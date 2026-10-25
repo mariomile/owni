@@ -10,3 +10,8 @@ DejaVu Sans Bold (Latin letters only), in src/core/chart-font.ts. Copyright (c)
 2003 by Bitstream, Inc. All Rights Reserved. Bitstream Vera is a trademark of
 Bitstream, Inc. DejaVu changes are in public domain. The Bitstream Vera license
 is reproduced in full at the top of src/core/chart-font.ts.
+
+The provider marks in src/web/ui/models.js are the path outlines of LobeHub
+Icons (https://github.com/lobehub/lobe-icons), MIT License, Copyright (c) 2023
+LobeHub. The marks themselves are trademarks of their owners, shown only to
+name each provider.
