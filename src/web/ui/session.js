@@ -4,7 +4,7 @@ import { renderCode, renderLogin } from "./login.js";
 import { finishGoogle } from "./google.js";
 import { setupLeft } from "./setup.js";
 import { finishConnector } from "./signin.js";
-import { refreshThreads, render, renderRail } from "./shell.js";
+import { refreshConversations, render, renderRail } from "./shell.js";
 
 // ---------- boot ----------
 // api() says a session is gone with this event (common.js imports nothing): show the login.
@@ -160,17 +160,16 @@ function connectEvents() {
 		const event = JSON.parse(e.data);
 		// A reply can carry news for the counters (a tool proposed, a task created).
 		void refreshCounters();
+		// The rail says what is unread (ADR 0112); a reply nobody has on screen is also announced.
 		if (state.onEntry?.(event)) return;
-		state.unread.add(event.threadId);
-		const { view, rest } = route();
-		if (view !== "chat" || rest[0] !== event.threadId) toast("Nuova risposta di Owni");
-		renderRail();
-		void refreshThreads().then(renderRail);
+		toast("Nuova risposta di Owni");
+		void refreshConversations().then(renderRail);
 	});
 	es.addEventListener("room", (e) => {
 		const event = JSON.parse(e.data);
 		if (state.onRoom?.(event)) return;
-		if (event.entry.from === "agent") toast("Nuova risposta in una stanza");
+		if (event.entry.from === "agent") toast("Nuova risposta in un canale");
+		void refreshConversations().then(renderRail);
 	});
 	es.addEventListener("board", (e) => {
 		const event = JSON.parse(e.data);

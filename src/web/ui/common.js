@@ -45,6 +45,9 @@ const ICONS = {
 	listen: ["M4 9v6h4l5 4V5L8 9H4Z", "M16.5 8.5a5 5 0 0 1 0 7", "M19 6a8.5 8.5 0 0 1 0 12"],
 	stop: ["M7 7h10v10H7Z"],
 	chat: ["M20 12a8 8 0 0 1-11.6 7.1L4 20l.9-4.4A8 8 0 1 1 20 12Z"],
+	dm: ["M20 12a8 8 0 0 1-11.6 7.1L4 20l.9-4.4A8 8 0 1 1 20 12Z"],
+	canali: ["M10 4 8 20M16 4l-2 16M5 9h15M4 15h15"],
+	thread: ["M9 14 4 9l5-5", "M4 9h10a6 6 0 0 1 6 6v4"],
 	board: ["M4 5h4v14H4Z", "M10 5h4v9h-4Z", "M16 5h4v6h-4Z"],
 	agenti: ["M8 4h8a3 3 0 0 1 3 3v6a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3Z", "M9.5 9.5h.01M14.5 9.5h.01", "M9 20h6", "M12 16v4"],
 	segreteria: ["M3 13h5l1.5 2.5h5L16 13h5", "M5.5 5h13L21 13v6H3v-6Z"],
@@ -356,9 +359,8 @@ export const state = {
 	pendingApprovals: 0,
 	/** Schede waiting for this person's review (ADR 0051). */
 	boardReview: 0,
-	unread: new Set(),
-	/** This person's conversations across chat-enabled agents, newest first. */
-	threads: [],
+	/** The rail's conversations (ADR 0112): a direct one per agente the person can write to, the general one first, and their canali. */
+	conversations: { direct: [], channels: [] },
 	/** Steps of «Primi passi» still to do, for the owner; 0 when done or put away. */
 	setupLeft: 0,
 	events: undefined,
@@ -375,15 +377,26 @@ export function route() {
 	const params = new URLSearchParams(question < 0 ? "" : hash.slice(question + 1));
 	const [view, ...rest] = path.split("/");
 	const decode = (part) => { try { return decodeURIComponent(part); } catch { return part; } };
-	return { view: view || "chat", rest: rest.map(decode), instanceId: params.get("agent") ?? undefined, params };
+	return { view: view || "dm", rest: rest.map(decode), instanceId: params.get("agent") ?? undefined, params };
 }
 
-const AGENT_VIEWS = new Set(["chat", "file", "memoria", "skill", "task", "automazioni", "impostazioni", "connettori", "segreteria", "inizia"]);
+const AGENT_VIEWS = new Set(["file", "memoria", "skill", "task", "automazioni", "impostazioni", "connettori", "segreteria", "inizia"]);
 
 /** A link carries its agent: opening it later never borrows another agent from the browser. */
 export function instanceHref(view, rest = [], instanceId = state.instance?.id) {
 	const path = `#/${[view, ...rest].map(encodeURIComponent).join("/")}`;
 	return instanceId ? `${path}?agent=${encodeURIComponent(instanceId)}` : path;
+}
+
+/** The person's direct conversation with an agente, or a thread in it (ADR 0112). */
+export function dmHref(instanceId, threadId) {
+	return `#/dm/${encodeURIComponent(instanceId)}${threadId ? `/t/${encodeURIComponent(threadId)}` : ""}`;
+}
+
+/** Where an address from before the canali goes now (ADR 0112): a chat opens in its agente's direct messages. */
+export function movedHref({ view, rest, instanceId }) {
+	if (view === "chat") return instanceId ? dmHref(instanceId, rest[0]) : "#/";
+	return undefined;
 }
 
 /** Where an agent's own page is: its configuration for the owner, its documents for everyone else. */
@@ -398,7 +411,6 @@ export function selectInstance(id) {
 	if (!instance) return false;
 	if (state.instance !== instance) {
 		state.instance = instance;
-		state.threads = [];
 		state.setup = undefined;
 		state.setupLeft = 0;
 	}

@@ -1,6 +1,6 @@
 // Task page, with sentinelle and the morning brief.
 import { agentLabel, api, emptyNote, fmt, go, h, head, icon, mount, needInstance, route, state, toast } from "../common.js";
-import { refreshThreads, render } from "../shell.js";
+import { render } from "../shell.js";
 import { runHistory } from "../runs.js";
 
 // ---------- task ----------
@@ -111,7 +111,6 @@ export async function viewTasks(main) {
 			const threadId = thread.value || (await api(`/api/instances/${inst.id}/dm`, { method: "POST", body: {} })).thread.id;
 			const body = { instruction: instruction.value, threadId, ...(mode === "cron" ? { cron: cron.value } : { at: at.value ? new Date(at.value).toISOString() : "" }) };
 			await api(`/api/instances/${inst.id}/schedules`, { method: "POST", body });
-			if (!thread.value) await refreshThreads();
 			toast("Task programmato");
 			render();
 		} catch (error) {
@@ -222,7 +221,6 @@ function watchSection(inst, watches, threads) {
 			const page = url.value.trim().replace(/^https?:\/\/(www\.)?/, "").replace(/\/$/, "");
 			const threadId = thread.value || (await api(`/api/instances/${inst.id}/dm`, { method: "POST", body: {} })).thread.id;
 			const { watch } = await api(`/api/instances/${inst.id}/watches`, { method: "POST", body: { url: url.value, what: what.value, below: below.value, above: above.value, everyMinutes: Number(every.value), threadId } });
-			if (!thread.value) await refreshThreads();
 			const now = watch.last?.price != null ? ` Prezzo adesso: ${num(watch.last.price)}.` : "";
 			toast(watch.below != null || watch.above != null ? `Sentinella attiva: ti scrivo quando il prezzo passa la soglia.${now}` : "Sentinella attiva: ti scrivo quando cambia.");
 			render();

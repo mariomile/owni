@@ -1,22 +1,17 @@
 // Command palette.
-import { api, go, h, icon, instanceHref, mount, state } from "./common.js";
+import { dmHref, go, h, icon, mount, state } from "./common.js";
 import { PAGES } from "./shell.js";
 
 // ---------- command palette (⌘K) ----------
 export function openPalette() {
 	if (!state.me || document.querySelector("dialog.palette")) return;
 	const items = PAGES.filter((p) => p.palette !== false && (!p.owner || state.me.role === "owner") && (!p.when || p.when(state.instance))).map((p) => ({ ...p, icon: p.id, to: [p.id] }));
-	// Conversations by title, once something is typed: this agente's chats, and the stanze (loaded now).
-	const chats = state.threads.map((t) => ({ label: t.title, group: t.agent?.name ?? "Conversazione", icon: "chat", href: instanceHref("chat", [t.id], t.instanceId ?? state.instance?.id) }));
-	let rooms = [];
-	if (PAGES.find((p) => p.id === "stanze")?.when()) {
-		void api("/api/rooms")
-			.then(({ rooms: list }) => {
-				rooms = list.map((r) => ({ label: r.title, group: "Stanza", icon: "stanze", to: ["stanze", r.id] }));
-				if (dialog.open) draw();
-			})
-			.catch(() => {});
-	}
+	// Conversations by name, once something is typed: the direct messages and the canali in the rail.
+	const dms = state.conversations.direct.flatMap((d) => {
+		const agent = state.instances.find((i) => i.id === d.instanceId);
+		return agent ? [{ label: agent.name, group: "Messaggi diretti", icon: "dm", href: dmHref(agent.id) }] : [];
+	});
+	const rooms = state.conversations.channels.map((c) => ({ label: c.title, group: "Canale", icon: "canali", href: `#/stanze/${encodeURIComponent(c.id)}` }));
 	const input = h("input", { type: "text", placeholder: "Vai a una sezione o a una conversazione…", "aria-label": "Cerca una sezione o una conversazione", autocomplete: "off" });
 	const list = h("ul", { role: "listbox" });
 	let active = 0;
@@ -31,7 +26,7 @@ export function openPalette() {
 	};
 	const draw = () => {
 		const q = input.value.trim().toLowerCase();
-		const talks = q === "" ? [] : [...rooms, ...chats].filter((c) => c.label.toLowerCase().includes(q)).slice(0, 8);
+		const talks = q === "" ? [] : [...dms, ...rooms].filter((c) => c.label.toLowerCase().includes(q)).slice(0, 8);
 		shown = [...items.filter((i) => q ? i.label.toLowerCase().includes(q) : ["lavori", "agenti", "gestione"].includes(i.id)), ...talks];
 		active = Math.min(active, Math.max(0, shown.length - 1));
 		mount(list, 

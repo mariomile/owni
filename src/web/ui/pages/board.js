@@ -345,7 +345,6 @@ export async function viewBoard(main) {
 				if (state.instance) store("owni.instance", state.instance.id);
 				return toast("Non puoi più scrivere a questo agente", true);
 			}
-			state.threads = [];
 			void refreshSetup();
 			go("chat", c.work.threadId);
 		};

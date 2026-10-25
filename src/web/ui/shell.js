@@ -1,13 +1,13 @@
 // Shell: sidebar, account menu, theme.
 import { accountDialog } from "./account.js";
-import { $app, agentHome, api, ApiError, emptyNote, face, fmt, go, h, icon, initials, instanceHref, mount, route, selectInstance, state, store, toast } from "./common.js";
+import { $app, agentHome, api, ApiError, dmHref, emptyNote, face, fmt, go, h, icon, initials, instanceHref, mount, movedHref, route, selectInstance, state, store, toast } from "./common.js";
 import { renderLogin } from "./login.js";
 import { viewActivity } from "./pages/activity.js";
 import { agentForm, viewAgents } from "./pages/agents.js";
 import { viewApprovals } from "./pages/approvals.js";
 import { viewAutomations } from "./pages/automations.js";
 import { viewBoard } from "./pages/board.js";
-import { closeModelMenu, viewChat } from "./pages/chat.js";
+import { closeModelMenu, viewDm } from "./pages/chat.js";
 import { viewConnectors } from "./pages/connectors.js";
 import { viewFiles } from "./pages/files.js";
 import { viewMemory } from "./pages/memory.js";
@@ -32,7 +32,7 @@ import { applyTheme, refreshSetup } from "./session.js";
  */
 export const PAGES = [
 	{ id: "lavori", label: "Lavori", group: "Lavoro", workspace: "work", sidebar: true, view: viewWork },
-	{ id: "chat", label: "Nuova conversazione", group: "Lavoro", workspace: "conversations", view: viewChat },
+	{ id: "dm", label: "Messaggi diretti", group: "Lavoro", workspace: "conversations", palette: false, view: viewDm },
 	{ id: "stanze", label: "Conversazioni con più agenti", group: "Lavoro", workspace: "conversations", when: () => state.instances.filter((i) => i.canChat).length > 1, view: viewRooms },
 	{ id: "board", label: "Board degli incarichi", group: "Lavoro", workspace: "work", view: viewBoard },
 	{ id: "programmi", label: "Automazioni", group: "Lavoro", workspace: "work", view: viewPrograms },
@@ -52,47 +52,6 @@ export const PAGES = [
 	{ id: "attivita", label: "Attività e spesa", group: "Gestione", workspace: "management", view: viewActivity },
 ];
 
-/** The agent a new chat goes to: a button that opens a menu of the agents the person can talk to. */
-function agentPicker(inst, choices) {
-	const trigger = h("button.agent-picker", { type: "button", "aria-haspopup": "menu", "aria-expanded": "false", "aria-label": `Agente della nuova conversazione: ${inst.name}` }, face(inst, 20), h("span.agent-picker-name", inst.name), icon("chevron"));
-	const open = () => {
-		const items = choices.map((i) => h("button.model-option", { type: "button", role: "menuitemradio", "aria-checked": i.id === inst.id ? "true" : "false", onclick: () => { closeModelMenu(); location.hash = instanceHref("chat", [], i.id); } },
-			face(i, 24), h("span", h("span.model-option-name", i.name), i.tagline ? h("small", i.tagline) : null), i.id === inst.id ? icon("check") : null));
-		const menu = h("div.model-menu.agent-menu", { role: "menu", "aria-label": "Agente della nuova conversazione" }, items);
-		document.body.append(menu);
-		trigger.setAttribute("aria-expanded", "true");
-		const place = () => {
-			const r = trigger.getBoundingClientRect();
-			const width = Math.min(340, window.innerWidth - 16);
-			menu.style.width = `${width}px`;
-			menu.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - width - 8))}px`;
-			menu.style.top = `${r.bottom + 6}px`;
-			menu.style.maxHeight = `${Math.max(160, (window.visualViewport?.height ?? window.innerHeight) - r.bottom - 20)}px`;
-			menu.style.transformOrigin = "top left";
-		};
-		place();
-		menu.addEventListener("keydown", (e) => {
-			const i = items.indexOf(document.activeElement);
-			if (e.key === "Escape") { e.preventDefault(); closeModelMenu(); trigger.focus(); }
-			else if (e.key === "Tab") closeModelMenu();
-			else if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); items[(i + (e.key === "ArrowDown" ? 1 : -1) + items.length) % items.length].focus(); }
-			else if (e.key === "Home" || e.key === "End") { e.preventDefault(); items[e.key === "Home" ? 0 : items.length - 1].focus(); }
-		});
-		const away = (e) => { if (!menu.contains(e.target) && !trigger.contains(e.target)) closeModelMenu(); };
-		document.addEventListener("pointerdown", away);
-		window.addEventListener("resize", place);
-		menu.cleanup = () => {
-			document.removeEventListener("pointerdown", away);
-			window.removeEventListener("resize", place);
-			trigger.setAttribute("aria-expanded", "false");
-		};
-		(items.find((el) => el.getAttribute("aria-checked") === "true") ?? items[0]).focus();
-	};
-	trigger.addEventListener("click", () => { if (!closeModelMenu()) open(); });
-	trigger.addEventListener("keydown", (e) => { if (e.key === "ArrowDown" && !closeModelMenu() && (e.preventDefault(), true)) open(); });
-	return trigger;
-}
-
 function workspaceNav(item) {
 	const { view } = route();
 	const link = (label, href, active) => h("a", { href, "aria-current": active ? "page" : undefined }, label);
@@ -106,14 +65,17 @@ function workspaceNav(item) {
 		link("Documenti", instanceHref("file"), view === "file"), link("Memoria", instanceHref("memoria"), view === "memoria"), link("Procedure", instanceHref("skill"), view === "skill"),
 		state.me.role === "owner" ? link("Configurazione", instanceHref("impostazioni"), ["impostazioni", "connettori", "inizia"].includes(view)) : null,
 	);
-	if (view === "chat") {
+	if (item.id === "dm") {
 		const inst = state.instance;
-		const choices = state.instances.filter((i) => i.canChat);
-		const who = !route().rest[0] && choices.length > 1 && inst ? agentPicker(inst, choices)
-			: h("a.agent-context", { href: agentHome(inst?.id) }, inst ? face(inst, 20) : null, h("span.agent-context-label", route().rest[0] ? `Conversazione con ${inst?.name ?? "l'agente"}` : inst?.name ?? "Il tuo assistente"));
+		const who = h("a.agent-context", { href: agentHome(inst?.id) }, inst ? face(inst, 20) : null, h("span.agent-context-label", inst?.name ?? "Il tuo assistente"));
 		return h("div.conversation-context", who, h("div.conversation-context-actions", h("div.conversation-tools", { role: "group", "aria-label": "Strumenti della conversazione" })));
 	}
 	return null;
+}
+
+/** Where `#/` opens: the direct conversation with the general agente, or the first one the person can write to. */
+function homeAgent() {
+	return state.instances.find((i) => i.main && i.canChat) ?? state.instances.find((i) => i.canChat);
 }
 
 async function viewManagement(main) {
@@ -133,19 +95,18 @@ export function render() {
 	const { view } = current;
 	// The old agent profile address goes where that agent's page now lives.
 	if (view === "agente") return void (location.replace(agentHome(current.rest[0])));
-	const requested = current.instanceId;
+	const moved = movedHref(current);
+	if (moved) return void location.replace(moved);
+	const item = PAGES.find((p) => p.id === view) ?? PAGES.find((p) => p.id === "dm");
+	if (item.owner && state.me.role !== "owner") return void (location.hash = "#/");
+	// A direct conversation names its agente in the address; `#/` is the general agente's.
+	const requested = item.id === "dm" ? (view === "dm" ? current.rest[0] : undefined) ?? homeAgent()?.id : current.instanceId;
 	const previous = state.instance;
 	const unavailable = requested && !selectInstance(requested);
-	if (view === "chat" && !current.rest[0] && !requested && !state.instance?.canChat) {
-		const first = state.instances.find((i) => i.canChat);
-		if (first) selectInstance(first.id);
-	}
-	const item = PAGES.find((p) => p.id === view) ?? PAGES.find((p) => p.id === "chat");
-	if (item.owner && state.me.role !== "owner") return go("chat");
 	if (previous !== state.instance) void refreshSetup().then(() => { if (document.getElementById("rail")) renderRail(); });
 	closeMenu();
 	closeModelMenu();
-	const chat = item.id === "chat" || (item.id === "stanze" && current.rest[0] && current.rest[0] !== "nuova");
+	const chat = item.id === "dm" || (item.id === "stanze" && current.rest[0] && current.rest[0] !== "nuova");
 	const main = h("main", { id: "main", class: chat ? "is-chat" : "is-page" });
 	const content = h(chat ? "div.page-content.chat-content" : "div.page-content");
 	mount(main, workspaceNav(item), content);
@@ -154,12 +115,12 @@ export function render() {
 		h("header.topbar", h("button.icon-btn.rail-menu", {
 			"aria-label": "Apri la barra laterale", "aria-controls": "rail", "aria-expanded": "false",
 			onclick: () => { shell.classList.toggle("open"); syncRailControls(); },
-		}, icon("menu")), h("b.topbar-brand", "Owni"), h("button.icon-btn", { "aria-label": "Nuova conversazione", title: "Nuova conversazione", onclick: () => go("chat") }, icon("compose"))),
+		}, icon("menu")), h("b.topbar-brand", "Owni"), h("button.icon-btn", { "aria-label": "Cerca", title: "Cerca", onclick: openPalette }, icon("search"))),
 		h("div.scrim", { onclick: closeRailOnPhone }), h("aside.rail", { id: "rail" }), main,
 	);
 	mount($app, shell);
 	renderRail();
-	void refreshThreads().then(renderRail);
+	void refreshConversations().then(renderRail);
 	state.onEntry = undefined;
 	state.onRoom = undefined;
 	state.onRun = undefined;
@@ -202,28 +163,16 @@ function syncRailControls() {
 	if (rail) rail.inert = railPhone.matches && !open;
 }
 
-/** The current instance's conversations, for the sidebar; none for someone who cannot chat there. */
-let threadRead = 0;
-export async function refreshThreads() {
-	const read = ++threadRead;
+/** The rail's direct conversations and canali, with what is unread (ADR 0112). */
+let conversationsRead = 0;
+export async function refreshConversations() {
+	const read = ++conversationsRead;
 	const person = state.me;
 	if (!person) return;
-	const agents = state.instances.filter((i) => i.canChat);
-	const results = await Promise.allSettled(agents.map(async (agent) => {
-		const { threads } = await api(`/api/instances/${encodeURIComponent(agent.id)}/threads`);
-		return threads.map((thread) => ({ ...thread, instanceId: agent.id, agent }));
-	}));
-	if (state.me !== person || read !== threadRead) return;
-	const allowed = new Set(state.instances.filter((i) => i.canChat).map((i) => i.id));
-	state.threads = results.flatMap((result, i) => !allowed.has(agents[i].id) ? [] : result.status === "fulfilled" ? result.value : [401, 403, 404].includes(result.reason?.status) ? [] : state.threads.filter((thread) => thread.instanceId === agents[i].id));
-	state.threads.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-}
-
-/** Today, yesterday, this week, older: how the sidebar groups conversations. */
-function threadGroup(at, now = new Date()) {
-	const day = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-	const days = Math.round((day(now) - day(new Date(at))) / 86_400_000);
-	return days <= 0 ? "Oggi" : days === 1 ? "Ieri" : days < 7 ? "Ultimi 7 giorni" : days < 30 ? "Ultimi 30 giorni" : "Più vecchie";
+	// A failed read keeps the last known list: an unavailable source does not empty the rail.
+	const conversations = await api("/api/conversations").catch(() => undefined);
+	if (conversations === undefined || state.me !== person || read !== conversationsRead) return;
+	state.conversations = conversations;
 }
 
 function closeRailOnPhone() {
@@ -243,45 +192,39 @@ export function renderRail() {
 		const label = count > 0 ? `${item.label} (${count})` : item.label;
 		nav.append(h("a", { href: `#/${item.id}`, "aria-current": PAGES.find((p) => p.id === view)?.workspace === item.workspace ? "page" : undefined, "aria-label": label, title: label, onclick: closeRailOnPhone }, icon(item.id), h("span.label", item.label), count > 0 ? h("span.count", { "aria-hidden": "true" }, String(count)) : null));
 	}
-	const past = h("nav.history", { "aria-label": "Conversazioni" });
-	let group;
-	for (const t of (state.threads ?? []).slice(0, 24)) {
-		const g = threadGroup(t.updatedAt);
-		if (g !== group) {
-			group = g;
-			past.append(h("div.group", g));
-		}
-		const agent = t.agent ?? state.instances.find((i) => i.id === t.instanceId) ?? state.instance;
-		const current = view === "chat" && rest[0] === t.id && (!t.instanceId || t.instanceId === state.instance?.id);
-		const label = `${agent?.name ?? "Agente"} · ${t.title}`;
-		const unread = state.unread.has(t.id);
-		past.append(
-			h(
-				"a",
-				{ href: instanceHref("chat", [t.id], agent?.id), "aria-current": current ? "page" : undefined, "aria-label": `${label}${unread ? ", non letto" : ""}`, title: label, onclick: closeRailOnPhone },
-				face(agent, 24),
-				h("span.thread-text", h("span.name", agent?.name ?? "Agente"), h("span.title", t.title)),
-				unread ? h("span.dot", { "aria-hidden": "true" }) : null,
-			),
-		);
-	}
+	// The rail like a team chat (ADR 0112): the canali, then a direct conversation per agente.
+	const row = (href, current, unread, mark, name, label) =>
+		h(`a${unread ? ".unread" : ""}`, { href, "aria-current": current ? "page" : undefined, "aria-label": `${label}${unread ? ", non letto" : ""}`, title: label, onclick: closeRailOnPhone }, mark, h("span.label", name), unread ? h("span.dot", { "aria-hidden": "true" }) : null);
+	const { direct, channels } = state.conversations;
+	const canCreate = state.instances.filter((i) => i.canChat).length > 1;
+	const canali = canCreate || channels.length
+		? h("nav.rail-list", { "aria-label": "Canali" },
+			h("div.rail-group", h("span.label", "Canali"), canCreate ? h("a.icon-btn.small", { href: "#/stanze/nuova", "aria-label": "Nuovo canale", title: "Nuovo canale", onclick: closeRailOnPhone }, icon("plus")) : null),
+			channels.map((c) => row(`#/stanze/${encodeURIComponent(c.id)}`, view === "stanze" && rest[0] === c.id, c.unread, icon("canali"), c.title, c.title)))
+		: null;
+	const here = view === "dm" ? rest[0] ?? homeAgent()?.id : undefined;
+	const agents = direct.flatMap((d) => {
+		const agent = state.instances.find((i) => i.id === d.instanceId);
+		return agent ? [row(dmHref(agent.id), here === agent.id, d.unread, face(agent, 20), agent.name, `Messaggi diretti con ${agent.name}`)] : [];
+	});
+	const dms = agents.length ? h("nav.rail-list", { "aria-label": "Messaggi diretti" }, h("div.rail-group", h("span.label", "Messaggi diretti")), agents) : null;
 	mount(
 		rail,
 		h(
 			"div.rail-top",
-			h("a.brand", { href: "#/chat", "aria-label": "Owni", title: "Owni", onclick: closeRailOnPhone }, h("img", { src: "/icon.svg", alt: "", width: "22", height: "22" }), h("b", "Owni")),
+			h("a.brand", { href: "#/", "aria-label": "Owni", title: "Owni", onclick: closeRailOnPhone }, h("img", { src: "/icon.svg", alt: "", width: "22", height: "22" }), h("b", "Owni")),
 			h("button.icon-btn.collapse", { "aria-label": "Chiudi la barra laterale", "aria-controls": "rail", "aria-expanded": "true", title: "Chiudi la barra laterale", onclick: toggleRail }, icon("sidebar")),
 		),
 		h(
 			"div.rail-actions",
-			h("a.rail-btn", { href: "#/chat", "aria-current": view === "chat" && !rest[0] ? "page" : undefined, "aria-label": "Nuova chat", title: "Nuova chat", onclick: closeRailOnPhone }, icon("compose"), h("span.label", "Nuova chat")),
 			h("button.rail-btn", { onclick: openPalette, "aria-label": "Vai a una sezione", title: "Cerca" }, icon("search"), h("span.label", "Cerca"), h("kbd", navigator.platform.startsWith("Mac") ? "⌘K" : "Ctrl K")),
 		),
 		h(
 			"div.rail-scroll",
 			nav,
 			h("a.rail-btn.attention-link", { href: "#/lavori/attenzione", onclick: closeRailOnPhone, title: "Richiede te" }, icon("approvazioni"), h("span.label", "Richiede te"), state.pendingApprovals + state.boardReview ? h("span.count", String(state.pendingApprovals + state.boardReview)) : null),
-			past.childElementCount ? past : null,
+			canali,
+			dms,
 			h("nav.sections.rail-management", { "aria-label": "Gestione" }, h("a", { href: state.instances.length === 1 ? agentHome(state.instances[0].id) : "#/agenti", onclick: closeRailOnPhone, title: "Agenti" }, icon("agenti"), h("span.label", state.instances.length === 1 ? "Il tuo assistente" : "Agenti")), h("a", { href: "#/gestione", onclick: closeRailOnPhone, title: "Account e gestione" }, icon("gestione"), h("span.label", "Account e gestione"))),
 		),
 		h(

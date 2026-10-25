@@ -1,5 +1,5 @@
 // Chat page.
-import { api, face, faceColor, fmt, go, h, icon, mount, needInstance, route, state, store, thinking, toast } from "../common.js";
+import { api, face, faceColor, fmt, h, icon, mount, needInstance, state, store, thinking, toast } from "../common.js";
 import { boardNote, copyButton, listenButton } from "../listen.js";
 import { connectorActionCard, googleActionCard } from "../cards.js";
 import { agentCommands, commandMenu } from "../commands.js";
@@ -7,7 +7,7 @@ import { chatModelCache, chatModelChoices, chatModelList, modelAbilities, modelF
 import { stepsLeftText } from "../setup.js";
 import { install, installed, installOffer } from "../pwa.js";
 import { refreshCounters } from "../session.js";
-import { refreshThreads, renderRail } from "../shell.js";
+import { refreshConversations, renderRail } from "../shell.js";
 import { conversationRuns } from "../runs.js";
 import { renderMarkdown } from "../markdown.js";
 import { linkPreviews, sources } from "../sources.js";
@@ -31,26 +31,43 @@ const HINTS = [
 	{ icon: "task", label: "Ricordamelo", text: "Ricordami ogni lunedì alle 9 di " },
 ];
 
-export async function viewChat(main) {
+/**
+ * The person's direct conversation with an agente (ADR 0112): one, continuous, made with the first
+ * message. Empty, it is the welcome. The chats from before it show in it as messages with replies.
+ */
+export async function viewDm(main) {
 	if (needInstance(main)) return;
 	const inst = state.instance;
 	if (!inst.canChat) {
 		mount(main, h("section.conversation.empty-chat", h("div.welcome", h("h2", "Chat non disponibile"), h("p", state.me.role === "owner" ? "Aggiungi te stesso alle persone che possono scrivere a questo agente, in Impostazioni." : "Non sei tra le persone che possono scrivere a questo agente."))));
 		return;
 	}
-	const threadId = route().rest[0];
 	chatModelCache.clear();
+	let { thread, entries, model } = await api(`/api/instances/${inst.id}/dm`);
+	if (!main.isConnected || state.instance !== inst) return;
+	if (entries.length === 0) return landing(inst, main, thread, model);
+	// Only chats from before so far: the conversation that goes on under them.
+	thread ??= (await api(`/api/instances/${inst.id}/dm`, { method: "POST", body: {} })).thread;
+	if (!main.isConnected || state.instance !== inst) return;
+	conversationView(inst, main, thread, entries, model);
+}
+
+/** The person had the conversation on screen: the rail stops showing it unread. */
+function markRead(inst, threadId) {
+	void api(`/api/instances/${inst.id}/threads/${encodeURIComponent(threadId)}/read`, { method: "POST", body: {} })
+		.then(refreshConversations)
+		.then(renderRail)
+		.catch(() => {});
+}
+
+function conversationView(inst, main, thread, entries, model) {
+	const threadId = thread.id;
 	const conversation = h("section.conversation");
-	mount(main, conversation);
-	if (!threadId) return landing(inst, conversation);
 	// One panel at a time next to the chat, also when one opens by itself.
 	const browser = browserPanel(inst, threadId, () => screen.show(false));
 	const screen = screenPanel(inst, threadId, () => browser.show(false));
 	mount(main, h("div.chat-split", conversation, browser.el, screen.el));
-	state.unread.delete(threadId);
-	renderRail();
-	const { entries, model } = await api(`/api/instances/${inst.id}/threads/${encodeURIComponent(threadId)}`);
-	if (!main.isConnected || state.instance !== inst) return;
+	markRead(inst, threadId);
 	// Tools belong to the fixed context bar, after the conversation has loaded successfully.
 	mount(main.parentElement.querySelector(".conversation-tools"), screen.toggle, browser.toggle);
 	const transcript = h("div.transcript", { role: "log", "aria-live": "polite" });
@@ -153,17 +170,13 @@ export async function viewChat(main) {
 		browser.lively();
 		screen.lively();
 		follow();
+		markRead(inst, threadId);
 		return true;
 	};
 	const box = chatBox(inst, threadId, conversation, async (text, images) => {
 		browser.lively();
 		screen.lively();
 		const bubble = show({ from: "person", text, images, at: new Date().toISOString() });
-		const listed = state.threads.find((t) => t.id === threadId && (!t.instanceId || t.instanceId === inst.id));
-		if (listed && listed.title === "Nuova chat") {
-			listed.title = text ? text.replace(/\s+/g, " ").slice(0, 60) : "Foto";
-			renderRail();
-		}
 		startTyping();
 		try {
 			await api(`/api/instances/${inst.id}/threads/${encodeURIComponent(threadId)}/messages`, { method: "POST", body: images.length ? { text, images } : { text } });
@@ -173,7 +186,6 @@ export async function viewChat(main) {
 			bubble.remove();
 			throw error;
 		}
-		void refreshThreads().then(renderRail);
 	}, modelPill(inst, model, async (picked) => {
 		await api(`/api/instances/${inst.id}/threads/${encodeURIComponent(threadId)}/model`, { method: "PUT", body: picked ? { provider: picked.provider, modelId: picked.modelId } : {} });
 	}));
@@ -540,19 +552,23 @@ function screenPanel(inst, threadId, onShow) {
 	};
 }
 
-/** The empty chat: a greeting, the box in the middle and a few ideas. Sending opens a new conversation. */
-function landing(inst, conversation) {
-	conversation.classList.add("empty-chat");
-	// A model picked before the first message: the conversation it opens is created with it.
-	let picked;
+/**
+ * The empty direct conversation: a greeting, the box in the middle and a few ideas. The first message
+ * makes the conversation (with the model picked here) and is sent as soon as it shows.
+ */
+function landing(inst, main, thread, model) {
+	const conversation = h("section.conversation.empty-chat");
+	mount(main, conversation);
+	let picked = model;
 	const box = chatBox(inst, `new.${inst.id}`, conversation, async (text, images) => {
-		const { thread } = await api(`/api/instances/${inst.id}/dm`, { method: "POST", body: picked ? { model: { provider: picked.provider, modelId: picked.modelId } } : {} });
-		store(`owni.draft.${thread.id}`, text);
-		if (images.length) store(`owni.pending.${thread.id}`, JSON.stringify(images));
-		store(`owni.autosend.${thread.id}`, "1");
-		go("chat", thread.id);
-	}, modelPill(inst, undefined, async (model) => {
-		picked = model;
+		const made = thread ?? (await api(`/api/instances/${inst.id}/dm`, { method: "POST", body: picked ? { model: { provider: picked.provider, modelId: picked.modelId } } : {} })).thread;
+		store(`owni.draft.${made.id}`, text);
+		if (images.length) store(`owni.pending.${made.id}`, JSON.stringify(images));
+		store(`owni.autosend.${made.id}`, "1");
+		if (main.isConnected) conversationView(inst, main, made, [], picked);
+	}, modelPill(inst, model, async (choice) => {
+		picked = choice;
+		if (thread) await api(`/api/instances/${inst.id}/threads/${encodeURIComponent(thread.id)}/model`, { method: "PUT", body: choice ? { provider: choice.provider, modelId: choice.modelId } : {} });
 	}));
 	const hour = new Date().getHours();
 	const hello = hour < 5 || hour >= 18 ? "Buonasera" : "Buongiorno";
