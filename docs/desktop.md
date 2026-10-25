@@ -75,7 +75,7 @@ Le icone vengono da `src/web/ui/icon-512.png`: `pnpm icons` le rigenera.
 
 ## Installer
 
-Il workflow **Desktop app** (a mano da GitHub Actions, o con un tag `desktop-v0.8.0`) costruisce gli installer per Mac (universale), Windows e Linux e li mette in una bozza di release. Per il Mac prima `desktop/scripts/bundle-server.sh` prepara Node e il server compilato, e controlla che partano; `--config src-tauri/tauri.local.conf.json` li mette nell'app.
+Il workflow **Desktop app** (a mano da GitHub Actions, o con un tag `desktop-v0.9.0`) costruisce gli installer per Mac (universale), Windows e Linux e li mette in una bozza di release. Per il Mac prima `desktop/scripts/bundle-server.sh` prepara Node e il server compilato, e controlla che partano; `--config src-tauri/tauri.local.conf.json` li mette nell'app.
 
 ### Aggiornamenti
 
