@@ -18,7 +18,6 @@ import { viewSettings } from "./pages/settings.js";
 import { viewSkills } from "./pages/skills.js";
 import { viewStart } from "./pages/start.js";
 import { viewTasks } from "./pages/tasks.js";
-import { viewConversations } from "./pages/conversations.js";
 import { viewPrograms, viewWork } from "./pages/work.js";
 import { viewAgentProfile } from "./pages/agent-profile.js";
 import { openPalette } from "./palette.js";
@@ -33,7 +32,6 @@ import { applyTheme, refreshSetup } from "./session.js";
  * one line in sw.js.
  */
 export const PAGES = [
-	{ id: "conversazioni", label: "Conversazioni", group: "Lavoro", workspace: "conversations", sidebar: true, view: viewConversations },
 	{ id: "lavori", label: "Lavori", group: "Lavoro", workspace: "work", sidebar: true, view: viewWork },
 	{ id: "chat", label: "Nuova conversazione", group: "Lavoro", workspace: "conversations", view: viewChat },
 	{ id: "stanze", label: "Conversazioni con più agenti", group: "Lavoro", workspace: "conversations", when: () => state.instances.filter((i) => i.canChat).length > 1, view: viewRooms },
@@ -76,7 +74,7 @@ function workspaceNav(item) {
 		const who = route().rest[0]
 			? h("a.agent-context", { href: inst ? `#/agente/${encodeURIComponent(inst.id)}` : "#/agenti" }, inst ? face(inst, 20) : null, h("span.agent-context-label", `Conversazione con ${inst?.name ?? "l'agente"}`))
 			: h("label.chat-recipient", h("span", "Scrivi a"), choices.length > 1 ? h("select", { "aria-label": "Agente della nuova conversazione", value: inst?.id, onchange: (event) => { location.hash = instanceHref("chat", [], event.target.value); } }, choices.map((i) => h("option", { value: i.id, selected: i.id === inst?.id }, i.name))) : h("a", { href: inst ? `#/agente/${encodeURIComponent(inst.id)}` : "#/agenti" }, inst?.name ?? "Il tuo assistente"));
-		return h("div.conversation-context", who, h("div.conversation-context-actions", h("div.conversation-tools", { role: "group", "aria-label": "Strumenti della conversazione" }), h("a.btn.small.ghost.conversation-list-link", { href: "#/conversazioni", "aria-label": "Le tue conversazioni", title: "Le tue conversazioni" }, icon("chat"), h("span", "Le tue conversazioni"))));
+		return h("div.conversation-context", who, h("div.conversation-context-actions", h("div.conversation-tools", { role: "group", "aria-label": "Strumenti della conversazione" })));
 	}
 	return null;
 }
