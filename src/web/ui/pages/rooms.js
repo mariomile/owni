@@ -1,5 +1,5 @@
 // Canali pages.
-import { api, channelHref, channelName, confirmDialog, emptyNote, face, faceColor, fmt, go, h, head, icon, initials, mount, route, state, store, thinking, toast } from "../common.js";
+import { api, batched, channelHref, channelName, confirmDialog, emptyNote, face, faceColor, fmt, go, h, head, icon, initials, mount, route, state, store, thinking, toast, whenSeen } from "../common.js";
 import { agentCommands, commandMenu } from "../commands.js";
 import { renderMarkdown } from "../markdown.js";
 import { copyButton, listenButton } from "../listen.js";
@@ -69,7 +69,11 @@ function channelDialog(title, name, chosen, okLabel, onSave) {
 		h("div.field", h("span", "Agenti (da 2 a 5)"), boxes.map((b) => h("label.row-gap", b.box, h("span", b.label)))),
 		h("div.actions", h("button.btn.accent", { onclick: save }, okLabel), h("button.btn.ghost", { onclick: () => dialog.close() }, "Annulla")),
 	);
-	dialog.addEventListener("close", () => dialog.remove());
+	dialog.addEventListener("close", () => {
+		dialog.remove();
+		// Opened from «+» in the rail: the address leaves «nuova», so the next «+» opens it again.
+		if (route().rest[0] === "nuova") history.replaceState(null, "", "#/canali");
+	});
 	document.body.append(dialog);
 	dialog.showModal();
 	input.focus();
@@ -77,7 +81,7 @@ function channelDialog(title, name, chosen, okLabel, onSave) {
 
 /** The person had the canale or thread on screen: the rail stops showing it unread. */
 function markRead(roomId) {
-	return api(`/api/rooms/${encodeURIComponent(roomId)}/read`, { method: "POST", body: {} })
+	return whenSeen(roomId, () => api(`/api/rooms/${encodeURIComponent(roomId)}/read`, { method: "POST", body: {} }))
 		.then(refreshConversations)
 		.then(renderRail)
 		.catch(() => {});
@@ -199,7 +203,7 @@ async function viewRoom(main, roomId, openId) {
 		return roomMessage(room, entry, answer, slot);
 	};
 	const show = (entry) => transcript.insertBefore(draw(entry), typing.parentNode === transcript ? typing : null);
-	const refreshSummaries = async () => {
+	const refreshSummaries = batched(async () => {
 		const { entries: now } = await api(`/api/rooms/${encodeURIComponent(roomId)}`).catch(() => ({ entries: [] }));
 		for (const entry of now) {
 			const slot = slots.get(entry.id);
@@ -208,7 +212,7 @@ async function viewRoom(main, roomId, openId) {
 			slot.threadId = entry.thread.id;
 			mount(slot.el, threadSummary(room, entry.thread, () => openThread(entry)));
 		}
-	};
+	});
 	for (const e of entries) show(e);
 	state.onRoom = (event) => {
 		if (event.roomId === roomId) {
@@ -321,6 +325,8 @@ function threadPanel(channel, onChange, onShow) {
 		if (el.hidden) return;
 		el.hidden = true;
 		current = undefined;
+		// An open still on its way stays closed.
+		opening++;
 		typing?.remove();
 		mount(dock);
 		if (route().rest[1] === "t") history.pushState(null, "", channelHref(channel.id));

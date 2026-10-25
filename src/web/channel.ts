@@ -208,7 +208,8 @@ export class WebChannel implements ChannelAdapter {
 			...(origin === undefined ? {} : { origin }),
 			});
 			await this.append(threadId, entry);
-			await this.saveThread({ ...thread, updatedAt: entry.at, readAt: entry.at });
+			// The person's own words are read; what the board or the brief sends on its own is not theirs.
+			await this.saveThread({ ...thread, updatedAt: entry.at, ...(origin === undefined ? { readAt: entry.at } : {}) });
 			return entry;
 		});
 	}

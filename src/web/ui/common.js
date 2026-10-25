@@ -390,6 +390,39 @@ export function instanceHref(view, rest = [], instanceId = state.instance?.id) {
 	return instanceId ? `${path}?agent=${encodeURIComponent(instanceId)}` : path;
 }
 
+/**
+ * Work for a person who sees the page: now, or when they come back to the tab. A conversation
+ * open in a tab in the background is not read. Once per `key` while waiting.
+ */
+const unseen = new Map();
+export function whenSeen(key, work) {
+	if (document.visibilityState === "visible") return Promise.resolve().then(work);
+	if (!unseen.has(key)) {
+		unseen.set(key, new Promise((resolve) => {
+			const back = () => {
+				if (document.visibilityState !== "visible") return;
+				document.removeEventListener("visibilitychange", back);
+				unseen.delete(key);
+				resolve(work());
+			};
+			document.addEventListener("visibilitychange", back);
+		}));
+	}
+	return unseen.get(key);
+}
+
+/** `work` once for a burst of calls: a reply, its read and the rail ask the server one time. */
+export function batched(work, ms = 150) {
+	let soon;
+	return () => {
+		soon ??= new Promise((resolve) => setTimeout(resolve, ms)).then(() => {
+			soon = undefined;
+			return work();
+		});
+		return soon;
+	};
+}
+
 /** The person's direct conversation with an agente, or a thread in it (ADR 0113). */
 export function dmHref(instanceId, threadId) {
 	return `#/dm/${encodeURIComponent(instanceId)}${threadId ? `/t/${encodeURIComponent(threadId)}` : ""}`;

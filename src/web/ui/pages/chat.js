@@ -1,5 +1,5 @@
 // Chat page.
-import { api, dmHref, face, faceColor, fmt, h, icon, initials, mount, needInstance, route, state, store, thinking, toast } from "../common.js";
+import { api, batched, channelHref, dmHref, face, faceColor, fmt, h, icon, initials, mount, needInstance, route, state, store, thinking, toast, whenSeen } from "../common.js";
 import { boardNote, copyButton, listenButton } from "../listen.js";
 import { connectorActionCard, googleActionCard } from "../cards.js";
 import { agentCommands, commandMenu } from "../commands.js";
@@ -50,8 +50,9 @@ export async function viewDm(main) {
 	const { rest } = route();
 	const open = rest[1] === "t" ? rest[2] : undefined;
 	if (entries.length === 0) {
-		if (open !== undefined) history.replaceState(null, "", dmHref(inst.id));
-		return landing(inst, main, thread, model);
+		landing(inst, main, thread, model);
+		if (open !== undefined) await elsewhere(inst, main, open, thread?.id);
+		return;
 	}
 	// Only chats from before so far: the conversation that goes on under them.
 	thread ??= (await api(`/api/instances/${inst.id}/dm`, { method: "POST", body: {} })).thread;
@@ -59,18 +60,29 @@ export async function viewDm(main) {
 	const view = conversationView(inst, main, thread, entries, model);
 	if (open === undefined) return;
 	const root = entries.find((e) => e.thread?.id === open);
-	// The conversation itself, or a thread that is not there (another person's, deleted): just the conversation.
-	if (root === undefined) {
-		history.replaceState(null, "", dmHref(inst.id));
-		if (open !== thread.id) toast("Questo thread non c'è più", true);
-		return;
-	}
-	void view.openThread(root, open);
+	if (root !== undefined) return void view.openThread(root, open);
+	await elsewhere(inst, main, open, thread.id);
+}
+
+/**
+ * A thread in the address that is not one of the conversation's. A link from the work done (a run, a
+ * scheda) may name the agente's place in a canale, or a chat nothing was written in yet: the canale,
+ * or just the conversation. Not there at all (another person's, deleted): said.
+ */
+async function elsewhere(inst, main, open, dmId) {
+	history.replaceState(null, "", dmHref(inst.id));
+	if (open === dmId) return;
+	const there = await api(`/api/instances/${inst.id}/threads/${encodeURIComponent(open)}`).catch(() => undefined);
+	if (!main.isConnected) return;
+	if (there === undefined) return toast("Questo thread non c'è più", true);
+	if (there.thread.room === undefined) return;
+	const { room } = await api(`/api/rooms/${encodeURIComponent(there.thread.room)}`).catch(() => ({}));
+	if (main.isConnected && room !== undefined) location.replace(room.parent ? channelHref(room.parent.roomId, room.id) : channelHref(room.id));
 }
 
 /** The person had the conversation on screen: the rail stops showing it unread. */
 function markRead(inst, threadId) {
-	void api(`/api/instances/${inst.id}/threads/${encodeURIComponent(threadId)}/read`, { method: "POST", body: {} })
+	return whenSeen(`${inst.id}/${threadId}`, () => api(`/api/instances/${inst.id}/threads/${encodeURIComponent(threadId)}/read`, { method: "POST", body: {} }))
 		.then(refreshConversations)
 		.then(renderRail)
 		.catch(() => {});
@@ -112,7 +124,7 @@ function conversationView(inst, main, thread, entries, model) {
 	const fileCard = (file) => (isHtml(file.path) ? h("div.file-open", fileLink(file), h("button.btn.small", { type: "button", onclick: () => artifact.openFile(inst.id, file.path) }, "Apri")) : fileLink(file));
 	// `into`: where the message goes, the conversation by default or the thread panel; `where`: the
 	// thread it was written in, whose artifacts it shows.
-	const show = (entry, into = place, here = into === place, where = threadId) => {
+	const show = (entry, into = place, here = into === place, where = entry.threadId ?? threadId) => {
 		// What the board sends the agente reads as a scheda, not as a wall of instructions the person never typed.
 		const brief = entry.from === "person" ? boardNote(entry) : null;
 		if (brief) {
@@ -165,7 +177,7 @@ function conversationView(inst, main, thread, entries, model) {
 	/** The replies under each message, as the server counts them now. */
 	const summaries = new Map();
 	const known = new Set(entries.flatMap((e) => (e.thread ? [e.thread.id] : [])));
-	const refreshSummaries = async () => {
+	const refreshSummaries = batched(async () => {
 		const { entries: now } = await api(`/api/instances/${inst.id}/dm`).catch(() => ({ entries: [] }));
 		for (const entry of now) {
 			const slot = summaries.get(entry.id);
@@ -176,7 +188,7 @@ function conversationView(inst, main, thread, entries, model) {
 			const button = slot.parentElement?.querySelector(".reply-thread");
 			if (button) button.onclick = () => void replies.open(entry, entry.thread.id);
 		}
-	};
+	});
 	for (const e of entries) show(e);
 	// Google writes this conversation asked for: decided here, above the box, without leaving the chat.
 	const asks = h("div.asks", { hidden: true });
@@ -315,6 +327,8 @@ function threadPanel(inst, render, onShow, onChange) {
 		if (on || el.hidden) return;
 		el.hidden = true;
 		current = undefined;
+		// An open still on its way stays closed.
+		opening++;
 		stopTyping();
 		mount(dock);
 		if (route().rest[1] === "t") history.pushState(null, "", dmHref(inst.id));
@@ -359,8 +373,8 @@ function threadPanel(inst, render, onShow, onChange) {
 			});
 			mount(dock, box.el);
 			if (route().rest[2] !== id) history.pushState(null, "", dmHref(inst.id, id));
-			markRead(inst, id);
-			if (threadId === undefined) onChange();
+			// Read first, then the summary under the message: else it would still say unread.
+			void markRead(inst, id).then(onChange);
 			follow();
 			if (!matchMedia("(pointer: coarse)").matches) box.input.focus({ preventScroll: true });
 		} catch (error) {
@@ -374,8 +388,7 @@ function threadPanel(inst, render, onShow, onChange) {
 		render(event.entry, put, current);
 		counted(1);
 		follow();
-		markRead(inst, current);
-		onChange();
+		void markRead(inst, current).then(onChange);
 		return true;
 	};
 	return { el, show, open, onEntry };

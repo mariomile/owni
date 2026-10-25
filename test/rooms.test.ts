@@ -171,6 +171,21 @@ describe("stanze", () => {
 		expect(await rooms.open(PERSON, thread.id)).toBeUndefined();
 	});
 
+	it("an empty name is the agenti's names; a thread made while the canale changes or goes follows it", async () => {
+		const { rooms } = setup((id) => `ok ${id}`);
+		const room = await rooms.create(PERSON, "Bando", ["ricerca", "vendite"]);
+		expect((await rooms.update(PERSON, room.id, { title: "  " }))?.title).toBe("Ricercatore, Assistente vendite");
+		const root = await rooms.post(PERSON, room.id, "@ricercatore trova il bando");
+		// Made while the agenti change: it has the new ones.
+		const [thread] = await Promise.all([rooms.thread(PERSON, room.id, root.id), rooms.update(PERSON, room.id, { instanceIds: ["vendite", "conti"] })]);
+		const seats = (await rooms.open(PERSON, thread?.id as string))?.room.seats.map((s) => s.instanceId);
+		expect(seats).toEqual(["vendite", "conti"]);
+		// Made while the canale is cancelled: nothing left under it.
+		const other = await rooms.post(PERSON, room.id, "@vendite un'offerta");
+		await Promise.all([rooms.thread(PERSON, room.id, other.id).catch(() => undefined), rooms.remove(PERSON, room.id)]);
+		expect((await rooms.list(PERSON)).length + (await rooms.children(PERSON, room.id)).length).toBe(0);
+	});
+
 	it("a /comando goes with the person's words to the agenti they call, never from an agente's answer", async () => {
 		const { rooms, commands, seen } = setup((id) => (id === "ricerca" ? "/chiusura-mese anche tu, @vendite" : `ok ${id}`));
 		const room = await rooms.create(PERSON, "", ["ricerca", "vendite"]);

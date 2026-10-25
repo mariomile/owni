@@ -238,8 +238,26 @@ describe("direct conversations and threads (ADR 0113)", () => {
 		await channel.createThread(h.anna.person.id, "Chat"); // never written in: not shown
 		const timeline = (await anna("/api/instances/ops/dm")).body;
 		expect(timeline.thread).toBeUndefined();
-		expect(timeline.entries).toEqual([expect.objectContaining({ id: sent.id, text: "una domanda di prima", at: old.createdAt, thread: expect.objectContaining({ id: old.id, count: 1, unread: false }) })]);
+		expect(timeline.entries).toEqual([expect.objectContaining({ id: sent.id, text: "una domanda di prima", at: sent.at, threadId: old.id, thread: expect.objectContaining({ id: old.id, count: 1, unread: false }) })]);
 		expect((await anna("/api/conversations")).body.direct[0].unread).toBe(false);
+	});
+
+	it("a chat that goes on answering shows where it last spoke, and what the agente is sent on its own leaves it unread", async () => {
+		const h = await setup();
+		const anna = await h.as(h.anna.token);
+		const channel = h.channels.get("ops") as WebChannel;
+		const brief = await channel.createThread(h.anna.person.id, "Brief");
+		const first = await say(anna, "ops", brief.id, "il brief di ieri");
+		const dm = (await anna("/api/instances/ops/dm", {})).body.thread;
+		const { sent } = await say(anna, "ops", dm.id, "nel mezzo");
+		const before = (await channel.thread(brief.id))?.readAt;
+		await channel.post(brief.id, h.anna.person.id, "il brief di oggi", { origin: "scheduled" });
+		// Not the person's words: what they had not read yet stays unread.
+		expect((await channel.thread(brief.id))?.readAt).toBe(before);
+		await until(async () => (await channel.transcript(brief.id)).some((e) => e.from === "owni" && e.text?.includes("il brief di oggi")));
+		const { entries } = (await anna("/api/instances/ops/dm")).body as { entries: any[] };
+		expect(entries.map((e) => e.id)).toEqual([sent.id, expect.any(String), first.sent.id]);
+		expect(entries.at(-1)).toEqual(expect.objectContaining({ threadId: brief.id, thread: expect.objectContaining({ id: brief.id, count: 3, unread: true }) }));
 	});
 
 	it("a thread answers with the model the person chose for the conversation", async () => {
@@ -312,7 +330,8 @@ describe("direct conversations and threads (ADR 0113)", () => {
 		await settled(anna, room.id, 1);
 		const thread = (await anna(`/api/rooms/${room.id}/threads`, { parent: sent.id })).body.room;
 		expect((await anna(`/api/rooms/${room.id}`, { agents: ["ops"] }, "PATCH")).status).toBe(400);
-		expect((await anna(`/api/rooms/${room.id}`, { title: "  " }, "PATCH")).status).toBe(400);
+		// No name: the agenti's, as when it was made.
+		expect((await anna(`/api/rooms/${room.id}`, { title: "  " }, "PATCH")).body.room).toMatchObject({ title: "Ops, Vendite" });
 		expect((await anna(`/api/rooms/${thread.id}`, { title: "Altro" }, "PATCH")).status).toBe(404);
 		const luca = await h.as(h.luca.token);
 		expect((await luca(`/api/rooms/${room.id}`, { title: "Mio" }, "PATCH")).status).toBe(404);

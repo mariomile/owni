@@ -1,6 +1,6 @@
 // Shell: sidebar, account menu, theme.
 import { accountDialog } from "./account.js";
-import { $app, agentHome, api, ApiError, channelHref, channelName, dmHref, emptyNote, face, fmt, go, h, icon, initials, instanceHref, mount, movedHref, route, selectInstance, state, store, toast } from "./common.js";
+import { $app, agentHome, api, ApiError, batched, channelHref, channelName, dmHref, emptyNote, face, fmt, go, h, icon, initials, instanceHref, mount, movedHref, route, selectInstance, state, store, toast } from "./common.js";
 import { renderLogin } from "./login.js";
 import { viewActivity } from "./pages/activity.js";
 import { agentForm, viewAgents } from "./pages/agents.js";
@@ -168,7 +168,7 @@ function syncRailControls() {
 
 /** The rail's direct conversations and canali, with what is unread (ADR 0113). */
 let conversationsRead = 0;
-export async function refreshConversations() {
+export const refreshConversations = batched(async () => {
 	const read = ++conversationsRead;
 	const person = state.me;
 	if (!person) return;
@@ -176,7 +176,7 @@ export async function refreshConversations() {
 	const conversations = await api("/api/conversations").catch(() => undefined);
 	if (conversations === undefined || state.me !== person || read !== conversationsRead) return;
 	state.conversations = conversations;
-}
+});
 
 function closeRailOnPhone() {
 	document.querySelector(".shell")?.classList.remove("open");
