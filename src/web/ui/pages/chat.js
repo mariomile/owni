@@ -9,6 +9,7 @@ import { install, installed, installOffer } from "../pwa.js";
 import { refreshCounters } from "../session.js";
 import { refreshThreads, renderRail } from "../shell.js";
 import { conversationRuns } from "../runs.js";
+import { renderMarkdown } from "../markdown.js";
 
 // ---------- chat ----------
 /** A workspace picture shown in the page (not downloaded). */
@@ -38,11 +39,13 @@ export async function viewChat(main) {
 	// One panel at a time next to the chat, also when one opens by itself.
 	const browser = browserPanel(inst, threadId, () => screen.show(false));
 	const screen = screenPanel(inst, threadId, () => browser.show(false));
-	mount(main, h("div.chat-split", conversation, browser.el, screen.el), h("div.panel-toggles", screen.toggle, browser.toggle));
+	mount(main, h("div.chat-split", conversation, browser.el, screen.el));
 	state.unread.delete(threadId);
 	renderRail();
 	const { entries, model } = await api(`/api/instances/${inst.id}/threads/${encodeURIComponent(threadId)}`);
 	if (!main.isConnected || state.instance !== inst) return;
+	// Tools belong to the fixed context bar, after the conversation has loaded successfully.
+	mount(main.parentElement.querySelector(".conversation-tools"), screen.toggle, browser.toggle);
 	const transcript = h("div.transcript", { role: "log", "aria-live": "polite" });
 	let typing;
 	const picture = (path) => pictureUrl(inst, path);
@@ -68,7 +71,7 @@ export async function viewChat(main) {
 				)
 			: entry.file
 			? fileLink(entry.file)
-			: h("div.body", entry.text ?? "");
+			: h("div.body", entry.from === "annie" ? renderMarkdown(entry.text ?? "") : entry.text ?? "");
 		const pictures = entry.images?.length
 			? h(
 					"div.pics",
@@ -112,7 +115,8 @@ export async function viewChat(main) {
 		transcript.append(typing);
 		transcript.scrollTop = transcript.scrollHeight;
 	};
-	const work = conversationRuns(inst, threadId, (active) => { if (!active) stopTyping(); });
+	// Once durable state is known, one compact status replaces the optimistic typing indicator.
+	const work = conversationRuns(inst, threadId, () => stopTyping());
 	state.onEntry = (event) => {
 		if (event.threadId !== threadId) return false;
 		stopTyping();
@@ -152,7 +156,8 @@ export async function viewChat(main) {
 		store(`annie.autosend.${threadId}`, null);
 		void box.submit();
 	}
-	box.input.focus();
+	// Opening a conversation to read it must not summon the phone's keyboard.
+	if (!matchMedia("(pointer: coarse)").matches) box.input.focus({ preventScroll: true });
 }
 
 /**

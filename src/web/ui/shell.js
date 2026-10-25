@@ -74,9 +74,9 @@ function workspaceNav(item) {
 		const inst = state.instance;
 		const choices = state.instances.filter((i) => i.canChat);
 		const who = route().rest[0]
-			? h("a.agent-context", { href: inst ? `#/agente/${encodeURIComponent(inst.id)}` : "#/agenti" }, inst ? face(inst, 20) : null, `Conversazione con ${inst?.name ?? "l'agente"}`)
+			? h("a.agent-context", { href: inst ? `#/agente/${encodeURIComponent(inst.id)}` : "#/agenti" }, inst ? face(inst, 20) : null, h("span.agent-context-label", `Conversazione con ${inst?.name ?? "l'agente"}`))
 			: h("label.chat-recipient", h("span", "Scrivi a"), choices.length > 1 ? h("select", { "aria-label": "Agente della nuova conversazione", value: inst?.id, onchange: (event) => { location.hash = instanceHref("chat", [], event.target.value); } }, choices.map((i) => h("option", { value: i.id, selected: i.id === inst?.id }, i.name))) : h("a", { href: inst ? `#/agente/${encodeURIComponent(inst.id)}` : "#/agenti" }, inst?.name ?? "Il tuo assistente"));
-		return h("div.conversation-context", who, h("a.btn.small.ghost", { href: "#/conversazioni" }, "Le tue conversazioni"));
+		return h("div.conversation-context", who, h("div.conversation-context-actions", h("div.conversation-tools", { role: "group", "aria-label": "Strumenti della conversazione" }), h("a.btn.small.ghost.conversation-list-link", { href: "#/conversazioni", "aria-label": "Le tue conversazioni", title: "Le tue conversazioni" }, icon("chat"), h("span", "Le tue conversazioni"))));
 	}
 	return null;
 }

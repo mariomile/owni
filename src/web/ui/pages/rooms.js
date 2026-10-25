@@ -1,6 +1,8 @@
 // Stanze pages.
 import { api, confirmDialog, emptyNote, face, faceColor, fmt, go, h, head, icon, mount, route, state, store, thinking, toast } from "../common.js";
 import { agentCommands, commandMenu } from "../commands.js";
+import { renderMarkdown } from "../markdown.js";
+import { copyButton, listenButton } from "../listen.js";
 
 // ---------- stanze (ADR 0063) ----------
 export async function viewRooms(main) {
@@ -80,7 +82,8 @@ async function viewRoom(main, roomId) {
 		// Each agente's name in the colour of its face, so that who is speaking reads at a glance.
 		const who = h("b.who", `${agent?.emoji ? `${agent.emoji} ` : ""}${agent?.name ?? entry.instanceId}`);
 		who.style.setProperty("--agent", faceColor(agent ?? { id: entry.instanceId }));
-		transcript.append(h("div.msg.annie", h("div.meta", face(agent ?? { id: entry.instanceId }, 20), who, h("span", fmt.time(entry.at)), by), entry.file ? fileLink(entry.instanceId, entry.file) : h("div.body", entry.text ?? "")));
+		const actions = entry.text ? h("div.msg-actions", copyButton(entry.text), listenButton(entry.text)) : null;
+		transcript.append(h("div.msg.annie", h("div.meta", face(agent ?? { id: entry.instanceId }, 20), who, h("span", fmt.time(entry.at)), by), entry.file ? fileLink(entry.instanceId, entry.file) : h("div.body", renderMarkdown(entry.text ?? "")), actions));
 	};
 	for (const e of entries) show(e);
 	state.onRoom = (event) => {
@@ -166,6 +169,6 @@ async function viewRoom(main, roomId) {
 	mount(main, h("section.conversation", header, transcript, h("div.dock", chips, h("div.box", commands, h("div.composer", input, send)))));
 	fit();
 	transcript.scrollTop = transcript.scrollHeight;
-	input.focus();
+	if (!matchMedia("(pointer: coarse)").matches) input.focus({ preventScroll: true });
 }
 

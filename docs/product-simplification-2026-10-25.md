@@ -1,6 +1,6 @@
 # Owni: Semplificazione del prodotto
 
-Data: 25 ottobre 2026. Stato: Implementazione completata e verificata localmente sul branch `feat/product-simplification`. App installata e release pubblica non ancora aggiornate a questa implementazione.
+Data: 25 ottobre 2026. Stato: Implementazione completata e verificata localmente sul branch `feat/product-simplification`. App locale aggiornata il 25 ottobre, insieme alla successiva correzione della chat; release pubblica non aggiornata.
 
 Richiesta di Mario:
 
@@ -330,4 +330,4 @@ Le evidenze locali e il manifest dei dati di prova sono in `/private/tmp/owni-pr
 
 Queste prove non costituiscono ricerca di usabilità con il pubblico scelto. Il ciclo commerciale completo della Segreteria e gli effetti reali su Google/MCP o altri servizi esterni non sono stati eseguiti. Il tentativo di rifiuto Google nel server di prova ha restituito 501 perché quel server non dispone del relativo esecutore; l'interfaccia ha mostrato l'errore. Nessuna chiamata a modelli a pagamento, mail reale o modifica a sistemi clienti.
 
-L'app macOS installata e la release pubblica non includono ancora questa implementazione. Non sono stati eseguiti push, merge, pubblicazione o aggiornamento dell'app installata per questa modifica.
+Al termine della prima consegna, l'app installata e la release pubblica non includevano ancora l'implementazione. Dopo la successiva segnalazione di Mario sulla chat, il 25 ottobre l'app locale è stata aggiornata con questa semplificazione e con il rendering Markdown, la nuova tipografia, il compositore compatto e lo stato discreto delle esecuzioni. L'aggiornamento delle risorse è stato verificato nella conversazione originale, dopo un backup dei dati e senza cambiare i binari nativi. Dettagli delle verifiche in [console.md](console.md#verificato). Nessun push, merge o pubblicazione della nuova versione.
