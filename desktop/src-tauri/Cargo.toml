@@ -1,6 +1,6 @@
 [package]
 name = "annie-desktop"
-version = "0.5.0"
+version = "0.6.0"
 description = "Owni as a desktop app: a window on an Owni server"
 license = "Apache-2.0"
 edition = "2021"
