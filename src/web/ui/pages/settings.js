@@ -631,7 +631,7 @@ export async function viewSettings(main) {
 	if (needInstance(main)) return;
 	const inst = state.instance;
 	if (state.me.role !== "owner") {
-		mount(main, head(agentLabel(inst), "Configurazione", "La configurazione dell'agente è riservata all'owner.", h("a.btn", { href: `#/agente/${encodeURIComponent(inst.id)}` }, "Torna al profilo")));
+		mount(main, head(agentLabel(inst), "Configurazione", "La configurazione dell'agente è riservata all'owner.", h("a.btn", { href: instanceHref("file", [], inst.id) }, "Apri i documenti")));
 		return;
 	}
 	const [{ settings }, { people }, tg, wa, google, voice, search, tel, computer, speech, images, models, desktop, providers] = await Promise.all([
@@ -747,7 +747,7 @@ export async function viewSettings(main) {
 	}, icon(group.glyph), group.label)));
 	show(active);
 	mount(main,
-		head(agentLabel(inst), h("h1", "Configurazione"), `Configura ${inst.name} una sezione alla volta. Materiali e procedure restano nel suo profilo.`, h("a.btn.ghost", { href: `#/agente/${encodeURIComponent(inst.id)}` }, "Profilo agente"), h("button.btn.ghost", { onclick: () => (setupHidden(inst.id, false), go("inizia")) }, "Primi passi")),
+		head(agentLabel(inst), h("h1", "Configurazione"), `Configura ${inst.name} una sezione alla volta.`, h("button.btn.ghost", { onclick: () => (setupHidden(inst.id, false), go("inizia")) }, "Primi passi")),
 		nav, saveBar, independentNote, panels,
 	);
 	if (requested === "modello") modelDetails.open = true;

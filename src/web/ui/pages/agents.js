@@ -1,5 +1,5 @@
 // Agenti page.
-import { agentLabel, api, emptyNote, face, faceColor, go, h, head, icon, instanceHref, mount, state, store, toast } from "../common.js";
+import { agentHome, agentLabel, api, emptyNote, face, faceColor, go, h, head, icon, instanceHref, mount, state, store, toast } from "../common.js";
 import { TONES } from "../tones.js";
 import { refreshInstances, refreshSetup } from "../session.js";
 import { render } from "../shell.js";
@@ -75,7 +75,7 @@ export function agentForm() {
 			store("owni.instance", state.instance.id);
 			toast(`Agente ${agentLabel(instance)} creato`);
 			await refreshSetup();
-			go("agente", instance.id);
+			go("impostazioni");
 			render();
 		} catch (error) {
 			toast(error.message, true);
@@ -177,7 +177,7 @@ export async function viewAgents(main) {
 			h("div.agent-face", face(a, 60)),
 			h(
 				"div.agent-body",
-				h("h2", h("a.agent-profile-link", { href: `#/agente/${encodeURIComponent(a.id)}` }, a.name), a.id === state.instance?.id ? h("span.tag", "aperto") : null),
+				h("h2", h("a.agent-profile-link", { href: agentHome(a.id) }, a.name), a.id === state.instance?.id ? h("span.tag", "aperto") : null),
 				a.tagline ? h("p", a.tagline) : null,
 				h("p.muted.small", [a.model?.provider === "faux" ? "Modello di prova" : a.model?.name, TONES.find(([v]) => v === a.tone)?.[1], a.channels.filter((c) => c !== "web" && c !== "agente").join(", ")].filter(Boolean).join(" · ")),
 				h("p.muted.small", h("span.tag", a.busy ? `Occupato${a.busyFor === undefined ? "" : ` da ${a.busyFor < 90 ? `${a.busyFor} s` : `${Math.round(a.busyFor / 60)} min`}`}` : "Libero"), a.doing ? ` ${a.busy ? "sta lavorando su" : "scheda in corso"}: ${a.doing}` : ""),
@@ -188,7 +188,7 @@ export async function viewAgents(main) {
 			h(
 				"div.agent-actions",
 				a.canChat ? h("a.btn.small.accent", { href: instanceHref("chat", [], a.id) }, "Scrivi") : null,
-				h("a.btn.small.ghost", { href: `#/agente/${encodeURIComponent(a.id)}` }, "Profilo"),
+				h("a.btn.small.ghost", { href: instanceHref("file", [], a.id) }, "Documenti"),
 				owner ? h("a.btn.small.ghost", { href: instanceHref("impostazioni", ["identita"], a.id) }, "Configura") : null,
 			),
 		);
@@ -198,7 +198,7 @@ export async function viewAgents(main) {
 	};
 	mount(
 		main,
-		head(null, h("h1", "Agenti"), "Il tuo assistente e gli eventuali agenti con responsabilità separate. Dal profilo trovi materiali, procedure, capacità e configurazione.", owner ? h("button.btn.accent", { onclick: () => agentForm() }, icon("plus"), "Nuovo agente") : null),
+		head(null, h("h1", "Agenti"), "Il tuo assistente e gli eventuali agenti con responsabilità separate. Di ognuno trovi documenti, memoria, procedure e configurazione.", owner ? h("button.btn.accent", { onclick: () => agentForm() }, icon("plus"), "Nuovo agente") : null),
 		agents.length === 0 ? emptyNote("div.empty", "Nessun agente", owner ? "Crea il primo con Nuovo agente." : "Chiedi all'owner di aggiungerti a un agente.") : h("div.agents", agents.map(card)),
 		owner ? h("details.card.fold.agent-team-options", h("summary", h("span.fold-glyph", icon("agenti")), h("span.fold-text", h("b", "Estendi il team quando serve"), h("small", "Squadre pronte e collaborazione tra agenti.")), h("span.fold-chevron", icon("down"))), h("div.fold-body", h("p.muted", "Una nuova conversazione non richiede un nuovo agente. Aggiungi una squadra o consenti la collaborazione quando vuoi dividere responsabilità e accessi."), h("div.actions", teamButton, h("button.btn.ghost", { title: "Più agenti già pronti a lavorare insieme", onclick: () => teamsForm() }, "Squadre pronte")))) : null,
 	);
