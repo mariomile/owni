@@ -1,6 +1,6 @@
 // Shell: sidebar, account menu, theme.
 import { accountDialog } from "./account.js";
-import { $app, agentHome, api, ApiError, dmHref, emptyNote, face, fmt, go, h, icon, initials, instanceHref, mount, movedHref, route, selectInstance, state, store, toast } from "./common.js";
+import { $app, agentHome, api, ApiError, channelHref, channelName, dmHref, emptyNote, face, fmt, go, h, icon, initials, instanceHref, mount, movedHref, route, selectInstance, state, store, toast } from "./common.js";
 import { renderLogin } from "./login.js";
 import { viewActivity } from "./pages/activity.js";
 import { agentForm, viewAgents } from "./pages/agents.js";
@@ -33,7 +33,7 @@ import { applyTheme, refreshSetup } from "./session.js";
 export const PAGES = [
 	{ id: "lavori", label: "Lavori", group: "Lavoro", workspace: "work", sidebar: true, view: viewWork },
 	{ id: "dm", label: "Messaggi diretti", group: "Lavoro", workspace: "conversations", palette: false, view: viewDm },
-	{ id: "stanze", label: "Conversazioni con più agenti", group: "Lavoro", workspace: "conversations", when: () => state.instances.filter((i) => i.canChat).length > 1, view: viewRooms },
+	{ id: "canali", label: "Canali", group: "Lavoro", workspace: "conversations", when: () => state.instances.filter((i) => i.canChat).length > 1, view: viewRooms },
 	{ id: "board", label: "Board degli incarichi", group: "Lavoro", workspace: "work", view: viewBoard },
 	{ id: "programmi", label: "Automazioni", group: "Lavoro", workspace: "work", view: viewPrograms },
 	{ id: "segreteria", label: "Pratiche commerciali", group: "Lavoro", workspace: "work", when: (i) => i?.hasSegreteria, view: viewSegreteria },
@@ -106,7 +106,7 @@ export function render() {
 	if (previous !== state.instance) void refreshSetup().then(() => { if (document.getElementById("rail")) renderRail(); });
 	closeMenu();
 	closeModelMenu();
-	const chat = item.id === "dm" || (item.id === "stanze" && current.rest[0] && current.rest[0] !== "nuova");
+	const chat = item.id === "dm" || (item.id === "canali" && current.rest[0] && current.rest[0] !== "nuova");
 	const main = h("main", { id: "main", class: chat ? "is-chat" : "is-page" });
 	const content = h(chat ? "div.page-content.chat-content" : "div.page-content");
 	mount(main, workspaceNav(item), content);
@@ -163,7 +163,7 @@ function syncRailControls() {
 	if (rail) rail.inert = railPhone.matches && !open;
 }
 
-/** The rail's direct conversations and canali, with what is unread (ADR 0112). */
+/** The rail's direct conversations and canali, with what is unread (ADR 0113). */
 let conversationsRead = 0;
 export async function refreshConversations() {
 	const read = ++conversationsRead;
@@ -192,15 +192,15 @@ export function renderRail() {
 		const label = count > 0 ? `${item.label} (${count})` : item.label;
 		nav.append(h("a", { href: `#/${item.id}`, "aria-current": PAGES.find((p) => p.id === view)?.workspace === item.workspace ? "page" : undefined, "aria-label": label, title: label, onclick: closeRailOnPhone }, icon(item.id), h("span.label", item.label), count > 0 ? h("span.count", { "aria-hidden": "true" }, String(count)) : null));
 	}
-	// The rail like a team chat (ADR 0112): the canali, then a direct conversation per agente.
+	// The rail like a team chat (ADR 0113): the canali, then a direct conversation per agente.
 	const row = (href, current, unread, mark, name, label) =>
 		h(`a${unread ? ".unread" : ""}`, { href, "aria-current": current ? "page" : undefined, "aria-label": `${label}${unread ? ", non letto" : ""}`, title: label, onclick: closeRailOnPhone }, mark, h("span.label", name), unread ? h("span.dot", { "aria-hidden": "true" }) : null);
 	const { direct, channels } = state.conversations;
 	const canCreate = state.instances.filter((i) => i.canChat).length > 1;
 	const canali = canCreate || channels.length
 		? h("nav.rail-list", { "aria-label": "Canali" },
-			h("div.rail-group", h("span.label", "Canali"), canCreate ? h("a.icon-btn.small", { href: "#/stanze/nuova", "aria-label": "Nuovo canale", title: "Nuovo canale", onclick: closeRailOnPhone }, icon("plus")) : null),
-			channels.map((c) => row(`#/stanze/${encodeURIComponent(c.id)}`, view === "stanze" && rest[0] === c.id, c.unread, icon("canali"), c.title, c.title)))
+			h("div.rail-group", h("span.label", "Canali"), canCreate ? h("a.icon-btn.small", { href: "#/canali/nuova", "aria-label": "Nuovo canale", title: "Nuovo canale", onclick: closeRailOnPhone }, icon("plus")) : null),
+			channels.map((c) => row(channelHref(c.id), view === "canali" && rest[0] === c.id, c.unread, icon("canali"), channelName(c.title).slice(1), `Canale ${channelName(c.title)}`)))
 		: null;
 	const here = view === "dm" ? rest[0] ?? homeAgent()?.id : undefined;
 	const agents = direct.flatMap((d) => {

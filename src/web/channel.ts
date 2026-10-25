@@ -13,9 +13,9 @@ export type WebThread = {
 	readonly updatedAt: string;
 	/** The stanza this thread is the agente's seat in (ADR 0063): not in the person's chats, its replies go to the stanza. */
 	readonly room?: string;
-	/** The person's one direct conversation with this agente (ADR 0112). */
+	/** The person's one direct conversation with this agente (ADR 0113). */
 	readonly dm?: true;
-	/** A thread under one message of a direct conversation (ADR 0112): shown in the side panel, not in lists. */
+	/** A thread under one message of a direct conversation (ADR 0113): shown in the side panel, not in lists. */
 	readonly parent?: { readonly threadId: string; readonly entryId: string };
 	/** When the person last had it on screen: anything later is unread. Missing on chats older than the marker: read. */
 	readonly readAt?: string;

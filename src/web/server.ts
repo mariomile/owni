@@ -148,7 +148,7 @@ export type WebAppOptions = {
 	readonly channels: ReadonlyMap<string, WebChannel>;
 	/** Stanze with more agenti (ADR 0063); without them the console shows none. */
 	readonly rooms?: Rooms;
-	/** The general agente: its direct conversation comes first and opens the console (ADR 0112). */
+	/** The general agente: its direct conversation comes first and opens the console (ADR 0113). */
 	readonly main?: string;
 	readonly connectors: (instanceId: string) => ConnectorStore;
 	readonly connectorStatus: (instanceId: string) => readonly ConnectorStatus[];
@@ -492,7 +492,7 @@ export function createWebApp(options: WebAppOptions): Server {
 		await instanceAccess(person as Person, params[0] as string);
 		return { threads: (await channelOf(params[0] as string).threads((person as Person).id)).filter((t) => t.parent === undefined) };
 	});
-	// --- direct conversation (ADR 0112): one per person and agente, a thread under any of its messages ---
+	// --- direct conversation (ADR 0113): one per person and agente, a thread under any of its messages ---
 	route("GET", "/api/instances/:id/dm", "person", async ({ person, params }) => {
 		const p = person as Person;
 		const { record } = await instanceAccess(p, params[0] as string);
@@ -780,7 +780,7 @@ export function createWebApp(options: WebAppOptions): Server {
 			if (people.includes(p.id)) res.write(`event: board\ndata: ${JSON.stringify({ kind: "started", id: card.id, n: card.n, title: card.title })}\n\n`);
 		};
 		options.board?.work.events.on("started", started);
-		const roomEntry = (event: RoomEvent) => res.write(`event: room\ndata: ${JSON.stringify({ roomId: event.roomId, entry: shownInRoom(event.entry) })}\n\n`);
+		const roomEntry = (event: RoomEvent) => res.write(`event: room\ndata: ${JSON.stringify({ roomId: event.roomId, entry: shownInRoom(event.entry), ...(event.parent === undefined ? {} : { parent: event.parent }) })}\n\n`);
 		options.rooms?.events.on(p.id, roomEntry);
 		const ping = setInterval(() => res.write(": ping\n\n"), 25_000);
 		await new Promise<void>((resolve) => req.on("close", resolve));
@@ -1521,7 +1521,7 @@ export function createWebApp(options: WebAppOptions): Server {
 		unread: unread(thread),
 	});
 	/**
-	 * The person's direct conversation with an agente (ADR 0112): its messages, each with the thread
+	 * The person's direct conversation with an agente (ADR 0113): its messages, each with the thread
 	 * under it, and the chats from before as messages of their own, at the time they started.
 	 */
 	const directTimeline = async (channel: WebChannel, personId: string) => {
@@ -1699,7 +1699,12 @@ export function createWebApp(options: WebAppOptions): Server {
 		);
 		// The @nome the console offers is one the stanza reads as that agente.
 		const short = handles(agents.filter((a) => a.present));
-		return { id: room.id, title: room.title, updatedAt: room.updatedAt, agents: agents.map((a) => ({ ...a, handle: short.get(a.instanceId) ?? a.instanceId })) };
+		return { id: room.id, title: room.title, updatedAt: room.updatedAt, ...(room.parent === undefined ? {} : { parent: room.parent }), agents: agents.map((a) => ({ ...a, handle: short.get(a.instanceId) ?? a.instanceId })) };
+	};
+	/** How a thread under a message of a canale reads there: how many replies, the last one, who wrote them. */
+	const roomReplies = (thread: Room, said: readonly RoomEntry[]) => {
+		const talk = said.filter((e) => e.from !== "note");
+		return { id: thread.id, count: talk.length, ...(talk.length === 0 ? {} : { lastAt: (talk.at(-1) as RoomEntry).at }), who: [...new Set(talk.map((e) => (e.from === "person" ? "person" : (e.instanceId as string))))], unread: unread(thread) };
 	};
 	const roomError = (error: unknown): never => {
 		if (error instanceof RoomError) throw new HttpError(400, error.message);
@@ -1737,8 +1742,44 @@ export function createWebApp(options: WebAppOptions): Server {
 	route("GET", "/api/rooms/:room", "person", async ({ person, params }) => {
 		const p = person as Person;
 		const opened = await roomsOf().open(p.id, params[0] as string);
-		if (opened === undefined) throw new HttpError(404, "Stanza non trovata");
-		return { room: await roomView(opened.room, p), entries: opened.entries.map(shownInRoom) };
+		if (opened === undefined) throw new HttpError(404, "Canale non trovato");
+		// Each message of a canale with the thread under it (ADR 0113).
+		const under = new Map((await roomsOf().children(p.id, opened.room.id)).map((t) => [t.parent?.entryId, t] as const));
+		const entries = await Promise.all(
+			opened.entries.map(async (e) => {
+				const thread = under.get(e.id);
+				return thread === undefined ? shownInRoom(e) : { ...shownInRoom(e), thread: roomReplies(thread, (await roomsOf().open(p.id, thread.id))?.entries ?? []) };
+			}),
+		);
+		return { room: await roomView(opened.room, p), entries };
+	});
+	route("PATCH", "/api/rooms/:room", "person", async ({ person, params, req }) => {
+		const p = person as Person;
+		const body = (await readJson(req)) as { title?: unknown; agents?: unknown };
+		try {
+			const room = await roomsOf().update(p.id, params[0] as string, {
+				...(typeof body.title === "string" ? { title: body.title } : {}),
+				...(Array.isArray(body.agents) ? { instanceIds: body.agents.filter((a): a is string => typeof a === "string") } : {}),
+			});
+			if (room === undefined) throw new HttpError(404, "Canale non trovato");
+			await runtime.audit(tenantId).append({ type: "room.updated", personId: p.id, roomId: room.id, agents: room.seats.length });
+			return { room: await roomView(room, p) };
+		} catch (error) {
+			return roomError(error);
+		}
+	});
+	// The thread under a message of a canale, made on first use (ADR 0113).
+	route("POST", "/api/rooms/:room/threads", "person", async ({ person, params, req }) => {
+		const p = person as Person;
+		const body = (await readJson(req)) as { parent?: unknown };
+		if (typeof body.parent !== "string") throw new HttpError(400, "Serve il messaggio a cui risponde il thread");
+		try {
+			const thread = await roomsOf().thread(p.id, params[0] as string, body.parent);
+			if (thread === undefined) throw new HttpError(404, "Messaggio non trovato");
+			return { room: await roomView(thread, p) };
+		} catch (error) {
+			return roomError(error);
+		}
 	});
 	route("POST", "/api/rooms/:room/messages", "person", async ({ person, params, req }) => {
 		const p = person as Person;
@@ -1750,10 +1791,10 @@ export function createWebApp(options: WebAppOptions): Server {
 		}
 	});
 	route("POST", "/api/rooms/:room/read", "person", async ({ person, params }) => {
-		if (!(await roomsOf().markRead((person as Person).id, params[0] as string))) throw new HttpError(404, "Stanza non trovata");
+		if (!(await roomsOf().markRead((person as Person).id, params[0] as string))) throw new HttpError(404, "Canale non trovato");
 		return { ok: true };
 	});
-	// The console's rail (ADR 0112): a direct conversation for each agente the person can write to, the general one first, and their canali.
+	// The console's rail (ADR 0113): a direct conversation for each agente the person can write to, the general one first, and their canali.
 	route("GET", "/api/conversations", "person", async ({ person }) => {
 		const p = person as Person;
 		const agents = (await runtime.registry.listInstances(tenantId)).filter((r) => canChatWith(r, p));
@@ -1767,12 +1808,13 @@ export function createWebApp(options: WebAppOptions): Server {
 			}),
 		);
 		const rooms = options.rooms === undefined ? [] : await options.rooms.list(p.id);
-		const channels = await Promise.all(rooms.map(async (r) => ({ ...(await roomView(r, p)), unread: unread(r) })));
+		// A canale is unread when it or a thread under it is.
+		const channels = await Promise.all(rooms.map(async (r) => ({ ...(await roomView(r, p)), unread: unread(r) || (await options.rooms?.children(p.id, r.id))?.some(unread) === true })));
 		return { direct, channels: channels.sort((a, b) => a.title.localeCompare(b.title, "it")) };
 	});
 	route("DELETE", "/api/rooms/:room", "person", async ({ person, params }) => {
 		const p = person as Person;
-		if (!(await roomsOf().remove(p.id, params[0] as string))) throw new HttpError(404, "Stanza non trovata");
+		if (!(await roomsOf().remove(p.id, params[0] as string))) throw new HttpError(404, "Canale non trovato");
 		await runtime.audit(tenantId).append({ type: "room.deleted", personId: p.id, roomId: params[0] });
 		return { ok: true };
 	});

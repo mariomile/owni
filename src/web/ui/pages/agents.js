@@ -120,7 +120,7 @@ async function teamsForm() {
 			dialog.close();
 			await refreshInstances();
 			toast(note ?? `Squadra ${team.name} pronta: ${agents.map((a) => a.name).join(", ")}`, note !== undefined);
-			if (room) go("stanze", room);
+			if (room) go("canali", room);
 			else go("agenti");
 			render();
 		} catch (error) {

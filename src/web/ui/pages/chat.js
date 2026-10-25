@@ -32,7 +32,7 @@ const HINTS = [
 ];
 
 /**
- * The person's direct conversation with an agente (ADR 0112): one, continuous, made with the first
+ * The person's direct conversation with an agente (ADR 0113): one, continuous, made with the first
  * message. Empty, it is the welcome. The chats from before it show in it as messages with replies.
  */
 export async function viewDm(main) {
@@ -142,7 +142,7 @@ function conversationView(inst, main, thread, entries, model) {
 				)
 			: null;
 		const listen = entry.from === "owni" && entry.text ? listenButton(entry.text) : null;
-		// In the conversation, under every message: answer it in a thread (ADR 0112), and the thread's replies so far.
+		// In the conversation, under every message: answer it in a thread (ADR 0113), and the thread's replies so far.
 		const threaded = here && entry.id !== undefined;
 		const answer = threaded ? h("button.listen.reply-thread", { type: "button", title: "Rispondi nel thread", "aria-label": "Rispondi nel thread", onclick: () => void replies.open(entry, entry.thread?.id) }, icon("thread")) : null;
 		// Under an answer, on hover (always on touch): copy it, listen to it.
@@ -262,7 +262,7 @@ function threadSummary(inst, entry, open) {
 }
 
 /**
- * A thread under one message (ADR 0112), in the place next to the conversation the browser and the
+ * A thread under one message (ADR 0113), in the place next to the conversation the browser and the
  * screen use: the message, its replies and a box to answer. The thread is made on the first open; a
  * chat from before opens here whole. `render(entry, into)` draws a message the conversation's way.
  */

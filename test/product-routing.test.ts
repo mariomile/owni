@@ -6,12 +6,13 @@ function browserCommon() {
 	const data = new Map<string, string>();
 	const storage = { getItem: (key: string) => data.get(key) ?? null, setItem: (key: string, value: string) => data.set(key, value), removeItem: (key: string) => data.delete(key) };
 	const source = readFileSync(new URL("../src/web/ui/common.js", import.meta.url), "utf8").replace(/^export /gm, "");
-	const common = new Function("document", "location", "localStorage", `${source}\nreturn { route, go, instanceHref, dmHref, movedHref, selectInstance, state };`)({ getElementById: () => null }, location, storage) as {
+	const common = new Function("document", "location", "localStorage", `${source}\nreturn { route, go, instanceHref, dmHref, movedHref, channelName, selectInstance, state };`)({ getElementById: () => null }, location, storage) as {
 		route(): { view: string; rest: string[]; instanceId?: string };
 		go(view: string, ...rest: string[]): void;
 		instanceHref(view: string, rest: string[], instanceId?: string | null): string;
 		dmHref(instanceId: string, threadId?: string): string;
 		movedHref(route: { view: string; rest: string[]; instanceId?: string }): string | undefined;
+		channelName(title: string): string;
 		selectInstance(id: string): boolean;
 		state: { instance?: { id: string }; instances: { id: string }[] };
 	};
@@ -56,7 +57,7 @@ describe("agent context in product navigation", () => {
 		expect(common.route()).toMatchObject({ view: "file", rest: ["%broken"], instanceId: "sales" });
 	});
 
-	it("sends links saved before ADR 0112 to where the conversation lives now", () => {
+	it("sends links saved before ADR 0113 to where the conversation lives now", () => {
 		const common = browserCommon();
 		const moved = (hash: string) => {
 			common.location.hash = hash;
@@ -65,8 +66,18 @@ describe("agent context in product navigation", () => {
 		expect(moved("#/chat/p_1.abc?agent=sales")).toBe("#/dm/sales/t/p_1.abc");
 		expect(moved("#/chat?agent=sales")).toBe("#/dm/sales");
 		expect(moved("#/chat")).toBe("#/");
+		expect(moved("#/stanze/p_1.r2")).toBe("#/canali/p_1.r2");
+		expect(moved("#/stanze/nuova")).toBe("#/canali/nuova");
+		expect(moved("#/canali/p_1.r2")).toBeUndefined();
 		expect(moved("#/dm/sales")).toBeUndefined();
 		expect(moved("#/lavori")).toBeUndefined();
+	});
+
+	it("names a canale the way a team chat does, the stored title untouched", () => {
+		const common = browserCommon();
+		expect(common.channelName("Bando regionale 2027")).toBe("#bando-regionale-2027");
+		expect(common.channelName("  Città & Più!  ")).toBe("#città-più");
+		expect(common.channelName("!!!")).toBe("#canale");
 	});
 });
 

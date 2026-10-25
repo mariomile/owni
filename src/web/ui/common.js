@@ -359,7 +359,7 @@ export const state = {
 	pendingApprovals: 0,
 	/** Schede waiting for this person's review (ADR 0051). */
 	boardReview: 0,
-	/** The rail's conversations (ADR 0112): a direct one per agente the person can write to, the general one first, and their canali. */
+	/** The rail's conversations (ADR 0113): a direct one per agente the person can write to, the general one first, and their canali. */
 	conversations: { direct: [], channels: [] },
 	/** Steps of «Primi passi» still to do, for the owner; 0 when done or put away. */
 	setupLeft: 0,
@@ -388,15 +388,26 @@ export function instanceHref(view, rest = [], instanceId = state.instance?.id) {
 	return instanceId ? `${path}?agent=${encodeURIComponent(instanceId)}` : path;
 }
 
-/** The person's direct conversation with an agente, or a thread in it (ADR 0112). */
+/** The person's direct conversation with an agente, or a thread in it (ADR 0113). */
 export function dmHref(instanceId, threadId) {
 	return `#/dm/${encodeURIComponent(instanceId)}${threadId ? `/t/${encodeURIComponent(threadId)}` : ""}`;
 }
 
-/** Where an address from before the canali goes now (ADR 0112): a chat opens in its agente's direct messages. */
+/** Where an address from before the canali goes now (ADR 0113): a chat opens in its agente's direct messages. */
 export function movedHref({ view, rest, instanceId }) {
 	if (view === "chat") return instanceId ? dmHref(instanceId, rest[0]) : "#/";
+	if (view === "stanze") return `#/${["canali", ...rest].map(encodeURIComponent).join("/")}`;
 	return undefined;
+}
+
+/** A canale as the console names it (ADR 0113): «#bando-regionale» for «Bando regionale». */
+export function channelName(title) {
+	return `#${title.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-+|-+$/g, "") || "canale"}`;
+}
+
+/** A canale, or a thread in it (ADR 0113). */
+export function channelHref(roomId, threadId) {
+	return `#/canali/${encodeURIComponent(roomId)}${threadId ? `/t/${encodeURIComponent(threadId)}` : ""}`;
 }
 
 /** Where an agent's own page is: its configuration for the owner, its documents for everyone else. */

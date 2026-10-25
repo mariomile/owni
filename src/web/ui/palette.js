@@ -1,5 +1,5 @@
 // Command palette.
-import { dmHref, go, h, icon, mount, state } from "./common.js";
+import { channelHref, channelName, dmHref, go, h, icon, mount, state } from "./common.js";
 import { PAGES } from "./shell.js";
 
 // ---------- command palette (⌘K) ----------
@@ -11,7 +11,7 @@ export function openPalette() {
 		const agent = state.instances.find((i) => i.id === d.instanceId);
 		return agent ? [{ label: agent.name, group: "Messaggi diretti", icon: "dm", href: dmHref(agent.id) }] : [];
 	});
-	const rooms = state.conversations.channels.map((c) => ({ label: c.title, group: "Canale", icon: "canali", href: `#/stanze/${encodeURIComponent(c.id)}` }));
+	const rooms = state.conversations.channels.map((c) => ({ label: channelName(c.title), group: "Canale", icon: "canali", href: channelHref(c.id) }));
 	const input = h("input", { type: "text", placeholder: "Vai a una sezione o a una conversazione…", "aria-label": "Cerca una sezione o una conversazione", autocomplete: "off" });
 	const list = h("ul", { role: "listbox" });
 	let active = 0;

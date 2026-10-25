@@ -160,7 +160,7 @@ function connectEvents() {
 		const event = JSON.parse(e.data);
 		// A reply can carry news for the counters (a tool proposed, a task created).
 		void refreshCounters();
-		// The rail says what is unread (ADR 0112); a reply nobody has on screen is also announced.
+		// The rail says what is unread (ADR 0113); a reply nobody has on screen is also announced.
 		if (state.onEntry?.(event)) return;
 		toast("Nuova risposta di Owni");
 		void refreshConversations().then(renderRail);

@@ -79,8 +79,8 @@ async function setup() {
 	const as = async (token: string) => {
 		const login = await fetch(`${base}/api/login`, { method: "POST", headers: { "x-owni": "1", "content-type": "application/json" }, body: JSON.stringify({ token }) });
 		const cookie = (login.headers.get("set-cookie") ?? "").split(";")[0] as string;
-		return async (path: string, body?: unknown) => {
-			const res = await fetch(`${base}${path}`, { method: body === undefined ? "GET" : "POST", headers: { cookie, "x-owni": "1", "content-type": "application/json" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+		return async (path: string, body?: unknown, method = body === undefined ? "GET" : "POST") => {
+			const res = await fetch(`${base}${path}`, { method, headers: { cookie, "x-owni": "1", "content-type": "application/json" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
 			return { status: res.status, body: (await res.json()) as any };
 		};
 	};
@@ -102,7 +102,26 @@ async function say(client: Client, agent: string, threadId: string, text: string
 	return { sent, answer };
 }
 
-describe("direct conversations and threads (ADR 0112)", () => {
+/** Write in a canale or a thread of one and wait for an agente's answer that repeats `text`. */
+async function sayInRoom(client: Client, roomId: string, text: string) {
+	const sent = (await client(`/api/rooms/${roomId}/messages`, { text })).body.entry;
+	let answer: any;
+	await until(async () => {
+		answer = ((await client(`/api/rooms/${roomId}`)).body.entries as any[]).find((e) => e.from === "agent" && e.at >= sent.at && e.text.includes(text));
+		return answer !== undefined;
+	});
+	return { sent, answer };
+}
+
+/**
+ * Wait for the agenti of a canale to be done. The test model repeats what it is told, @nomi included,
+ * so they call each other until the chain stops with its note.
+ */
+async function settled(client: Client, roomId: string, notes: number) {
+	await until(async () => ((await client(`/api/rooms/${roomId}`)).body.entries as any[]).filter((e) => e.from === "note").length >= notes);
+}
+
+describe("direct conversations and threads (ADR 0113)", () => {
 	it("one direct conversation per person and agente, however many open it at once", async () => {
 		const h = await setup();
 		const anna = await h.as(h.anna.token);
@@ -232,5 +251,78 @@ describe("direct conversations and threads (ADR 0112)", () => {
 		await h.runtime.setChatModel("acme", "ops", { channel: "web", threadId: dm.id }, chosen, h.anna.person.id);
 		const thread = (await anna("/api/instances/ops/threads", { parent: sent.id })).body.thread;
 		expect(await h.runtime.chatModel("acme", "ops", "web", thread.id)).toEqual(chosen);
+	});
+
+	it("a thread under a message of a canale: its agenti, out of the lists, told what it answers, the canale unread for it", async () => {
+		const h = await setup();
+		const anna = await h.as(h.anna.token);
+		const room = (await anna("/api/rooms", { title: "Lancio", agents: ["ops", "sales"] })).body.room;
+		const { sent } = await sayInRoom(anna, room.id, "@ops prepara il piano di lancio");
+		await settled(anna, room.id, 1);
+		await anna(`/api/rooms/${room.id}/read`, {});
+		const made = await Promise.all([1, 2].map(() => anna(`/api/rooms/${room.id}/threads`, { parent: sent.id })));
+		expect(made.map((r) => r.status)).toEqual([200, 200]);
+		const thread = made[0]?.body.room;
+		expect(made[1]?.body.room.id).toBe(thread.id);
+		expect(thread).toMatchObject({ title: "Lancio", parent: { roomId: room.id, entryId: sent.id } });
+		expect(thread.agents.map((a: any) => a.instanceId)).toEqual(["ops", "sales"]);
+		expect((await anna(`/api/rooms/${room.id}/threads`, { parent: "m_nessuno" })).status).toBe(404);
+		expect((await anna(`/api/rooms/${thread.id}/threads`, { parent: sent.id })).status).toBe(404);
+		// Not a canale of its own in any list.
+		expect((await anna("/api/rooms")).body.rooms.map((r: any) => r.id)).toEqual([room.id]);
+		expect((await anna("/api/conversations")).body.channels.map((c: any) => c.id)).toEqual([room.id]);
+		// The first call of each agente in the thread is told the message it answers; @nome works as in the canale.
+		const first = await sayInRoom(anna, thread.id, "@vendite più corto");
+		expect(first.answer).toMatchObject({ instanceId: "sales" });
+		expect(first.answer.text).toContain("Thread nel canale «Lancio»");
+		expect(first.answer.text).toContain("dati del thread");
+		expect(first.answer.text).toContain("prepara il piano di lancio");
+		expect(first.answer.text).toContain("scritto dalla persona");
+		// Ops, called by Vendite's answer, is told too: its first call in the thread.
+		await settled(anna, thread.id, 1);
+		const said = (await anna(`/api/rooms/${thread.id}`)).body.entries as any[];
+		const byOps = said.find((e) => e.instanceId === "ops");
+		expect(byOps.text).toContain("dati del thread");
+		expect(byOps.text).toContain("scritto dalla persona");
+		// Under the message in the canale: how many replies, the last, who wrote them.
+		const talk = said.filter((e) => e.from !== "note");
+		const shown = ((await anna(`/api/rooms/${room.id}`)).body.entries as any[]).find((e) => e.id === sent.id);
+		expect(shown.thread).toMatchObject({ id: thread.id, count: talk.length, lastAt: talk.at(-1).at, who: ["person", "sales", "ops"], unread: true });
+		expect((await anna("/api/conversations")).body.channels[0].unread).toBe(true);
+		await anna(`/api/rooms/${thread.id}/read`, {});
+		expect((await anna("/api/conversations")).body.channels[0].unread).toBe(false);
+		// Nobody else opens it, the owner neither.
+		for (const token of [h.luca.token, h.owner.token]) {
+			const other = await h.as(token);
+			expect((await other(`/api/rooms/${thread.id}`)).status).toBe(404);
+			expect((await other(`/api/rooms/${room.id}/threads`, { parent: sent.id })).status).toBe(404);
+			expect((await other(`/api/rooms/${thread.id}/messages`, { text: "intruso" })).status).toBe(400);
+			expect((await other(`/api/rooms/${thread.id}/read`, {})).status).toBe(404);
+		}
+		// Deleting the canale deletes its threads.
+		expect((await anna(`/api/rooms/${room.id}`, undefined, "DELETE")).status).toBe(200);
+		expect((await anna(`/api/rooms/${thread.id}`)).status).toBe(404);
+	});
+
+	it("a canale changes name and agenti, and its threads follow", async () => {
+		const h = await setup();
+		const anna = await h.as(h.anna.token);
+		const room = (await anna("/api/rooms", { title: "Lancio", agents: ["ops", "sales"] })).body.room;
+		const { sent } = await sayInRoom(anna, room.id, "@ops ciao");
+		await settled(anna, room.id, 1);
+		const thread = (await anna(`/api/rooms/${room.id}/threads`, { parent: sent.id })).body.room;
+		expect((await anna(`/api/rooms/${room.id}`, { agents: ["ops"] }, "PATCH")).status).toBe(400);
+		expect((await anna(`/api/rooms/${room.id}`, { title: "  " }, "PATCH")).status).toBe(400);
+		expect((await anna(`/api/rooms/${thread.id}`, { title: "Altro" }, "PATCH")).status).toBe(404);
+		const luca = await h.as(h.luca.token);
+		expect((await luca(`/api/rooms/${room.id}`, { title: "Mio" }, "PATCH")).status).toBe(404);
+		const renamed = await anna(`/api/rooms/${room.id}`, { title: "Lancio autunno" }, "PATCH");
+		expect(renamed.body.room).toMatchObject({ id: room.id, title: "Lancio autunno" });
+		expect((await anna(`/api/rooms/${thread.id}`)).body.room.title).toBe("Lancio autunno");
+		// Out and back in: the thread follows the canale's agenti.
+		expect((await anna(`/api/rooms/${room.id}`, { agents: ["sales", "ops"] }, "PATCH")).status).toBe(200);
+		expect((await anna(`/api/rooms/${thread.id}`)).body.room.agents.map((a: any) => a.instanceId)).toEqual(["ops", "sales"]);
+		// Luca cannot write to Vendite: no canale of his has it.
+		expect((await luca("/api/rooms", { title: "Suo", agents: ["ops", "sales"] })).status).toBe(400);
 	});
 });
