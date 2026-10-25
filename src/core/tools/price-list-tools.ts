@@ -1,4 +1,4 @@
-import type { AnnieTool, JsonValue, ToolContext } from "../engine.ts";
+import type { OwniTool, JsonValue, ToolContext } from "../engine.ts";
 import type { InvoiceStore } from "../invoice-store.ts";
 import { todayIn } from "../italian-calendar.ts";
 import { changedCents, checkOf, fencedList, findItems, parseItemId, PRICE_LIST_LIMITS, PRICE_LIST_OPS, type PriceItem, PriceListError, type PriceListOp, priceListCallReads, searchItems } from "../price-list.ts";
@@ -53,10 +53,10 @@ function capitalised(name: string): string {
  * preview and the person's yes, exported. Ids, prices and checks are this tool's; names, codes and
  * descriptions come from the person or a file and are fenced.
  */
-export function createPriceListTools(options: PriceListToolsOptions): AnnieTool[] {
+export function createPriceListTools(options: PriceListToolsOptions): OwniTool[] {
 	const { store, workspace, timeZone } = options;
 	const now = options.now ?? (() => new Date());
-	const who = (ctx: ToolContext) => (ctx.thread === undefined ? "annie" : (options.whoIs(ctx.thread) ?? `${ctx.thread.channel}:${ctx.thread.threadId}`));
+	const who = (ctx: ToolContext) => (ctx.thread === undefined ? "owni" : (options.whoIs(ctx.thread) ?? `${ctx.thread.channel}:${ctx.thread.threadId}`));
 	const mark = (ctx: ToolContext) => ({ by: who(ctx), at: now().toISOString() });
 	const audit = async (ctx: ToolContext, op: PriceListEvent["op"], count: number) => {
 		// Its own step: an audit that failed is written on the rerun, after the change it records.

@@ -4,7 +4,7 @@ import { type InstanceVoice, spokenNote } from "./channels/speech.ts";
 import { attachmentNote } from "./core/attachment-note.ts";
 import { imageType } from "./core/images.ts";
 import type { ChatModels } from "./core/chat-models.ts";
-import type { AnnieRuntime, InstanceRecord } from "./core/index.ts";
+import type { OwniRuntime, InstanceRecord } from "./core/index.ts";
 import { answerModelCommand, modelCommandArgument } from "./model-command.ts";
 
 /** What a person reads when the model gave no answer; «Primi passi» does not count it as a reply. */
@@ -18,7 +18,7 @@ export const REPLY_CANCELLED = "Lavoro interrotto su tua richiesta. Le azioni gi
  * The only module that knows both sides.
  */
 export function connectChannel(
-	runtime: AnnieRuntime,
+	runtime: OwniRuntime,
 	adapter: ChannelAdapter,
 	instance: { readonly tenantId: string; readonly instanceId: string },
 	log: (message: string) => void = console.error,
@@ -117,7 +117,7 @@ export function connectChannel(
  * checks them). Only for allowed users: the core decides that on submit, so files of a
  * stranger are dropped here, before they touch the disk.
  */
-async function withAttachments(runtime: AnnieRuntime, message: InboundMessage): Promise<InboundMessage> {
+async function withAttachments(runtime: OwniRuntime, message: InboundMessage): Promise<InboundMessage> {
 	if (message.attachments === undefined || message.attachments.length === 0) return message;
 	const record = await runtime.registry.getInstance(message.tenantId, message.instanceId);
 	const allowed = (record.allowedUsers[message.channel] ?? []).includes(message.userId);

@@ -16,9 +16,9 @@ export const DEFAULT_MODEL_ROLES: ModelRoles = {
 
 /** Test / offline roles use the local faux model. */
 export const FAUX_MODEL_ROLES: ModelRoles = {
-	extract: { provider: "faux", modelId: "annie-dev" },
-	draft: { provider: "faux", modelId: "annie-dev" },
-	classify: { provider: "faux", modelId: "annie-dev" },
+	extract: { provider: "faux", modelId: "owni-dev" },
+	draft: { provider: "faux", modelId: "owni-dev" },
+	classify: { provider: "faux", modelId: "owni-dev" },
 };
 
 export function roleModel(roles: ModelRoles, role: keyof ModelRoles): ModelSelection {

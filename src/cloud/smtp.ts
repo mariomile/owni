@@ -28,10 +28,10 @@ export function parseSmtpUrl(url: string, from: string): SmtpOptions {
 	try {
 		parsed = new URL(url);
 	} catch {
-		throw new Error("ANNIE_CLOUD_SMTP_URL: not a URL (smtps://user:password@host:465 or smtp://user:password@host:587)");
+		throw new Error("OWNI_CLOUD_SMTP_URL: not a URL (smtps://user:password@host:465 or smtp://user:password@host:587)");
 	}
 	const security = parsed.protocol === "smtps:" ? "tls" : parsed.protocol === "smtp:" ? "starttls" : undefined;
-	if (security === undefined) throw new Error("ANNIE_CLOUD_SMTP_URL: use smtps:// (port 465) or smtp:// with STARTTLS (port 587)");
+	if (security === undefined) throw new Error("OWNI_CLOUD_SMTP_URL: use smtps:// (port 465) or smtp:// with STARTTLS (port 587)");
 	assertSender(from);
 	return {
 		host: parsed.hostname,
@@ -49,7 +49,7 @@ const SEND_DEADLINE_MS = 60_000;
 const MAX_LINE = 8192;
 
 function assertSender(from: string): void {
-	if (!/^[^\r\n<>]*<[^\s<>@]+@[^\s<>@]+>$|^[^\s<>@]+@[^\s<>@]+$/.test(from)) throw new Error('ANNIE_CLOUD_MAIL_FROM: an address, or "Name <address>"');
+	if (!/^[^\r\n<>]*<[^\s<>@]+@[^\s<>@]+>$|^[^\s<>@]+@[^\s<>@]+$/.test(from)) throw new Error('OWNI_CLOUD_MAIL_FROM: an address, or "Name <address>"');
 }
 
 /** Sends each mail over a fresh SMTP connection: few mails, no pool to keep alive. */
@@ -215,7 +215,7 @@ class SmtpSession {
 	}
 
 	async ehlo(): Promise<string> {
-		return this.command("EHLO annie", 250);
+		return this.command("EHLO owni", 250);
 	}
 
 	/** STARTTLS accepted: the same connection continues encrypted, certificate checked. */

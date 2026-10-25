@@ -9,7 +9,7 @@ import { refreshThreads, render, renderRail } from "./shell.js";
 // ---------- boot ----------
 // api() says a session is gone with this event (common.js imports nothing): show the login.
 let counterTimer;
-window.addEventListener("annie:unauthorized", () => {
+window.addEventListener("owni:unauthorized", () => {
 	state.me = undefined;
 	clearInterval(counterTimer);
 	renderLogin();
@@ -87,7 +87,7 @@ function unreachable() {
 
 export async function refreshInstances() {
 	state.instances = (await api("/api/instances")).instances;
-	const saved = store("annie.instance");
+	const saved = store("owni.instance");
 	state.instance = state.instances.find((i) => i.id === saved) ?? state.instances[0];
 	await refreshCounters();
 }
@@ -110,13 +110,13 @@ export async function refreshSetup() {
 export function setupHidden(instanceId, hide) {
 	let ids = [];
 	try {
-		ids = JSON.parse(store("annie.setup.hidden") ?? "[]");
+		ids = JSON.parse(store("owni.setup.hidden") ?? "[]");
 	} catch {
 		/* an older value: start again */
 	}
 	if (!Array.isArray(ids)) ids = [];
 	if (hide === undefined) return ids.includes(instanceId);
-	store("annie.setup.hidden", JSON.stringify(hide ? [...new Set([...ids, instanceId])] : ids.filter((id) => id !== instanceId)));
+	store("owni.setup.hidden", JSON.stringify(hide ? [...new Set([...ids, instanceId])] : ids.filter((id) => id !== instanceId)));
 }
 
 let counterRefresh;
@@ -183,8 +183,8 @@ function connectEvents() {
 }
 
 export function applyTheme(next) {
-	if (next) store("annie.theme", next);
-	const theme = store("annie.theme");
+	if (next) store("owni.theme", next);
+	const theme = store("owni.theme");
 	if (theme === "light" || theme === "dark") document.documentElement.dataset.theme = theme;
 	else delete document.documentElement.dataset.theme;
 }

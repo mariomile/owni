@@ -1,7 +1,7 @@
 /**
  * `pnpm cloud`: the control plane of Owni Cloud (ADR 0007, ADR 0008).
- * Cells as local processes (development), containers on one server (ANNIE_CLOUD_PROVIDER=docker)
- * or Railway services (ANNIE_CLOUD_PROVIDER=railway); see docs/runbook.md 6c and 6d.
+ * Cells as local processes (development), containers on one server (OWNI_CLOUD_PROVIDER=docker)
+ * or Railway services (OWNI_CLOUD_PROVIDER=railway); see docs/runbook.md 6c and 6d.
  */
 import { existsSync } from "node:fs";
 import { join } from "node:path";
@@ -21,93 +21,93 @@ import { ConfigError, loadComputerConfig } from "./config.ts";
 if (existsSync(".env")) process.loadEnvFile(".env");
 
 const env = (name: string) => process.env[name]?.trim() || undefined;
-const domain = env("ANNIE_CLOUD_DOMAIN") ?? "annie.localhost";
-const dataDir = env("ANNIE_CLOUD_DATA_DIR") ?? "data-cloud";
-const port = Number(env("ANNIE_CLOUD_PORT") ?? "8090");
+const domain = env("OWNI_CLOUD_DOMAIN") ?? "owni.localhost";
+const dataDir = env("OWNI_CLOUD_DATA_DIR") ?? "data-cloud";
+const port = Number(env("OWNI_CLOUD_PORT") ?? "8090");
 // What every cell gets; the control plane's own settings never reach a cell.
-const passed = ["ANNIE_MODEL_PROVIDER", "ANNIE_MODEL_ID", ...MODEL_PROVIDERS.map((p) => p.keyEnv), "ANNIE_TIME_ZONE", "ANNIE_GOOGLE_CLIENT_ID", "ANNIE_GOOGLE_CLIENT_SECRET", "ANNIE_GOOGLE_SERVICES", "ANNIE_GOOGLE_WRITE", "ANNIE_TRANSCRIBE_URL", "ANNIE_TRANSCRIBE_API_KEY", "ANNIE_TRANSCRIBE_MODEL", "ANNIE_TRANSCRIBE_MAX_SECONDS", "ANNIE_TRANSCRIBE_TIMESTAMPS", "ANNIE_TRANSCRIBE_SPEAKERS", "ANNIE_TRANSCRIBE_MAX_MINUTES", "ANNIE_TRANSCRIBE_MINUTES_PER_DAY", "ANNIE_SPEECH_URL", "ANNIE_SPEECH_API_KEY", "ANNIE_SPEECH_MODEL", "ANNIE_SPEECH_VOICE", "ANNIE_SPEECH_MAX_CHARS", "ANNIE_SPEECH_MAX_PER_DAY", "ANNIE_SPEECH_STYLE", "ANNIE_SEARCH_URL", "ANNIE_SEARCH_API_KEY", "ANNIE_SEARCH_COUNTRY", "ANNIE_SEARCH_LANG", "ANNIE_SEARCH_MAX_PER_DAY", "ANNIE_WEATHER", "ANNIE_WEATHER_URL", "ANNIE_WEATHER_GEOCODING_URL", "ANNIE_WEATHER_API_KEY", "ANNIE_WEATHER_MAX_PER_DAY", "ANNIE_EXCHANGE_RATES", "ANNIE_EXCHANGE_RATES_URL", "ANNIE_NEWS", "ANNIE_NEWS_FEEDS", "ANNIE_VAT_CHECK", "ANNIE_VAT_CHECK_URL", "ANNIE_VAT_CHECK_MAX_PER_DAY", "ANNIE_VAT_CHECK_MAX_PER_DAY_SERVER", "ANNIE_IMAGE_URL", "ANNIE_IMAGE_API_KEY", "ANNIE_IMAGE_MODEL", "ANNIE_IMAGE_MAX_PER_DAY"];
+const passed = ["OWNI_MODEL_PROVIDER", "OWNI_MODEL_ID", ...MODEL_PROVIDERS.map((p) => p.keyEnv), "OWNI_TIME_ZONE", "OWNI_GOOGLE_CLIENT_ID", "OWNI_GOOGLE_CLIENT_SECRET", "OWNI_GOOGLE_SERVICES", "OWNI_GOOGLE_WRITE", "OWNI_TRANSCRIBE_URL", "OWNI_TRANSCRIBE_API_KEY", "OWNI_TRANSCRIBE_MODEL", "OWNI_TRANSCRIBE_MAX_SECONDS", "OWNI_TRANSCRIBE_TIMESTAMPS", "OWNI_TRANSCRIBE_SPEAKERS", "OWNI_TRANSCRIBE_MAX_MINUTES", "OWNI_TRANSCRIBE_MINUTES_PER_DAY", "OWNI_SPEECH_URL", "OWNI_SPEECH_API_KEY", "OWNI_SPEECH_MODEL", "OWNI_SPEECH_VOICE", "OWNI_SPEECH_MAX_CHARS", "OWNI_SPEECH_MAX_PER_DAY", "OWNI_SPEECH_STYLE", "OWNI_SEARCH_URL", "OWNI_SEARCH_API_KEY", "OWNI_SEARCH_COUNTRY", "OWNI_SEARCH_LANG", "OWNI_SEARCH_MAX_PER_DAY", "OWNI_WEATHER", "OWNI_WEATHER_URL", "OWNI_WEATHER_GEOCODING_URL", "OWNI_WEATHER_API_KEY", "OWNI_WEATHER_MAX_PER_DAY", "OWNI_EXCHANGE_RATES", "OWNI_EXCHANGE_RATES_URL", "OWNI_NEWS", "OWNI_NEWS_FEEDS", "OWNI_VAT_CHECK", "OWNI_VAT_CHECK_URL", "OWNI_VAT_CHECK_MAX_PER_DAY", "OWNI_VAT_CHECK_MAX_PER_DAY_SERVER", "OWNI_IMAGE_URL", "OWNI_IMAGE_API_KEY", "OWNI_IMAGE_MODEL", "OWNI_IMAGE_MAX_PER_DAY"];
 const cellEnv: Record<string, string> = Object.fromEntries(passed.flatMap((name) => (env(name) === undefined ? [] : [[name, env(name) as string]])));
-const scheme = (env("ANNIE_CLOUD_SCHEME") ?? (domain.endsWith("localhost") ? "http" : "https")) as "http" | "https";
+const scheme = (env("OWNI_CLOUD_SCHEME") ?? (domain.endsWith("localhost") ? "http" : "https")) as "http" | "https";
 
 /**
- * The instances' computers on Fly machines with ANNIE_CLOUD_COMPUTER=fly (ADR 0015): the token
+ * The instances' computers on Fly machines with OWNI_CLOUD_COMPUTER=fly (ADR 0015): the token
  * stays here, and cells reach their computers through the control plane. Never Docker: a cell
  * with the Docker socket would have the server (ADR 0013).
  */
 function computers(): FlyComputerProvider | undefined {
-	const kind = env("ANNIE_CLOUD_COMPUTER");
+	const kind = env("OWNI_CLOUD_COMPUTER");
 	if (kind === undefined) {
 		// Switched off: an upgrade takes the computer away from cells that had it, too.
-		cellEnv.ANNIE_COMPUTER = "";
+		cellEnv.OWNI_COMPUTER = "";
 		return undefined;
 	}
 	try {
-		if (kind !== "fly") throw new ConfigError("ANNIE_CLOUD_COMPUTER: fly, or unset for no computer (Docker computers are never for cells)");
-		const config = loadComputerConfig(process.env, kind, "ANNIE_CLOUD_COMPUTER");
-		if (config?.kind !== "fly") throw new ConfigError("ANNIE_CLOUD_COMPUTER: fly");
-		const url = env("ANNIE_CLOUD_COMPUTER_URL") ?? `${scheme}://${domain}${domain.endsWith("localhost") ? `:${port}` : ""}`;
-		if (!/^https?:\/\/[^\s/]+\/?$/.test(url)) throw new ConfigError("ANNIE_CLOUD_COMPUTER_URL: the control plane's address as cells reach it (http(s)://host[:port])");
-		cellEnv.ANNIE_COMPUTER = "cloud";
-		cellEnv.ANNIE_COMPUTER_URL = url;
-		return new FlyComputerProvider({ ...config, salt: computerSalt(dataDir), log: (message) => console.error(`annie cloud: ${message}`) });
+		if (kind !== "fly") throw new ConfigError("OWNI_CLOUD_COMPUTER: fly, or unset for no computer (Docker computers are never for cells)");
+		const config = loadComputerConfig(process.env, kind, "OWNI_CLOUD_COMPUTER");
+		if (config?.kind !== "fly") throw new ConfigError("OWNI_CLOUD_COMPUTER: fly");
+		const url = env("OWNI_CLOUD_COMPUTER_URL") ?? `${scheme}://${domain}${domain.endsWith("localhost") ? `:${port}` : ""}`;
+		if (!/^https?:\/\/[^\s/]+\/?$/.test(url)) throw new ConfigError("OWNI_CLOUD_COMPUTER_URL: the control plane's address as cells reach it (http(s)://host[:port])");
+		cellEnv.OWNI_COMPUTER = "cloud";
+		cellEnv.OWNI_COMPUTER_URL = url;
+		return new FlyComputerProvider({ ...config, salt: computerSalt(dataDir), log: (message) => console.error(`owni cloud: ${message}`) });
 	} catch (error) {
-		console.error(`annie cloud: ${error instanceof Error ? error.message : String(error)}`);
+		console.error(`owni cloud: ${error instanceof Error ? error.message : String(error)}`);
 		process.exit(1);
 	}
 }
 const computer = computers();
 
-/** Cells as containers (one server) with ANNIE_CLOUD_PROVIDER=docker; local processes otherwise (development). */
+/** Cells as containers (one server) with OWNI_CLOUD_PROVIDER=docker; local processes otherwise (development). */
 function provider(): CellProvider {
-	const kind = env("ANNIE_CLOUD_PROVIDER") ?? "local";
+	const kind = env("OWNI_CLOUD_PROVIDER") ?? "local";
 	if (kind === "local") return new LocalCellProvider({ root: join(dataDir, "cells"), repoRoot: process.cwd() });
 	if (kind === "railway") {
 		const token = env("RAILWAY_API_TOKEN");
-		const image = env("ANNIE_CLOUD_RAILWAY_IMAGE");
+		const image = env("OWNI_CLOUD_RAILWAY_IMAGE");
 		if (token === undefined || image === undefined) {
-			console.error("annie cloud: ANNIE_CLOUD_PROVIDER=railway needs RAILWAY_API_TOKEN and ANNIE_CLOUD_RAILWAY_IMAGE (e.g. ghcr.io/<owner>/annie:latest)");
+			console.error("owni cloud: OWNI_CLOUD_PROVIDER=railway needs RAILWAY_API_TOKEN and OWNI_CLOUD_RAILWAY_IMAGE (e.g. ghcr.io/<owner>/owni:latest)");
 			process.exit(1);
 		}
-		const workspaceId = env("ANNIE_CLOUD_RAILWAY_WORKSPACE");
-		const region = env("ANNIE_CLOUD_RAILWAY_REGION");
-		return new RailwayCellProvider({ token, image, dataDir, log: (message) => console.error(`annie cloud: ${message}`), ...(workspaceId === undefined ? {} : { workspaceId }), ...(region === undefined ? {} : { region }) });
+		const workspaceId = env("OWNI_CLOUD_RAILWAY_WORKSPACE");
+		const region = env("OWNI_CLOUD_RAILWAY_REGION");
+		return new RailwayCellProvider({ token, image, dataDir, log: (message) => console.error(`owni cloud: ${message}`), ...(workspaceId === undefined ? {} : { workspaceId }), ...(region === undefined ? {} : { region }) });
 	}
 	if (kind !== "docker") {
-		console.error(`annie cloud: ANNIE_CLOUD_PROVIDER="${kind}": use local, docker or railway`);
+		console.error(`owni cloud: OWNI_CLOUD_PROVIDER="${kind}": use local, docker or railway`);
 		process.exit(1);
 	}
-	const memory = env("ANNIE_CLOUD_CELL_MEMORY_MB");
+	const memory = env("OWNI_CLOUD_CELL_MEMORY_MB");
 	// A typo must not become "no limit": Docker reads a missing memory value as unlimited.
 	if (memory !== undefined && !(/^\d+$/.test(memory) && Number(memory) >= 128)) {
-		console.error("annie cloud: ANNIE_CLOUD_CELL_MEMORY_MB: a whole number of megabytes, at least 128");
+		console.error("owni cloud: OWNI_CLOUD_CELL_MEMORY_MB: a whole number of megabytes, at least 128");
 		process.exit(1);
 	}
-	return new DockerCellProvider({ image: env("ANNIE_CLOUD_DOCKER_IMAGE") ?? "annie:local", ...(memory === undefined ? {} : { memoryMb: Number(memory) }) });
+	return new DockerCellProvider({ image: env("OWNI_CLOUD_DOCKER_IMAGE") ?? "owni:local", ...(memory === undefined ? {} : { memoryMb: Number(memory) }) });
 }
 
-/** A real mail service when ANNIE_CLOUD_SMTP_URL is set; otherwise links go to a file to read. */
+/** A real mail service when OWNI_CLOUD_SMTP_URL is set; otherwise links go to a file to read. */
 function mailer(): Mailer {
-	const url = env("ANNIE_CLOUD_SMTP_URL");
+	const url = env("OWNI_CLOUD_SMTP_URL");
 	if (url === undefined) return new FileMailer(join(dataDir, "mail"));
-	const from = env("ANNIE_CLOUD_MAIL_FROM");
+	const from = env("OWNI_CLOUD_MAIL_FROM");
 	if (from === undefined) {
-		console.error("annie cloud: ANNIE_CLOUD_SMTP_URL needs ANNIE_CLOUD_MAIL_FROM, the sender of the sign-in links");
+		console.error("owni cloud: OWNI_CLOUD_SMTP_URL needs OWNI_CLOUD_MAIL_FROM, the sender of the sign-in links");
 		process.exit(1);
 	}
 	try {
 		return new SmtpMailer(parseSmtpUrl(url, from));
 	} catch (error) {
-		console.error(`annie cloud: ${error instanceof Error ? error.message : String(error)}`);
+		console.error(`owni cloud: ${error instanceof Error ? error.message : String(error)}`);
 		process.exit(1);
 	}
 }
 
-/** Subscriptions through Stripe when ANNIE_CLOUD_STRIPE_SECRET_KEY is set (ADR 0010); free to use otherwise. */
+/** Subscriptions through Stripe when OWNI_CLOUD_STRIPE_SECRET_KEY is set (ADR 0010); free to use otherwise. */
 function billing(): StripeBilling | undefined {
-	const secretKey = env("ANNIE_CLOUD_STRIPE_SECRET_KEY");
+	const secretKey = env("OWNI_CLOUD_STRIPE_SECRET_KEY");
 	if (secretKey === undefined) return undefined;
 	const fail = (message: string): never => {
-		console.error(`annie cloud: ${message}`);
+		console.error(`owni cloud: ${message}`);
 		process.exit(1);
 	};
 	// Prefixes checked so that two values swapped, or a publishable key, stop here and not at the first payment.
@@ -116,15 +116,15 @@ function billing(): StripeBilling | undefined {
 		if (value !== undefined && !prefix.test(value)) fail(`${name}: expected ${what}`);
 		return value;
 	};
-	named("ANNIE_CLOUD_STRIPE_SECRET_KEY", /^(sk|rk)_(test|live)_/, "a secret or restricted key (sk_… or rk_…)");
-	const webhookSecret = named("ANNIE_CLOUD_STRIPE_WEBHOOK_SECRET", /^whsec_/, "the webhook's signing secret (whsec_…)") ?? fail("ANNIE_CLOUD_STRIPE_SECRET_KEY needs ANNIE_CLOUD_STRIPE_WEBHOOK_SECRET (whsec_…)");
-	const price = named("ANNIE_CLOUD_STRIPE_PRICE", /^price_/, "a price id (price_…)") ?? fail("ANNIE_CLOUD_STRIPE_SECRET_KEY needs ANNIE_CLOUD_STRIPE_PRICE (price_…)");
-	const usagePrice = named("ANNIE_CLOUD_STRIPE_USAGE_PRICE", /^price_/, "a price id (price_…)");
-	const meterEvent = env("ANNIE_CLOUD_STRIPE_METER_EVENT");
-	if (usagePrice === price) fail("ANNIE_CLOUD_STRIPE_USAGE_PRICE must be the metered price, not the flat one");
-	if ((usagePrice === undefined) !== (meterEvent === undefined)) fail("ANNIE_CLOUD_STRIPE_USAGE_PRICE and ANNIE_CLOUD_STRIPE_METER_EVENT go together");
-	const trialDays = env("ANNIE_CLOUD_TRIAL_DAYS") ?? "14";
-	if (!/^\d{1,3}$/.test(trialDays)) fail("ANNIE_CLOUD_TRIAL_DAYS: a whole number of days (0 for no trial)");
+	named("OWNI_CLOUD_STRIPE_SECRET_KEY", /^(sk|rk)_(test|live)_/, "a secret or restricted key (sk_… or rk_…)");
+	const webhookSecret = named("OWNI_CLOUD_STRIPE_WEBHOOK_SECRET", /^whsec_/, "the webhook's signing secret (whsec_…)") ?? fail("OWNI_CLOUD_STRIPE_SECRET_KEY needs OWNI_CLOUD_STRIPE_WEBHOOK_SECRET (whsec_…)");
+	const price = named("OWNI_CLOUD_STRIPE_PRICE", /^price_/, "a price id (price_…)") ?? fail("OWNI_CLOUD_STRIPE_SECRET_KEY needs OWNI_CLOUD_STRIPE_PRICE (price_…)");
+	const usagePrice = named("OWNI_CLOUD_STRIPE_USAGE_PRICE", /^price_/, "a price id (price_…)");
+	const meterEvent = env("OWNI_CLOUD_STRIPE_METER_EVENT");
+	if (usagePrice === price) fail("OWNI_CLOUD_STRIPE_USAGE_PRICE must be the metered price, not the flat one");
+	if ((usagePrice === undefined) !== (meterEvent === undefined)) fail("OWNI_CLOUD_STRIPE_USAGE_PRICE and OWNI_CLOUD_STRIPE_METER_EVENT go together");
+	const trialDays = env("OWNI_CLOUD_TRIAL_DAYS") ?? "14";
+	if (!/^\d{1,3}$/.test(trialDays)) fail("OWNI_CLOUD_TRIAL_DAYS: a whole number of days (0 for no trial)");
 	return new StripeBilling({
 		secretKey,
 		webhookSecret,
@@ -157,7 +157,7 @@ if (process.argv[2] === "computers") {
 	const tenant = process.argv[4];
 	if (process.argv[3] === "delete") {
 		if (computer === undefined || tenant === undefined) {
-			console.error("annie cloud: computers delete <tenant>, with ANNIE_CLOUD_COMPUTER=fly and its settings");
+			console.error("owni cloud: computers delete <tenant>, with OWNI_CLOUD_COMPUTER=fly and its settings");
 			process.exit(1);
 		}
 		console.log(`${await deleteTenantComputers({ dataDir, tenant, computer })} computer cancellati per ${tenant}`);
@@ -170,16 +170,16 @@ if (process.argv[2] === "computers") {
 }
 
 // `pnpm cloud upgrade`, with the control plane stopped: every cell gets a new container from the
-// current image and the current model settings (ANNIE_MODEL_*, keys); volumes and data stay.
+// current image and the current model settings (OWNI_MODEL_*, keys); volumes and data stay.
 if (process.argv[2] === "upgrade") {
 	const cells = provider();
 	if (!(cells instanceof DockerCellProvider || cells instanceof RailwayCellProvider)) {
-		console.error("annie cloud: upgrade is for docker and railway cells; local cells run the code of this checkout");
+		console.error("owni cloud: upgrade is for docker and railway cells; local cells run the code of this checkout");
 		process.exit(1);
 	}
 	for (const id of await cells.list()) {
 		await cells.upgrade(id, cellEnv);
-		console.error(`annie cloud: cell ${id} upgraded`);
+		console.error(`owni cloud: cell ${id} upgraded`);
 	}
 	process.exit(0);
 }
@@ -199,11 +199,11 @@ const cp = await startControlPlane({
 	...(subscriptions === undefined ? {} : { billing: subscriptions }),
 	...(computer === undefined ? {} : { computer }),
 	// Railway sleeps a quiet cell by itself: the control plane must let go of it sooner (railway-provider.ts).
-	idleMs: env("ANNIE_CLOUD_IDLE_MINUTES") !== undefined ? Number(env("ANNIE_CLOUD_IDLE_MINUTES")) * 60_000 : cells instanceof RailwayCellProvider ? RailwayCellProvider.IDLE_MS : 15 * 60_000,
-	web: { host: env("ANNIE_CLOUD_HOST") ?? "127.0.0.1", port },
+	idleMs: env("OWNI_CLOUD_IDLE_MINUTES") !== undefined ? Number(env("OWNI_CLOUD_IDLE_MINUTES")) * 60_000 : cells instanceof RailwayCellProvider ? RailwayCellProvider.IDLE_MS : 15 * 60_000,
+	web: { host: env("OWNI_CLOUD_HOST") ?? "127.0.0.1", port },
 	tickMs: 30_000,
 });
-console.error(`annie cloud: http://${domain}:${port} (sign-in links ${env("ANNIE_CLOUD_SMTP_URL") === undefined ? `in ${join(dataDir, "mail", "outbox.txt")}` : "by email"})`);
-if (computer !== undefined) void computer.check().then((problem) => console.error(`annie cloud: computers on Fly ${problem === undefined ? "ready" : `not ready: ${problem}`}`));
-if (subscriptions !== undefined) console.error(`annie cloud: subscriptions through Stripe, ${subscriptions.trialDays} days of trial, webhook at /stripe/webhook${subscriptions.meters ? ", model cost metered" : ""}`);
+console.error(`owni cloud: http://${domain}:${port} (sign-in links ${env("OWNI_CLOUD_SMTP_URL") === undefined ? `in ${join(dataDir, "mail", "outbox.txt")}` : "by email"})`);
+if (computer !== undefined) void computer.check().then((problem) => console.error(`owni cloud: computers on Fly ${problem === undefined ? "ready" : `not ready: ${problem}`}`));
+if (subscriptions !== undefined) console.error(`owni cloud: subscriptions through Stripe, ${subscriptions.trialDays} days of trial, webhook at /stripe/webhook${subscriptions.meters ? ", model cost metered" : ""}`);
 for (const signal of ["SIGTERM", "SIGINT"] as const) process.once(signal, () => void cp.stop().then(() => process.exit(0)));

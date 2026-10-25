@@ -2,7 +2,7 @@
 
 > Deliverable di Craft per Ship (codice) e AI Guru (stack agenti). Nessun codice in questo documento. Commit e PR: Ship. Decisioni A1-A8 integrate.
 
-Architettura: [`architettura.md`](architettura.md). Settimana 2: [`week2.md`](week2.md). Piano e nota vault: `Active/Projects/Annie/`.
+Architettura: [`architettura.md`](architettura.md). Settimana 2: [`week2.md`](week2.md). Piano e nota vault: `Active/Projects/Owni/`.
 
 ## 1. Caso d'uso e cliente tipo
 
@@ -338,7 +338,7 @@ interface MailAdapter {
 
 **HubSpot** (Contacts + nota/engagement; Deal opzionale dopo) perché: piano gratuito per il pilota, OAuth e API chiare, diffusione nelle PMI digitali italiane. Pipedrive è il secondo adapter sulla stessa interfaccia.
 
-**Gmail** (label o casella dedicata `annie-preventivi`) come primo mail adapter; Microsoft Graph secondo, stessa interfaccia.
+**Gmail** (label o casella dedicata `owni-preventivi`) come primo mail adapter; Microsoft Graph secondo, stessa interfaccia.
 
 ## 5. Regole di sicurezza
 

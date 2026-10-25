@@ -1,6 +1,6 @@
 import { type Automation, AutomationError, AUTOMATION_LIMITS, type AutomationStore } from "../automations.ts";
 import { AGENT_CHANNEL } from "../agent-messages.ts";
-import type { AnnieTool } from "../engine.ts";
+import type { OwniTool } from "../engine.ts";
 
 type Thread = { readonly channel: string; readonly threadId: string };
 
@@ -14,13 +14,13 @@ export function createAutomationTools(options: {
 	readonly store: AutomationStore;
 	/** The person a private conversation is with, "<channel>:<userId>"; undefined in a group or unknown thread. */
 	readonly whoIs: (thread: Thread) => string | undefined;
-	/** Where the server answers from outside (ANNIE_PUBLIC_URL); without it the address is a path. */
+	/** Where the server answers from outside (OWNI_PUBLIC_URL); without it the address is a path. */
 	readonly baseUrl?: string;
 	/** Send the address to the person, through the outbox; the same key is sent once. */
 	readonly tell: (thread: Thread, text: string, key: string) => Promise<void>;
 	readonly record?: (event: { type: "automation.created" | "automation.deleted"; automationId: string; channel: string; userId: string }) => Promise<void>;
 	readonly instance: string;
-}): AnnieTool[] {
+}): OwniTool[] {
 	const { store } = options;
 	const person = (thread: Thread | undefined) => {
 		const subject = thread === undefined ? undefined : options.whoIs(thread);

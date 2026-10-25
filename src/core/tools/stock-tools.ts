@@ -1,4 +1,4 @@
-import type { AnnieTool, ToolContext } from "../engine.ts";
+import type { OwniTool, ToolContext } from "../engine.ts";
 import type { ExpenseStore } from "../expense-store.ts";
 import { euros, n1 } from "../format-words.ts";
 import { InvoiceScanner } from "../invoice-scan.ts";
@@ -66,10 +66,10 @@ const underWords = (min: string) => (Number(min) === 1 ? "sotto 1" : `sotto i ${
  * the export change something (and the brief's low, which marks its alerts as said); the rest
  * only reads. Today is read once per call.
  */
-export function createStockTools(options: StockToolsOptions): AnnieTool[] {
+export function createStockTools(options: StockToolsOptions): OwniTool[] {
 	const { store, workspace, timeZone } = options;
 	const now = options.now ?? (() => new Date());
-	const who = (ctx: ToolContext) => (ctx.thread === undefined ? "annie" : (options.whoIs(ctx.thread) ?? `${ctx.thread.channel}:${ctx.thread.threadId}`));
+	const who = (ctx: ToolContext) => (ctx.thread === undefined ? "owni" : (options.whoIs(ctx.thread) ?? `${ctx.thread.channel}:${ctx.thread.threadId}`));
 	const marker = (ctx: ToolContext): Marker => ({ by: who(ctx), at: now().toISOString() });
 	const audit = async (ctx: ToolContext, op: StockEvent["op"], count: number) => {
 		// Its own step: an audit that failed is written on the rerun, after the change it records.

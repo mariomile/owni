@@ -5,10 +5,10 @@ import { ecbRates, ExchangeRateError, type ExchangeRatesConfig } from "../core/e
 import { DEV_PROVIDER, modelProvider } from "../core/model-providers.ts";
 import { feedNews, type NewsConfig } from "../core/news.ts";
 import { viesClient, type ViesConfig, ViesError } from "../core/vies.ts";
-import type { AnnieConfig } from "./config.ts";
+import type { OwniConfig } from "./config.ts";
 
 /**
- * `pnpm annie check`: before a live test, ask each configured service whether the keys in
+ * `pnpm owni check`: before a live test, ask each configured service whether the keys in
  * `.env` work and whether this machine reaches it. Nothing secret is printed: a check reports
  * what it found (a bot name, a mailbox) or what to fix (which variable, which host).
  */
@@ -20,7 +20,7 @@ const TIMEOUT_MS = 10_000;
 const NEWS_TIMEOUT_MS = 15_000;
 const GMAIL_SCOPES = ["gmail.readonly", "gmail.send"] as const;
 
-export async function runChecks(config: AnnieConfig, fetchImpl: typeof fetch = fetch): Promise<CheckResult[]> {
+export async function runChecks(config: OwniConfig, fetchImpl: typeof fetch = fetch): Promise<CheckResult[]> {
 	const call = (url: string, init: RequestInit = {}) => fetchImpl(url, { ...init, signal: AbortSignal.timeout(TIMEOUT_MS) });
 	const checks: Promise<CheckResult>[] = [check(`Modello (${config.modelProvider})`, () => modelCheck(config, call))];
 	if (config.telegram !== undefined) {
@@ -78,7 +78,7 @@ async function reach(call: Call, url: string, init?: RequestInit): Promise<Respo
 	}
 }
 
-async function modelCheck(config: AnnieConfig, call: Call): Promise<string> {
+async function modelCheck(config: OwniConfig, call: Call): Promise<string> {
 	if (config.modelProvider === DEV_PROVIDER) return "modello locale di sviluppo, nessuna chiave";
 	const key = config.modelApiKeys[config.modelProvider] ?? "";
 	const variable = modelProvider(config.modelProvider)?.keyEnv ?? "la chiave del modello";
@@ -92,12 +92,12 @@ async function modelCheck(config: AnnieConfig, call: Call): Promise<string> {
 	if (!response.ok) throw new CheckFailed(`il provider risponde ${response.status}`);
 	const models = ((await response.json()) as { data?: { id: string }[] }).data?.map((m) => m.id) ?? [];
 	const found = models.includes(config.modelId);
-	if (models.length > 0 && !found) throw new CheckFailed(`chiave valida, ma il modello ${config.modelId} non è tra quelli disponibili (ANNIE_MODEL_ID)`);
+	if (models.length > 0 && !found) throw new CheckFailed(`chiave valida, ma il modello ${config.modelId} non è tra quelli disponibili (OWNI_MODEL_ID)`);
 	return `chiave valida, modello ${config.modelId}`;
 }
 
 /** The Docker host answers and has the image (ADR 0013), Fly takes the token, or the control plane answers (ADR 0015). */
-async function computerCheck(config: AnnieConfig, computer: NonNullable<AnnieConfig["computer"]>): Promise<string> {
+async function computerCheck(config: OwniConfig, computer: NonNullable<OwniConfig["computer"]>): Promise<string> {
 	const problem = await createComputerProvider(computer, { tenant: config.tenantId, dataDir: config.dataDir, ...(config.cell.secret === undefined ? {} : { cellSecret: config.cell.secret }) }).check();
 	if (problem !== undefined) throw new CheckFailed(problem);
 	if (computer.kind === "docker") return `Docker risponde, immagine ${computer.image} presente`;
@@ -106,7 +106,7 @@ async function computerCheck(config: AnnieConfig, computer: NonNullable<AnnieCon
 }
 
 /** The Docker host answers, is amd64 and has Cua's image, or the desktop run elsewhere answers with its token (ADR 0045). */
-async function desktopCheck(desktop: NonNullable<AnnieConfig["desktop"]>, fetchImpl: typeof fetch): Promise<string> {
+async function desktopCheck(desktop: NonNullable<OwniConfig["desktop"]>, fetchImpl: typeof fetch): Promise<string> {
 	const problem = await createDesktopProvider(desktop, { fetch: fetchImpl }).check();
 	if (problem !== undefined) throw new CheckFailed(problem);
 	if (desktop.kind === "docker") return `Docker risponde, immagine di Cua presente; il primo schermo si prova alla prima azione${desktop.network === "internet" ? " (con internet)" : " (senza internet)"}`;
@@ -116,8 +116,8 @@ async function desktopCheck(desktop: NonNullable<AnnieConfig["desktop"]>, fetchI
 /** The service's model list: the key works and the model is there (the services that list models). */
 async function transcriptionCheck(config: { url: string; apiKey: string; model: string }, call: Call): Promise<string> {
 	const response = await reach(call, `${config.url.replace(/\/+$/, "")}/models`, { headers: { authorization: `Bearer ${config.apiKey}` } });
-	if (response.status === 401 || response.status === 403) throw new CheckFailed("chiave rifiutata: controlla ANNIE_TRANSCRIBE_API_KEY");
-	if (!response.ok) throw new CheckFailed(`il servizio risponde ${response.status}: controlla ANNIE_TRANSCRIBE_URL`);
+	if (response.status === 401 || response.status === 403) throw new CheckFailed("chiave rifiutata: controlla OWNI_TRANSCRIBE_API_KEY");
+	if (!response.ok) throw new CheckFailed(`il servizio risponde ${response.status}: controlla OWNI_TRANSCRIBE_URL`);
 	const models = ((await response.json().catch(() => ({}))) as { data?: { id: string }[] }).data?.map((m) => m.id) ?? [];
 	// Aliases (voxtral-mini-latest) are not always listed: a warning, not a failure.
 	if (models.length > 0 && !models.includes(config.model)) return `chiave valida; il modello ${config.model} non compare nell'elenco del servizio, prova un vocale per esserne certo`;
@@ -127,8 +127,8 @@ async function transcriptionCheck(config: { url: string; apiKey: string; model: 
 /** The key works: the service lists its models. No audio is made, so the check costs nothing. */
 async function speechCheck(config: { url: string; apiKey: string; model: string; voice: string }, call: Call): Promise<string> {
 	const response = await reach(call, `${config.url}/models`, { headers: { authorization: `Bearer ${config.apiKey}` } });
-	if (response.status === 401 || response.status === 403) throw new CheckFailed("chiave rifiutata: controlla ANNIE_SPEECH_API_KEY");
-	if (!response.ok) throw new CheckFailed(`il servizio risponde ${response.status}: controlla ANNIE_SPEECH_URL`);
+	if (response.status === 401 || response.status === 403) throw new CheckFailed("chiave rifiutata: controlla OWNI_SPEECH_API_KEY");
+	if (!response.ok) throw new CheckFailed(`il servizio risponde ${response.status}: controlla OWNI_SPEECH_URL`);
 	return `chiave valida (modello ${config.model} e voce ${config.voice} non verificati: prova un vocale)`;
 }
 
@@ -140,8 +140,8 @@ async function searchCheck(config: { url: string; apiKey: string; country: strin
 	url.searchParams.set("country", config.country);
 	url.searchParams.set("search_lang", config.language);
 	const response = await reach(call, url.toString(), { headers: { accept: "application/json", "x-subscription-token": config.apiKey } });
-	if (response.status === 401 || response.status === 403) throw new CheckFailed("chiave rifiutata: controlla ANNIE_SEARCH_API_KEY");
-	if (!response.ok) throw new CheckFailed(`il servizio risponde ${response.status}: controlla ANNIE_SEARCH_URL`);
+	if (response.status === 401 || response.status === 403) throw new CheckFailed("chiave rifiutata: controlla OWNI_SEARCH_API_KEY");
+	if (!response.ok) throw new CheckFailed(`il servizio risponde ${response.status}: controlla OWNI_SEARCH_URL`);
 	return `chiave valida, ${url.host} risponde`;
 }
 
@@ -151,11 +151,11 @@ async function weatherCheck(config: { forecastUrl: string; geocodingUrl: string;
 	for (const [name, value] of [["name", "Roma"], ["count", "1"], ["format", "json"]]) geocoding.searchParams.set(name as string, value as string);
 	const forecast = new URL(config.forecastUrl);
 	for (const [name, value] of [["latitude", "41.89"], ["longitude", "12.51"], ["daily", "weather_code"], ["forecast_days", "1"]]) forecast.searchParams.set(name as string, value as string);
-	for (const [url, variable] of [[geocoding, "ANNIE_WEATHER_GEOCODING_URL"], [forecast, "ANNIE_WEATHER_URL"]] as const) {
+	for (const [url, variable] of [[geocoding, "OWNI_WEATHER_GEOCODING_URL"], [forecast, "OWNI_WEATHER_URL"]] as const) {
 		if (config.apiKey !== undefined) url.searchParams.set("apikey", config.apiKey);
 		const response = await reach(call, url.toString(), { headers: { accept: "application/json" } });
 		await response.body?.cancel().catch(() => {});
-		if (response.status === 401 || response.status === 403) throw new CheckFailed(config.apiKey === undefined ? "richiesta rifiutata: per un uso commerciale serve un piano e ANNIE_WEATHER_API_KEY" : "chiave rifiutata: controlla ANNIE_WEATHER_API_KEY");
+		if (response.status === 401 || response.status === 403) throw new CheckFailed(config.apiKey === undefined ? "richiesta rifiutata: per un uso commerciale serve un piano e OWNI_WEATHER_API_KEY" : "chiave rifiutata: controlla OWNI_WEATHER_API_KEY");
 		if (!response.ok) throw new CheckFailed(`il servizio risponde ${response.status}: controlla ${variable}`);
 	}
 	return `${geocoding.host} e ${forecast.host} rispondono${config.apiKey === undefined ? "" : ", chiave valida"}`;
@@ -170,7 +170,7 @@ async function exchangeRatesCheck(config: ExchangeRatesConfig, call: Call): Prom
 		const { day } = await ecbRates(config, fetchImpl).rateOn();
 		return `${host} risponde, cambi del ${day.date} per ${day.rates.size} valute`;
 	} catch (error) {
-		if (error instanceof ExchangeRateError) throw new CheckFailed(`${error.message}: controlla che ${host} sia raggiungibile, o ANNIE_EXCHANGE_RATES_URL`);
+		if (error instanceof ExchangeRateError) throw new CheckFailed(`${error.message}: controlla che ${host} sia raggiungibile, o OWNI_EXCHANGE_RATES_URL`);
 		throw error;
 	}
 }
@@ -187,9 +187,9 @@ async function newsCheck(config: NewsConfig, fetchImpl: typeof fetch): Promise<s
 	// A feed without a single dated headline shows nothing either: it counts toward the warning.
 	const undated = results.flatMap((r) => ("error" in r || r.headlines.some((h) => h.published !== undefined) ? [] : [r.feed.name]));
 	const summary = `${results.length - failed.length} feed su ${results.length} rispondono: ${report.join("; ")}`;
-	if (failed.length === results.length) throw new CheckFailed(`${summary}. Controlla la rete e ANNIE_NEWS_FEEDS`);
+	if (failed.length === results.length) throw new CheckFailed(`${summary}. Controlla la rete e OWNI_NEWS_FEEDS`);
 	const warnings = [...(failed.length === 0 ? [] : [`non vanno ${failed.join(", ")}`]), ...(undated.length === 0 ? [] : [`senza notizie datate ${undated.join(", ")}`])];
-	return warnings.length === 0 ? summary : `${summary}. Attenzione: ${warnings.join("; ")}. Controlla ANNIE_NEWS_FEEDS, o togli quei feed`;
+	return warnings.length === 0 ? summary : `${summary}. Attenzione: ${warnings.join("; ")}. Controlla OWNI_NEWS_FEEDS, o togli quei feed`;
 }
 
 /**
@@ -211,7 +211,7 @@ async function vatCheckCheck(config: ViesConfig, call: Call): Promise<string> {
 		if (!(error instanceof ViesError)) throw error;
 		// Errors that pass by themselves are a warning, not a failure.
 		if (error.temporary) return `${host} risponde. Attenzione: ${error.message}`;
-		throw new CheckFailed(`${error.message}: controlla che ${host} sia raggiungibile, o ANNIE_VAT_CHECK_URL`);
+		throw new CheckFailed(`${error.message}: controlla che ${host} sia raggiungibile, o OWNI_VAT_CHECK_URL`);
 	}
 }
 

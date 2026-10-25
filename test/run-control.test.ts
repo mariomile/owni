@@ -5,19 +5,19 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { Harness } from "@earendil-works/pi-durable";
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import { piDurableEngine } from "../src/core/adapters/pi-durable.ts";
-import { AnnieRuntime } from "../src/core/runtime.ts";
-import type { AnnieTool, DurableEngine, EngineRunEvent, EngineSession } from "../src/core/engine.ts";
+import { OwniRuntime } from "../src/core/runtime.ts";
+import type { OwniTool, DurableEngine, EngineRunEvent, EngineSession } from "../src/core/engine.ts";
 import { RunStore, type RunEvent, type RunRecord, RUN_HISTORY_LIMIT, RUN_PROGRESS_LIMIT } from "../src/core/run-store.ts";
 import { writeFileAtomic } from "../src/core/atomic-file.ts";
 import { FAUX_MODEL, runtimeWithInstance, tempDataDir, waitFor } from "./helpers.ts";
 import { kill9, spawnFixture, type Worker } from "./processes.ts";
 
 const hello = { tenantId: "acme", instanceId: "ops", channel: "test", threadId: "one", userId: "u", text: "hello", messageId: "first" };
-const open: AnnieRuntime[] = [];
+const open: OwniRuntime[] = [];
 afterEach(async () => { try { await Promise.all(open.splice(0).map((runtime) => runtime.close())); } finally { vi.restoreAllMocks(); } });
-const register = (runtime: AnnieRuntime) => { open.push(runtime); return runtime; };
+const register = (runtime: OwniRuntime) => { open.push(runtime); return runtime; };
 
-function slowTool(effects: string[], ms = 400): AnnieTool {
+function slowTool(effects: string[], ms = 400): OwniTool {
 	return { name: "slow", description: "A deterministic slow tool", parameters: { type: "object", properties: {} }, replaySafe: true,
 		async execute(_args, ctx) {
 			effects.push(`${ctx.thread?.threadId}:start`);
@@ -31,7 +31,7 @@ function slowTool(effects: string[], ms = 400): AnnieTool {
 
 
 /** A tool advances only when the test releases its thread; scheduling load cannot complete it early. */
-function heldTool(effects: string[]): { tool: AnnieTool; release: (threadId: string) => void } {
+function heldTool(effects: string[]): { tool: OwniTool; release: (threadId: string) => void } {
 	const releases = new Map<string, () => void>();
 	return {
 		release(threadId) {
@@ -56,7 +56,7 @@ function heldTool(effects: string[]): { tool: AnnieTool; release: (threadId: str
 	};
 }
 
-async function setup(tools: AnnieTool[] = []) {
+async function setup(tools: OwniTool[] = []) {
 	const result = await runtimeWithInstance({ tools });
 	register(result.runtime);
 	return result;
@@ -124,7 +124,7 @@ describe("observable cancellable work", () => {
 		await waitFor(() => replies.length === 1);
 		expect(replies[0]).toMatchObject({ status: "unanswered", reason: "aborted", cancelled: true });
 		await runtime.close(); open.splice(open.indexOf(runtime), 1);
-		const restarted = register(new AnnieRuntime({ dataDir, engine: piDurableEngine }));
+		const restarted = register(new OwniRuntime({ dataDir, engine: piDurableEngine }));
 		const repeated: unknown[] = [];
 		restarted.onReply((reply) => repeated.push(reply));
 		await restarted.resume("acme", "ops");
@@ -137,7 +137,7 @@ describe("observable cancellable work", () => {
 		const effects: string[] = [];
 		let session!: EngineSession;
 		const engine: DurableEngine = { async open(options) { session = await piDurableEngine.open(options); return session; } };
-		const runtime = register(new AnnieRuntime({ dataDir: first.dataDir, engine, tools: [heldTool(effects).tool] }));
+		const runtime = register(new OwniRuntime({ dataDir: first.dataDir, engine, tools: [heldTool(effects).tool] }));
 		const replies: unknown[] = [];
 		runtime.onReply((reply) => replies.push(reply));
 		await runtime.submit({ ...hello, text: "/tool slow {}" });
@@ -155,7 +155,7 @@ describe("observable cancellable work", () => {
 		let release!: () => void;
 		const held = new Promise<void>((resolve) => { release = resolve; });
 		let signal: AbortSignal | undefined;
-		const tool: AnnieTool = { ...slowTool(effects), async execute(_args, ctx) { signal = ctx.signal; effects.push("started"); await held; await ctx.step("after-stop", async () => { effects.push("unsafe"); return true; }); return "done"; } };
+		const tool: OwniTool = { ...slowTool(effects), async execute(_args, ctx) { signal = ctx.signal; effects.push("started"); await held; await ctx.step("after-stop", async () => { effects.push("unsafe"); return true; }); return "done"; } };
 		const { runtime } = await setup([tool]);
 		await runtime.submit({ ...hello, text: "/tool slow {}" });
 		await waitFor(() => effects.length === 1);
@@ -179,8 +179,8 @@ describe("observable cancellable work", () => {
 				const value = Reflect.get(target, key); return typeof value === "function" ? value.bind(target) : value;
 			} });
 		} };
-		const tool: AnnieTool = { ...slowTool([]), async execute() { started = true; await held; return "done"; } };
-		const runtime = register(new AnnieRuntime({ dataDir: first.dataDir, engine, tools: [tool] }));
+		const tool: OwniTool = { ...slowTool([]), async execute() { started = true; await held; return "done"; } };
+		const runtime = register(new OwniRuntime({ dataDir: first.dataDir, engine, tools: [tool] }));
 		await runtime.submit({ ...hello, text: "/tool slow {}" });
 		await waitFor(() => started);
 		const result = await runtime.stopConversation("acme", "ops", { channel: "test", threadId: "one" });
@@ -197,7 +197,7 @@ describe("observable cancellable work", () => {
 		}
 		await runtime.idle("acme", "ops");
 		await runtime.close(); open.splice(open.indexOf(runtime), 1);
-		const restarted = register(new AnnieRuntime({ dataDir, engine: piDurableEngine }));
+		const restarted = register(new OwniRuntime({ dataDir, engine: piDurableEngine }));
 		const before = await restarted.listRuns("acme", "ops");
 		expect(before).toHaveLength(4);
 		for (const item of submissions) {
@@ -214,7 +214,7 @@ describe("observable cancellable work", () => {
 		const admitted = await runtime.submit({ ...hello, text: "/tool slow {}" });
 		await waitFor(() => effects.length === 1);
 		await runtime.close(); open.splice(open.indexOf(runtime), 1);
-		const restarted = register(new AnnieRuntime({ dataDir, engine: piDurableEngine, tools: [held.tool] }));
+		const restarted = register(new OwniRuntime({ dataDir, engine: piDurableEngine, tools: [held.tool] }));
 		expect((await restarted.listRuns("acme", "ops"))[0]?.status).toBe("running");
 		await restarted.resume("acme", "ops");
 		await waitFor(() => effects.filter((effect) => effect === "one:start").length === 2);
@@ -240,7 +240,7 @@ describe("observable cancellable work", () => {
 				const value = Reflect.get(target, key); return typeof value === "function" ? value.bind(target) : value;
 			} });
 		} };
-		const runtime = register(new AnnieRuntime({ dataDir: first.dataDir, engine, tools: [slowTool(effects, 100)] }));
+		const runtime = register(new OwniRuntime({ dataDir: first.dataDir, engine, tools: [slowTool(effects, 100)] }));
 		const replies: unknown[] = [];
 		runtime.onReply((reply) => replies.push(reply));
 		const request = { ...hello, text: "/tool slow {}" };
@@ -265,7 +265,7 @@ describe("observable cancellable work", () => {
 				const value = Reflect.get(target, key); return typeof value === "function" ? value.bind(target) : value;
 			} });
 		} };
-		const runtime = register(new AnnieRuntime({ dataDir: first.dataDir, engine }));
+		const runtime = register(new OwniRuntime({ dataDir: first.dataDir, engine }));
 		await expect(runtime.submit(hello)).rejects.toThrow("private credential failure");
 		const failed = (await runtime.listRuns("acme", "ops"))[0]!;
 		expect(failed.status).toBe("failed");
@@ -281,7 +281,7 @@ describe("observable cancellable work", () => {
 });
 
 describe("restored Stop and uncertain admission", () => {
-	async function restoredStop(tools: AnnieTool[]) {
+	async function restoredStop(tools: OwniTool[]) {
 		const dataDir = tempDataDir();
 		const worker = spawnFixture("run-stop-worker.ts", [dataDir]);
 		try { await worker.waitForLine("STOP_INTENT"); }
@@ -289,7 +289,7 @@ describe("restored Stop and uncertain admission", () => {
 		let harness!: Harness;
 		const originalOpen = Harness.open;
 		vi.spyOn(Harness, "open").mockImplementation(async (...args) => { harness = await originalOpen(...args); return harness; });
-		const runtime = register(new AnnieRuntime({ dataDir, engine: piDurableEngine, tools }));
+		const runtime = register(new OwniRuntime({ dataDir, engine: piDurableEngine, tools }));
 		await runtime.openInstance("acme", "ops");
 		return { runtime, harness };
 	}
@@ -361,7 +361,7 @@ describe("restored Stop and uncertain admission", () => {
 		let session!: EngineSession;
 		const engine: DurableEngine = { async open(options) { session = await piDurableEngine.open(options); return session; } };
 		const effects: string[] = [];
-		const runtime = register(new AnnieRuntime({ dataDir: first.dataDir, engine, tools: [heldTool(effects).tool] }));
+		const runtime = register(new OwniRuntime({ dataDir: first.dataDir, engine, tools: [heldTool(effects).tool] }));
 		await runtime.submit({ ...hello, text: "/tool slow {}" });
 		await waitFor(() => effects.length === 1);
 		const log = vi.spyOn(console, "error").mockImplementation(() => {});
@@ -389,7 +389,7 @@ describe("restored Stop and uncertain admission", () => {
 				const value = Reflect.get(target, key); return typeof value === "function" ? value.bind(target) : value;
 			} });
 		} };
-		const runtime = register(new AnnieRuntime({ dataDir: first.dataDir, engine }));
+		const runtime = register(new OwniRuntime({ dataDir: first.dataDir, engine }));
 		await expect(runtime.submit(hello)).rejects.toThrow("admission unavailable");
 		const uncertain = (await runtime.listRuns("acme", "ops"))[0]!;
 		expect(uncertain).toMatchObject({ status: "queued", delivery: "pending" });
@@ -434,7 +434,7 @@ describe("restored Stop and uncertain admission", () => {
 		} };
 		const effects: string[] = [];
 		const held = heldTool(effects);
-		const runtime = register(new AnnieRuntime({ dataDir: first.dataDir, engine, tools: [held.tool] }));
+		const runtime = register(new OwniRuntime({ dataDir: first.dataDir, engine, tools: [held.tool] }));
 		const replies: unknown[] = [];
 		runtime.onReply((reply) => replies.push(reply));
 		const request = { ...hello, text: "/tool slow {}" };
@@ -495,7 +495,7 @@ it("survives SIGKILL after Stop intent but before Pi abort: stopped tools never 
 		await worker.waitForLine("STOP_INTENT");
 		await kill9(worker); worker = undefined;
 		const effects: string[] = [];
-		const runtime = register(new AnnieRuntime({ dataDir, engine: piDurableEngine, tools: [slowTool(effects, 1)] }));
+		const runtime = register(new OwniRuntime({ dataDir, engine: piDurableEngine, tools: [slowTool(effects, 1)] }));
 		await runtime.resume("acme", "ops");
 		await runtime.idle("acme", "ops");
 		expect(await runtime.listRuns("acme", "ops")).toMatchObject([{ status: "cancelled", cancelRequestedAt: expect.any(String) }]);
@@ -513,7 +513,7 @@ it("repairs an outcome committed before submit returned and before the outbox ex
 		worker = spawnFixture("run-stop-worker.ts", [dataDir, "admission"]);
 		await worker.waitForLine("ADMITTED_OUTCOME");
 		await kill9(worker); worker = undefined;
-		const runtime = register(new AnnieRuntime({ dataDir, engine: piDurableEngine }));
+		const runtime = register(new OwniRuntime({ dataDir, engine: piDurableEngine }));
 		const replies: unknown[] = [];
 		runtime.onReply((reply) => replies.push(reply));
 		expect(await runtime.listRuns("acme", "ops")).toMatchObject([{ status: "succeeded" }]);
@@ -607,7 +607,7 @@ describe("backend failure recovery", () => {
 			} });
 		} };
 		const effects: string[] = [];
-		const runtime = register(new AnnieRuntime({ dataDir: first.dataDir, engine, tools: [heldTool(effects).tool] }));
+		const runtime = register(new OwniRuntime({ dataDir: first.dataDir, engine, tools: [heldTool(effects).tool] }));
 		await runtime.submit({ ...hello, text: "/tool slow {}" });
 		await waitFor(() => effects.length === 1);
 		const other = runtime.submit({ ...hello, threadId: "two" });
@@ -665,7 +665,7 @@ describe("backend failure recovery", () => {
 			} });
 		} };
 		for (let restart = 0; restart < 2; restart++) {
-			const runtime = register(new AnnieRuntime({ dataDir: first.dataDir, engine }));
+			const runtime = register(new OwniRuntime({ dataDir: first.dataDir, engine }));
 			await runtime.resume("acme", "ops");
 			expect(await runtime.listRuns("acme", "ops")).toMatchObject([{ status, delivery: "not_applicable" }]);
 			expect(await (await runtime.openInstance("acme", "ops")).undelivered()).toEqual([]);

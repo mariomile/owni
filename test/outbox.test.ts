@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { DUPLICATE_NOTICE } from "../src/channels/telegram.ts";
 import { type ChannelAdapter, ChannelRefused, type OutboundMessage } from "../src/channels/types.ts";
 import { piDurableEngine } from "../src/core/adapters/pi-durable.ts";
-import { AnnieRuntime, type DurableEngine, type EngineSession, Outbox, type OutboxEntry, type Reply } from "../src/core/index.ts";
+import { OwniRuntime, type DurableEngine, type EngineSession, Outbox, type OutboxEntry, type Reply } from "../src/core/index.ts";
 import { connectChannel } from "../src/gateway.ts";
 import { runtimeWithInstance, tempDataDir, waitFor } from "./helpers.ts";
 import { kill9, spawnFixture, type Worker } from "./processes.ts";
@@ -60,7 +60,7 @@ describe("reply outbox (in process)", () => {
 		const key = channel.sent[0]?.idempotencyKey;
 		expect(key).toMatch(/^reply:/);
 		// At send time: on disk, not yet delivered.
-		expect(atSend).toEqual([expect.objectContaining({ key, channel: "test", threadId: "t1", attempts: 1, reply: { status: "answered", text: ANSWER, model: { provider: "faux", modelId: "annie-dev" } } })]);
+		expect(atSend).toEqual([expect.objectContaining({ key, channel: "test", threadId: "t1", attempts: 1, reply: { status: "answered", text: ANSWER, model: { provider: "faux", modelId: "owni-dev" } } })]);
 		expect(atSend[0]?.deliveredAt).toBeUndefined();
 		// After the channel's ok: delivered.
 		expect(outboxEntries(dataDir)).toEqual([expect.objectContaining({ key, attempts: 1, deliveredAt: expect.any(String) })]);
@@ -84,7 +84,7 @@ describe("reply outbox (in process)", () => {
 		expect(outboxEntries(dataDir)[0]?.deliveredAt).toBeUndefined();
 		await runtime.close();
 
-		const next = new AnnieRuntime({ dataDir, engine: piDurableEngine });
+		const next = new OwniRuntime({ dataDir, engine: piDurableEngine });
 		const working = testChannel(async () => {});
 		connectChannel(next, working, { tenantId: "acme", instanceId: "ops" });
 		expect(await next.resume("acme", "ops")).toEqual({ pending: 0, undelivered: 1, reattached: 0 });
@@ -106,7 +106,7 @@ describe("reply outbox: retries in the same process", () => {
 		const dataDir = tempDataDir();
 		const { runtime } = await runtimeWithInstance({ dataDir });
 		await runtime.close();
-		const retrying = new AnnieRuntime({ dataDir, engine: piDurableEngine, retryDelaysMs: [30, 60] });
+		const retrying = new OwniRuntime({ dataDir, engine: piDurableEngine, retryDelaysMs: [30, 60] });
 		let failures = 2;
 		const flaky = testChannel(async () => {
 			if (failures-- > 0) throw new Error("network down");
@@ -127,7 +127,7 @@ describe("reply outbox: retries in the same process", () => {
 		const dataDir = tempDataDir();
 		const { runtime } = await runtimeWithInstance({ dataDir });
 		await runtime.close();
-		const retrying = new AnnieRuntime({ dataDir, engine: piDurableEngine, retryDelaysMs: [30] });
+		const retrying = new OwniRuntime({ dataDir, engine: piDurableEngine, retryDelaysMs: [30] });
 		const refusing = testChannel(async () => {
 			throw new ChannelRefused("Forbidden: bot was blocked by the user");
 		});
@@ -141,9 +141,9 @@ describe("reply outbox: retries in the same process", () => {
 		const down = testChannel(async () => {
 			throw new Error("network down");
 		});
-		const other = new AnnieRuntime({ dataDir: tempDataDir(), engine: piDurableEngine, retryDelaysMs: [60] });
+		const other = new OwniRuntime({ dataDir: tempDataDir(), engine: piDurableEngine, retryDelaysMs: [60] });
 		await other.registry.createTenant({ id: "acme", name: "acme" });
-		await other.registry.createInstance("acme", { id: "ops", name: "ops", model: { provider: "faux", modelId: "annie-dev" }, egress: { modelProviders: ["faux"], channels: ["test"] }, allowedUsers: { test: ["u"] } });
+		await other.registry.createInstance("acme", { id: "ops", name: "ops", model: { provider: "faux", modelId: "owni-dev" }, egress: { modelProviders: ["faux"], channels: ["test"] }, allowedUsers: { test: ["u"] } });
 		connectChannel(other, down, { tenantId: "acme", instanceId: "ops" }, () => {});
 		await other.submit(hello);
 		await waitFor(() => down.sent.length === 1);
@@ -160,7 +160,7 @@ describe("reply outbox: retry limits", () => {
 		const { runtime } = await runtimeWithInstance({ dataDir });
 		await runtime.close();
 		// The first retry soon, the next one far away: only the duplicate reports are under test.
-		const retrying = new AnnieRuntime({ dataDir, engine: piDurableEngine, retryDelaysMs: [40, 60_000] });
+		const retrying = new OwniRuntime({ dataDir, engine: piDurableEngine, retryDelaysMs: [40, 60_000] });
 		const sent: Reply[] = [];
 		retrying.onReply((r) => sent.push(r));
 		const down = testChannel(async () => {
@@ -184,7 +184,7 @@ describe("reply outbox: retry limits", () => {
 		const dataDir = tempDataDir();
 		const { runtime } = await runtimeWithInstance({ dataDir });
 		await runtime.close();
-		const retrying = new AnnieRuntime({ dataDir, engine: piDurableEngine, retryDelaysMs: [10, 10], maxRetries: 3 });
+		const retrying = new OwniRuntime({ dataDir, engine: piDurableEngine, retryDelaysMs: [10, 10], maxRetries: 3 });
 		const down = testChannel(async () => {
 			throw new Error("network down");
 		});
@@ -203,7 +203,7 @@ describe("reply outbox: stale failures", () => {
 		const dataDir = tempDataDir();
 		const { runtime } = await runtimeWithInstance({ dataDir });
 		await runtime.close();
-		const retrying = new AnnieRuntime({ dataDir, engine: piDurableEngine, retryDelaysMs: [20] });
+		const retrying = new OwniRuntime({ dataDir, engine: piDurableEngine, retryDelaysMs: [20] });
 		const sent: Reply[] = [];
 		retrying.onReply((r) => sent.push(r));
 		const pending: (() => void)[] = [];
@@ -240,7 +240,7 @@ describe("reply outbox: cleanup", () => {
 		await outbox.put({ key: "reply:stuck", submissionId: "s2", channel: "test", threadId: "t1", attempts: 0, createdAt: days(40) });
 		// Messages the instance sends itself (approval notices) keep their key: it stops a second notice.
 		await outbox.put({ ...base, key: "msg:acme/ops/proposal:p1:9", createdAt: days(41), deliveredAt: days(40) });
-		const next = new AnnieRuntime({ dataDir, engine: piDurableEngine });
+		const next = new OwniRuntime({ dataDir, engine: piDurableEngine });
 		await next.resume("acme", "ops");
 		expect((await outbox.list()).map((e) => e.key).sort()).toEqual(["msg:acme/ops/proposal:p1:9", "reply:recent", "reply:stuck"]);
 		expect(await next.audit("acme").read()).toContainEqual(expect.objectContaining({ type: "outbox.pruned", instanceId: "ops", removed: 1 }));
@@ -273,7 +273,7 @@ describe("activity: what a cell must finish before it sleeps", () => {
 	it("counts submissions still waiting for their reply, and nothing once replies are out", async () => {
 		const setup = await runtimeWithInstance({});
 		await setup.runtime.close();
-		const deaf = new AnnieRuntime({ dataDir: setup.dataDir, engine: deafEngine });
+		const deaf = new OwniRuntime({ dataDir: setup.dataDir, engine: deafEngine });
 		expect(await deaf.activity("acme")).toEqual({ working: 0, retrying: 0 });
 		await deaf.submit(hello);
 		await (await deaf.openInstance("acme", "ops")).idle();
@@ -293,7 +293,7 @@ describe("reply outbox: review regressions", () => {
 	it("a reply Pi settled but the outbox never received is reattached by ID and sent once on resume", async () => {
 		const setup = await runtimeWithInstance({});
 		await setup.runtime.close();
-		const deaf = new AnnieRuntime({ dataDir: setup.dataDir, engine: deafEngine });
+		const deaf = new OwniRuntime({ dataDir: setup.dataDir, engine: deafEngine });
 		await deaf.submit(hello);
 		await (await deaf.openInstance("acme", "ops")).idle();
 		await deaf.close();
@@ -301,7 +301,7 @@ describe("reply outbox: review regressions", () => {
 		expect(outboxEntries(setup.dataDir)).toEqual([expect.objectContaining({ channel: "test", threadId: "t1", attempts: 0 })]);
 		expect(outboxEntries(setup.dataDir)[0]?.reply).toBeUndefined();
 
-		const next = new AnnieRuntime({ dataDir: setup.dataDir, engine: piDurableEngine });
+		const next = new OwniRuntime({ dataDir: setup.dataDir, engine: piDurableEngine });
 		const channel = testChannel(async () => {});
 		connectChannel(next, channel, { tenantId: "acme", instanceId: "ops" });
 		expect(await next.resume("acme", "ops")).toEqual({ pending: 0, undelivered: 0, reattached: 1 });
@@ -322,7 +322,7 @@ describe("reply outbox: review regressions", () => {
 		await waitFor(() => outboxEntries(dataDir).filter((e) => e.attempts === 1).length === 2);
 		await runtime.close();
 
-		const next = new AnnieRuntime({ dataDir, engine: piDurableEngine });
+		const next = new OwniRuntime({ dataDir, engine: piDurableEngine });
 		const channel = testChannel(async () => {});
 		connectChannel(next, channel, { tenantId: "acme", instanceId: "ops" });
 		await Promise.all([next.resume("acme", "ops"), next.resume("acme", "ops"), next.resume("acme", "ops")]);
@@ -348,7 +348,7 @@ describe("reply outbox: review regressions", () => {
 		expect(logs[0]).toContain("not confirmed in the outbox: Instance acme/ops is not open");
 
 		// The lock is free (nothing reopened it), and the reply goes out again, flagged.
-		const next = new AnnieRuntime({ dataDir, engine: piDurableEngine });
+		const next = new OwniRuntime({ dataDir, engine: piDurableEngine });
 		const channel = testChannel(async () => {});
 		connectChannel(next, channel, { tenantId: "acme", instanceId: "ops" });
 		expect(await next.resume("acme", "ops")).toMatchObject({ undelivered: 1 });
@@ -360,7 +360,7 @@ describe("reply outbox: review regressions", () => {
 	it("idempotency keys name the tenant and instance, so two tenants never share one", async () => {
 		const { runtime } = await runtimeWithInstance({});
 		await runtime.registry.createTenant({ id: "globex", name: "globex" });
-		await runtime.registry.createInstance("globex", { id: "ops", name: "ops", model: { provider: "faux", modelId: "annie-dev" }, egress: { modelProviders: ["faux"], channels: ["test"] }, allowedUsers: { test: ["u"] } });
+		await runtime.registry.createInstance("globex", { id: "ops", name: "ops", model: { provider: "faux", modelId: "owni-dev" }, egress: { modelProviders: ["faux"], channels: ["test"] }, allowedUsers: { test: ["u"] } });
 		const channel = testChannel(async () => {});
 		connectChannel(runtime, channel, { tenantId: "acme", instanceId: "ops" });
 		connectChannel(runtime, channel, { tenantId: "globex", instanceId: "ops" });
@@ -400,7 +400,7 @@ describe("reply outbox across a SIGKILL (real child processes, fake Telegram)", 
 		const first = worker("start", dataDir, callsFile, "hang-before");
 		await first.waitForLine("SENDING");
 		// The reply is on disk before the request leaves.
-		expect(outboxEntries(dataDir)).toEqual([expect.objectContaining({ channel: "telegram", threadId: "42", attempts: 1, reply: { status: "answered", text: ANSWER, model: { provider: "faux", modelId: "annie-dev" } } })]);
+		expect(outboxEntries(dataDir)).toEqual([expect.objectContaining({ channel: "telegram", threadId: "42", attempts: 1, reply: { status: "answered", text: ANSWER, model: { provider: "faux", modelId: "owni-dev" } } })]);
 		await kill9(first);
 		expect(sendMessages(callsFile)).toEqual([]);
 

@@ -8,25 +8,25 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v5
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Deterministic evals
         run: pnpm eval:segreteria && pnpm eval:agente
-      - name: Real models + LLM judge (skipped without ANNIE_JUDGE_MODEL_KEY, an Anthropic key)
+      - name: Real models + LLM judge (skipped without OWNI_JUDGE_MODEL_KEY, an Anthropic key)
         run: pnpm eval:segreteria:judge
         env:
-          ANNIE_JUDGE_MODEL_KEY: ${{ secrets.ANNIE_JUDGE_MODEL_KEY }}
-      - name: General agent with the real model (skipped without ANNIE_JUDGE_MODEL_KEY)
+          OWNI_JUDGE_MODEL_KEY: ${{ secrets.OWNI_JUDGE_MODEL_KEY }}
+      - name: General agent with the real model (skipped without OWNI_JUDGE_MODEL_KEY)
         # Runs also when the segreteria judge failed: the two measure different things.
         if: success() || failure()
         run: pnpm eval:agente:real
         env:
-          ANNIE_JUDGE_MODEL_KEY: ${{ secrets.ANNIE_JUDGE_MODEL_KEY }}
+          OWNI_JUDGE_MODEL_KEY: ${{ secrets.OWNI_JUDGE_MODEL_KEY }}
       - name: Agent routing and outcome summary (passed, failed, skipped, error)
         if: always()
         run: |
@@ -45,7 +45,7 @@ jobs:
         if: always()
         # A full artifact quota must not turn the evals red: the report is a convenience.
         continue-on-error: true
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: segreteria-judge-report
           path: evals/segreteria/last-report/
@@ -53,7 +53,7 @@ jobs:
           retention-days: 14
       - name: Upload agent report
         if: always()
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: agente-report
           path: evals/agente/last-report/

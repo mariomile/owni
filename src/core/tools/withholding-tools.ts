@@ -2,7 +2,7 @@ import { isAgentTurn } from "../turn-origin.ts";
 import { statementOf } from "../bank.ts";
 import type { BankStore } from "../bank-store.ts";
 import { type Candidate, FORM_NOTE, findNamed, taxIdOf } from "../client-find.ts";
-import type { AnnieTool, JsonValue, ToolContext } from "../engine.ts";
+import type { OwniTool, JsonValue, ToolContext } from "../engine.ts";
 import type { FatturaParty } from "../fattura-pa.ts";
 import { InvoiceScanner } from "../invoice-scan.ts";
 import type { InvoiceStore } from "../invoice-store.ts";
@@ -56,7 +56,7 @@ const DESCRIPTION = [
  * stores and the shared scanner. Only the CU (recorded or removed, in the store) and the export (a
  * new CSV under ritenute/) write. Today is read once per call.
  */
-export function createWithholdingTools(options: WithholdingToolsOptions): AnnieTool[] {
+export function createWithholdingTools(options: WithholdingToolsOptions): OwniTool[] {
 	const { workspace, timeZone, store } = options;
 	const now = options.now ?? (() => new Date());
 	const scanner = options.scanner ?? new InvoiceScanner(workspace);
@@ -226,7 +226,7 @@ export function createWithholdingTools(options: WithholdingToolsOptions): AnnieT
 		const found = clientOf(said, l.docs);
 		if ("ask" in found) return askClient(found.ask);
 		if ("none" in found) return ["Errore: nelle mie fatture non c'è nessun cliente con questo nome (nel riquadro): dammi la partita IVA del cliente come la scrive la CU.", fenced(said)].join("\n");
-		const who = ctx.thread === undefined ? "annie" : (options.whoIs(ctx.thread) ?? `${ctx.thread.channel}:${ctx.thread.threadId}`);
+		const who = ctx.thread === undefined ? "owni" : (options.whoIs(ctx.thread) ?? `${ctx.thread.channel}:${ctx.thread.threadId}`);
 		const done = (await ctx.step("record", async () => {
 			const at = now().toISOString();
 			// A client taken by a name not its own (a similar one, another legal form) never takes another CU's place.

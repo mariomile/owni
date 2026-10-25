@@ -2,7 +2,7 @@ node_modules/
 dist/
 data/
 .env
-.annie-run/
+.owni-run/
 *.log
 
 evals/segreteria/last-report/

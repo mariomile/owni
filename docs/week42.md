@@ -18,14 +18,14 @@ Branch `week-42`. Fatture in dollari, fornitori svizzeri, preventivi in sterline
 - Cache: un solo download per chiamate insieme, file del giorno rinnovato solo quando serve, fallimenti tenuti 2 minuti.
 - Conti: euro verso valuta, valuta verso euro, fra due valute passando per l'euro, importi fino a un miliardo senza perdere centesimi, totale di più importi, cambi fissi delle vecchie valute.
 - Risposte: forma compatta, cambio come lo pubblica la BCE, date gg/mm/aaaa, nessun «hai chiesto» quando la data non c'era, motivi specifici per rublo, criptovalute e codici sconosciuti.
-- Configurazione: spento senza `ANNIE_EXCHANGE_RATES=1`, indirizzo di prova controllato, `pnpm annie check` che scarica il file del giorno solo se è acceso.
+- Configurazione: spento senza `OWNI_EXCHANGE_RATES=1`, indirizzo di prova controllato, `pnpm owni check` che scarica il file del giorno solo se è acceso.
 - In un'istanza vera: una conversione dalla chat con il modello di prova.
 
 ## Review indipendente
 
 Due revisori: sicurezza e standard; specifiche e uso, con richieste vere provate sul codice e i fatti controllati sul sito della BCE. Corretti:
 
-- **Alta (sicurezza).** Un'espressione regolare che toglieva i commenti era quadratica: un file ostile da 320 KB bloccava il server per 15 secondi. Il tool era acceso di default, contro il principio «niente in uscita senza configurazione», e rompeva `annie check` sui server senza rete.
+- **Alta (sicurezza).** Un'espressione regolare che toglieva i commenti era quadratica: un file ostile da 320 KB bloccava il server per 15 secondi. Il tool era acceso di default, contro il principio «niente in uscita senza configurazione», e rompeva `owni check` sui server senza rete.
 - **Media (sicurezza).** I download falliti si ripetevano a ogni chiamata, anche quello della storia. Un giorno scartato poteva tornare. Un file troncato era accettato. Gli importi grandi perdevano i centesimi o finivano in notazione esponenziale.
 - **Alta (uso).**
   - Dopo le 16:00 il cambio di oggi poteva restare nascosto per un'ora.

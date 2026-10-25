@@ -19,7 +19,7 @@ export async function evaluateRouting(options: {
 	let skipReason: string | undefined;
 	try {
 		selected = selectCases(await options.load(), options.selectors);
-		if (!options.key?.trim()) skipReason = "Missing ANNIE_JUDGE_MODEL_KEY; no real-model calls made";
+		if (!options.key?.trim()) skipReason = "Missing OWNI_JUDGE_MODEL_KEY; no real-model calls made";
 		else {
 			session = await options.open();
 			for (const c of selected) {

@@ -2,7 +2,7 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { piDurableEngine } from "../src/core/adapters/pi-durable.ts";
-import { AnnieRuntime, EgressDenied, modelApiKeySecret, type Reply } from "../src/core/index.ts";
+import { OwniRuntime, EgressDenied, modelApiKeySecret, type Reply } from "../src/core/index.ts";
 import { FAUX_MODEL, runtimeWithInstance, tempDataDir, waitFor } from "./helpers.ts";
 
 afterEach(() => {
@@ -13,7 +13,7 @@ afterEach(() => {
 describe("egress policy", () => {
 	it("denies everything by default: an instance created without a policy cannot reach any model", async () => {
 		const dataDir = tempDataDir();
-		const runtime = new AnnieRuntime({ dataDir, engine: piDurableEngine });
+		const runtime = new OwniRuntime({ dataDir, engine: piDurableEngine });
 		await runtime.registry.createTenant({ id: "acme", name: "Acme" });
 		const instance = await runtime.registry.createInstance("acme", { id: "ops", name: "Ops", model: FAUX_MODEL });
 		expect(instance.egress).toEqual({ modelProviders: [], channels: [] });
@@ -26,7 +26,7 @@ describe("egress policy", () => {
 
 	it("denies a model provider that is not the one explicitly allowed", async () => {
 		const dataDir = tempDataDir();
-		const runtime = new AnnieRuntime({ dataDir, engine: piDurableEngine });
+		const runtime = new OwniRuntime({ dataDir, engine: piDurableEngine });
 		await runtime.registry.createTenant({ id: "acme", name: "Acme" });
 		await runtime.registry.createInstance("acme", {
 			id: "ops",
@@ -80,7 +80,7 @@ describe("model credentials", () => {
 			return Response.json({ type: "error", error: { type: "invalid_request_error", message: "blocked in test" } }, { status: 400 });
 		}));
 
-		const runtime = new AnnieRuntime({ dataDir: dir, engine: piDurableEngine });
+		const runtime = new OwniRuntime({ dataDir: dir, engine: piDurableEngine });
 		await runtime.registry.createTenant({ id: "acme", name: "Acme" });
 		await runtime.registry.createInstance("acme", {
 			id: "ops",

@@ -16,7 +16,7 @@ import {
 import { FORM_NOTE, findNamed } from "../client-find.ts";
 import { lookalikeParties } from "../party-groups.ts";
 import { cardNameKeys } from "../party-cards.ts";
-import type { AnnieTool, ToolContext } from "../engine.ts";
+import type { OwniTool, ToolContext } from "../engine.ts";
 import { euros, n1 } from "../format-words.ts";
 import { InvoiceScanner } from "../invoice-scan.ts";
 import type { InvoiceStore } from "../invoice-store.ts";
@@ -98,12 +98,12 @@ function meant(candidates: readonly Client[], more = ""): string {
 }
 
 /** I clienti (clients.ts): the cards kept here; everything else read from the registers, never written. Today is read once per call. */
-export function createClientTools(options: ClientToolsOptions): AnnieTool[] {
+export function createClientTools(options: ClientToolsOptions): OwniTool[] {
 	const { store, workspace, timeZone } = options;
 	const now = options.now ?? (() => new Date());
 	const scanner = options.scanner ?? new InvoiceScanner(workspace);
 	const dayOf = dayOfIn(timeZone);
-	const who = (ctx: ToolContext) => (ctx.thread === undefined ? "annie" : (options.whoIs(ctx.thread) ?? `${ctx.thread.channel}:${ctx.thread.threadId}`));
+	const who = (ctx: ToolContext) => (ctx.thread === undefined ? "owni" : (options.whoIs(ctx.thread) ?? `${ctx.thread.channel}:${ctx.thread.threadId}`));
 	const marker = (ctx: ToolContext): Marker => ({ by: who(ctx), at: now().toISOString() });
 	const audit = async (ctx: ToolContext, op: ClientEvent["op"], count: number) => {
 		// Its own step: an audit that failed is written on the rerun, after the change it records.

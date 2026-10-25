@@ -3,11 +3,11 @@ import type { AddressInfo } from "node:net";
 import { join } from "node:path";
 import { runInNewContext } from "node:vm";
 import { afterEach, describe, expect, it } from "vitest";
-import { type RunningAnnie, startAnnie } from "../src/app.ts";
-import { loadAnnieConfig } from "../src/main/config.ts";
+import { type RunningOwni, startOwni } from "../src/app.ts";
+import { loadOwniConfig } from "../src/main/config.ts";
 import { tempDataDir } from "./helpers.ts";
 
-const running: RunningAnnie[] = [];
+const running: RunningOwni[] = [];
 afterEach(async () => {
 	for (const a of running.splice(0)) await a.stop();
 });
@@ -15,23 +15,23 @@ afterEach(async () => {
 /** A Telegram that knows every token and has no messages: enough for a bot to be connected. */
 const quietTelegram = (async (url: string | URL | Request) => {
 	if (String(url).endsWith("/getUpdates")) await new Promise((r) => setTimeout(r, 20));
-	return Response.json({ ok: true, result: String(url).endsWith("/getMe") ? { username: "annie_bot" } : [] });
+	return Response.json({ ok: true, result: String(url).endsWith("/getMe") ? { username: "owni_bot" } : [] });
 }) as typeof fetch;
 
 async function boot(env: Record<string, string> = {}) {
-	const config = loadAnnieConfig({ ANNIE_DATA_DIR: tempDataDir(), ANNIE_MODEL_PROVIDER: "faux", ANNIE_WEB_PORT: "1", ...env });
-	const annie = await startAnnie({ ...config, web: { ...config.web, port: 0 } }, { schedulerIntervalMs: 3_600_000, telegramFetch: quietTelegram, log: () => {} });
-	running.push(annie);
-	const base = `http://127.0.0.1:${(annie.server.address() as AddressInfo).port}`;
-	return { annie, base, api: await client(base, annie.ownerLink as string) };
+	const config = loadOwniConfig({ OWNI_DATA_DIR: tempDataDir(), OWNI_MODEL_PROVIDER: "faux", OWNI_WEB_PORT: "1", ...env });
+	const owni = await startOwni({ ...config, web: { ...config.web, port: 0 } }, { schedulerIntervalMs: 3_600_000, telegramFetch: quietTelegram, log: () => {} });
+	running.push(owni);
+	const base = `http://127.0.0.1:${(owni.server.address() as AddressInfo).port}`;
+	return { owni, base, api: await client(base, owni.ownerLink as string) };
 }
 
 async function client(base: string, link: string) {
-	const login = await fetch(`${base}/api/login`, { method: "POST", headers: { "x-annie": "1" }, body: JSON.stringify({ token: link.split("#")[1] }) });
+	const login = await fetch(`${base}/api/login`, { method: "POST", headers: { "x-owni": "1" }, body: JSON.stringify({ token: link.split("#")[1] }) });
 	const cookie = (login.headers.get("set-cookie") ?? "").split(";")[0] as string;
 	// biome-ignore lint: test
 	return async (path: string, method = "GET", body?: unknown): Promise<any> => {
-		const res = await fetch(`${base}${path}`, { method, headers: { cookie, "x-annie": "1" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+		const res = await fetch(`${base}${path}`, { method, headers: { cookie, "x-owni": "1" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
 		return { status: res.status, ...((await res.json()) as object) };
 	};
 }
@@ -40,56 +40,56 @@ const nothingDone = { model: false, instructions: false, tried: false, channel: 
 
 describe("primi passi", () => {
 	it("each step is checked from the real settings, and only the owner sees them", async () => {
-		const { annie, base, api } = await boot();
-		expect((await api("/api/instances/annie/setup")).setup).toEqual(nothingDone);
-		await api("/api/instances/annie/settings", "PUT", { about: "Assistente di Studio Rossi." });
-		const instructions = (await api("/api/instances/annie/settings")).settings.instructions as string;
+		const { owni, base, api } = await boot();
+		expect((await api("/api/instances/owni/setup")).setup).toEqual(nothingDone);
+		await api("/api/instances/owni/settings", "PUT", { about: "Assistente di Studio Rossi." });
+		const instructions = (await api("/api/instances/owni/settings")).settings.instructions as string;
 		// Added to what Owni can do, not in its place.
 		expect(instructions).toContain("watch_");
 		expect(instructions.endsWith("Informazioni su chi ti usa:\nAssistente di Studio Rossi.")).toBe(true);
-		const thread = (await api("/api/instances/annie/threads", "POST", {})).thread;
-		await api(`/api/instances/annie/threads/${thread.id}/messages`, "POST", { text: "Ciao" });
-		for (let i = 0; i < 200 && !(await api("/api/instances/annie/setup")).setup.tried; i++) await new Promise((r) => setTimeout(r, 30));
-		const record = await annie.runtime.registry.getInstance("default", "annie");
-		await annie.runtime.registry.setEgress("default", "annie", { ...record.egress, web: ["comune.roma.it"] });
+		const thread = (await api("/api/instances/owni/threads", "POST", {})).thread;
+		await api(`/api/instances/owni/threads/${thread.id}/messages`, "POST", { text: "Ciao" });
+		for (let i = 0; i < 200 && !(await api("/api/instances/owni/setup")).setup.tried; i++) await new Promise((r) => setTimeout(r, 30));
+		const record = await owni.runtime.registry.getInstance("default", "owni");
+		await owni.runtime.registry.setEgress("default", "owni", { ...record.egress, web: ["comune.roma.it"] });
 		// Someone added who cannot write to this instance is not the team yet.
 		const added = await api("/api/people", "POST", { name: "Giulia" });
-		expect((await api("/api/instances/annie/setup")).setup.people).toBe(false);
+		expect((await api("/api/instances/owni/setup")).setup.people).toBe(false);
 		const owner = (await api("/api/me")).person.id as string;
-		await api("/api/instances/annie/settings", "PUT", { webPeople: [owner, added.person.id] });
-		expect((await api("/api/instances/annie/setup")).setup).toEqual({ ...nothingDone, instructions: true, tried: true, web: true, people: true });
+		await api("/api/instances/owni/settings", "PUT", { webPeople: [owner, added.person.id] });
+		expect((await api("/api/instances/owni/setup")).setup).toEqual({ ...nothingDone, instructions: true, tried: true, web: true, people: true });
 		const giulia = await client(base, added.link);
-		expect((await giulia("/api/instances/annie/setup")).status).toBe(403);
+		expect((await giulia("/api/instances/owni/setup")).status).toBe(403);
 	});
 
 	it("saving again replaces the owner's block, and bad or placeholder text is refused", async () => {
 		const { api } = await boot();
-		await api("/api/instances/annie/settings", "PUT", { about: "Primo testo." });
-		await api("/api/instances/annie/settings", "PUT", { about: "Secondo testo." });
-		const instructions = (await api("/api/instances/annie/settings")).settings.instructions as string;
+		await api("/api/instances/owni/settings", "PUT", { about: "Primo testo." });
+		await api("/api/instances/owni/settings", "PUT", { about: "Secondo testo." });
+		const instructions = (await api("/api/instances/owni/settings")).settings.instructions as string;
 		expect(instructions.match(/Informazioni su chi ti usa:/g)).toHaveLength(1);
 		expect(instructions).not.toContain("Primo testo");
 		expect(instructions.endsWith("Secondo testo.")).toBe(true);
-		expect((await api("/api/instances/annie/settings", "PUT", { about: "  " })).status).toBe(400);
-		expect((await api("/api/instances/annie/settings", "PUT", { about: "Assistente di [nome dell'attività]" })).status).toBe(400);
-		expect((await api("/api/instances/annie/settings", "PUT", { about: "x".repeat(2001) })).status).toBe(400);
-		expect((await api("/api/instances/annie/settings", "PUT", { about: "Ciao", instructions: "Altro" })).status).toBe(400);
-		expect((await api("/api/instances/annie/settings")).settings.instructions).toBe(instructions);
+		expect((await api("/api/instances/owni/settings", "PUT", { about: "  " })).status).toBe(400);
+		expect((await api("/api/instances/owni/settings", "PUT", { about: "Assistente di [nome dell'attività]" })).status).toBe(400);
+		expect((await api("/api/instances/owni/settings", "PUT", { about: "x".repeat(2001) })).status).toBe(400);
+		expect((await api("/api/instances/owni/settings", "PUT", { about: "Ciao", instructions: "Altro" })).status).toBe(400);
+		expect((await api("/api/instances/owni/settings")).settings.instructions).toBe(instructions);
 	});
 
 	it("an old copy of the default instructions is still the default; the owner's own text counts", async () => {
-		const { annie, api } = await boot();
-		await annie.runtime.registry.updateInstance("default", "annie", { instructions: "Sei Owni, l'assistente sempre attiva di un'azienda italiana. Puoi: cose di una versione vecchia." });
-		expect((await api("/api/instances/annie/setup")).setup.instructions).toBe(false);
-		await annie.runtime.registry.updateInstance("default", "annie", { instructions: "Sei il centralino della pizzeria Da Mario." });
-		expect((await api("/api/instances/annie/setup")).setup.instructions).toBe(true);
+		const { owni, api } = await boot();
+		await owni.runtime.registry.updateInstance("default", "owni", { instructions: "Sei Owni, l'assistente sempre attiva di un'azienda italiana. Puoi: cose di una versione vecchia." });
+		expect((await api("/api/instances/owni/setup")).setup.instructions).toBe(false);
+		await owni.runtime.registry.updateInstance("default", "owni", { instructions: "Sei il centralino della pizzeria Da Mario." });
+		expect((await api("/api/instances/owni/setup")).setup.instructions).toBe(true);
 	});
 
 	it("a connected bot is a step done only once someone can write to it", async () => {
-		const { annie, api } = await boot({ TELEGRAM_BOT_TOKEN: "1:T" });
-		expect((await api("/api/instances/annie/setup")).setup.channel).toBe(false);
-		await annie.runtime.registry.setAllowedUsers("default", "annie", "telegram", ["7"]);
-		expect((await api("/api/instances/annie/setup")).setup.channel).toBe(true);
+		const { owni, api } = await boot({ TELEGRAM_BOT_TOKEN: "1:T" });
+		expect((await api("/api/instances/owni/setup")).setup.channel).toBe(false);
+		await owni.runtime.registry.setAllowedUsers("default", "owni", "telegram", ["7"]);
+		expect((await api("/api/instances/owni/setup")).setup.channel).toBe(true);
 	});
 
 	it("a new instance with the owner's words keeps what Owni can do", async () => {
@@ -131,7 +131,7 @@ describe("console as an app", () => {
 		const put: string[] = [];
 		let online = true;
 		const self = {
-			location: { origin: "https://annie.example" },
+			location: { origin: "https://owni.example" },
 			addEventListener: (type: string, fn: (event: unknown) => void) => (handlers[type] = fn),
 			skipWaiting: async () => {},
 			clients: { claim: async () => {} },
@@ -149,17 +149,17 @@ describe("console as an app", () => {
 			return { ok: true, type: "basic", body: `net ${new URL(req.url).pathname}`, clone: () => ({}) };
 		};
 		runInNewContext(code, { self, caches, fetch, URL, Response: { error: () => ({ error: true }) }, Promise });
-		const request = async (path: string, mode = "cors", method = "GET", origin = "https://annie.example") => {
+		const request = async (path: string, mode = "cors", method = "GET", origin = "https://owni.example") => {
 			let answer: Promise<unknown> | undefined;
 			handlers.fetch?.({ request: { url: `${origin}${path}`, mode, method }, respondWith: (p: Promise<unknown>) => (answer = p) });
 			return answer === undefined ? "not handled" : await answer;
 		};
 		expect(await request("/api/me")).toBe("not handled");
-		expect(await request("/api/instances/annie/files/raw?path=a.pdf")).toBe("not handled");
+		expect(await request("/api/instances/owni/files/raw?path=a.pdf")).toBe("not handled");
 		expect(await request("/app.js", "cors", "POST")).toBe("not handled");
 		expect(await request("/app.js", "cors", "GET", "https://cdn.example")).toBe("not handled");
 		// A file opened in a new tab, or the return from Google, is never answered with the shell.
-		expect(await request("/api/instances/annie/files/raw?path=a.pdf", "navigate")).toBe("not handled");
+		expect(await request("/api/instances/owni/files/raw?path=a.pdf", "navigate")).toBe("not handled");
 		expect(await request("/oauth/google/callback?code=x", "navigate")).toBe("not handled");
 		expect(await request("/app.js")).toMatchObject({ body: "net /app.js" });
 		// The page opened online is the one kept for offline; another address is not kept as the page.

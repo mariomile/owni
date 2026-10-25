@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { type AutomationRate, automationData, automationText } from "./automations.ts";
 import { EgressDenied, NotFound, UserNotAllowed } from "./errors.ts";
-import type { AnnieRuntime } from "./runtime.ts";
+import type { OwniRuntime } from "./runtime.ts";
 
 /** What an automazione's caller gets back: 202 once the run is admitted, otherwise why not. */
 export type AutomationCall = { readonly status: 202 | 404 | 409 | 429; readonly error?: string };
@@ -12,7 +12,7 @@ export type AutomationCall = { readonly status: 202 | 404 | 409 | 429; readonly 
  * firing, once per `key` (the caller's Idempotency-Key, when it sends one: a retried delivery runs once).
  */
 export async function callAutomation(
-	runtime: AnnieRuntime,
+	runtime: OwniRuntime,
 	call: { tenant: string; instance: string; id: string; token: string; body: Buffer; contentType: string | undefined; key: string | undefined },
 	rate: AutomationRate,
 ): Promise<AutomationCall> {

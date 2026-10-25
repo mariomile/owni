@@ -62,7 +62,7 @@ export function audioName(mimeType: string, given?: string, stem = "vocale"): st
 	return `${stem}.${EXTENSIONS[mimeType.split(";")[0]?.trim().toLowerCase() ?? ""] ?? "ogg"}`;
 }
 
-/** Longest voice message read as a message when the transcriber does not say: five minutes, as ANNIE_TRANSCRIBE_MAX_SECONDS. */
+/** Longest voice message read as a message when the transcriber does not say: five minutes, as OWNI_TRANSCRIBE_MAX_SECONDS. */
 const DEFAULT_MESSAGE_SECONDS = 300;
 
 /**

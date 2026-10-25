@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { instanceId } from "./ids.ts";
-import type { AnnieRuntime } from "./runtime.ts";
+import type { OwniRuntime } from "./runtime.ts";
 
 /**
  * Agenti that write to each other (ADR 0042). An agente asks another one something; the other
@@ -123,7 +123,7 @@ export class AgentRate {
  * from the answer's key, so a resend after a crash is admitted once.
  */
 export async function relayAgentAnswer(
-	runtime: Pick<AnnieRuntime, "registry" | "workspace" | "submitNotice">,
+	runtime: Pick<OwniRuntime, "registry" | "workspace" | "submitNotice">,
 	tenant: string,
 	from: string,
 	answer: { readonly to: string; readonly origin: Origin; readonly text?: string; readonly file?: { readonly name: string; readonly data: Uint8Array }; readonly key: string },

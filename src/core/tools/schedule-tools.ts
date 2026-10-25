@@ -1,6 +1,6 @@
 import { AGENT_CHANNEL } from "../agent-messages.ts";
 import { nextRun, parseCron } from "../cron.ts";
-import type { AnnieTool, ToolContext } from "../engine.ts";
+import type { OwniTool, ToolContext } from "../engine.ts";
 import { addDays, todayIn } from "../italian-calendar.ts";
 import { ScheduleError, type ScheduleStore, schedulePerson, threadPerson } from "../schedules.ts";
 
@@ -55,7 +55,7 @@ export type ReminderSeam = {
  * Tools to create, list and delete tasks programmati. A task created in a conversation
  * delivers its results to that same conversation.
  */
-export function createScheduleTools(options: ScheduleToolsOptions): AnnieTool[] {
+export function createScheduleTools(options: ScheduleToolsOptions): OwniTool[] {
 	return schedulesOf(options).tools;
 }
 
@@ -66,7 +66,7 @@ const REMINDER_REFUSED: Readonly<Record<ScheduleRefusal, string>> = {
 };
 
 /** The schedule tools, and the same schedules' reminders for another tool. */
-export function schedulesOf(options: ScheduleToolsOptions): { readonly tools: AnnieTool[]; readonly reminders: ReminderSeam } {
+export function schedulesOf(options: ScheduleToolsOptions): { readonly tools: OwniTool[]; readonly reminders: ReminderSeam } {
 	const { store } = options;
 	const now = options.now ?? (() => new Date());
 	const timeZone = options.defaultTimeZone;
@@ -114,7 +114,7 @@ export function schedulesOf(options: ScheduleToolsOptions): { readonly tools: An
 			});
 		},
 	};
-	const tools: AnnieTool[] = [
+	const tools: OwniTool[] = [
 		{
 			name: "schedule_create",
 			description:

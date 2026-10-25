@@ -1,11 +1,11 @@
 import type { RunRecord } from "../core/run-store.ts";
-import type { AnnieRuntime } from "../core/runtime.ts";
+import type { OwniRuntime } from "../core/runtime.ts";
 import type { Person } from "./auth.ts";
 import type { WebChannel } from "./channel.ts";
 import { type AddRoute, HttpError } from "./http.ts";
 
 type RunRoutesDeps = {
-	readonly runtime: AnnieRuntime;
+	readonly runtime: OwniRuntime;
 	readonly tenantId: string;
 	readonly access: (person: Person, instanceId: string) => Promise<unknown>;
 	readonly channel: (instanceId: string) => WebChannel;

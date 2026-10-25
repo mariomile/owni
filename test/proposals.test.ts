@@ -1,14 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { piDurableEngine } from "../src/core/adapters/pi-durable.ts";
 import { decideToolProposal, NotAnApprover, OWNER } from "../src/core/approvals.ts";
-import { AnnieRuntime, type Reply } from "../src/core/index.ts";
+import { OwniRuntime, type Reply } from "../src/core/index.ts";
 import type { ToolProposal } from "../src/core/proposals.ts";
 import { createCustomTools } from "../src/core/tools/custom-tools.ts";
 import { FAUX_MODEL, tempDataDir, waitFor } from "./helpers.ts";
 
 async function setup() {
 	const proposed: ToolProposal[] = [];
-	const runtime: AnnieRuntime = new AnnieRuntime({
+	const runtime: OwniRuntime = new OwniRuntime({
 		dataDir: tempDataDir(),
 		engine: piDurableEngine,
 		tools: async (r) =>

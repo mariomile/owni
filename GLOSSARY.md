@@ -227,19 +227,19 @@ Un elenco che Owni tiene per chi le scrive (la spesa, le cose da fare, i regali)
 _Avoid_: checklist, todo, elenco puntato
 
 **Meteo**:
-Quello che dà `weather`: le condizioni di adesso, le fasce di oggi e domani (notte, mattina, pomeriggio, sera) e le previsioni giorno per giorno fino a 16 giorni compreso oggi, per un posto cercato per nome. Acceso dall'operatore con `ANNIE_WEATHER`. Vedi ADR 0039.
+Quello che dà `weather`: le condizioni di adesso, le fasce di oggi e domani (notte, mattina, pomeriggio, sera) e le previsioni giorno per giorno fino a 16 giorni compreso oggi, per un posto cercato per nome. Acceso dall'operatore con `OWNI_WEATHER`. Vedi ADR 0039.
 _Avoid_: previsioni del tempo (quando si intende il tool), forecast
 
 **Cambio BCE**:
-Il tasso di riferimento dell'euro pubblicato dalla Banca Centrale Europea nei giorni lavorativi verso le 16:00, che `exchange_rate` usa per convertire importi, oggi o alla data di una fattura. Per un giorno senza pubblicazione vale l'ultimo giorno lavorativo prima. Acceso dall'operatore con `ANNIE_EXCHANGE_RATES`. Vedi ADR 0040.
+Il tasso di riferimento dell'euro pubblicato dalla Banca Centrale Europea nei giorni lavorativi verso le 16:00, che `exchange_rate` usa per convertire importi, oggi o alla data di una fattura. Per un giorno senza pubblicazione vale l'ultimo giorno lavorativo prima. Acceso dall'operatore con `OWNI_EXCHANGE_RATES`. Vedi ADR 0040.
 _Avoid_: tasso di mercato, quotazione (quando si intende il cambio BCE)
 
 **Feed di notizie**:
-Il file RSS o Atom pubblico di un giornale, da cui `news_headlines` prende i titoli recenti con fonte, ora e link. La lista la sceglie l'operatore (`ANNIE_NEWS_FEEDS`), con una di partenza; acceso con `ANNIE_NEWS`. Vedi ADR 0043.
+Il file RSS o Atom pubblico di un giornale, da cui `news_headlines` prende i titoli recenti con fonte, ora e link. La lista la sceglie l'operatore (`OWNI_NEWS_FEEDS`), con una di partenza; acceso con `OWNI_NEWS`. Vedi ADR 0043.
 _Avoid_: notiziario, rassegna stampa (quando si intendono i titoli dei feed)
 
 **VIES**:
-Il servizio della Commissione europea che dice se un numero IVA è attivo per gli scambi intra-UE, con nome e indirizzo quando il paese li dà; `vat_check` lo usa con `ANNIE_VAT_CHECK`. «Non attiva nel VIES» non vuol dire che la partita IVA non esista. Vedi ADR 0047.
+Il servizio della Commissione europea che dice se un numero IVA è attivo per gli scambi intra-UE, con nome e indirizzo quando il paese li dà; `vat_check` lo usa con `OWNI_VAT_CHECK`. «Non attiva nel VIES» non vuol dire che la partita IVA non esista. Vedi ADR 0047.
 _Avoid_: registro delle partite IVA, anagrafe tributaria
 
 **Scadenza fine mese**:

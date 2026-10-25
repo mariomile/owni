@@ -27,13 +27,13 @@ async function capability(runner: CliRunner) {
 }
 async function complete(provider: string, runner: CliRunner, signal?: AbortSignal) {
 	const local = await capability(runner);
-	const models = createModels({ credentials: { read: async () => ({ type: "api_key", key: "annie-local-subscription" }), list: async () => [], modify: async () => undefined, delete: async () => {} }, authContext: { env: async () => undefined, fileExists: async () => false } });
+	const models = createModels({ credentials: { read: async () => ({ type: "api_key", key: "owni-local-subscription" }), list: async () => [], modify: async () => undefined, delete: async () => {} }, authContext: { env: async () => undefined, fileExists: async () => false } });
 	models.setProvider(localCliProvider(provider, local));
 	return models.complete(models.getModels(provider)[0]!, { messages: [{ role: "user", content: "Calculate", timestamp: 0 }] }, { signal });
 }
 async function engine(provider: string, runner: CliRunner) {
 	const localProviders = await capability(runner);
-	const session = await piDurableEngine.open({ storageDir: tempDataDir(), model: { provider, modelId: provider === "codex" ? "default" : "sonnet" }, apiKey: async () => "annie-local-subscription", localProviders, tools: [] });
+	const session = await piDurableEngine.open({ storageDir: tempDataDir(), model: { provider, modelId: provider === "codex" ? "default" : "sonnet" }, apiKey: async () => "owni-local-subscription", localProviders, tools: [] });
 	closers.push(() => session.close());
 	return session;
 }

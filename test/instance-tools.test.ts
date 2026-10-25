@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { piDurableEngine } from "../src/core/adapters/pi-durable.ts";
-import { AnnieRuntime, createSlowCounter, type InstanceRecord, type ToolSet } from "../src/core/index.ts";
+import { OwniRuntime, createSlowCounter, type InstanceRecord, type ToolSet } from "../src/core/index.ts";
 import { FAUX_MODEL, tempDataDir, waitFor } from "./helpers.ts";
 
 const ask = (instanceId: string, messageId: string) => ({ tenantId: "acme", instanceId, channel: "test", threadId: "t", userId: "u", text: "conta fino a 2", messageId });
 
 async function setup(tools: (record: InstanceRecord) => Promise<ToolSet>) {
-	const runtime = new AnnieRuntime({ dataDir: tempDataDir(), engine: piDurableEngine, tools });
+	const runtime = new OwniRuntime({ dataDir: tempDataDir(), engine: piDurableEngine, tools });
 	await runtime.registry.createTenant({ id: "acme", name: "acme" });
 	for (const id of ["a", "b"]) {
 		await runtime.registry.createInstance("acme", { id, name: id, model: FAUX_MODEL, egress: { modelProviders: ["faux"], channels: ["test"] }, allowedUsers: { test: ["u"] } });

@@ -15,7 +15,7 @@ describe("usage caps and routing", () => {
 	});
 
 	it("soft and hard caps trip with audit + Telegram copy constants", async () => {
-		const dir = mkdtempSync(join(tmpdir(), "annie-cap-"));
+		const dir = mkdtempSync(join(tmpdir(), "owni-cap-"));
 		const audit = new AuditLog(dir, tenantId("acme"));
 		const ledger = new UsageLedger(join(dir, "acme"), { softUsdPerDay: 5, hardUsdPerDay: 20 });
 		const big = estimateUsd("claude-sonnet-5-5", 2_000_000, 500_000); // well over soft

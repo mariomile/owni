@@ -4,12 +4,12 @@ Owni leggeva solo le pagine di cui conosceva l'indirizzo. Ora cerca: per notizie
 
 ## Come funziona
 
-- **Un servizio per server**: Brave Search, con la chiave dell'operatore in `ANNIE_SEARCH_API_KEY`. In Owni Cloud la chiave sta sul control plane e passa alle celle come quella della trascrizione dei vocali.
+- **Un servizio per server**: Brave Search, con la chiave dell'operatore in `OWNI_SEARCH_API_KEY`. In Owni Cloud la chiave sta sul control plane e passa alle celle come quella della trascrizione dei vocali.
 - **Acceso istanza per istanza** dall'owner (connettore `web_search` nella egress policy, Impostazioni → Ricerca sul web), spento di default, cambio registrato nell'audit. Fuori dalla chat del brief del mattino, come gli altri strumenti web: lì si leggono mail di chiunque, e una mail non deve poter far cercare niente.
-- **Cosa esce**: solo le parole cercate, con paese e lingua (Italia e italiano di default, `ANNIE_SEARCH_COUNTRY` e `ANNIE_SEARCH_LANG`; il modello può chiedere un altro paese). Nell'audit `web_search.ran` dice quanti risultati, mai cosa si è cercato.
+- **Cosa esce**: solo le parole cercate, con paese e lingua (Italia e italiano di default, `OWNI_SEARCH_COUNTRY` e `OWNI_SEARCH_LANG`; il modello può chiedere un altro paese). Nell'audit `web_search.ran` dice quanti risultati, mai cosa si è cercato.
 - **Cosa torna al modello**: la data e l'ora della ricerca nel fuso dell'istanza, poi titoli, indirizzi, estratti ed età delle pagine, marcati come dati dal web. Fuori da quella recinzione, quali risultati `web_read` può aprire: un risultato non può dire di sé che è apribile.
 - **Aprire i risultati** resta un permesso a parte: i siti consentiti (ADR 0009). Senza, il modello risponde con gli estratti e cita gli indirizzi; la scheda della ricerca ha un pulsante, con conferma, per consentire tutti i siti pubblici.
-- **Tetti**: 200 ricerche al giorno per account (`ANNIE_SEARCH_MAX_PER_DAY`), contate dal processo; una risposta oltre 1 MB è rifiutata; 15 secondi al più.
+- **Tetti**: 200 ricerche al giorno per account (`OWNI_SEARCH_MAX_PER_DAY`), contate dal processo; una risposta oltre 1 MB è rifiutata; 15 secondi al più.
 
 ## Alternative scartate
 

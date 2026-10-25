@@ -59,7 +59,7 @@ export function cleanup(): void {
 }
 
 export function setup(o: { people?: Person[]; hours?: AppointmentSettings | null } = {}) {
-	const dir = mkdtempSync(join(tmpdir(), "annie-staff-"));
+	const dir = mkdtempSync(join(tmpdir(), "owni-staff-"));
 	dirs.push(dir);
 	const root = join(dir, "workspace");
 	mkdirSync(root, { recursive: true });

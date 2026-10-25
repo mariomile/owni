@@ -19,12 +19,12 @@ const said = (cost: number, ...tools: string[]) => ({
 /** A request that failed: Pi writes it down, then retries, compacts, or gives up. */
 const failed = (cost: number, stopReason: "error" | "aborted" = "error") => ({ ...said(cost), content: [], stopReason, errorMessage: "529 overloaded" });
 const asked = { role: "user", content: "fai" };
-const input = (id: number): FakeEntry => ({ id, kind: "annie.input", model: [asked] });
+const input = (id: number): FakeEntry => ({ id, kind: "owni.input", model: [asked] });
 const assistant = (id: number, message: unknown): FakeEntry => ({ id, kind: "pi.assistant", model: [message] });
 const ledger = (cost: number, input = 0) => ({ input, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: input, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: cost } });
 
 /** A conversation billed from its start, as one created now. */
-const fresh = (): Record<string, unknown> => ({ "annie.billed-to": { spent: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 } } });
+const fresh = (): Record<string, unknown> => ({ "owni.billed-to": { spent: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 } } });
 
 /**
  * Entries newest first, read in pages of `size` in either order; `models` is the conversation's
@@ -172,7 +172,7 @@ describe("quanto costa un turno (ADR 0098)", () => {
 		await runtime.close();
 		const ledger = (await readFile(join(tenantDir(dataDir, tenantId("acme")), "usage.jsonl"), "utf8")).trim().split("\n").map((line) => JSON.parse(line) as UsageRecord);
 		expect(ledger.map((r) => r.role)).toEqual(["agent", "agent"]);
-		expect(ledger[0]).toMatchObject({ instanceId: "ops", threadId: "t1", provider: "faux", model: "annie-dev", modelCalls: 2, tools: ["slow_counter"] });
+		expect(ledger[0]).toMatchObject({ instanceId: "ops", threadId: "t1", provider: "faux", model: "owni-dev", modelCalls: 2, tools: ["slow_counter"] });
 		expect(ledger[1]).toMatchObject({ modelCalls: 1, tools: [] });
 		expect(new Set(ledger.map((r) => r.submissionId)).size).toBe(2);
 		expect(await readFile(join(tenantDir(dataDir, tenantId("acme")), "audit.jsonl"), "utf8").catch(() => "")).not.toContain("turn.usage");
@@ -180,7 +180,7 @@ describe("quanto costa un turno (ADR 0098)", () => {
 
 	it("a conversation from before billing, with work left pending, bills that work even when it is reattached and answered before resume", async () => {
 		const storageDir = tempDataDir();
-		const open = () => piDurableEngine.open({ storageDir, model: { provider: "faux", modelId: "annie-dev" }, apiKey: async () => undefined, tools: [] });
+		const open = () => piDurableEngine.open({ storageDir, model: { provider: "faux", modelId: "owni-dev" }, apiKey: async () => undefined, tools: [] });
 		const replies: EngineReply[] = [];
 		let session = await open();
 		session.onReply((reply) => replies.push(reply));
@@ -191,7 +191,7 @@ describe("quanto costa un turno (ADR 0098)", () => {
 		await session.close();
 		// The conversation from before billing existed: no starting point.
 		const db = new DatabaseSync(join(storageDir, "pi-durable.sqlite"));
-		db.exec(`DELETE FROM document_revisions WHERE document_id IN (SELECT id FROM documents WHERE kind = '"annie.billed-to"'); DELETE FROM documents WHERE kind = '"annie.billed-to"'`);
+		db.exec(`DELETE FROM document_revisions WHERE document_id IN (SELECT id FROM documents WHERE kind = '"owni.billed-to"'); DELETE FROM documents WHERE kind = '"owni.billed-to"'`);
 		db.close();
 
 		// The runtime reattaches the outbox's entries before resume(): the scheduler starts there.

@@ -1,12 +1,12 @@
 import type { ChannelAdapter } from "../channels/types.ts";
 import { BoardError, type BoardStore } from "../core/board.ts";
 import { type BoardDigest, type BoardReview, BoardWork } from "../core/board-work.ts";
-import type { AnnieRuntime } from "../core/runtime.ts";
+import type { OwniRuntime } from "../core/runtime.ts";
 import type { PeopleStore } from "../web/auth.ts";
 import type { WebChannel } from "../web/channel.ts";
 
 export type BoardWiring = {
-	readonly runtime: AnnieRuntime;
+	readonly runtime: OwniRuntime;
 	readonly tenant: string;
 	readonly store: BoardStore;
 	readonly people: PeopleStore;
@@ -54,7 +54,7 @@ export function startBoard(w: BoardWiring): BoardWork {
 	runtime.onReply((reply) => {
 		// Only answers to what was written in the conversation: not files or messages sent mid-turn.
 		if (reply.tenantId !== tenant || reply.channel !== "web" || reply.status === "file" || reply.submissionId === "message") return;
-		void work.afterReply(reply.instanceId, reply.threadId, reply.deliveryId, reply.status === "unanswered" ? reply.reason : undefined).catch((error: unknown) => log(`annie: board after reply in ${reply.threadId}: ${error instanceof Error ? error.message : String(error)}`));
+		void work.afterReply(reply.instanceId, reply.threadId, reply.deliveryId, reply.status === "unanswered" ? reply.reason : undefined).catch((error: unknown) => log(`owni: board after reply in ${reply.threadId}: ${error instanceof Error ? error.message : String(error)}`));
 	});
 	// A scheda to review (ADR 0051): when it is the owner's, a line in the owner's chat with the main agente too.
 	const noticeReview = async ({ card, people: to }: BoardReview): Promise<void> => {
@@ -72,7 +72,7 @@ export function startBoard(w: BoardWiring): BoardWork {
 			for (const chat of record.approvers?.[adapter.name] ?? []) {
 				await adapter
 					.send({ tenantId: tenant, instanceId: w.main, channel: adapter.name, threadId: chat, idempotencyKey: `board-review:${card.id}:${card.updatedAt}:${chat}`, text, ...(adapter.onAction === undefined ? {} : { buttons }) })
-					.catch((error: unknown) => log(`annie: notice for scheda #${card.n} to ${adapter.name} ${chat} not sent: ${error instanceof Error ? error.message : String(error)}`));
+					.catch((error: unknown) => log(`owni: notice for scheda #${card.n} to ${adapter.name} ${chat} not sent: ${error instanceof Error ? error.message : String(error)}`));
 			}
 		}
 	};
@@ -85,13 +85,13 @@ export function startBoard(w: BoardWiring): BoardWork {
 				for (const chat of record.approvers?.[adapter.name] ?? []) {
 					await adapter
 						.send({ tenantId: tenant, instanceId: w.main, channel: adapter.name, threadId: chat, idempotencyKey: `board-digest:${week}:${chat}`, text })
-						.catch((error: unknown) => log(`annie: board summary to ${adapter.name} ${chat} not sent: ${error instanceof Error ? error.message : String(error)}`));
+						.catch((error: unknown) => log(`owni: board summary to ${adapter.name} ${chat} not sent: ${error instanceof Error ? error.message : String(error)}`));
 				}
 			}
-		})().catch((error: unknown) => log(`annie: board summary not sent: ${error instanceof Error ? error.message : String(error)}`));
+		})().catch((error: unknown) => log(`owni: board summary not sent: ${error instanceof Error ? error.message : String(error)}`));
 	});
 	work.events.on("review", (review: BoardReview) => {
-		void noticeReview(review).catch((error: unknown) => log(`annie: notice for scheda #${review.card.n} not sent: ${error instanceof Error ? error.message : String(error)}`));
+		void noticeReview(review).catch((error: unknown) => log(`owni: notice for scheda #${review.card.n} not sent: ${error instanceof Error ? error.message : String(error)}`));
 	});
 	return work;
 }

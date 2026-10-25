@@ -72,7 +72,7 @@ export function agentForm() {
 			dialog.close();
 			await refreshInstances();
 			state.instance = state.instances.find((i) => i.id === instance.id) ?? state.instance;
-			store("annie.instance", state.instance.id);
+			store("owni.instance", state.instance.id);
 			toast(`Agente ${agentLabel(instance)} creato`);
 			await refreshSetup();
 			go("agente", instance.id);

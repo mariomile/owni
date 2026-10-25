@@ -78,7 +78,7 @@ function xml(from: Party, to: Party, o: { number: string; date: string; lines: L
 const item = (n: number, name: string, unit: string, more: Partial<StockItem> = {}): StockItem => ({ id: `MG-000${n}`, name, unit, ...more, ...MARK });
 
 function setup() {
-	const dir = mkdtempSync(join(tmpdir(), "annie-orders-"));
+	const dir = mkdtempSync(join(tmpdir(), "owni-orders-"));
 	dirs.push(dir);
 	const root = join(dir, "workspace");
 	mkdirSync(join(root, "fatture"), { recursive: true });

@@ -1,6 +1,6 @@
 # Settimana 35: Owni crea documenti Word, Excel e PDF
 
-Branch `week-35`. Owni leggeva i documenti (settimane 32-34) ma non li creava: un preventivo o un listino uscivano come testo in chat. Ora `document_create` scrive un file Word, Excel o PDF nel workspace, partendo da quello che Owni scrive in Markdown o da un CSV, e Owni lo manda con `file_send` su Telegram, WhatsApp o nella console. Come funziona, i limiti e le alternative scartate sono nell'[ADR 0029](adr/0029-documenti-creati-da-annie.md).
+Branch `week-35`. Owni leggeva i documenti (settimane 32-34) ma non li creava: un preventivo o un listino uscivano come testo in chat. Ora `document_create` scrive un file Word, Excel o PDF nel workspace, partendo da quello che Owni scrive in Markdown o da un CSV, e Owni lo manda con `file_send` su Telegram, WhatsApp o nella console. Come funziona, i limiti e le alternative scartate sono nell'[ADR 0029](adr/0029-documenti-creati-da-owni.md).
 
 ## Cosa cambia per chi usa Owni
 

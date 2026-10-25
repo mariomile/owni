@@ -1,5 +1,5 @@
 {
-	"name": "annie-desktop",
+	"name": "owni-desktop",
 	"private": true,
 	"type": "module",
 	"description": "Owni as a desktop app: a Tauri 2 window on an Owni server (docs/desktop.md).",

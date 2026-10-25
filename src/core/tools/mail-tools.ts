@@ -1,4 +1,4 @@
-import type { AnnieTool } from "../engine.ts";
+import type { OwniTool } from "../engine.ts";
 import { hashIdempotency } from "../practice.ts";
 import type { MailAdapter } from "../../connectors/types.ts";
 import type { PracticeStore } from "../practice.ts";
@@ -14,10 +14,10 @@ export function createMailTools(options: {
 	practices: PracticeStore;
 	/** Returns true only when the pratica is approved and not yet sent. */
 	maySend: (praticaId: string) => Promise<boolean>;
-}): AnnieTool[] {
+}): OwniTool[] {
 	const { tenantId, mail, practices, maySend } = options;
 
-	const sendEmail: AnnieTool = {
+	const sendEmail: OwniTool = {
 		name: "send_email",
 		description: "Send an approved draft email reply. Only callable after human Approva.",
 		parameters: {
@@ -69,7 +69,7 @@ export function createMailTools(options: {
 		},
 	};
 
-	const readMail: AnnieTool = {
+	const readMail: OwniTool = {
 		name: "mail_read",
 		description: "Read a previously ingested inbound mail by message id (idempotent).",
 		parameters: {

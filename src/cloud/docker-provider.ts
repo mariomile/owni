@@ -13,8 +13,8 @@ export type DockerCellOptions = {
 	readonly startTimeoutMs?: number;
 };
 
-const LABEL = "annie.cell";
-const NETWORK = "annie-cells";
+const LABEL = "owni.cell";
+const NETWORK = "owni-cells";
 const API_TIMEOUT_MS = 30_000;
 const PORT = "8080/tcp";
 
@@ -82,7 +82,7 @@ export class DockerCellProvider implements CellProvider {
 				Image: this.options.image,
 				// The node user of the official image, whatever the image says: never root.
 				User: "1000:1000",
-				Env: Object.entries({ ...env, ANNIE_DATA_DIR: "/data", ANNIE_WEB_HOST: "0.0.0.0", ANNIE_WEB_PORT: "8080" }).map(([k, v]) => `${k}=${v}`),
+				Env: Object.entries({ ...env, OWNI_DATA_DIR: "/data", OWNI_WEB_HOST: "0.0.0.0", OWNI_WEB_PORT: "8080" }).map(([k, v]) => `${k}=${v}`),
 				Labels: { [LABEL]: id },
 				ExposedPorts: { [PORT]: {} },
 				HostConfig: {
@@ -199,7 +199,7 @@ type ContainerInfo = { Image?: string; Config?: { Env?: string[] }; State?: { Ru
 
 function cellName(id: string): string {
 	if (!/^[a-z0-9][a-z0-9-]{0,62}$/.test(id)) throw new Error(`Invalid cell id ${id}`);
-	return `annie-cell-${id}`;
+	return `owni-cell-${id}`;
 }
 
 function dockerMessage(text: string): string {

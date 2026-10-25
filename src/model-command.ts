@@ -2,7 +2,7 @@ import type { InboundMessage } from "./channels/types.ts";
 import { ChatModelRefused, type ChatModels } from "./core/chat-models.ts";
 import { EgressDenied } from "./core/errors.ts";
 import type { InstanceRecord } from "./core/registry.ts";
-import type { AnnieRuntime } from "./core/runtime.ts";
+import type { OwniRuntime } from "./core/runtime.ts";
 import { subjectOf } from "./core/memory.ts";
 
 /** The command in a channel's menu (Telegram's, next to the message box). */
@@ -28,7 +28,7 @@ export function modelCommandArgument(text: string): string | undefined {
  * does on the web: among the providers the instance may use, never widening them. Returns the reply.
  */
 export async function answerModelCommand(
-	runtime: AnnieRuntime,
+	runtime: OwniRuntime,
 	chats: ChatModels,
 	record: InstanceRecord,
 	message: Pick<InboundMessage, "channel" | "threadId" | "userId">,
@@ -60,7 +60,7 @@ export async function answerModelCommand(
 	}
 }
 
-async function status(runtime: AnnieRuntime, chats: ChatModels, record: InstanceRecord, chat: { channel: string; threadId: string }, instanceModel: string): Promise<string> {
+async function status(runtime: OwniRuntime, chats: ChatModels, record: InstanceRecord, chat: { channel: string; threadId: string }, instanceModel: string): Promise<string> {
 	const own = await runtime.chatModel(record.tenantId, record.id, chat.channel, chat.threadId);
 	const providers = await chats.providers(record, false);
 	const current = own === undefined ? `Questa chat usa il modello dell'istanza, ${instanceModel}.` : `Questa chat usa ${chats.named(own).name}. Con /modello istanza torna a ${instanceModel}.`;

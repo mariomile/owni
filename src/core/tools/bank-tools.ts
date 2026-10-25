@@ -5,7 +5,7 @@ import { rowFates } from "../bank-dedup.ts";
 import { type Parsed, parseStatement } from "../bank-parse.ts";
 import { BANK_BROKEN, type BankBook, type BankState, type BankStore } from "../bank-store.ts";
 import type { CashflowStore } from "../cashflow-store.ts";
-import type { AnnieTool, ToolContext } from "../engine.ts";
+import type { OwniTool, ToolContext } from "../engine.ts";
 import type { ExpenseStore } from "../expense-store.ts";
 import { InvoiceScanner } from "../invoice-scan.ts";
 import type { InvoiceStore } from "../invoice-store.ts";
@@ -78,7 +78,7 @@ const DESCRIPTION = [
  * L'estratto conto (bank.ts): loading a statement, the matches and their confirmation, the totals,
  * the odd movements and the export. Today is read once per call.
  */
-export function createBankTools(options: BankToolsOptions): AnnieTool[] {
+export function createBankTools(options: BankToolsOptions): OwniTool[] {
 	const { store, workspace, timeZone } = options;
 	const now = options.now ?? (() => new Date());
 	const scanner = options.scanner ?? new InvoiceScanner(workspace);
@@ -88,7 +88,7 @@ export function createBankTools(options: BankToolsOptions): AnnieTool[] {
 		store,
 		now,
 		today: () => todayIn(timeZone, now()),
-		who: (ctx) => (ctx.thread === undefined ? "annie" : (options.whoIs(ctx.thread) ?? `${ctx.thread.channel}:${ctx.thread.threadId}`)),
+		who: (ctx) => (ctx.thread === undefined ? "owni" : (options.whoIs(ctx.thread) ?? `${ctx.thread.channel}:${ctx.thread.threadId}`)),
 		audit: async (ctx, op, count) => {
 			// Its own step: an audit that failed is written on the rerun, after the change it records.
 			await ctx.step(`audit:${op}`, async () => {
@@ -216,7 +216,7 @@ export function createBankTools(options: BankToolsOptions): AnnieTool[] {
 		const ren = options.renewals.read();
 		const outcomes = matchMovements({ movements: open, invoices, expenses: ex.broken ? [] : ex.expenses, renewals: ren.broken ? [] : ren.renewals, taxes, used, refused }, false);
 		const at = now().toISOString();
-		const made = outcomes.filter((o) => !hintsOnly || o.state === "hint").map((o): BankMatch => ({ movement: o.movement, state: o.state, ...(o.target ?? {}), ...(o.strong === true ? { strong: true as const } : {}), ...(o.note === undefined ? {} : { note: o.note }), ...(o.candidates === undefined ? {} : { candidates: o.candidates }), by: "annie", at }));
+		const made = outcomes.filter((o) => !hintsOnly || o.state === "hint").map((o): BankMatch => ({ movement: o.movement, state: o.state, ...(o.target ?? {}), ...(o.strong === true ? { strong: true as const } : {}), ...(o.note === undefined ? {} : { note: o.note }), ...(o.candidates === undefined ? {} : { candidates: o.candidates }), by: "owni", at }));
 		return { ...s, matches: [...s.matches.filter((m) => m.state !== "hint"), ...made] };
 	}
 

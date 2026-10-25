@@ -12,7 +12,7 @@ pub struct Server {
     pub start: Url,
 }
 
-/// Read what the person typed: an address (`annie.example.it`, `https://…`) or their login link.
+/// Read what the person typed: an address (`owni.example.it`, `https://…`) or their login link.
 /// Plain http only to this computer: a session cookie must not cross the network in clear.
 pub fn parse(input: &str) -> Result<Server, String> {
     let text = input.trim();
@@ -80,7 +80,7 @@ pub fn bundled_page() -> Url {
     } else {
         "tauri://localhost/index.html"
     };
-    Url::parse(base).expect("annie: a fixed address")
+    Url::parse(base).expect("owni: a fixed address")
 }
 
 fn is_bundled(target: &Url) -> bool {
@@ -144,8 +144,8 @@ mod tests {
     #[test]
     fn a_bare_name_is_https_and_a_local_one_is_http() {
         assert_eq!(
-            parse("annie.example.it").unwrap().origin.as_str(),
-            "https://annie.example.it/"
+            parse("owni.example.it").unwrap().origin.as_str(),
+            "https://owni.example.it/"
         );
         assert_eq!(
             parse(" localhost:8080 ").unwrap().origin.as_str(),
@@ -162,37 +162,37 @@ mod tests {
 
     #[test]
     fn the_login_link_is_kept_to_sign_in() {
-        let server = parse("https://annie.example.it/login#abc123").unwrap();
-        assert_eq!(server.origin.as_str(), "https://annie.example.it/");
+        let server = parse("https://owni.example.it/login#abc123").unwrap();
+        assert_eq!(server.origin.as_str(), "https://owni.example.it/");
         assert_eq!(
             server.start.as_str(),
-            "https://annie.example.it/login#abc123"
+            "https://owni.example.it/login#abc123"
         );
         assert_eq!(
-            parse("https://annie.example.it/login#").unwrap().start,
+            parse("https://owni.example.it/login#").unwrap().start,
             server.origin
         );
     }
 
     #[test]
     fn refuses_clear_text_to_another_computer_and_other_schemes() {
-        assert!(parse("http://annie.example.it").is_err());
-        assert!(parse("http://annie.localhost").is_err());
+        assert!(parse("http://owni.example.it").is_err());
+        assert!(parse("http://owni.localhost").is_err());
         assert_eq!(
             parse("[::1]:8080").unwrap().origin.as_str(),
             "http://[::1]:8080/"
         );
         assert!(parse("file:///etc/passwd").is_err());
         assert!(parse("javascript:alert(1)").is_err());
-        assert!(parse("https://user:pw@annie.example.it").is_err());
+        assert!(parse("https://user:pw@owni.example.it").is_err());
         assert!(parse("   ").is_err());
     }
 
     #[test]
     fn the_server_stays_in_the_window_and_the_rest_of_the_web_goes_to_the_browser() {
-        let origin = parse("annie.example.it").unwrap().origin;
+        let origin = parse("owni.example.it").unwrap().origin;
         let at = |u: &str| navigation(Some(&origin), &Url::parse(u).unwrap());
-        assert_eq!(at("https://annie.example.it/#/chat"), Navigation::Stay);
+        assert_eq!(at("https://owni.example.it/#/chat"), Navigation::Stay);
         let (bundled, other) = if cfg!(windows) {
             (
                 "http://tauri.localhost/index.html",
@@ -211,29 +211,29 @@ mod tests {
         assert_eq!(at("file:///etc/passwd"), Navigation::Refuse);
         assert_eq!(at("tauri://evil/index.html"), Navigation::Refuse);
         assert_eq!(
-            navigation(None, &Url::parse("https://annie.example.it/").unwrap()),
+            navigation(None, &Url::parse("https://owni.example.it/").unwrap()),
             Navigation::Browser
         );
     }
 
     #[test]
     fn only_the_server_origin_is_the_server() {
-        let origin = parse("annie.example.it").unwrap().origin;
+        let origin = parse("owni.example.it").unwrap().origin;
         assert!(same_origin(
             &origin,
-            &Url::parse("https://annie.example.it/#/impostazioni").unwrap()
+            &Url::parse("https://owni.example.it/#/impostazioni").unwrap()
         ));
         assert!(!same_origin(
             &origin,
-            &Url::parse("https://annie.example.it.evil.com/").unwrap()
+            &Url::parse("https://owni.example.it.evil.com/").unwrap()
         ));
         assert!(!same_origin(
             &origin,
-            &Url::parse("http://annie.example.it/").unwrap()
+            &Url::parse("http://owni.example.it/").unwrap()
         ));
         assert!(!same_origin(
             &origin,
-            &Url::parse("https://annie.example.it:8443/").unwrap()
+            &Url::parse("https://owni.example.it:8443/").unwrap()
         ));
     }
 }

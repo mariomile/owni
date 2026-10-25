@@ -85,7 +85,7 @@ export class StoredOAuthProvider implements OAuthClientProvider {
 
 	async clientInformation() {
 		const client = (await this.load()).client;
-		// A client registered for another return address (ANNIE_PUBLIC_URL changed) would be sent back elsewhere: register again.
+		// A client registered for another return address (OWNI_PUBLIC_URL changed) would be sent back elsewhere: register again.
 		const uris = (client as { redirect_uris?: unknown } | undefined)?.redirect_uris;
 		if (Array.isArray(uris) && !uris.includes(this.redirectUrl)) return undefined;
 		return client;

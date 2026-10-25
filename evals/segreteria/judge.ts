@@ -9,7 +9,7 @@
  *   - quality: Sonnet as judge with rubrics/draft_rubric.md.
  * Writes last-report/judge.json and exits 1 when a gate fails.
  *
- * PR CI never runs this. Without ANNIE_JUDGE_MODEL_KEY (an Anthropic key) it skips.
+ * PR CI never runs this. Without OWNI_JUDGE_MODEL_KEY (an Anthropic key) it skips.
  */
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -31,9 +31,9 @@ import { parseJsonObject } from "../../src/segreteria/model.ts";
 import { processInboundMail } from "../../src/segreteria/pipeline.ts";
 import { compareLead, type FieldCounts, hardFail, type JudgeVerdict, meanScore, microF1, parseVerdict } from "./metrics.ts";
 
-const key = process.env.ANNIE_JUDGE_MODEL_KEY;
+const key = process.env.OWNI_JUDGE_MODEL_KEY;
 if (!key) {
-	console.log("eval:segreteria:judge skipped (no ANNIE_JUDGE_MODEL_KEY)");
+	console.log("eval:segreteria:judge skipped (no OWNI_JUDGE_MODEL_KEY)");
 	process.exit(0);
 }
 
@@ -82,7 +82,7 @@ const client: ModelClient = createPiCompletionClient({
 });
 const { draft: sonnet } = DEFAULT_MODEL_ROLES;
 // One ledger for the run, caps out of the way; the judge's own calls are counted apart.
-const usage = new UsageLedger(await mkdtemp(join(tmpdir(), "annie-judge-usage-")), { softUsdPerDay: 1e9, hardUsdPerDay: 1e9 });
+const usage = new UsageLedger(await mkdtemp(join(tmpdir(), "owni-judge-usage-")), { softUsdPerDay: 1e9, hardUsdPerDay: 1e9 });
 let judgeUsd = 0;
 
 const JUDGE_SYSTEM = `You are a strict reviewer of reply drafts written for an Italian SME's sales team. Apply this rubric exactly and return ONLY the JSON object it describes, no prose, no code fences.\n\n${rubric}`;
@@ -110,7 +110,7 @@ async function runCase(c: CaseRow): Promise<CaseResult> {
 		...(c.email.inReplyTo === undefined ? {} : { inReplyTo: c.email.inReplyTo }),
 	};
 	// What production runs: the whole pipeline, with a fake mailbox and CRM.
-	const dir = await mkdtemp(join(tmpdir(), "annie-judge-"));
+	const dir = await mkdtemp(join(tmpdir(), "owni-judge-"));
 	const audit = new AuditLog(dir, tenantId("judge"));
 	const notifications: string[] = [];
 	const result0 = await processInboundMail(

@@ -24,12 +24,12 @@ import {
 	type Unit,
 	workingDaysIn,
 } from "../dates.ts";
-import type { AnnieTool } from "../engine.ts";
+import type { OwniTool } from "../engine.ts";
 import { daysBetween, daysInMonth, type Holiday, HOLIDAYS_SINCE, holidayOn, isoDate, italianHolidays, leapYear, MONTH_NAMES, realDate, todayIn, weekdayOf, type WorkingWeek, workingDay } from "../italian-calendar.ts";
 import { capitalized, italianDate, italianWeekday } from "../italian-format.ts";
 
 export type DateToolsOptions = {
-	/** The server's time zone (ANNIE_TIME_ZONE): where "today" is. */
+	/** The server's time zone (OWNI_TIME_ZONE): where "today" is. */
 	readonly timeZone: string;
 	/** Tests: the clock. */
 	readonly now?: () => Date;
@@ -61,7 +61,7 @@ const SAN_FRANCESCO_NEWS = new Set([2026, 2027]);
  * and offline (no network, no keys), so always offered and safe in the brief's thread; nothing
  * from outside, so no fence. The rules live in dates.ts and italian-calendar.ts.
  */
-export function createDateTools(options: DateToolsOptions): AnnieTool[] {
+export function createDateTools(options: DateToolsOptions): OwniTool[] {
 	const now = options.now ?? (() => new Date());
 	return [
 		{

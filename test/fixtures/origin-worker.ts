@@ -7,11 +7,11 @@
  * Lines on stdout: ORIGIN <origin>, RESUMED <pending>, REPLY <json>.
  */
 import { piDurableEngine } from "../../src/core/adapters/pi-durable.ts";
-import { type AnnieTool, AnnieRuntime } from "../../src/core/index.ts";
+import { type OwniTool, OwniRuntime } from "../../src/core/index.ts";
 
 const [mode, dataDir] = process.argv.slice(2) as [string, string];
 
-const probe: AnnieTool = {
+const probe: OwniTool = {
 	name: "origin_probe",
 	description: "Says where the turn comes from.",
 	parameters: { type: "object", properties: {}, additionalProperties: false },
@@ -25,7 +25,7 @@ const probe: AnnieTool = {
 	},
 };
 
-const runtime = new AnnieRuntime({ dataDir, engine: piDurableEngine, tools: [probe] });
+const runtime = new OwniRuntime({ dataDir, engine: piDurableEngine, tools: [probe] });
 
 runtime.onReply((reply) => {
 	console.log(`REPLY ${JSON.stringify(reply)}`);
@@ -37,7 +37,7 @@ if (mode === "start") {
 	await runtime.registry.createInstance("acme", {
 		id: "ops",
 		name: "Ops",
-		model: { provider: "faux", modelId: "annie-dev" },
+		model: { provider: "faux", modelId: "owni-dev" },
 		egress: { modelProviders: ["faux"], channels: ["test"] },
 		allowedUsers: { test: ["u1"] },
 	});

@@ -9,7 +9,7 @@ import { runtimeWithInstance, waitFor } from "./helpers.ts";
 
 const model = (id: string, name: string): ModelInfo => ({ id, name, images: true, reasoning: false, contextWindow: 1_000_000, inputUsd: 0.3, outputUsd: 2.5 });
 const CATALOG: Record<string, readonly ModelInfo[]> = {
-	faux: [model("annie-dev", "Owni di prova")],
+	faux: [model("owni-dev", "Owni di prova")],
 	google: [model("gemini-3.5-pro", "Gemini 3.5 Pro"), model("gemini-3.5-flash", "Gemini 3.5 Flash")],
 	openai: [model("gpt-5.5", "GPT-5.5")],
 };
@@ -55,7 +55,7 @@ describe("the /modello command", () => {
 	it("recognizes the command, also with a bot's name, and nothing else", () => {
 		expect(modelCommandArgument("/modello")).toBe("");
 		expect(modelCommandArgument(" /Model  gemini pro ")).toBe("gemini pro");
-		expect(modelCommandArgument("/modello@AnnieBot google")).toBe("google");
+		expect(modelCommandArgument("/modello@OwniBot google")).toBe("google");
 		expect(modelCommandArgument("/modellone")).toBeUndefined();
 		expect(modelCommandArgument("che /modello usi?")).toBeUndefined();
 	});

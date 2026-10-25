@@ -1,6 +1,6 @@
 # Qualsiasi modello AI, scelto dall'owner
 
-Owni girava solo su Anthropic o OpenAI, e il modello lo sceglieva chi gestisce il server, una volta, con `ANNIE_MODEL_PROVIDER` e `ANNIE_MODEL_ID`. Chi usa Owni vuole scegliere: Claude per scrivere, Gemini perché costa poco, Grok, Mistral perché è europeo, DeepSeek o Kimi, o tutti quelli di OpenRouter con una chiave sola. Owni è l'alternativa a Grok che non ti lega a un modello.
+Owni girava solo su Anthropic o OpenAI, e il modello lo sceglieva chi gestisce il server, una volta, con `OWNI_MODEL_PROVIDER` e `OWNI_MODEL_ID`. Chi usa Owni vuole scegliere: Claude per scrivere, Gemini perché costa poco, Grok, Mistral perché è europeo, DeepSeek o Kimi, o tutti quelli di OpenRouter con una chiave sola. Owni è l'alternativa a Grok che non ti lega a un modello.
 
 ## Decisione
 
@@ -11,7 +11,7 @@ Owni girava solo su Anthropic o OpenAI, e il modello lo sceglieva chi gestisce i
 - **Quando vale.** Il cambio riapre l'istanza: chiude quella aperta e la riapre con il nuovo modello, come dopo un riavvio. Una risposta già in corso viene ripresa dalla nuova istanza e finisce con il nuovo modello.
 - **Le chiavi del server.** Ogni chiave nell'ambiente va nel secret store all'avvio, così l'owner può passare a quei provider senza chiave sua. La chiave di un provider che il server ha non si sostituisce e non si toglie dalla console: è dell'operatore. Se l'operatore toglie una variabile, al riavvio dopo la chiave sparisce anche dal secret store (Owni tiene l'elenco dei provider che aveva dal server); una chiave che l'owner aveva salvato per un provider mai dato dal server resta.
 
-| `ANNIE_MODEL_PROVIDER` | Provider | Chiave | Dominio |
+| `OWNI_MODEL_PROVIDER` | Provider | Chiave | Dominio |
 |---|---|---|---|
 | `anthropic` | Anthropic (Claude) | `ANTHROPIC_API_KEY` | `api.anthropic.com` |
 | `openai` | OpenAI (GPT) | `OPENAI_API_KEY` | `api.openai.com` |
@@ -51,6 +51,6 @@ Owni girava solo su Anthropic o OpenAI, e il modello lo sceglieva chi gestisce i
 
 ## Conseguenze
 
-- `pnpm annie check` prova la chiave di Anthropic e OpenAI chiedendo l'elenco dei modelli; per gli altri provider dice che la chiave c'è e la verifica la prima risposta. Controlla il modello di `ANNIE_MODEL_*`, non quello che l'owner ha scelto poi dalla console.
+- `pnpm owni check` prova la chiave di Anthropic e OpenAI chiedendo l'elenco dei modelli; per gli altri provider dice che la chiave c'è e la verifica la prima risposta. Controlla il modello di `OWNI_MODEL_*`, non quello che l'owner ha scelto poi dalla console.
 - La segreteria commerciale resta su Anthropic: con lei accesa serve `ANTHROPIC_API_KEY` anche se l'istanza principale usa un altro provider.
 - Le celle di Owni Cloud ricevono tutte le variabili delle chiavi dei provider.

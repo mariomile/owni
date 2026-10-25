@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { TelegramAdapter } from "../src/channels/telegram.ts";
 import { piDurableEngine } from "../src/core/adapters/pi-durable.ts";
-import { AnnieRuntime, type DurableEngine, type Reply, UserNotAllowed } from "../src/core/index.ts";
+import { OwniRuntime, type DurableEngine, type Reply, UserNotAllowed } from "../src/core/index.ts";
 import { connectChannel } from "../src/gateway.ts";
 import { FAUX_MODEL, tempDataDir, waitFor } from "./helpers.ts";
 
@@ -30,7 +30,7 @@ function countingEngine(submits: string[]): DurableEngine {
 async function setup(allowedUsers?: Record<string, string[]>) {
 	const dataDir = tempDataDir();
 	const submits: string[] = [];
-	const runtime = new AnnieRuntime({ dataDir, engine: countingEngine(submits) });
+	const runtime = new OwniRuntime({ dataDir, engine: countingEngine(submits) });
 	await runtime.registry.createTenant({ id: "acme", name: "Acme" });
 	await runtime.registry.createInstance("acme", {
 		id: "ops",
@@ -125,7 +125,7 @@ describe("user allowlist", () => {
 
 		const updated = await runtime.registry.setAllowedUsers("acme", "ops", "test", ["alice", "alice"]);
 		expect(updated.allowedUsers).toEqual({ test: ["alice"] });
-		const reopened = new AnnieRuntime({ dataDir, engine: piDurableEngine });
+		const reopened = new OwniRuntime({ dataDir, engine: piDurableEngine });
 		await expect(reopened.submit(message("alice"))).resolves.toMatchObject({ submissionId: expect.any(String) });
 		expect(await reopened.audit("acme").read()).toContainEqual(expect.objectContaining({ type: "instance.allowlist.updated", channel: "test", users: 1 }));
 		await reopened.close();

@@ -28,7 +28,7 @@ export function createPiCompletionClient(options: PiCompletionOptions): ModelCli
 			models = createModels({
 				credentials: {
 					async read(id) {
-						if (subscriptionProvider(id) !== undefined) return options.localProviders?.connected(id) ? { type: "api_key", key: "annie-local-subscription" } : undefined;
+						if (subscriptionProvider(id) !== undefined) return options.localProviders?.connected(id) ? { type: "api_key", key: "owni-local-subscription" } : undefined;
 						const key = await options.apiKey(id);
 						return key === undefined ? undefined : { type: "api_key", key };
 					},

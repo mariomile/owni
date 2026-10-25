@@ -8,8 +8,8 @@ Perché adesso e perché così: le persone chiedono di unire due fogli, converti
 
 ## Come funziona
 
-- L'owner accende il computer per istanza (Impostazioni, «Computer»), spento di default come canali e connettori. L'operatore lo rende disponibile con `ANNIE_COMPUTER=docker` e l'accesso al socket di Docker.
-- Il computer è un container dall'immagine `ANNIE_COMPUTER_IMAGE` (`docker/computer.Dockerfile`), creato al primo comando: rete `none`, comandi come utente 1000 (mai root) e container come nobody, file system in sola lettura tranne `/work` (un volume dell'istanza) e `/tmp`, nessuna capability, niente escalation di privilegi, limiti di memoria, CPU, processi e dimensione dei file, una quota per `/work`. Con `ANNIE_COMPUTER_RUNTIME=runsc` gira sotto gVisor, con un kernel suo. Il nome del computer è un hash di tenant e istanza.
+- L'owner accende il computer per istanza (Impostazioni, «Computer»), spento di default come canali e connettori. L'operatore lo rende disponibile con `OWNI_COMPUTER=docker` e l'accesso al socket di Docker.
+- Il computer è un container dall'immagine `OWNI_COMPUTER_IMAGE` (`docker/computer.Dockerfile`), creato al primo comando: rete `none`, comandi come utente 1000 (mai root) e container come nobody, file system in sola lettura tranne `/work` (un volume dell'istanza) e `/tmp`, nessuna capability, niente escalation di privilegi, limiti di memoria, CPU, processi e dimensione dei file, una quota per `/work`. Con `OWNI_COMPUTER_RUNTIME=runsc` gira sotto gVisor, con un kernel suo. Il nome del computer è un hash di tenant e istanza.
 - Un comando alla volta per computer; alla fine di ognuno, tutto quello che ha lasciato acceso viene chiuso (`kill -9 -1` come utente 1000, che non può toccare il container). Al massimo 8 computer accesi e 4 comandi alla volta per server.
 - Un comando ha un tempo massimo (fino a 5 minuti) e un tetto di output: al modello arrivano al più 16.000 caratteri di uscita, recintati come dati, perché possono contenere il testo dei file.
 - I file entrano dal workspace (`copy_in`) ed escono nel workspace sotto `computer/` (`copy_out`), al massimo 20 MB l'uno: lì Owni li può mandare con `file_send`.

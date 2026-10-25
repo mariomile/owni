@@ -1,4 +1,4 @@
-import type { AnnieTool } from "../engine.ts";
+import type { OwniTool } from "../engine.ts";
 import { threadPerson } from "../schedules.ts";
 import { untrusted } from "../untrusted.ts";
 import { firstLook, formatNumber, type Watch, WatchError, WATCH_LIMITS, type WatchStore, watchUrl } from "../watches.ts";
@@ -17,7 +17,7 @@ export type WatchToolsOptions = {
  * reports on in this conversation when they change, or when a price crosses a threshold. Each
  * conversation sees and deletes only the sentinelle of its own person.
  */
-export function createWatchTools(options: WatchToolsOptions): AnnieTool[] {
+export function createWatchTools(options: WatchToolsOptions): OwniTool[] {
 	const { store } = options;
 	const now = options.now ?? (() => new Date());
 	const record = options.record ?? (async () => {});

@@ -98,7 +98,7 @@ function nameParams(name: string): { type: string; disposition: string } {
 /** A boundary found nowhere in the parts. */
 function boundaryFor(parts: readonly Buffer[]): string {
 	for (;;) {
-		const boundary = `=_annie_${randomBytes(18).toString("hex")}`;
+		const boundary = `=_owni_${randomBytes(18).toString("hex")}`;
 		if (!parts.some((p) => p.includes(boundary))) return boundary;
 	}
 }

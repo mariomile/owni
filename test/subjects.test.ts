@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { AGENT_CHANNEL } from "../src/core/agent-messages.ts";
 import { BoardStore } from "../src/core/board.ts";
 import { BoardWork } from "../src/core/board-work.ts";
-import type { AnnieTool, ToolContext } from "../src/core/engine.ts";
+import type { OwniTool, ToolContext } from "../src/core/engine.ts";
 import { cardSubjects, OVERLAP_GENERIC, overlapText, sameParty, SubjectLedger, type SubjectSeam, type SubjectStores, subjectsKey, syncAgent, withSubjects } from "../src/core/subjects.ts";
 import { createBoardTools } from "../src/core/tools/board-tools.ts";
 
@@ -43,7 +43,7 @@ function registers() {
 }
 
 /** A register tool: «list» reads, anything else runs `write`. */
-const tool = (name: string, write: (args: Record<string, unknown>) => void): AnnieTool => ({
+const tool = (name: string, write: (args: Record<string, unknown>) => void): OwniTool => ({
 	name,
 	description: name,
 	parameters: { type: "object", properties: {} },
@@ -57,7 +57,7 @@ const tool = (name: string, write: (args: Record<string, unknown>) => void): Ann
 const NAMES: Record<string, string> = { vendite: "Vendite", acquisti: "Acquisti" };
 
 function setup() {
-	const dir = mkdtempSync(join(tmpdir(), "annie-subjects-"));
+	const dir = mkdtempSync(join(tmpdir(), "owni-subjects-"));
 	const ledger = new SubjectLedger(dir, "test-key");
 	const board = new BoardStore(dir);
 	const logs: string[] = [];
@@ -78,7 +78,7 @@ function setup() {
 			seam,
 			(m) => void logs.push(m),
 		);
-		const run = async (name: string, args: Record<string, unknown>, ctx = fresh()) => String(await (tools.find((t) => t.name === name) as AnnieTool).execute(args, ctx));
+		const run = async (name: string, args: Record<string, unknown>, ctx = fresh()) => String(await (tools.find((t) => t.name === name) as OwniTool).execute(args, ctx));
 		return { books, stores, reads, seam, tools, run };
 	};
 	return { dir, ledger, board, agent, logs };
@@ -148,7 +148,7 @@ describe("il registro di chi segue cosa (ADR 0110)", () => {
 		// The same name, no legal form: it may be.
 		expect(await acquisti.run("orders", { op: "create", id: "OR-0003", name: "Rossi" })).toContain("Vendite ha già cliente CL-0001.");
 
-		const l = new SubjectLedger(mkdtempSync(join(tmpdir(), "annie-subjects-")), "k1");
+		const l = new SubjectLedger(mkdtempSync(join(tmpdir(), "owni-subjects-")), "k1");
 		expect(l.party({ name: "Alfa S.r.l.", vat: "01234567890" })).toEqual(l.party({ name: "alfa srl", vat: "IT 01234567890" }));
 		// A company's codice fiscale is its partita IVA.
 		expect(l.party({ name: "Alfa", cf: "01234567890" }).ids).toEqual(l.party({ vat: "IT01234567890" }).ids);
@@ -159,7 +159,7 @@ describe("il registro di chi segue cosa (ADR 0110)", () => {
 		const p = l.party({ name: "Alfa Srl", vat: "01234567890" });
 		expect([...p.ids, p.name].every((k) => /^[0-9a-f]{32}$/.test(String(k)))).toBe(true);
 		expect(p.form).toBe("srl");
-		expect(new SubjectLedger(mkdtempSync(join(tmpdir(), "annie-subjects-")), "k2").party({ name: "Alfa Srl", vat: "01234567890" }).ids).not.toEqual(p.ids);
+		expect(new SubjectLedger(mkdtempSync(join(tmpdir(), "owni-subjects-")), "k2").party({ name: "Alfa Srl", vat: "01234567890" }).ids).not.toEqual(p.ids);
 	});
 
 	it("a record saved again about the same client is not news; about another one it is", async () => {
@@ -232,7 +232,7 @@ describe("il registro di chi segue cosa (ADR 0110)", () => {
 		for (let i = 10; i < 22; i++) vendite.books.clients.push({ id: `CL-00${i}`, name: `Cliente ${i}` });
 		const work = new BoardWork({ store: board, agentName: async (id) => NAMES[id], canChat: async () => true, isOwner: async () => false, owners: async () => [], personName: async () => undefined, openThread: async () => "t1", post: async () => {} });
 		const tools = createBoardTools({ self: "vendite", store: board, work, agents: async () => [{ id: "vendite", name: "Vendite" }], personOf: () => "p_anna", subjects: cardSubjects(vendite.seam) });
-		const run = async (name: string, args: Record<string, unknown>) => String(await (tools.find((t) => t.name === name) as AnnieTool).execute(args, fresh()));
+		const run = async (name: string, args: Record<string, unknown>) => String(await (tools.find((t) => t.name === name) as OwniTool).execute(args, fresh()));
 
 		expect(await run("board_create", { title: "Offerta", subjects: ["2026-999"] })).toBe("Errore: nei tuoi registri non c'è 2026-999. Usa gli ID dei tuoi record (CL-0012, OR-0003...).");
 		expect(board.list()).toHaveLength(0);
@@ -263,7 +263,7 @@ describe("il registro di chi segue cosa (ADR 0110)", () => {
 		writeFileSync(join(dir, "subjects.json"), "{ non è json");
 		const work = new BoardWork({ store: board, agentName: async (id) => NAMES[id], canChat: async () => true, isOwner: async () => false, owners: async () => [], personName: async () => undefined, openThread: async () => "t1", post: async () => {} });
 		const tools = createBoardTools({ self: "vendite", store: board, work, agents: async () => [{ id: "vendite", name: "Vendite" }], personOf: () => "p_anna", subjects: cardSubjects(vendite.seam, (m) => void logs.push(m)) });
-		const run = async (name: string, args: Record<string, unknown>) => String(await (tools.find((t) => t.name === name) as AnnieTool).execute(args, fresh()));
+		const run = async (name: string, args: Record<string, unknown>) => String(await (tools.find((t) => t.name === name) as OwniTool).execute(args, fresh()));
 
 		expect(await run("board_create", { title: "Offerta", subjects: ["CL-0001"] })).toBe("Scheda #1 creata in «Da fare».");
 		expect(board.list()).toHaveLength(1);
@@ -272,7 +272,7 @@ describe("il registro di chi segue cosa (ADR 0110)", () => {
 		expect(await vendite.run("clients", { op: "upsert", id: "CL-0002", name: "Beta" })).toBe("fatto upsert");
 		expect(vendite.books.clients.map((c) => c.id)).toEqual(["CL-0001", "CL-0002"]);
 		expect(logs.length).toBeGreaterThanOrEqual(4);
-		expect(logs.every((m) => m.startsWith("annie: "))).toBe(true);
+		expect(logs.every((m) => m.startsWith("owni: "))).toBe(true);
 	});
 
 	it("the text names at most five, then how many more", () => {

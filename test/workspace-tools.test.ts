@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { TelegramAdapter } from "../src/channels/telegram.ts";
 import { piDurableEngine } from "../src/core/adapters/pi-durable.ts";
-import { AnnieRuntime } from "../src/core/index.ts";
+import { OwniRuntime } from "../src/core/index.ts";
 import { createWorkspaceTools } from "../src/core/tools/workspace-tools.ts";
 import { connectChannel } from "../src/gateway.ts";
 import { readFileSync } from "node:fs";
@@ -30,7 +30,7 @@ function fakeTelegram(updates: unknown[][] = [], download: Uint8Array | string =
 describe("workspace tools (faux model, fake Telegram)", () => {
 	it("the instance writes a file, lists it, finds it by its words and sends it to the person as a document, once", async () => {
 		const dataDir = tempDataDir();
-		const runtime: AnnieRuntime = new AnnieRuntime({
+		const runtime: OwniRuntime = new OwniRuntime({
 			dataDir,
 			engine: piDurableEngine,
 			tools: async (record) => createWorkspaceTools({ workspace: runtime.workspace(record.tenantId, record.id), sendFile: (f) => runtime.sendFile(record.tenantId, record.id, f) }),
@@ -78,7 +78,7 @@ describe("files people send on Telegram", () => {
 
 	it("an allowed user's document lands in uploads/ and the instance is told where; a stranger's never touches the disk", async () => {
 		const dataDir = tempDataDir();
-		const runtime = new AnnieRuntime({ dataDir, engine: piDurableEngine });
+		const runtime = new OwniRuntime({ dataDir, engine: piDurableEngine });
 		await runtime.registry.createTenant({ id: "acme", name: "acme" });
 		await runtime.registry.createInstance("acme", { id: "ops", name: "ops", model: FAUX_MODEL, egress: { modelProviders: ["faux"], channels: ["telegram"] }, allowedUsers: { telegram: ["7"] } });
 		const doc = (updateId: number, from: number, caption?: string) => ({
@@ -99,7 +99,7 @@ describe("files people send on Telegram", () => {
 
 	it("a PDF someone sends is noted as a document Owni can read with file_read", async () => {
 		const dataDir = tempDataDir();
-		const runtime = new AnnieRuntime({ dataDir, engine: piDurableEngine });
+		const runtime = new OwniRuntime({ dataDir, engine: piDurableEngine });
 		await runtime.registry.createTenant({ id: "acme", name: "acme" });
 		await runtime.registry.createInstance("acme", { id: "ops", name: "ops", model: FAUX_MODEL, egress: { modelProviders: ["faux"], channels: ["telegram"] }, allowedUsers: { telegram: ["7"] } });
 		const update = { update_id: 1, message: { message_id: 1, chat: { id: 7 }, from: { id: 7 }, document: { file_id: "F", file_name: "fattura.pdf", file_size: 2000 } } };
@@ -115,7 +115,7 @@ describe("files people send on Telegram", () => {
 
 describe("file_read on documents", () => {
 	const setup = async () => {
-		const runtime = new AnnieRuntime({ dataDir: tempDataDir(), engine: piDurableEngine });
+		const runtime = new OwniRuntime({ dataDir: tempDataDir(), engine: piDurableEngine });
 		await runtime.registry.createTenant({ id: "acme", name: "acme" });
 		const workspace = runtime.workspace("acme", "ops");
 		const tools = createWorkspaceTools({ workspace, sendFile: async () => undefined });

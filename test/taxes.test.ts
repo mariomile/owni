@@ -3,7 +3,7 @@ import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { type RunningAnnie, startAnnie } from "../src/app.ts";
+import { type RunningOwni, startOwni } from "../src/app.ts";
 import { BRIEF_INSTRUCTION, readOnlyInBriefs } from "../src/core/brief.ts";
 import { averageSpend, isTaxName, type Movement, TAX_PAID_PERCENT, TAX_TWIN_DAYS, TAX_VOCI_PERCENT, taxDuplicates, taxFlows } from "../src/core/cashflow-sources.ts";
 import { CashflowStore } from "../src/core/cashflow-store.ts";
@@ -29,7 +29,7 @@ import { createCashflowTools } from "../src/core/tools/cashflow-tools.ts";
 import * as render from "../src/core/tools/tax-render.ts";
 import { createTaxTools, type TaxEvent } from "../src/core/tools/tax-tools.ts";
 import { Workspace } from "../src/core/workspace.ts";
-import { loadAnnieConfig } from "../src/main/config.ts";
+import { loadOwniConfig } from "../src/main/config.ts";
 import { BETA, fattura, GAMMA } from "./solleciti-fixtures.ts";
 import { loadTools } from "./helpers.ts";
 
@@ -59,7 +59,7 @@ afterEach(async () => {
 });
 
 function temp(): string {
-	const dir = mkdtempSync(join(tmpdir(), "annie-taxes-"));
+	const dir = mkdtempSync(join(tmpdir(), "owni-taxes-"));
 	dirs.push(dir);
 	return dir;
 }
@@ -1065,7 +1065,7 @@ describe("taxes in the app", () => {
 		expect(description).toContain("nell'ordinario l'IVA è vat_settlement");
 		expect(description).toContain("Fixed F24 voci the person adds in the cashflow are kept there; this tool estimates.");
 		const dataDir = temp();
-		const config = loadAnnieConfig({ ANNIE_DATA_DIR: dataDir, ANNIE_MODEL_PROVIDER: "faux", ANNIE_WEB_PORT: "1" });
+		const config = loadOwniConfig({ OWNI_DATA_DIR: dataDir, OWNI_MODEL_PROVIDER: "faux", OWNI_WEB_PORT: "1" });
 		const reply = await boot(config);
 		await loadTools(reply, "taxes");
 		expect(await reply('/tool taxes {"op":"set_profile","coefficient":78,"pension":"gestione separata","last_year_imposta":"6543,21"}')).toContain("Fatto, profilo delle tasse salvato:");
@@ -1087,20 +1087,20 @@ describe("taxes in the app", () => {
 });
 
 /** An Owni with the faux model, and a way to send a message and read the reply. */
-async function boot(config: ReturnType<typeof loadAnnieConfig>) {
-	const annie: RunningAnnie = await startAnnie({ ...config, web: { ...config.web, port: 0 } }, { schedulerIntervalMs: 60_000, log: () => {} });
-	closers.push(() => annie.stop());
-	const base = `http://127.0.0.1:${(annie.server.address() as AddressInfo).port}`;
-	const login = await fetch(`${base}/api/login`, { method: "POST", headers: { "x-annie": "1" }, body: JSON.stringify({ token: (annie.ownerLink as string).split("#")[1] }) });
+async function boot(config: ReturnType<typeof loadOwniConfig>) {
+	const owni: RunningOwni = await startOwni({ ...config, web: { ...config.web, port: 0 } }, { schedulerIntervalMs: 60_000, log: () => {} });
+	closers.push(() => owni.stop());
+	const base = `http://127.0.0.1:${(owni.server.address() as AddressInfo).port}`;
+	const login = await fetch(`${base}/api/login`, { method: "POST", headers: { "x-owni": "1" }, body: JSON.stringify({ token: (owni.ownerLink as string).split("#")[1] }) });
 	const cookie = (login.headers.get("set-cookie") ?? "").split(";")[0] as string;
 	const api = async (path: string, body?: unknown) => {
-		const res = await fetch(`${base}${path}`, { method: body === undefined ? "GET" : "POST", headers: { cookie, "x-annie": "1" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+		const res = await fetch(`${base}${path}`, { method: body === undefined ? "GET" : "POST", headers: { cookie, "x-owni": "1" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
 		// biome-ignore lint: test
 		return (await res.json()) as any;
 	};
 	const thread = (await api(`/api/instances/${config.instanceId}/threads`, {})).thread;
 	return async (text: string): Promise<string> => {
-		const answers = async () => ((await api(`/api/instances/${config.instanceId}/threads/${thread.id}`)).entries as { from: string; text?: string }[]).filter((e) => e.from === "annie");
+		const answers = async () => ((await api(`/api/instances/${config.instanceId}/threads/${thread.id}`)).entries as { from: string; text?: string }[]).filter((e) => e.from === "owni");
 		const before = (await answers()).length;
 		await api(`/api/instances/${config.instanceId}/threads/${thread.id}/messages`, { text });
 		for (const start = Date.now(); Date.now() - start < 30_000; ) {

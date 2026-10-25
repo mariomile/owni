@@ -15,7 +15,7 @@ starts here in the background and is waited for in slices, and files go in and o
 
 Run as root it drops to uid 1000 for everything that touches /work, and walks /work without
 following links. A command starts only once the machine's first process has sealed it off the
-network: the file `sealed`, written by annie-fly-init; on a machine ("rules" in it) the firewall
+network: the file `sealed`, written by owni-fly-init; on a machine ("rules" in it) the firewall
 is checked again, and the command gets no socket that the firewall does not see (vsock, packet).
 """
 import base64
@@ -32,10 +32,10 @@ import subprocess
 import sys
 import time
 
-STATE = os.environ.get("ANNIE_RUN_STATE", "/run/annie")
-WORK = os.environ.get("ANNIE_RUN_WORK", "/work")
+STATE = os.environ.get("OWNI_RUN_STATE", "/run/owni")
+WORK = os.environ.get("OWNI_RUN_WORK", "/work")
 # Tests run as root on a shared host give an unused uid: sweeping it ends nobody else's processes.
-UID = int(os.environ.get("ANNIE_RUN_UID", "1000"))
+UID = int(os.environ.get("OWNI_RUN_UID", "1000"))
 # As a normal user (tests) there is nothing to drop, and nothing broad to kill.
 ROOT = os.getuid() == 0
 MAX_STREAM = 64 * 1024
@@ -110,7 +110,7 @@ def touch():
 
 
 def strict():
-    """A real machine: annie-fly-init wrote "rules" in `sealed`."""
+    """A real machine: owni-fly-init wrote "rules" in `sealed`."""
     try:
         with open(os.path.join(STATE, "sealed")) as f:
             return f.read().strip() == "rules"
@@ -456,7 +456,7 @@ def number(text):
 
 def main(argv):
     if len(argv) < 2:
-        fail("usage: annie-run start|wait|kill|write|stat|read|idle ...")
+        fail("usage: owni-run start|wait|kill|write|stat|read|idle ...")
     what, args = argv[1], argv[2:]
     touch()
     try:
@@ -480,7 +480,7 @@ def main(argv):
         if error.errno == 40:  # ELOOP: a link where a file or folder was expected
             fail("not a file")
         fail(f"{type(error).__name__}: {error.strerror or error}")
-    fail("usage: annie-run start|wait|kill|write|stat|read|idle ...")
+    fail("usage: owni-run start|wait|kill|write|stat|read|idle ...")
 
 
 if __name__ == "__main__":

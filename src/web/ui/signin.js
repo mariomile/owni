@@ -12,7 +12,7 @@ export async function finishConnector() {
 		const inst = state.instances.find((i) => i.id === done.instanceId);
 		if (inst) {
 			state.instance = inst;
-			store("annie.instance", inst.id);
+			store("owni.instance", inst.id);
 		}
 		if (done.cancelled) return toast(error === "access_denied" ? "Accesso annullato: il connettore resta da collegare" : "Il servizio non ha completato l'accesso: riprova con «Collega»", true);
 		const st = done.status;

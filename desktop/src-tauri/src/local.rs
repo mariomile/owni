@@ -27,7 +27,7 @@ impl Bundle {
     pub fn find(exe_dir: &Path, resources: &Path) -> Option<Bundle> {
         let node = exe_dir.join(if cfg!(windows) { "node.exe" } else { "node" });
         let server = resources.join("server");
-        let helper = exe_dir.join("annie-computer-use");
+        let helper = exe_dir.join("owni-computer-use");
         let computer = (cfg!(target_os = "macos") && helper.is_file()).then_some(helper);
         (node.is_file() && server.join(ENTRY).is_file()).then_some(Bundle {
             node,
@@ -99,23 +99,23 @@ fn command(bundle: &Bundle, data: &Path, port: u16) -> Command {
         .arg(ENTRY)
         .current_dir(&bundle.server)
         .env("NODE_ENV", "production")
-        .env("ANNIE_DATA_DIR", data)
-        .env("ANNIE_WEB_HOST", "127.0.0.1")
-        .env("ANNIE_WEB_PORT", port.to_string())
-        .env("ANNIE_MODEL_PROVIDER", "faux")
+        .env("OWNI_DATA_DIR", data)
+        .env("OWNI_WEB_HOST", "127.0.0.1")
+        .env("OWNI_WEB_PORT", port.to_string())
+        .env("OWNI_MODEL_PROVIDER", "faux")
         // Only the bundled, loopback server may use this computer's subscriptions and screen.
-        .env("ANNIE_LOCAL_PROVIDERS", "1")
-        .env_remove("ANNIE_LOCAL_DESKTOP_HELPER")
-        .env_remove("ANNIE_DESKTOP")
-        .env_remove("ANNIE_DESKTOP_NETWORK")
-        .env_remove("ANNIE_DESKTOP_URL")
-        .env_remove("ANNIE_DESKTOP_TOKEN")
-        .env_remove("ANNIE_CELL_SECRET")
-        .env_remove("ANNIE_PUBLIC_URL");
+        .env("OWNI_LOCAL_PROVIDERS", "1")
+        .env_remove("OWNI_LOCAL_DESKTOP_HELPER")
+        .env_remove("OWNI_DESKTOP")
+        .env_remove("OWNI_DESKTOP_NETWORK")
+        .env_remove("OWNI_DESKTOP_URL")
+        .env_remove("OWNI_DESKTOP_TOKEN")
+        .env_remove("OWNI_CELL_SECRET")
+        .env_remove("OWNI_PUBLIC_URL");
     if let Some(helper) = &bundle.computer {
         command
-            .env("ANNIE_DESKTOP", "local")
-            .env("ANNIE_LOCAL_DESKTOP_HELPER", helper);
+            .env("OWNI_DESKTOP", "local")
+            .env("OWNI_LOCAL_DESKTOP_HELPER", helper);
     }
     command
 }
@@ -208,7 +208,7 @@ mod tests {
     use super::*;
 
     fn dir(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("annie-local-{name}-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("owni-local-{name}-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         dir
@@ -266,7 +266,7 @@ mod tests {
         fs::write(base.join("server").join(ENTRY), "").unwrap();
         let bundle = Bundle::find(&base, &base).unwrap();
         assert!(bundle.computer.is_none());
-        fs::write(base.join("annie-computer-use"), "").unwrap();
+        fs::write(base.join("owni-computer-use"), "").unwrap();
         let bundle = Bundle::find(&base, &base).unwrap();
         assert_eq!(bundle.computer.is_some(), cfg!(target_os = "macos"));
         fs::remove_dir_all(&base).unwrap();
@@ -275,7 +275,7 @@ mod tests {
     #[test]
     fn only_the_carried_server_receives_the_local_helper_and_loopback_mode() {
         use std::ffi::OsStr;
-        let helper = PathBuf::from("/Applications/Owni.app/Contents/MacOS/annie-computer-use");
+        let helper = PathBuf::from("/Applications/Owni.app/Contents/MacOS/owni-computer-use");
         let bundle = Bundle {
             node: PathBuf::from("/node"),
             server: PathBuf::from("/server"),
@@ -284,28 +284,28 @@ mod tests {
         let process = command(&bundle, Path::new("/data"), 47821);
         let env: std::collections::HashMap<_, _> = process.get_envs().collect();
         assert_eq!(
-            env[OsStr::new("ANNIE_WEB_HOST")],
+            env[OsStr::new("OWNI_WEB_HOST")],
             Some(OsStr::new("127.0.0.1"))
         );
         assert_eq!(
-            env[OsStr::new("ANNIE_LOCAL_PROVIDERS")],
+            env[OsStr::new("OWNI_LOCAL_PROVIDERS")],
             Some(OsStr::new("1"))
         );
-        assert_eq!(env[OsStr::new("ANNIE_DESKTOP")], Some(OsStr::new("local")));
+        assert_eq!(env[OsStr::new("OWNI_DESKTOP")], Some(OsStr::new("local")));
         assert_eq!(
-            env[OsStr::new("ANNIE_LOCAL_DESKTOP_HELPER")],
+            env[OsStr::new("OWNI_LOCAL_DESKTOP_HELPER")],
             Some(helper.as_os_str())
         );
-        assert_eq!(env[OsStr::new("ANNIE_PUBLIC_URL")], None);
-        assert_eq!(env[OsStr::new("ANNIE_CELL_SECRET")], None);
-        assert_eq!(env[OsStr::new("ANNIE_DESKTOP_URL")], None);
+        assert_eq!(env[OsStr::new("OWNI_PUBLIC_URL")], None);
+        assert_eq!(env[OsStr::new("OWNI_CELL_SECRET")], None);
+        assert_eq!(env[OsStr::new("OWNI_DESKTOP_URL")], None);
         let without = Bundle {
             computer: None,
             ..bundle
         };
         let process = command(&without, Path::new("/data"), 47821);
         let env: std::collections::HashMap<_, _> = process.get_envs().collect();
-        assert_eq!(env[OsStr::new("ANNIE_DESKTOP")], None);
-        assert_eq!(env[OsStr::new("ANNIE_LOCAL_DESKTOP_HELPER")], None);
+        assert_eq!(env[OsStr::new("OWNI_DESKTOP")], None);
+        assert_eq!(env[OsStr::new("OWNI_LOCAL_DESKTOP_HELPER")], None);
     }
 }

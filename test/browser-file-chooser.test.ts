@@ -2,16 +2,16 @@ import { existsSync } from "node:fs";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
-import { type RunningAnnie, startAnnie } from "../src/app.ts";
+import { type RunningOwni, startOwni } from "../src/app.ts";
 import { publicAddress } from "../src/core/web-fetch.ts";
 import { createWebTools } from "../src/core/tools/web-tools.ts";
 import { type Browser, BrowseSessions, sessionKey } from "../src/core/web-session.ts";
 import { type Workspace, WorkspaceError } from "../src/core/workspace.ts";
-import { loadAnnieConfig } from "../src/main/config.ts";
+import { loadOwniConfig } from "../src/main/config.ts";
 import { tempDataDir } from "./helpers.ts";
 
 // Real Chromium: the file chooser is refused where it opens, whatever way the page reaches it (ADR 0103).
-const chrome = process.env.ANNIE_CHROMIUM_PATH ?? (existsSync("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome") ? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" : undefined);
+const chrome = process.env.OWNI_CHROMIUM_PATH ?? (existsSync("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome") ? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" : undefined);
 const available = chrome !== undefined && existsSync(chrome);
 
 const closers: (() => Promise<void>)[] = [];
@@ -210,23 +210,23 @@ describe.skipIf(!available)("no file uploads, in real Chromium", () => {
 
 	it("a person's click through the panel leaves a late chooser for the agent's next view", async () => {
 		const site = await serve();
-		const config = loadAnnieConfig({ ANNIE_DATA_DIR: tempDataDir(), ANNIE_MODEL_PROVIDER: "faux", ANNIE_WEB_PORT: "1", ANNIE_SCREENSHOTS_WITHOUT_SANDBOX: "1", ANNIE_CHROMIUM_PATH: chrome as string });
-		const annie: RunningAnnie = await startAnnie({ ...config, web: { ...config.web, port: 0 } }, { webAddressAllowed: (address) => address === "127.0.0.1" || publicAddress(address), schedulerIntervalMs: 60_000, log: () => {} });
-		closers.push(() => annie.stop());
-		const policy = (await annie.runtime.registry.getInstance("default", "annie")).egress;
-		await annie.runtime.registry.setEgress("default", "annie", { ...policy, web: ["127.0.0.1"] });
-		const base = `http://127.0.0.1:${(annie.server.address() as AddressInfo).port}`;
-		const login = await fetch(`${base}/api/login`, { method: "POST", headers: { "x-annie": "1" }, body: JSON.stringify({ token: (annie.ownerLink as string).split("#")[1] }) });
+		const config = loadOwniConfig({ OWNI_DATA_DIR: tempDataDir(), OWNI_MODEL_PROVIDER: "faux", OWNI_WEB_PORT: "1", OWNI_SCREENSHOTS_WITHOUT_SANDBOX: "1", OWNI_CHROMIUM_PATH: chrome as string });
+		const owni: RunningOwni = await startOwni({ ...config, web: { ...config.web, port: 0 } }, { webAddressAllowed: (address) => address === "127.0.0.1" || publicAddress(address), schedulerIntervalMs: 60_000, log: () => {} });
+		closers.push(() => owni.stop());
+		const policy = (await owni.runtime.registry.getInstance("default", "owni")).egress;
+		await owni.runtime.registry.setEgress("default", "owni", { ...policy, web: ["127.0.0.1"] });
+		const base = `http://127.0.0.1:${(owni.server.address() as AddressInfo).port}`;
+		const login = await fetch(`${base}/api/login`, { method: "POST", headers: { "x-owni": "1" }, body: JSON.stringify({ token: (owni.ownerLink as string).split("#")[1] }) });
 		const cookie = (login.headers.get("set-cookie") ?? "").split(";")[0] as string;
 		const api = async (path: string, body?: unknown) => {
-			const res = await fetch(`${base}${path}`, { method: body === undefined ? "GET" : "POST", headers: { cookie, "x-annie": "1" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+			const res = await fetch(`${base}${path}`, { method: body === undefined ? "GET" : "POST", headers: { cookie, "x-owni": "1" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
 			return { status: res.status, ...((await res.json()) as any) };
 		};
-		const thread = (await api("/api/instances/annie/threads", {})).thread.id as string;
-		const answers = async () => ((await api(`/api/instances/annie/threads/${thread}`)).entries as { from: string; text?: string }[]).filter((e) => e.from === "annie");
+		const thread = (await api("/api/instances/owni/threads", {})).thread.id as string;
+		const answers = async () => ((await api(`/api/instances/owni/threads/${thread}`)).entries as { from: string; text?: string }[]).filter((e) => e.from === "owni");
 		const say = async (text: string): Promise<string> => {
 			const before = (await answers()).length;
-			await api(`/api/instances/annie/threads/${thread}/messages`, { text });
+			await api(`/api/instances/owni/threads/${thread}/messages`, { text });
 			for (const begun = Date.now(); Date.now() - begun < 30_000; ) {
 				const now = await answers();
 				if (now.length > before) return now.at(-1)?.text ?? "";
@@ -234,7 +234,7 @@ describe.skipIf(!available)("no file uploads, in real Chromium", () => {
 			}
 			throw new Error("no reply");
 		};
-		const click = (x: number, y: number) => api(`/api/instances/annie/threads/${thread}/browser/click`, { x, y });
+		const click = (x: number, y: number) => api(`/api/instances/owni/threads/${thread}/browser/click`, { x, y });
 
 		expect(await say(`/tool web_browse {"url":"${site}/late"}`)).toContain("Carica dopo");
 		// The person clicks the button whose page opens the chooser 1.6 s later, on its own.
@@ -248,6 +248,6 @@ describe.skipIf(!available)("no file uploads, in real Chromium", () => {
 		expect(await say("/tool web_browse {}")).toContain(LATE);
 		expect(await say("/tool web_browse {}")).not.toContain(LATE);
 		// And the person can read it on the activity page, whatever the agent reads.
-		expect((await annie.runtime.audit("default").read()).filter((e) => e.type === "web.browser.file_refused").map((e) => [e.instanceId, e.host])).toEqual([["annie", "127.0.0.1"]]);
+		expect((await owni.runtime.audit("default").read()).filter((e) => e.type === "web.browser.file_refused").map((e) => [e.instanceId, e.host])).toEqual([["owni", "127.0.0.1"]]);
 	}, 90_000);
 });

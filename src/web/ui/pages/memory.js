@@ -16,7 +16,7 @@ export async function viewMemory(main) {
 		memories.map((m) =>
 			h(
 				"li.task-row",
-				h("div.task-text", h("b", m.text), h("small", `${m.source === "annie" ? `ricordata da ${inst.name}` : "aggiunta a mano"} · ${fmt.time(m.createdAt)}`)),
+				h("div.task-text", h("b", m.text), h("small", `${m.source === "owni" ? `ricordata da ${inst.name}` : "aggiunta a mano"} · ${fmt.time(m.createdAt)}`)),
 				editable ? h("button.icon-btn.task-remove", { title: "Dimentica", "aria-label": `Dimentica: ${m.text}`, onclick: () => forget(m) }, icon("trash")) : null,
 			),
 		);

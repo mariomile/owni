@@ -1,7 +1,7 @@
 name: Image
 # Builds the Dockerfile and checks that the container answers, on a PR or a push to main that
-# touches what goes into the images; on main it also publishes ghcr.io/<owner>/annie (the image
-# Owni Cloud cells run, docs/runbook.md 6c and 6d) and ghcr.io/<owner>/annie-computer:fly (the
+# touches what goes into the images; on main it also publishes ghcr.io/<owner>/owni (the image
+# Owni Cloud cells run, docs/runbook.md 6c and 6d) and ghcr.io/<owner>/owni-computer:fly (the
 # computers' micro-VMs, runbook 6j). Run it by hand ("Run workflow" on main) to publish after
 # other changes: the builds are most of the Actions minutes, so they don't run on every change.
 on:
@@ -40,15 +40,15 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: Build
-        run: docker build -t annie:ci .
+        run: docker build -t owni:ci .
       - name: The container starts and answers
         run: |
-          docker run -d --name annie -e ANNIE_MODEL_PROVIDER=faux -p 127.0.0.1:8080:8080 \
-            --read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges:true annie:ci
+          docker run -d --name owni -e OWNI_MODEL_PROVIDER=faux -p 127.0.0.1:8080:8080 \
+            --read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges:true owni:ci
           for i in $(seq 1 60); do curl -sf http://127.0.0.1:8080/healthz && exit 0; sleep 1; done
-          docker logs annie
+          docker logs owni
           exit 1
 
   # The instances' computers (ADR 0013): the image builds, and the provider works on a real daemon.
@@ -56,25 +56,25 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
-      - uses: actions/checkout@v5
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Build the computer image
-        run: docker build -f docker/computer.Dockerfile -t annie-computer:ci docker
+        run: docker build -f docker/computer.Dockerfile -t owni-computer:ci docker
       - name: The computer on a real Docker host
         env:
-          ANNIE_TEST_COMPUTER_IMAGE: annie-computer:ci
+          OWNI_TEST_COMPUTER_IMAGE: owni-computer:ci
         run: pnpm vitest run test/computer-docker.live.test.ts
       # The micro-VM target (ADR 0015): its first process seals it off the network, then the same checks.
       - name: Build the micro-VM computer image
-        run: docker build -f docker/computer.Dockerfile --target fly -t annie-computer:fly-ci docker
+        run: docker build -f docker/computer.Dockerfile --target fly -t owni-computer:fly-ci docker
       - name: The micro-VM computer, sealed, on Docker's network
         env:
-          ANNIE_TEST_FLY_IMAGE: annie-computer:fly-ci
+          OWNI_TEST_FLY_IMAGE: owni-computer:fly-ci
         run: pnpm vitest run test/computer-fly.live.test.ts
 
   # Only this job can write packages, and only on main: a PR's Dockerfile never builds with it.
@@ -89,16 +89,16 @@ jobs:
     steps:
       # Built again here rather than handed over as an artifact: no artifact storage needed, and
       # this job only ever runs on code already merged to main.
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       # The published image has Chromium, so cells can take screenshots (web_screenshot, ADR 0009).
       - name: Build
-        run: docker build --build-arg WITH_BROWSER=1 -t annie:ci .
+        run: docker build --build-arg WITH_BROWSER=1 -t owni:ci .
       - name: The published image starts and answers
         run: |
-          docker run -d --name annie -e ANNIE_MODEL_PROVIDER=faux -p 127.0.0.1:8080:8080 \
-            --read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges:true annie:ci
+          docker run -d --name owni -e OWNI_MODEL_PROVIDER=faux -p 127.0.0.1:8080:8080 \
+            --read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges:true owni:ci
           for i in $(seq 1 60); do curl -sf http://127.0.0.1:8080/healthz && exit 0; sleep 1; done
-          docker logs annie
+          docker logs owni
           exit 1
       - name: Push to GHCR
         env:
@@ -107,9 +107,9 @@ jobs:
           OWNER: ${{ github.repository_owner }}
         run: |
           echo "$TOKEN" | docker login ghcr.io -u "$ACTOR" --password-stdin
-          image="ghcr.io/$(echo "$OWNER" | tr '[:upper:]' '[:lower:]')/annie"
-          docker tag annie:ci "$image:${GITHUB_SHA::12}"
-          docker tag annie:ci "$image:latest"
+          image="ghcr.io/$(echo "$OWNER" | tr '[:upper:]' '[:lower:]')/owni"
+          docker tag owni:ci "$image:${GITHUB_SHA::12}"
+          docker tag owni:ci "$image:latest"
           docker push "$image:${GITHUB_SHA::12}"
           docker push "$image:latest"
       # The micro-VM computer (ADR 0015), checked by the computer job on this same commit.
@@ -117,9 +117,9 @@ jobs:
         env:
           OWNER: ${{ github.repository_owner }}
         run: |
-          docker build -f docker/computer.Dockerfile --target fly -t annie-computer:fly-ci docker
-          image="ghcr.io/$(echo "$OWNER" | tr '[:upper:]' '[:lower:]')/annie-computer"
-          docker tag annie-computer:fly-ci "$image:fly-${GITHUB_SHA::12}"
-          docker tag annie-computer:fly-ci "$image:fly"
+          docker build -f docker/computer.Dockerfile --target fly -t owni-computer:fly-ci docker
+          image="ghcr.io/$(echo "$OWNER" | tr '[:upper:]' '[:lower:]')/owni-computer"
+          docker tag owni-computer:fly-ci "$image:fly-${GITHUB_SHA::12}"
+          docker tag owni-computer:fly-ci "$image:fly"
           docker push "$image:fly-${GITHUB_SHA::12}"
           docker push "$image:fly"

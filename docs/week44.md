@@ -1,6 +1,6 @@
 # Settimana 44: partita IVA
 
-Branch `week-44`. Chi fattura controlla partite IVA e codici fiscali di continuo. Ora `vat_check` fa il controllo formale (cifra di controllo, ufficio IVA, codice fiscale con omocodia, forma dei numeri IVA europei) sempre, senza rete, e con `ANNIE_VAT_CHECK=1` chiede al VIES della Commissione europea se un numero è attivo, con nome, indirizzo e ora del controllo. Come funziona, i limiti e le alternative scartate sono nell'[ADR 0047](adr/0047-partita-iva.md).
+Branch `week-44`. Chi fattura controlla partite IVA e codici fiscali di continuo. Ora `vat_check` fa il controllo formale (cifra di controllo, ufficio IVA, codice fiscale con omocodia, forma dei numeri IVA europei) sempre, senza rete, e con `OWNI_VAT_CHECK=1` chiede al VIES della Commissione europea se un numero è attivo, con nome, indirizzo e ora del controllo. Come funziona, i limiti e le alternative scartate sono nell'[ADR 0047](adr/0047-partita-iva.md).
 
 ## Cosa cambia per chi usa Owni
 
@@ -32,5 +32,5 @@ Seconda revisione, corretta: recinto ristretto ai segni veri (anche per mail e c
 
 ## Da fare
 
-- Provare l'indirizzo del VIES con `pnpm annie check` su un server con rete: da qui il proxy blocca il sito della Commissione.
+- Provare l'indirizzo del VIES con `pnpm owni check` su un server con rete: da qui il proxy blocca il sito della Commissione.
 - ~~Segreteria: usare il controllo formale sulla partita IVA estratta dalle mail~~ fatto nella settimana 46.

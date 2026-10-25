@@ -9,11 +9,11 @@
  */
 import { appendFileSync } from "node:fs";
 import { piDurableEngine } from "../../src/core/adapters/pi-durable.ts";
-import { AnnieRuntime, createSlowCounter, NotFound } from "../../src/core/index.ts";
+import { OwniRuntime, createSlowCounter, NotFound } from "../../src/core/index.ts";
 
 const [mode, dataDir, effectsFile] = process.argv.slice(2) as [string, string, string];
 
-const runtime = new AnnieRuntime({
+const runtime = new OwniRuntime({
 	dataDir,
 	engine: piDurableEngine,
 	tools: [
@@ -39,7 +39,7 @@ if (mode === "start") {
 		await runtime.registry.createInstance("acme", {
 			id: "ops",
 			name: "Ops",
-			model: { provider: "faux", modelId: "annie-dev" },
+			model: { provider: "faux", modelId: "owni-dev" },
 			egress: { modelProviders: ["faux"], channels: ["test"] },
 			allowedUsers: { test: ["u1"] },
 		});

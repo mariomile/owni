@@ -26,7 +26,7 @@ export const DEFAULT_VIES_URL = "https://ec.europa.eu/taxation_customs/vies/rest
 /**
  * The check of one number: GET {base}/ms/{country}/vat/{number}, the REST API's public endpoint
  * (the same API also takes a POST to /check-vat-number). It could not be reached where this was
- * written: verify with pnpm annie check.
+ * written: verify with pnpm owni check.
  */
 export function viesCheckUrl(base: string, country: EuVatCountry, number: string): URL {
 	return new URL(`${base.replace(/\/+$/, "")}/ms/${country}/vat/${encodeURIComponent(number)}`);

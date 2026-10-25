@@ -127,10 +127,10 @@ export async function viewBoard(main) {
 				c.auto && c.status === "in_corso" ? h("span.tag", { title: `Lavora da solo: risposta ${c.auto.rounds} di ${data.auto.replies}` }, "da solo") : null,
 			),
 		);
-	// Cerca e filtri: what is shown, remembered on this browser (`annie.board.filter`).
+	// Cerca e filtri: what is shown, remembered on this browser (`owni.board.filter`).
 	const filter = (() => {
 		try {
-			const f = JSON.parse(store("annie.board.filter") ?? "{}");
+			const f = JSON.parse(store("owni.board.filter") ?? "{}");
 			return { q: typeof f.q === "string" ? f.q : "", agent: typeof f.agent === "string" ? f.agent : "", mine: f.mine === true, due: f.due === true };
 		} catch {
 			return { q: "", agent: "", mine: false, due: false };
@@ -198,7 +198,7 @@ export async function viewBoard(main) {
 	const count = h("span.muted.small.board-filter-count");
 	const clear = h("button.btn.small.ghost", { type: "button" }, "Azzera");
 	const redraw = () => {
-		store("annie.board.filter", filtering() ? JSON.stringify(filter) : null);
+		store("owni.board.filter", filtering() ? JSON.stringify(filter) : null);
 		const next = lanes();
 		columns.replaceWith(next);
 		columns = next;
@@ -339,10 +339,10 @@ export async function viewBoard(main) {
 		const openThread = async () => {
 			dialog.close();
 			// An agente created after this page was loaded is not in the list yet.
-			store("annie.instance", c.work.agent);
+			store("owni.instance", c.work.agent);
 			await refreshInstances();
 			if (state.instance?.id !== c.work.agent) {
-				if (state.instance) store("annie.instance", state.instance.id);
+				if (state.instance) store("owni.instance", state.instance.id);
 				return toast("Non puoi più scrivere a questo agente", true);
 			}
 			state.threads = [];
@@ -654,7 +654,7 @@ export async function viewBoard(main) {
 			h("div.row-gap", h("button.btn.small.ghost", { onclick: toggle }, r.paused ? "Riprendi" : "Pausa"), h("button.btn.small.ghost", { onclick: remove }, "Togli")),
 		);
 	};
-	const routines = data.routines?.length ? h("details.board-routines", { open: store("annie.board.routines") !== "0" ? "" : undefined, ontoggle: (e) => store("annie.board.routines", e.currentTarget.open ? "1" : "0") }, h("summary", `Si ripetono (${data.routines.length})`), h("ul", data.routines.map(routineRow))) : null;
+	const routines = data.routines?.length ? h("details.board-routines", { open: store("owni.board.routines") !== "0" ? "" : undefined, ontoggle: (e) => store("owni.board.routines", e.currentTarget.open ? "1" : "0") }, h("summary", `Si ripetono (${data.routines.length})`), h("ul", data.routines.map(routineRow))) : null;
 	mount(
 		main,
 		head(null, h("h1", "Board degli incarichi"), "Le cose da fare, affidate agli agenti. L'agente ci lavora in una conversazione con chi gliel'ha affidata e la sposta in «Da rivedere»; poi una persona la chiude, o la rimanda indietro con un commento. Puoi anche chiedere in chat: «mettilo in board per Ricercatore», e avviarla da qui.", h("button.btn.accent", { onclick: newCard }, icon("plus"), "Nuovo incarico")),

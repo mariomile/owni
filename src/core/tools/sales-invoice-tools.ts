@@ -10,7 +10,7 @@
  * agente's approvers (ADR 0108): the draft is made and its issue waits for their yes; the agente
  * that asked hears only the outcome.
  */
-import type { AnnieTool, ToolContext } from "../engine.ts";
+import type { OwniTool, ToolContext } from "../engine.ts";
 import { todayIn } from "../italian-calendar.ts";
 import { CREDIT_NOTE_TYPE, FIELD_LIMITS, RITENUTA_CAUSALI, STALE_DRAFT_DAYS } from "../sales-invoice-rules.ts";
 import { nextSeq, type SalesBook } from "../sales-invoice-store.ts";
@@ -56,7 +56,7 @@ const DESCRIPTION = [
 	"When the tool asks for data, ask the person everything it lists in one message and never fill it in yourself. A fattura differita is issued by the 15th of the month after the DDTs. Repeat numbers and amounts as given, never compute them yourself.",
 ].join(" ");
 
-export function createSalesInvoiceTools(options: SalesToolsOptions): AnnieTool[] {
+export function createSalesInvoiceTools(options: SalesToolsOptions): OwniTool[] {
 	const env: SalesEnv = salesEnvOf(options);
 	const { store, timeZone, now } = env;
 	const text = (max: number, description: string) => ({ type: "string", maxLength: max, description });

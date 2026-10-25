@@ -43,7 +43,7 @@ export type GoogleClientConfig = {
 	/** Where Google sends the person back: this server's, or the control plane's in Owni Cloud. */
 	readonly redirectUrl: string;
 	readonly services: readonly GoogleService[];
-	/** Ask to write too (ANNIE_GOOGLE_WRITE): every write still waits for the person's approval. */
+	/** Ask to write too (OWNI_GOOGLE_WRITE): every write still waits for the person's approval. */
 	readonly write?: boolean;
 };
 
@@ -413,7 +413,7 @@ class Upload {
 function uploadBody(meta: Record<string, unknown>, message: Buffer): Upload {
 	const json = JSON.stringify(meta);
 	let boundary = "";
-	do boundary = `annie_upload_${randomBytes(18).toString("hex")}`;
+	do boundary = `owni_upload_${randomBytes(18).toString("hex")}`;
 	while (message.includes(boundary) || json.includes(boundary));
 	const head = Buffer.from(`--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${json}\r\n--${boundary}\r\nContent-Type: message/rfc822\r\n\r\n`, "utf8");
 	return new Upload(`multipart/related; boundary=${boundary}`, Buffer.concat([head, message, Buffer.from(`\r\n--${boundary}--\r\n`, "latin1")]));

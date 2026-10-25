@@ -2,7 +2,7 @@ import type { Message } from "@earendil-works/pi-ai";
 import { describe, expect, it } from "vitest";
 import { piDurableEngine, withTurnContext } from "../src/core/adapters/pi-durable.ts";
 import type { DurableEngine, EngineOpenOptions } from "../src/core/engine.ts";
-import { AnnieRuntime } from "../src/core/runtime.ts";
+import { OwniRuntime } from "../src/core/runtime.ts";
 import { createMemoryTools } from "../src/core/tools/memory-tools.ts";
 import { nowLine } from "../src/core/turn-context.ts";
 import { FAUX_MODEL, tempDataDir, waitFor } from "./helpers.ts";
@@ -46,7 +46,7 @@ describe("contesto del turno (ADR 0097)", () => {
 				return session;
 			},
 		};
-		const runtime: AnnieRuntime = new AnnieRuntime({ dataDir: tempDataDir(), engine, tools: async () => createMemoryTools({ store: runtime.memory("acme", "ops"), whoIs: (thread) => runtime.participant("acme", "ops", thread) }) });
+		const runtime: OwniRuntime = new OwniRuntime({ dataDir: tempDataDir(), engine, tools: async () => createMemoryTools({ store: runtime.memory("acme", "ops"), whoIs: (thread) => runtime.participant("acme", "ops", thread) }) });
 		await runtime.registry.createTenant({ id: "acme", name: "acme" });
 		await runtime.registry.createInstance("acme", { id: "ops", name: "ops", model: FAUX_MODEL, egress: { modelProviders: ["faux"], channels: ["test"] }, allowedUsers: { test: ["anna"] } });
 		const replies: { text?: string }[] = [];

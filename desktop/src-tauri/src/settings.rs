@@ -42,11 +42,11 @@ mod tests {
 
     #[test]
     fn saves_and_loads_and_a_broken_file_is_a_first_start() {
-        let dir = std::env::temp_dir().join(format!("annie-desktop-test-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("owni-desktop-test-{}", std::process::id()));
         let path = file(&dir);
         assert_eq!(load(&path), Settings::default());
         let settings = Settings {
-            server: Some("https://annie.example.it".into()),
+            server: Some("https://owni.example.it".into()),
         };
         save(&path, &settings).unwrap();
         assert_eq!(load(&path), settings);

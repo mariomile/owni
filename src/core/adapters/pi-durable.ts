@@ -47,7 +47,7 @@ import { createNodePhotonImages } from "@earendil-works/pi-durable/images/node";
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
 import { createToolSearchTool } from "@earendil-works/pi-durable/tool-search";
 import { DEFAULT_IMAGE_LIMITS, type ImageProcessor } from "@earendil-works/pi-durable/tools";
-import type { AnnieTool, DurableEngine, EngineImage, EngineOpenOptions, EngineReply, EngineSession, EngineRunEvent, EngineRunState, JsonValue, TurnUsage } from "../engine.ts";
+import type { OwniTool, DurableEngine, EngineImage, EngineOpenOptions, EngineReply, EngineSession, EngineRunEvent, EngineRunState, JsonValue, TurnUsage } from "../engine.ts";
 import type { ModelSelection } from "../registry.ts";
 import { isTurnOrigin, type TurnOrigin } from "../turn-origin.ts";
 import { createProvider } from "./pi-durable-models.ts";
@@ -56,7 +56,7 @@ const context = BACKGROUND_CONTEXT;
 
 /** Thread key (channel:threadId) → Pi conversation ID, stored in the same SQLite file. */
 const ThreadsDoc = defineDoc<{ threads: Record<string, number> }>({
-	kind: "annie.threads",
+	kind: "owni.threads",
 	version: 1,
 	scope: "session",
 	initial: () => ({ threads: {} }),
@@ -66,7 +66,7 @@ const ThreadsDoc = defineDoc<{ threads: Record<string, number> }>({
  * The entry a turn's input is placed as (ADR 0088): the person's words as the model sees them, with
  * where the turn comes from in its data, written in the same commit as the submission.
  */
-const INPUT_KIND = "annie.input";
+const INPUT_KIND = "owni.input";
 
 /**
  * How far this conversation is billed (ADR 0098): `answer` is the last answer billed, `spent` how
@@ -75,7 +75,7 @@ const INPUT_KIND = "annie.input";
  */
 type Spent = { input: number; output: number; cacheRead: number; cacheWrite: number; cost: number };
 const BilledDoc = defineDoc<{ answer?: number; spent?: Spent }>({
-	kind: "annie.billed-to",
+	kind: "owni.billed-to",
 	version: 1,
 	scope: "conversation",
 	history: "latest",
@@ -86,7 +86,7 @@ const BilledDoc = defineDoc<{ answer?: number; spent?: Spent }>({
 /** What one answer was billed (ADR 0098), keyed by its entry: written once, given again whenever it is read again. */
 type Bill = { modelCalls: number; inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheWriteTokens: number; costUsd: number; tools: string[] };
 const BillDoc = defineDocFamily<{ bill?: Bill }, Bill | null>({
-	kind: "annie.bill",
+	kind: "owni.bill",
 	version: 1,
 	family: true,
 	scope: "conversation",
@@ -97,7 +97,7 @@ const BillDoc = defineDocFamily<{ bill?: Bill }, Bill | null>({
 
 /** Thread key → the model that conversation answers with instead of the instance's (ADR 0036). */
 const ThreadModelsDoc = defineDoc<{ models: Record<string, ModelSelection> }>({
-	kind: "annie.thread-models",
+	kind: "owni.thread-models",
 	version: 1,
 	scope: "session",
 	initial: () => ({ models: {} }),
@@ -135,7 +135,7 @@ export const piDurableEngine: DurableEngine = {
 		const registry = createRegistry();
 		registry.install(
 			defineExtension({
-				name: "annie",
+				name: "owni",
 				tools: options.tools.map((tool) => toPiTool(tool, stopped)),
 				hooks: [
 					hook(GenerationTask, {
@@ -362,7 +362,7 @@ class PiDurableSession implements EngineSession {
 		if (id !== undefined) {
 			// Observation must never prevent the actual abort or report a successful abort as failed.
 			try { await this.watch(threadKey, id as ConversationId); }
-			catch (error) { console.error(`annie: Stop progress watch failed: ${String(error)}`); }
+			catch (error) { console.error(`owni: Stop progress watch failed: ${String(error)}`); }
 		}
 	}
 
@@ -370,7 +370,7 @@ class PiDurableSession implements EngineSession {
 		if (this.closing) return;
 		for (const listener of this.runListeners) {
 			try { listener(event); }
-			catch (error) { console.error(`annie: engine run listener failed: ${String(error)}`); }
+			catch (error) { console.error(`owni: engine run listener failed: ${String(error)}`); }
 		}
 	}
 
@@ -418,7 +418,7 @@ class PiDurableSession implements EngineSession {
 					} catch (error) {
 						// Pi closes watchers whose listener rejects. Keep later events observable after
 						// a transient read error, including the remaining events in this batch.
-						if (!this.closing) console.error(`annie: engine progress read failed: ${String(error)}`);
+						if (!this.closing) console.error(`owni: engine progress read failed: ${String(error)}`);
 					}
 				}
 			};
@@ -520,7 +520,7 @@ class PiDurableSession implements EngineSession {
 		if (this.tracked.has(submission.id)) return;
 		this.tracked.add(submission.id);
 		this.settle(submission, threadKey).catch((error: unknown) => {
-			console.error(`annie: reply for submission ${submission.id} failed: ${String(error)}`);
+			console.error(`owni: reply for submission ${submission.id} failed: ${String(error)}`);
 		});
 	}
 
@@ -543,7 +543,7 @@ class PiDurableSession implements EngineSession {
 			try {
 				listener(reply);
 			} catch (error) {
-				console.error(`annie: reply listener failed: ${String(error)}`);
+				console.error(`owni: reply listener failed: ${String(error)}`);
 			}
 		}
 	}
@@ -778,7 +778,7 @@ async function modelFor<T>(models: MutableModels, options: EngineOpenOptions, ow
  * so the model knows them whatever an instance's stored instructions say. A query made only of
  * their exact names loads those alone; BM25 ranks a name below its neighbours and would load eight.
  */
-export function toolSearch(deferred: readonly AnnieTool[]): ReturnType<typeof createToolSearchTool> {
+export function toolSearch(deferred: readonly OwniTool[]): ReturnType<typeof createToolSearchTool> {
 	const base = createToolSearchTool();
 	// The first sentence: up to the first full stop or colon followed by a space or the end.
 	const what = (description: string) => (description.trim().split(/[.:](?:\s|$)/)[0] ?? "");
@@ -799,7 +799,7 @@ export function toolSearch(deferred: readonly AnnieTool[]): ReturnType<typeof cr
 	};
 }
 
-function toPiTool(tool: AnnieTool, stopped: ReadonlySet<string>): ToolRegistration {
+function toPiTool(tool: OwniTool, stopped: ReadonlySet<string>): ToolRegistration {
 	return defineTool({
 		name: tool.name,
 		description: tool.description,
@@ -851,19 +851,19 @@ type OriginContext = Parameters<ToolRegistration["execute"]>[2];
  * after a crash gets the same one even if more messages arrived meanwhile.
  */
 async function turnOrigin(api: OriginApi, callContext: OriginContext): Promise<TurnOrigin> {
-	const stored = await api.memo<{ origin: string }>("annie:origin", callContext);
+	const stored = await api.memo<{ origin: string }>("owni:origin", callContext);
 	if (stored !== undefined && isTurnOrigin(stored.origin)) return stored.origin;
 	const found = await api.commit((tx) => inputsOrigin(tx, api.conversationId), callContext);
-	const kept = await api.memo<{ origin: string }>("annie:origin", { origin: found }, callContext);
+	const kept = await api.memo<{ origin: string }>("owni:origin", { origin: found }, callContext);
 	return isTurnOrigin(kept.origin) ? kept.origin : "scheduled";
 }
 
 /** The request ids of the messages the turn of a tool call answers, kept in the call's memo like its origin. */
 async function turnInputs(api: OriginApi, callContext: OriginContext): Promise<readonly string[]> {
-	const stored = await api.memo<{ ids: string[] }>("annie:inputs", callContext);
+	const stored = await api.memo<{ ids: string[] }>("owni:inputs", callContext);
 	if (stored !== undefined) return stored.ids;
 	const found = await api.commit((tx) => inputsRequests(tx, api.conversationId), callContext);
-	return (await api.memo<{ ids: string[] }>("annie:inputs", { ids: found }, callContext)).ids;
+	return (await api.memo<{ ids: string[] }>("owni:inputs", { ids: found }, callContext)).ids;
 }
 
 /** The request ids of the run's inputs, oldest first ("channel:messageId", ADR 0108). */
@@ -891,7 +891,7 @@ export async function inputsOrigin(tx: Pick<Tx, "scanEntries">, conversationId: 
 	return found.length === 0 ? "scheduled" : worst(found);
 }
 
-const SCAN_BOUND = "annie: the scan for a turn's run reached its bound before the start of the run; the turn is not taken for a person's";
+const SCAN_BOUND = "owni: the scan for a turn's run reached its bound before the start of the run; the turn is not taken for a person's";
 let boundWarned = false;
 
 /** Said once per process, with no value of the conversation: a run that long is rare, and the line is enough to look into it. */

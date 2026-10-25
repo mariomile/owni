@@ -5,7 +5,7 @@ import { alertsOf, type BudgetFacts, type Progress, periodFor, progressOf } from
 import { BUDGET_LIMITS, BUDGET_OPS, type Budget, budgetAgentReads, BudgetError, budgetId, type BudgetOp, type BudgetSubject, type Every, sameTarget, subjectKey } from "../budgets.ts";
 import { sourcesOf } from "../business-report-sums.ts";
 import { formNote } from "../client-find.ts";
-import type { AnnieTool, ToolContext } from "../engine.ts";
+import type { OwniTool, ToolContext } from "../engine.ts";
 import type { ExpenseStore } from "../expense-store.ts";
 import { cents as expenseCents } from "../expense-sums.ts";
 import { euros } from "../format-words.ts";
@@ -60,12 +60,12 @@ const DESCRIPTION = [
  * the export change anything (and the brief's status, which marks its alerts as said). Today is
  * read once per call.
  */
-export function createBudgetTools(options: BudgetToolsOptions): AnnieTool[] {
+export function createBudgetTools(options: BudgetToolsOptions): OwniTool[] {
 	const { store, workspace, timeZone } = options;
 	const now = options.now ?? (() => new Date());
 	const scanner = options.scanner ?? new InvoiceScanner(workspace);
 	const dayOf = dayOfIn(timeZone);
-	const who = (ctx: ToolContext) => (ctx.thread === undefined ? "annie" : (options.whoIs(ctx.thread) ?? `${ctx.thread.channel}:${ctx.thread.threadId}`));
+	const who = (ctx: ToolContext) => (ctx.thread === undefined ? "owni" : (options.whoIs(ctx.thread) ?? `${ctx.thread.channel}:${ctx.thread.threadId}`));
 	const marker = (ctx: ToolContext): Marker => ({ by: who(ctx), at: now().toISOString() });
 	const audit = async (ctx: ToolContext, op: BudgetEvent["op"], count: number) => {
 		// Its own step: an audit that failed is written on the rerun, after the change it records.

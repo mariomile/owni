@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
 import { AudioError, audioInfo, audioLabel, splitAudio } from "../audio.ts";
-import type { AnnieTool } from "../engine.ts";
+import type { OwniTool } from "../engine.ts";
 import { pool } from "../pool.ts";
 import { clock, type Passage, type PieceTranscript, passages, RECORDING_LIMITS, recordingName, speakerNames, type TranscribePiece, type TranscriptionAbilities, TranscriptionFailed, TranscriptionNotAllowed, transcriptMarkdown } from "../recordings.ts";
 import { freePath, type Workspace, WorkspaceError } from "../workspace.ts";
@@ -29,7 +29,7 @@ const PARALLEL_PIECES = 3;
  * Recordings to text (ADR 0033): a meeting, a call, a lesson or a video in the workspace becomes a
  * transcript with the time of each passage, saved in trascrizioni/, ready for a summary or minutes.
  */
-export function createRecordingTools(options: RecordingToolsOptions): AnnieTool[] {
+export function createRecordingTools(options: RecordingToolsOptions): OwniTool[] {
 	const { workspace, abilities } = options;
 	return [
 		{

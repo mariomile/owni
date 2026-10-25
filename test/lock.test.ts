@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { piDurableEngine } from "../src/core/adapters/pi-durable.ts";
-import { AnnieRuntime, InstanceLocked } from "../src/core/index.ts";
+import { OwniRuntime, InstanceLocked } from "../src/core/index.ts";
 import { runtimeWithInstance } from "./helpers.ts";
 import { kill9, spawnFixture, type Worker } from "./processes.ts";
 
@@ -24,7 +24,7 @@ describe("instance lock", () => {
 		const { runtime, dataDir } = await runtimeWithInstance({});
 		await runtime.openInstance("acme", "ops");
 
-		const other = new AnnieRuntime({ dataDir, engine: piDurableEngine });
+		const other = new OwniRuntime({ dataDir, engine: piDurableEngine });
 		const error = await other.openInstance("acme", "ops").catch((e: unknown) => e);
 		expect(error).toBeInstanceOf(InstanceLocked);
 		expect((error as Error).message).toContain(`Instance acme/ops is already open in another process (pid ${process.pid} on `);

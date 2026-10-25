@@ -235,7 +235,7 @@ export class BoardWork {
 		for (const seen of this.deps.store.list()) {
 			if (seen.due === undefined || seen.status === "fatto" || seen.dueNoticed === seen.due || dueIn(seen.due, now) > 0) continue;
 			// Recorded first: a notice that fails is not repeated every sweep.
-			const card = this.deps.store.update(seen.id, { dueNoticed: seen.due }, { kind: "agent", id: seen.assignee ?? "annie" });
+			const card = this.deps.store.update(seen.id, { dueNoticed: seen.due }, { kind: "agent", id: seen.assignee ?? "owni" });
 			const due = card.due as string;
 			told++;
 			const work = card.work;

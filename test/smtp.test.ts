@@ -89,22 +89,22 @@ async function fakeSmtp(options: { starttls?: boolean; auth?: string; refuseLogi
 	return { port: (server.address() as AddressInfo).port, log, mails };
 }
 
-const mail = { to: "anna@example.com", subject: "Il tuo link per entrare in Owni", text: "Apri questo link:\n\nhttps://annie.example.it/verify#abc\n" };
+const mail = { to: "anna@example.com", subject: "Il tuo link per entrare in Owni", text: "Apri questo link:\n\nhttps://owni.example.it/verify#abc\n" };
 
 describe("SMTP mailer", () => {
 	it("sends over STARTTLS with AUTH PLAIN, the text in UTF-8, the password never in an error", async () => {
 		const smtp = await fakeSmtp({ starttls: true, auth: "PLAIN LOGIN" });
-		await new SmtpMailer({ host: "localhost", port: smtp.port, security: "starttls", user: "u", password: "segreto", from: "Owni <accesso@annie.example.it>", ca: cert }).send(mail);
+		await new SmtpMailer({ host: "localhost", port: smtp.port, security: "starttls", user: "u", password: "segreto", from: "Owni <accesso@owni.example.it>", ca: cert }).send(mail);
 		expect(smtp.log.map((l) => l.split(" ")[0])).toEqual(["EHLO", "STARTTLS", "EHLO", "AUTH", "MAIL", "RCPT", "DATA", "QUIT"]);
 		expect(smtp.log).toContain("RCPT TO:<anna@example.com>");
-		expect(smtp.log).toContain("MAIL FROM:<accesso@annie.example.it>");
+		expect(smtp.log).toContain("MAIL FROM:<accesso@owni.example.it>");
 		const [sent] = smtp.mails;
 		expect(sent).toContain("Subject: Il tuo link per entrare in Owni");
 		const body = (sent ?? "").split("\r\n\r\n")[1]?.replace(/\r\n/g, "") ?? "";
-		expect(Buffer.from(body, "base64").toString("utf8")).toContain("https://annie.example.it/verify#abc");
+		expect(Buffer.from(body, "base64").toString("utf8")).toContain("https://owni.example.it/verify#abc");
 		// Wrong password: the error says so without what was sent.
 		const refusing = await fakeSmtp({ starttls: true, auth: "PLAIN", refuseLogin: true });
-		const failed = new SmtpMailer({ host: "localhost", port: refusing.port, security: "starttls", user: "u", password: "segreto", from: "accesso@annie.example.it", ca: cert }).send(mail);
+		const failed = new SmtpMailer({ host: "localhost", port: refusing.port, security: "starttls", user: "u", password: "segreto", from: "accesso@owni.example.it", ca: cert }).send(mail);
 		await expect(failed).rejects.toThrow(/answered 535$/);
 	});
 

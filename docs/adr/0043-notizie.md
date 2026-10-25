@@ -13,10 +13,10 @@ Un tool, `news_headlines`, che legge i feed RSS e Atom pubblici di giornali scel
   - Lo stesso titolo o lo stesso link da più feed compare una volta sola.
 - **Senza filtri** legge solo i feed «ultima ora» e «italia», così la prima risposta sono le notizie principali italiane e non lo sport o la BBC.
 - **Il topic resta sul server.** I feed si scaricano interi e si filtrano in memoria: nessuna parola di chi scrive arriva a un giornale. Le parole si confrontano senza accenti né maiuscole, con una radice per singolari e plurali (banca e banche, treno e treni) che non allarga troppo (governo non trova governatore). «Oggi», «notizie», «ultime» e simili non sono un topic.
-- **Fonti.** Una lista di partenza (ANSA per sezione, Rai News, Sky TG24, Corriere della Sera, la Repubblica, Il Post, Il Sole 24 Ore, BBC per mondo e tecnologia) che l'operatore sostituisce con `ANNIE_NEWS_FEEDS` (fino a 30 feed, nome, indirizzo https e sezione).
+- **Fonti.** Una lista di partenza (ANSA per sezione, Rai News, Sky TG24, Corriere della Sera, la Repubblica, Il Post, Il Sole 24 Ore, BBC per mondo e tecnologia) che l'operatore sostituisce con `OWNI_NEWS_FEEDS` (fino a 30 feed, nome, indirizzo https e sezione).
 - **Prima dei feed, non la ricerca.** Le istruzioni dicono di usare `news_headlines` per le notizie e `web_search` solo per ciò che i feed non coprono (un giornale che non c'è, un fatto più vecchio di 72 ore); per aprire un articolo c'è `web_read`.
 - **Brief.** Se la persona ha chiesto le notizie nel brief (Owni lo salva in memoria), il brief del mattino aggiunge tre titoli delle ultime 12 ore. Il tool è consentito nella chat del brief perché scarica solo indirizzi fissati dall'operatore.
-- **Acceso dall'operatore** con `ANNIE_NEWS=1`, come meteo e cambi (ADR 0039, 0040). `pnpm annie check` prova ogni feed e avvisa per nome di quelli che non vanno; fallisce solo se non risponde nessuno.
+- **Acceso dall'operatore** con `OWNI_NEWS=1`, come meteo e cambi (ADR 0039, 0040). `pnpm owni check` prova ogni feed e avvisa per nome di quelli che non vanno; fallisce solo se non risponde nessuno.
 
 ## Limiti
 

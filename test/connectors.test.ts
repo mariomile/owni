@@ -130,7 +130,7 @@ describe("Gmail adapter (mocked fetch)", () => {
 		expect(result).toEqual({ sentMessageId: "sent-1" });
 
 		const lookup = api.calls.find((c) => c.url.pathname.endsWith("/messages"));
-		expect(lookup?.url.searchParams.get("q")).toMatch(/^in:sent rfc822msgid:<annie\.[0-9a-f]{32}@annie\.local>$/);
+		expect(lookup?.url.searchParams.get("q")).toMatch(/^in:sent rfc822msgid:<owni\.[0-9a-f]{32}@owni\.local>$/);
 		const send = api.calls.find((c) => c.url.pathname.endsWith("/send"));
 		const body = send?.body as { raw: string; threadId: string };
 		expect(body.threadId).toBe("thr-m1");

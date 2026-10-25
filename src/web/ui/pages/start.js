@@ -63,7 +63,7 @@ export async function viewStart(main) {
 					onclick: async () => {
 						try {
 							const { thread } = await api(`/api/instances/${inst.id}/threads`, { method: "POST", body: {} });
-							store(`annie.draft.${thread.id}`, "Cosa sai fare per me?");
+							store(`owni.draft.${thread.id}`, "Cosa sai fare per me?");
 							go("chat", thread.id);
 						} catch (error) {
 							toast(error.message, true);

@@ -6,13 +6,13 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { startAnnie } from "../src/app.ts";
+import { startOwni } from "../src/app.ts";
 import { piDurableEngine, toolSearch } from "../src/core/adapters/pi-durable.ts";
-import type { AnnieTool, DurableEngine } from "../src/core/index.ts";
-import { loadAnnieConfig } from "../src/main/config.ts";
+import type { OwniTool, DurableEngine } from "../src/core/index.ts";
+import { loadOwniConfig } from "../src/main/config.ts";
 import { runtimeWithInstance, waitFor } from "./helpers.ts";
 
-function tool(name: string, calls: string[], deferred?: true): AnnieTool {
+function tool(name: string, calls: string[], deferred?: true): OwniTool {
 	return {
 		name,
 		description: `The ${name} register.`,
@@ -51,7 +51,7 @@ describe("deferred tools (ADR 0100)", () => {
 			{ ...tool("magazzino_giacenze", []), description: "Il magazzino, quante unità restano di un articolo.\nSeconda riga.", deferred: true as const },
 		];
 		const search = toolSearch(registers);
-		const run = async (query: string, limit?: number, live: readonly AnnieTool[] = registers) => {
+		const run = async (query: string, limit?: number, live: readonly OwniTool[] = registers) => {
 			const api = { agent: async () => ({ deferred: live }) };
 			return search.execute({ query, ...(limit === undefined ? {} : { limit }) }, api as never, {} as never);
 		};
@@ -96,16 +96,16 @@ describe("deferred tools (ADR 0100)", () => {
 
 	describe("the tools Owni really gets", () => {
 		const realTools = async () => {
-			const tools = new Map<string, AnnieTool>();
+			const tools = new Map<string, OwniTool>();
 			const engine: DurableEngine = {
 				open: (options) => {
 					for (const t of options.tools) tools.set(t.name, t);
 					return piDurableEngine.open(options);
 				},
 			};
-			const config = loadAnnieConfig({ ANNIE_DATA_DIR: mkdtempSync(join(tmpdir(), "annie-deferred-")), ANNIE_MODEL_PROVIDER: "faux", ANNIE_WEB_PORT: "1", ANNIE_GOOGLE_CLIENT_ID: "id", ANNIE_GOOGLE_CLIENT_SECRET: "secret", ANNIE_GOOGLE_WRITE: "1" });
-			const annie = await startAnnie({ ...config, web: { ...config.web, port: 0 } }, { engine, schedulerIntervalMs: 3_600_000, log: () => {} });
-			await annie.stop();
+			const config = loadOwniConfig({ OWNI_DATA_DIR: mkdtempSync(join(tmpdir(), "owni-deferred-")), OWNI_MODEL_PROVIDER: "faux", OWNI_WEB_PORT: "1", OWNI_GOOGLE_CLIENT_ID: "id", OWNI_GOOGLE_CLIENT_SECRET: "secret", OWNI_GOOGLE_WRITE: "1" });
+			const owni = await startOwni({ ...config, web: { ...config.web, port: 0 } }, { engine, schedulerIntervalMs: 3_600_000, log: () => {} });
+			await owni.stop();
 			return tools;
 		};
 

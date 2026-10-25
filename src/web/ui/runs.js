@@ -198,7 +198,7 @@ export function runHistory(instances, { sources, names = new Map(), title = "Le 
 				rows.length ? h("ul.task-list", rows.map(({ run, inst }) => h("li.task-row.run-row",
 					h(`span.chip${run.status === "failed" ? ".bad" : run.status === "succeeded" ? ".ok" : ""}`, label(run)),
 					h("div.task-text", h("b", names.get(run.sourceId) ?? SOURCE[run.source] ?? "Esecuzione", " · ", inst.name), h("small", clock(run.createdAt)), details(run)),
-					h("a.btn.ghost.small", { href: `#/chat/${encodeURIComponent(run.threadId)}`, onclick: () => { state.instance = inst; store("annie.instance", inst.id); } }, "Apri chat"))))
+					h("a.btn.ghost.small", { href: `#/chat/${encodeURIComponent(run.threadId)}`, onclick: () => { state.instance = inst; store("owni.instance", inst.id); } }, "Apri chat"))))
 					: failures ? null : emptyNote("div.empty", "Nessuna esecuzione", "Quando un agente lavora per te, da una chat, un task o un'automazione, l'esito compare qui."));
 			} while (dirty);
 		})().finally(() => { refreshing = undefined; refreshButton.disabled = false; if (dirty) return refresh(); });

@@ -1,6 +1,6 @@
 # Piano: Owni Cloud
 
-Deciso con Mario il 16 ottobre 2026. Vocabolario in [`GLOSSARY.md`](../GLOSSARY.md), decisione di architettura in [ADR 0007](adr/0007-annie-cloud-a-celle.md).
+Deciso con Mario il 16 ottobre 2026. Vocabolario in [`GLOSSARY.md`](../GLOSSARY.md), decisione di architettura in [ADR 0007](adr/0007-owni-cloud-a-celle.md).
 
 ## Perché
 
@@ -45,7 +45,7 @@ Stato al 16 ottobre 2026 (settimana 7, su `main`): fatti Telegram via webhook, i
 - Brief proattivo del mattino con tool in sola lettura.
 - Misura: quante persone usano il brief dopo una settimana.
 
-Stato al 16 ottobre 2026 (branch `week-7`): fatta la memoria della persona. Owni ricorda con `memory_remember` e dimentica con `memory_forget`; quello che ricorda di chi le scrive le arriva con ogni messaggio di quella persona, in qualunque conversazione. Ogni persona vede e cancella solo le proprie memorie nella pagina Memoria della console; quelle condivise le gestisce l'owner. Fatti anche Google per persona (OAuth con PKCE dalla console, Gmail e Calendar in sola lettura, solo nelle conversazioni della persona, consentito istanza per istanza dall'owner; in cloud il control plane riceve il ritorno da Google e rimanda alla cella) e il brief del mattino (un clic nella pagina Task, ora e giorni a scelta). Prima di aprire Google a tutti serve la verifica dell'app: `gmail.readonly` richiede la valutazione di sicurezza annuale, `calendar.readonly` no, quindi si può partire con il solo calendario. La misura (quante persone usano il brief dopo una settimana) la dà `pnpm annie brief`: brief attivi, persone che l'hanno ricevuto negli ultimi 7 giorni, persone che poi hanno scritto nella sua chat.
+Stato al 16 ottobre 2026 (branch `week-7`): fatta la memoria della persona. Owni ricorda con `memory_remember` e dimentica con `memory_forget`; quello che ricorda di chi le scrive le arriva con ogni messaggio di quella persona, in qualunque conversazione. Ogni persona vede e cancella solo le proprie memorie nella pagina Memoria della console; quelle condivise le gestisce l'owner. Fatti anche Google per persona (OAuth con PKCE dalla console, Gmail e Calendar in sola lettura, solo nelle conversazioni della persona, consentito istanza per istanza dall'owner; in cloud il control plane riceve il ritorno da Google e rimanda alla cella) e il brief del mattino (un clic nella pagina Task, ora e giorni a scelta). Prima di aprire Google a tutti serve la verifica dell'app: `gmail.readonly` richiede la valutazione di sicurezza annuale, `calendar.readonly` no, quindi si può partire con il solo calendario. La misura (quante persone usano il brief dopo una settimana) la dà `pnpm owni brief`: brief attivi, persone che l'hanno ricevuto negli ultimi 7 giorni, persone che poi hanno scritto nella sua chat.
 
 ### Fase 3: il computer dell'agente (2-3 settimane)
 

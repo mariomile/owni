@@ -6,7 +6,7 @@
 import assert, { AssertionError } from "node:assert/strict";
 import { rm } from "node:fs/promises";
 import { GoogleClient } from "../../src/connectors/google.ts";
-import type { AnnieTool } from "../../src/core/engine.ts";
+import type { OwniTool } from "../../src/core/engine.ts";
 import { GoogleActionStore } from "../../src/core/google-actions.ts";
 import { instanceId, tenantId } from "../../src/core/ids.ts";
 import { MemoryStore } from "../../src/core/memory.ts";
@@ -31,7 +31,7 @@ export type OutcomeResult = { id: OutcomeId; status: "passed" | "failed" | "erro
 
 type Options = {
 	/** Tests inject faulty implementations under the SAME tool name to challenge the oracle. */
-	wrapTools?: (tools: AnnieTool[], google: GoogleClient) => AnnieTool[];
+	wrapTools?: (tools: OwniTool[], google: GoogleClient) => OwniTool[];
 };
 
 export async function runOutcome(id: OutcomeId, options: Options = {}): Promise<OutcomeResult> {

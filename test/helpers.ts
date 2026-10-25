@@ -2,13 +2,13 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { piDurableEngine } from "../src/core/adapters/pi-durable.ts";
-import { type AllowedUsers, type AnnieTool, AnnieRuntime, type EgressPolicy, type Reply } from "../src/core/index.ts";
+import { type AllowedUsers, type OwniTool, OwniRuntime, type EgressPolicy, type Reply } from "../src/core/index.ts";
 
 export function tempDataDir(): string {
-	return mkdtempSync(join(tmpdir(), "annie-test-"));
+	return mkdtempSync(join(tmpdir(), "owni-test-"));
 }
 
-export const FAUX_MODEL = { provider: "faux", modelId: "annie-dev" } as const;
+export const FAUX_MODEL = { provider: "faux", modelId: "owni-dev" } as const;
 
 /** A runtime with one tenant and one instance on the local deterministic model. */
 export async function runtimeWithInstance(options: {
@@ -17,13 +17,13 @@ export async function runtimeWithInstance(options: {
 	instance?: string;
 	egress?: EgressPolicy;
 	allowedUsers?: AllowedUsers;
-	tools?: AnnieTool[];
+	tools?: OwniTool[];
 	/** Tools that need the runtime itself (its stores), built when the instance opens. */
-	toolsFor?: (runtime: AnnieRuntime) => AnnieTool[];
-}): Promise<{ runtime: AnnieRuntime; dataDir: string; replies: Reply[] }> {
+	toolsFor?: (runtime: OwniRuntime) => OwniTool[];
+}): Promise<{ runtime: OwniRuntime; dataDir: string; replies: Reply[] }> {
 	const dataDir = options.dataDir ?? tempDataDir();
 	const toolsFor = options.toolsFor;
-	const runtime: AnnieRuntime = new AnnieRuntime({ dataDir, engine: piDurableEngine, tools: toolsFor === undefined ? (options.tools ?? []) : async () => toolsFor(runtime) });
+	const runtime: OwniRuntime = new OwniRuntime({ dataDir, engine: piDurableEngine, tools: toolsFor === undefined ? (options.tools ?? []) : async () => toolsFor(runtime) });
 	const tenant = options.tenant ?? "acme";
 	const instance = options.instance ?? "ops";
 	await runtime.registry.createTenant({ id: tenant, name: tenant });

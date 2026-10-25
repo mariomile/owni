@@ -6,16 +6,16 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { TelegramAdapter } from "../src/channels/telegram.ts";
 import { pieceTranscriber, type TranscriberConfig } from "../src/channels/voice.ts";
-import { type RunningAnnie, startAnnie } from "../src/app.ts";
+import { type RunningOwni, startOwni } from "../src/app.ts";
 import { piDurableEngine } from "../src/core/adapters/pi-durable.ts";
 import { AudioError, audioFormat, audioInfo, oggCrc, splitAudio } from "../src/core/audio.ts";
 import type { JsonValue, ToolContext } from "../src/core/engine.ts";
-import { AnnieRuntime } from "../src/core/index.ts";
+import { OwniRuntime } from "../src/core/index.ts";
 import { clock, type PieceTranscript, passages, recordingName, speakerNames, type TranscribePiece, TranscriptionFailed, TranscriptionNotAllowed, transcriptMarkdown } from "../src/core/recordings.ts";
 import { createRecordingTools, type RecordingToolsOptions } from "../src/core/tools/recording-tools.ts";
 import { Workspace } from "../src/core/workspace.ts";
 import { connectChannel } from "../src/gateway.ts";
-import { loadAnnieConfig } from "../src/main/config.ts";
+import { loadOwniConfig } from "../src/main/config.ts";
 import { FAUX_MODEL, tempDataDir, waitFor } from "./helpers.ts";
 
 const FIXTURES = join(import.meta.dirname, "fixtures", "audio");
@@ -219,7 +219,7 @@ describe("recordings: cut into pieces", () => {
 	});
 
 	it.skipIf(!hasFfmpeg())("every piece decodes cleanly with ffmpeg", () => {
-		const dir = mkdtempSync(join(tmpdir(), "annie-audio-"));
+		const dir = mkdtempSync(join(tmpdir(), "owni-audio-"));
 		for (const name of ["riunione.mp3", "riunione.m4a", "riunione.opus", "riunione.ogg", "video.mp4"]) {
 			for (const piece of splitAudio(fixture(name), name, TEN)) {
 				const path = join(dir, piece.name);
@@ -290,7 +290,7 @@ function context(memo = new Map<string, JsonValue>(), progress: string[] = []): 
 }
 
 function tools(overrides: Partial<RecordingToolsOptions> & { transcribe: TranscribePiece }) {
-	const workspace = new Workspace(mkdtempSync(join(tmpdir(), "annie-rec-")), { maxFileBytes: 100 * 1024 * 1024 });
+	const workspace = new Workspace(mkdtempSync(join(tmpdir(), "owni-rec-")), { maxFileBytes: 100 * 1024 * 1024 });
 	let left = 600 * 60;
 	const events: unknown[] = [];
 	const [tool] = createRecordingTools({
@@ -445,16 +445,16 @@ describe("the transcription service, for recordings", () => {
 	});
 
 	it("is configured from the environment, with checks", () => {
-		const env = { ANNIE_DATA_DIR: "/tmp/x", ANNIE_MODEL_PROVIDER: "faux", ANNIE_TRANSCRIBE_API_KEY: KEY };
-		const openai = loadAnnieConfig({ ...env, ANNIE_TRANSCRIBE_URL: "https://api.openai.com/v1" }).transcription;
+		const env = { OWNI_DATA_DIR: "/tmp/x", OWNI_MODEL_PROVIDER: "faux", OWNI_TRANSCRIBE_API_KEY: KEY };
+		const openai = loadOwniConfig({ ...env, OWNI_TRANSCRIBE_URL: "https://api.openai.com/v1" }).transcription;
 		expect([openai?.timestamps, openai?.speakers]).toEqual(["openai", false]);
-		const gpt = loadAnnieConfig({ ...env, ANNIE_TRANSCRIBE_URL: "https://api.openai.com/v1", ANNIE_TRANSCRIBE_MODEL: "gpt-4o-transcribe" }).transcription;
+		const gpt = loadOwniConfig({ ...env, OWNI_TRANSCRIBE_URL: "https://api.openai.com/v1", OWNI_TRANSCRIBE_MODEL: "gpt-4o-transcribe" }).transcription;
 		expect(gpt?.timestamps).toBe("none");
-		const own = loadAnnieConfig({ ...env, ANNIE_TRANSCRIBE_URL: "https://stt.example.com/v1", ANNIE_TRANSCRIBE_MODEL: "m", ANNIE_TRANSCRIBE_TIMESTAMPS: "openai", ANNIE_TRANSCRIBE_MAX_MINUTES: "60", ANNIE_TRANSCRIBE_MINUTES_PER_DAY: "0" }).transcription;
+		const own = loadOwniConfig({ ...env, OWNI_TRANSCRIBE_URL: "https://stt.example.com/v1", OWNI_TRANSCRIBE_MODEL: "m", OWNI_TRANSCRIBE_TIMESTAMPS: "openai", OWNI_TRANSCRIBE_MAX_MINUTES: "60", OWNI_TRANSCRIBE_MINUTES_PER_DAY: "0" }).transcription;
 		expect([own?.timestamps, own?.maxMinutes, own?.minutesPerDay]).toEqual(["openai", 60, 0]);
-		expect(() => loadAnnieConfig({ ...env, ANNIE_TRANSCRIBE_URL: "https://api.mistral.ai/v1", ANNIE_TRANSCRIBE_TIMESTAMPS: "word" })).toThrow(/ANNIE_TRANSCRIBE_TIMESTAMPS/);
-		expect(() => loadAnnieConfig({ ...env, ANNIE_TRANSCRIBE_URL: "https://api.mistral.ai/v1", ANNIE_TRANSCRIBE_MAX_MINUTES: "0" })).toThrow(/ANNIE_TRANSCRIBE_MAX_MINUTES/);
-		expect(() => loadAnnieConfig({ ...env, ANNIE_TRANSCRIBE_URL: "https://api.mistral.ai/v1", ANNIE_TRANSCRIBE_SPEAKERS: "yes" })).toThrow(/ANNIE_TRANSCRIBE_SPEAKERS/);
+		expect(() => loadOwniConfig({ ...env, OWNI_TRANSCRIBE_URL: "https://api.mistral.ai/v1", OWNI_TRANSCRIBE_TIMESTAMPS: "word" })).toThrow(/OWNI_TRANSCRIBE_TIMESTAMPS/);
+		expect(() => loadOwniConfig({ ...env, OWNI_TRANSCRIBE_URL: "https://api.mistral.ai/v1", OWNI_TRANSCRIBE_MAX_MINUTES: "0" })).toThrow(/OWNI_TRANSCRIBE_MAX_MINUTES/);
+		expect(() => loadOwniConfig({ ...env, OWNI_TRANSCRIBE_URL: "https://api.mistral.ai/v1", OWNI_TRANSCRIBE_SPEAKERS: "yes" })).toThrow(/OWNI_TRANSCRIBE_SPEAKERS/);
 	});
 });
 
@@ -465,7 +465,7 @@ afterEach(async () => {
 
 describe("recordings in an instance", () => {
 	it("a long audio sent on Telegram is kept as a recording, named with its length, not read as a message", async () => {
-		const runtime = new AnnieRuntime({ dataDir: tempDataDir(), engine: piDurableEngine });
+		const runtime = new OwniRuntime({ dataDir: tempDataDir(), engine: piDurableEngine });
 		closers.push(() => runtime.close());
 		await runtime.registry.createTenant({ id: "acme", name: "acme" });
 		await runtime.registry.createInstance("acme", { id: "ops", name: "ops", model: FAUX_MODEL, egress: { modelProviders: ["faux"], channels: ["telegram"] }, allowedUsers: { telegram: ["7"] } });
@@ -490,7 +490,7 @@ describe("recordings in an instance", () => {
 	});
 
 	it("a video on Telegram or WhatsApp lands in the workspace; without a transcription service a long voice note stays a voice note", async () => {
-		const runtime = new AnnieRuntime({ dataDir: tempDataDir(), engine: piDurableEngine });
+		const runtime = new OwniRuntime({ dataDir: tempDataDir(), engine: piDurableEngine });
 		closers.push(() => runtime.close());
 		await runtime.registry.createTenant({ id: "acme", name: "acme" });
 		await runtime.registry.createInstance("acme", { id: "ops", name: "ops", model: FAUX_MODEL, egress: { modelProviders: ["faux"], channels: ["telegram"] }, allowedUsers: { telegram: ["7"] } });
@@ -528,19 +528,19 @@ describe("recordings in an instance", () => {
 			asked.push(String((init?.body as FormData).get("file") instanceof Blob));
 			return Response.json({ text: "Decidiamo il budget.", segments: [{ start: 2, end: 4, text: "Decidiamo il budget." }] });
 		}) as typeof fetch;
-		const loaded = loadAnnieConfig({ ANNIE_DATA_DIR: tempDataDir(), ANNIE_MODEL_PROVIDER: "faux", ANNIE_WEB_PORT: "1", ANNIE_TRANSCRIBE_URL: "https://api.mistral.ai/v1", ANNIE_TRANSCRIBE_API_KEY: "sk-test-0123456789abcdef" });
-		const annie: RunningAnnie = await startAnnie({ ...loaded, web: { ...loaded.web, port: 0 } }, { schedulerIntervalMs: 60_000, log: () => {}, transcribeFetch });
-		closers.push(() => annie.stop());
-		const base = `http://127.0.0.1:${(annie.server.address() as AddressInfo).port}`;
-		const login = await fetch(`${base}/api/login`, { method: "POST", headers: { "x-annie": "1" }, body: JSON.stringify({ token: (annie.ownerLink as string).split("#")[1] }) });
+		const loaded = loadOwniConfig({ OWNI_DATA_DIR: tempDataDir(), OWNI_MODEL_PROVIDER: "faux", OWNI_WEB_PORT: "1", OWNI_TRANSCRIBE_URL: "https://api.mistral.ai/v1", OWNI_TRANSCRIBE_API_KEY: "sk-test-0123456789abcdef" });
+		const owni: RunningOwni = await startOwni({ ...loaded, web: { ...loaded.web, port: 0 } }, { schedulerIntervalMs: 60_000, log: () => {}, transcribeFetch });
+		closers.push(() => owni.stop());
+		const base = `http://127.0.0.1:${(owni.server.address() as AddressInfo).port}`;
+		const login = await fetch(`${base}/api/login`, { method: "POST", headers: { "x-owni": "1" }, body: JSON.stringify({ token: (owni.ownerLink as string).split("#")[1] }) });
 		const cookie = (login.headers.get("set-cookie") ?? "").split(";")[0] as string;
 		// biome-ignore lint: test
-		const api = async (path: string, body?: unknown): Promise<any> => (await fetch(`${base}${path}`, { method: body === undefined ? "GET" : "POST", headers: { cookie, "x-annie": "1" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) })).json();
-		const thread = (await api("/api/instances/annie/threads", {})).thread;
+		const api = async (path: string, body?: unknown): Promise<any> => (await fetch(`${base}${path}`, { method: body === undefined ? "GET" : "POST", headers: { cookie, "x-owni": "1" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) })).json();
+		const thread = (await api("/api/instances/owni/threads", {})).thread;
 		const reply = async (text: string): Promise<string> => {
-			const answers = async () => ((await api(`/api/instances/annie/threads/${thread.id}`)).entries as { from: string; text?: string }[]).filter((e) => e.from === "annie" && e.text !== undefined);
+			const answers = async () => ((await api(`/api/instances/owni/threads/${thread.id}`)).entries as { from: string; text?: string }[]).filter((e) => e.from === "owni" && e.text !== undefined);
 			const before = (await answers()).length;
-			await api(`/api/instances/annie/threads/${thread.id}/messages`, { text });
+			await api(`/api/instances/owni/threads/${thread.id}/messages`, { text });
 			for (const start = Date.now(); Date.now() - start < 20_000; ) {
 				const now = await answers();
 				if (now.length > before) return now.at(-1)?.text ?? "";
@@ -548,11 +548,11 @@ describe("recordings in an instance", () => {
 			}
 			throw new Error("no reply");
 		};
-		const record = await annie.runtime.registry.getInstance("default", "annie");
-		await annie.runtime.workspace("default", "annie").write("uploads/riunione.mp3", fixture("riunione.mp3"));
+		const record = await owni.runtime.registry.getInstance("default", "owni");
+		await owni.runtime.workspace("default", "owni").write("uploads/riunione.mp3", fixture("riunione.mp3"));
 		expect(await reply('/tool audio_transcribe {"path":"uploads/riunione.mp3"}')).toContain("Errore: la trascrizione non è attiva per questa istanza");
 		expect(asked).toEqual([]);
-		await annie.runtime.registry.setEgress("default", "annie", { ...record.egress, connectors: [...(record.egress.connectors ?? []), "voice"] });
+		await owni.runtime.registry.setEgress("default", "owni", { ...record.egress, connectors: [...(record.egress.connectors ?? []), "voice"] });
 		const out = await reply('/tool audio_transcribe {"path":"uploads/riunione.mp3"}');
 		expect(out).toContain("salvata in trascrizioni/riunione.md");
 		expect(out).toContain("[00:02] Decidiamo il budget.");

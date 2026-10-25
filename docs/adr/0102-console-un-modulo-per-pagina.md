@@ -5,12 +5,12 @@ Tutto il front end della console stava in un solo file, `src/web/ui/app.js`, di 
 ## Decisione
 
 - **Un modulo ES per pagina.** `app.js` resta il punto d'ingresso e avvia l'app. Le pagine sono in `src/web/ui/pages/` (chat, board, impostazioni, e così via); le parti della console che non sono una pagina (`shell.js`, `login.js`, `account.js`, `palette.js`, `pwa.js`, `listen.js`, `session.js`) stanno accanto a `app.js`.
-- **Un modulo comune che non importa nulla.** `common.js` tiene gli strumenti usati da tutti: costruzione del DOM, client API, stato, percorsi, volti degli agenti. Quando una chiamata riceve 401, `api()` emette l'evento `annie:unauthorized` e `session.js` mostra il login.
+- **Un modulo comune che non importa nulla.** `common.js` tiene gli strumenti usati da tutti: costruzione del DOM, client API, stato, percorsi, volti degli agenti. Quando una chiamata riceve 401, `api()` emette l'evento `owni:unauthorized` e `session.js` mostra il login.
 - **Le parti condivise stanno fuori dalle pagine.** Il menu dei comandi (`commands.js`), le schede delle azioni (`cards.js`), i modelli (`models.js`), la sezione Google (`google.js`), il ritorno dai connettori (`signin.js`), i passi di «Primi passi» (`setup.js`) e i toni (`tones.js`) sono moduli a sé; `copyBox` sta in `listen.js`.
 - **Una tabella delle pagine.** `PAGES` in `shell.js` ha una riga per pagina (id, etichetta, gruppo, funzione della pagina, se sta nella barra laterale) e la usano la shell e la palette dei comandi.
 - **Nessun cambio di comportamento.** Il codice è stato spostato così com'è: cambiano solo le righe `import` in testa e `export` davanti a quello che altre pagine usano.
 - **Nessun passaggio di build e nessuna dipendenza.** La pagina caricava già `app.js` come `type="module"`, quindi il browser carica i moduli da solo.
-- **Il server serve ogni file.** All'avvio `src/web/server.ts` elenca la cartella della UI e serve ogni file di un tipo noto al suo percorso: nessun elenco da tenere. Gli script sono serviti con `no-cache`, così i moduli di un deploy non si mescolano con quelli vecchi in cache. Il service worker (`sw.js`) non può elencare una cartella: tiene la sua lista `SHELL` e la sua cache passa a `annie-shell-v5`.
+- **Il server serve ogni file.** All'avvio `src/web/server.ts` elenca la cartella della UI e serve ogni file di un tipo noto al suo percorso: nessun elenco da tenere. Gli script sono serviti con `no-cache`, così i moduli di un deploy non si mescolano con quelli vecchi in cache. Il service worker (`sw.js`) non può elencare una cartella: tiene la sua lista `SHELL` e la sua cache passa a `owni-shell-v5`.
 
 ## Conseguenze
 

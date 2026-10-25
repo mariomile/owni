@@ -3,13 +3,13 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { piDurableEngine } from "../src/core/adapters/pi-durable.ts";
 import { relayAgentAnswer } from "../src/core/agent-messages.ts";
-import { AnnieRuntime, NotFound, type Reply } from "../src/core/index.ts";
+import { OwniRuntime, NotFound, type Reply } from "../src/core/index.ts";
 import { FAUX_MODEL, tempDataDir, waitFor } from "./helpers.ts";
 
 describe("deleting an agente (ADR 0046)", () => {
 	it("closes the open agente, removes everything it kept, and leaves the ID free", async () => {
 		const dataDir = tempDataDir();
-		const runtime = new AnnieRuntime({ dataDir, engine: piDurableEngine });
+		const runtime = new OwniRuntime({ dataDir, engine: piDurableEngine });
 		await runtime.registry.createTenant({ id: "acme", name: "acme" });
 		const create = () => runtime.registry.createInstance("acme", { id: "vendite", name: "Vendite", model: FAUX_MODEL, egress: { modelProviders: ["faux"], channels: ["test"] }, allowedUsers: { test: ["u"] } });
 		await create();
@@ -44,7 +44,7 @@ describe("deleting an agente (ADR 0046)", () => {
 
 	it("late writers after the deletion do not break the list nor reach a new agente with the same ID", async () => {
 		const dataDir = tempDataDir();
-		const runtime = new AnnieRuntime({ dataDir, engine: piDurableEngine });
+		const runtime = new OwniRuntime({ dataDir, engine: piDurableEngine });
 		await runtime.registry.createTenant({ id: "acme", name: "acme" });
 		const create = (id: string) => runtime.registry.createInstance("acme", { id, name: id, model: FAUX_MODEL, egress: { modelProviders: ["faux"], channels: ["test"] }, allowedUsers: { test: ["u"] } });
 		await create("vendite");
@@ -69,7 +69,7 @@ describe("deleting an agente (ADR 0046)", () => {
 
 	it("nothing reopens an agente while it is being deleted", async () => {
 		const dataDir = tempDataDir();
-		const runtime = new AnnieRuntime({ dataDir, engine: piDurableEngine });
+		const runtime = new OwniRuntime({ dataDir, engine: piDurableEngine });
 		await runtime.registry.createTenant({ id: "acme", name: "acme" });
 		await runtime.registry.createInstance("acme", { id: "vendite", name: "Vendite", model: FAUX_MODEL, egress: { modelProviders: ["faux"], channels: ["test"] }, allowedUsers: { test: ["u"] } });
 		await runtime.openInstance("acme", "vendite");

@@ -4,7 +4,7 @@ import { ActionQueue, type QueuedStatus } from "./action-queue.ts";
 import { AGENT_CHANNEL, AGENT_LIMITS, fencedAgentRequest, type Origin, parseAgentThread } from "./agent-messages.ts";
 import type { AuditEvent } from "./audit.ts";
 import { shownArgs } from "./connector-actions.ts";
-import type { AnnieTool, PersonCall, ToolContext } from "./engine.ts";
+import type { OwniTool, PersonCall, ToolContext } from "./engine.ts";
 import { readJsonFile, updateJsonFile } from "./locked-json.ts";
 import { oneLine } from "./plain-text.ts";
 
@@ -198,7 +198,7 @@ export type AgentRequestDeps = {
  * waiting for one of them. Opt-in: a tool that hands over no call keeps its refusal. Elsewhere (a
  * stanza, a person's turn) nothing changes.
  */
-export function withAgentRequests(tools: readonly AnnieTool[], deps: AgentRequestDeps): AnnieTool[] {
+export function withAgentRequests(tools: readonly OwniTool[], deps: AgentRequestDeps): OwniTool[] {
 	return tools.map((tool) => ({
 		...tool,
 		execute: async (args, ctx) => {
@@ -287,10 +287,10 @@ export function agentRequestReport(request: AgentRequest, self: { readonly id: s
  * Runs an approved request's tool, once, as the approver's own act: a person's yes for exactly
  * these arguments. Outside B's conversation with A (no thread), so no tool takes it for A's turn.
  */
-export async function runAgentRequest(tools: readonly AnnieTool[] | undefined, request: AgentRequest, signal: AbortSignal = new AbortController().signal): Promise<AgentRequestResult> {
+export async function runAgentRequest(tools: readonly OwniTool[] | undefined, request: AgentRequest, signal: AbortSignal = new AbortController().signal): Promise<AgentRequestResult> {
 	const tool = tools?.find((t) => t.name === request.tool);
 	if (tool === undefined) throw new AgentRequestError(`lo strumento ${request.tool} non c'è più`);
-	let out: Awaited<ReturnType<AnnieTool["execute"]>>;
+	let out: Awaited<ReturnType<OwniTool["execute"]>>;
 	try {
 		const by = request.decidedBy === undefined ? {} : { approvedBy: `${request.decidedBy.channel}:${request.decidedBy.userId}` };
 		out = await tool.execute({ ...request.args }, { callId: `agent-request:${request.id}`, origin: "person", signal, progress: () => {}, step: (_key, work) => work(), ...by });
@@ -306,7 +306,7 @@ export async function runAgentRequest(tools: readonly AnnieTool[] | undefined, r
  * Takes back what a request rejected or expired left (its `undo`: a draft made for it), as a
  * person's act of this agente, once: an error is the caller's to log, the decision stands.
  */
-export async function undoAgentRequest(tools: readonly AnnieTool[] | undefined, request: AgentRequest, signal: AbortSignal = new AbortController().signal): Promise<void> {
+export async function undoAgentRequest(tools: readonly OwniTool[] | undefined, request: AgentRequest, signal: AbortSignal = new AbortController().signal): Promise<void> {
 	if (request.undo === undefined) return;
 	const tool = tools?.find((t) => t.name === request.tool);
 	if (tool === undefined) throw new AgentRequestError(`lo strumento ${request.tool} non c'è più`);

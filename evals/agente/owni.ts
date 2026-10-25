@@ -6,12 +6,12 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { startAnnie } from "../../src/app.ts";
+import { startOwni } from "../../src/app.ts";
 import { piDurableEngine } from "../../src/core/adapters/pi-durable.ts";
 import type { DurableEngine } from "../../src/core/engine.ts";
 import { instanceId, tenantId } from "../../src/core/ids.ts";
 import { engineDir } from "../../src/core/paths.ts";
-import { loadAnnieConfig } from "../../src/main/config.ts";
+import { loadOwniConfig } from "../../src/main/config.ts";
 
 export const root = dirname(fileURLToPath(import.meta.url));
 
@@ -26,8 +26,8 @@ export async function loadCases(): Promise<AgentCase[]> {
 		.map((line) => JSON.parse(line) as AgentCase);
 }
 
-export async function bootAnnie(env: Record<string, string>) {
-	const dataDir = await mkdtemp(join(tmpdir(), "annie-eval-agente-"));
+export async function bootOwni(env: Record<string, string>) {
+	const dataDir = await mkdtemp(join(tmpdir(), "owni-eval-agente-"));
 	const tools = new Map<string, string[]>();
 	const engine: DurableEngine = {
 		open: (options) => {
@@ -36,11 +36,11 @@ export async function bootAnnie(env: Record<string, string>) {
 		},
 	};
 	try {
-		const config = loadAnnieConfig({ ...env, ANNIE_DATA_DIR: dataDir });
-		const annie = await startAnnie({ ...config, web: { ...config.web, port: 0 } }, { engine, schedulerIntervalMs: 3_600_000, log: () => {} });
-		const general = tools.get(engineDir(dataDir, tenantId("default"), instanceId("annie"))) ?? [];
-		const close = async () => { await annie.stop(); await rm(dataDir, { recursive: true, force: true }); };
-		return { annie, dataDir, tools: general, close };
+		const config = loadOwniConfig({ ...env, OWNI_DATA_DIR: dataDir });
+		const owni = await startOwni({ ...config, web: { ...config.web, port: 0 } }, { engine, schedulerIntervalMs: 3_600_000, log: () => {} });
+		const general = tools.get(engineDir(dataDir, tenantId("default"), instanceId("owni"))) ?? [];
+		const close = async () => { await owni.stop(); await rm(dataDir, { recursive: true, force: true }); };
+		return { owni, dataDir, tools: general, close };
 	} catch (error) {
 		await rm(dataDir, { recursive: true, force: true });
 		throw error;

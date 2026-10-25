@@ -2,7 +2,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { type RunningAnnie, startAnnie } from "../src/app.ts";
+import { type RunningOwni, startOwni } from "../src/app.ts";
 import { GOOGLE_SCOPE, GOOGLE_WRITE_SCOPE } from "../src/connectors/google.ts";
 import { AGENT_CHANNEL } from "../src/core/agent-messages.ts";
 import { readOnlyInBriefs } from "../src/core/brief.ts";
@@ -11,9 +11,9 @@ import { instanceId, tenantId } from "../src/core/ids.ts";
 import { invoiceCallReads } from "../src/core/invoices.ts";
 import { auditFile, instanceDir, workspaceDir } from "../src/core/paths.ts";
 import { REMINDER_LIMITS } from "../src/core/reminder-book.ts";
-import type { AnnieRuntime } from "../src/core/runtime.ts";
+import type { OwniRuntime } from "../src/core/runtime.ts";
 import type { MailProposal as ReminderProposal } from "../src/core/mail-requests.ts";
-import { loadAnnieConfig } from "../src/main/config.ts";
+import { loadOwniConfig } from "../src/main/config.ts";
 import { B70, BETA, COMUNE, cleanTemp, ctx, DELTA, FILES, fakeMail, fattura, G1, GAMMA, GNC, IBAN, IBAN_2, IBAN_SAVED, inside, NOW, outside, setup, TUESDAY, temp } from "./solleciti-fixtures.ts";
 import { loadTools } from "./helpers.ts";
 
@@ -165,7 +165,7 @@ describe("solleciti: recorded only when the person says so", () => {
 			googleActions: () => actions,
 			invoices: () => store,
 			submitNotice: async (_t: string, _i: string, n: { text: string }) => void notices.push(n.text),
-		} as unknown as AnnieRuntime;
+		} as unknown as OwniRuntime;
 		const items = [{ invoice: B70, level: 1 as const }];
 		const ask = (key: string) =>
 			actions.propose({ kind: "mail.send", personId: "p1", account: "anna@example.com", reason: "Sollecito", mail: { to: ["a@gamma.example"], cc: [], subject: "s", body: "b" }, thread: { channel: "web", threadId: "t1" }, reminders: items }, new Date(), key);
@@ -364,7 +364,7 @@ describe("solleciti: the store", () => {
 		expect(inside(await run({ op: "due", side: "incassare", range: "scadute" }))).toContain("sollecitata il 18/10");
 		// Through an approved mail: the request carries the same short key, recorded as it is.
 		const actions = new GoogleActionStore(join(dir, "google-actions"));
-		const runtime = { audit: () => ({ append: async () => {} }), googleActions: () => actions, invoices: () => store, submitNotice: async () => {} } as unknown as AnnieRuntime;
+		const runtime = { audit: () => ({ append: async () => {} }), googleActions: () => actions, invoices: () => store, submitNotice: async () => {} } as unknown as OwniRuntime;
 		const person = "p".repeat(400);
 		const sent = await actions.propose({ kind: "mail.send", personId: person, account: "anna@example.com", reason: "Sollecito", mail: { to: ["a@gamma.example"], cc: [], subject: "s", body: "b" }, thread: { channel: "web", threadId: "t1" }, reminders: items }, new Date(), "k");
 		await decideGoogleAction(runtime, "t", "i", sent.id, "approved", person, async () => ({ done: "inviata" }), () => {});
@@ -421,14 +421,14 @@ describe("solleciti in the app", () => {
 		expect(setup(FILES).tool.description).toContain("reminder: a payment reminder (sollecito) to customers late on invoices to collect");
 		const dataDir = temp();
 		const google = fakeGoogle();
-		const config = loadAnnieConfig({ ANNIE_DATA_DIR: dataDir, ANNIE_MODEL_PROVIDER: "faux", ANNIE_WEB_PORT: "1", ANNIE_GOOGLE_CLIENT_ID: "c", ANNIE_GOOGLE_CLIENT_SECRET: "s", ANNIE_GOOGLE_WRITE: "1" });
-		const annie: RunningAnnie = await startAnnie({ ...config, web: { ...config.web, port: 0 } }, { googleFetch: google.fetch, schedulerIntervalMs: 60_000, log: () => {} });
-		closers.push(() => annie.stop());
-		const base = `http://127.0.0.1:${(annie.server.address() as AddressInfo).port}`;
-		const login = await fetch(`${base}/api/login`, { method: "POST", headers: { "x-annie": "1" }, body: JSON.stringify({ token: (annie.ownerLink as string).split("#")[1] }) });
+		const config = loadOwniConfig({ OWNI_DATA_DIR: dataDir, OWNI_MODEL_PROVIDER: "faux", OWNI_WEB_PORT: "1", OWNI_GOOGLE_CLIENT_ID: "c", OWNI_GOOGLE_CLIENT_SECRET: "s", OWNI_GOOGLE_WRITE: "1" });
+		const owni: RunningOwni = await startOwni({ ...config, web: { ...config.web, port: 0 } }, { googleFetch: google.fetch, schedulerIntervalMs: 60_000, log: () => {} });
+		closers.push(() => owni.stop());
+		const base = `http://127.0.0.1:${(owni.server.address() as AddressInfo).port}`;
+		const login = await fetch(`${base}/api/login`, { method: "POST", headers: { "x-owni": "1" }, body: JSON.stringify({ token: (owni.ownerLink as string).split("#")[1] }) });
 		const cookie = (login.headers.get("set-cookie") ?? "").split(";")[0] as string;
 		const api = async (path: string, body?: unknown, method?: string) => {
-			const res = await fetch(`${base}${path}`, { method: method ?? (body === undefined ? "GET" : "POST"), headers: { cookie, "x-annie": "1" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+			const res = await fetch(`${base}${path}`, { method: method ?? (body === undefined ? "GET" : "POST"), headers: { cookie, "x-owni": "1" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
 			// biome-ignore lint: test
 			return (await res.json()) as any;
 		};
@@ -440,7 +440,7 @@ describe("solleciti in the app", () => {
 		writeFileSync(join(workspace, "fatture", "g1.xml"), G1);
 		const thread = (await api(`/api/instances/${config.instanceId}/threads`, {})).thread as { id: string };
 		const reply = async (text: string): Promise<string> => {
-			const answers = async () => ((await api(`/api/instances/${config.instanceId}/threads/${thread.id}`)).entries as { from: string; text?: string }[]).filter((e) => e.from === "annie");
+			const answers = async () => ((await api(`/api/instances/${config.instanceId}/threads/${thread.id}`)).entries as { from: string; text?: string }[]).filter((e) => e.from === "owni");
 			const before = (await answers()).length;
 			await api(`/api/instances/${config.instanceId}/threads/${thread.id}/messages`, { text });
 			for (const start = Date.now(); Date.now() - start < 30_000; ) {

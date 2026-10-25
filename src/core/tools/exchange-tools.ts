@@ -1,4 +1,4 @@
-import type { AnnieTool } from "../engine.ts";
+import type { OwniTool } from "../engine.ts";
 import { checkDate, type DayRates, type ExchangeRates, ExchangeRateError, FIRST_RATES_DATE, type RatesOn, type RatesSeries } from "../exchange-rates.ts";
 import { addDays } from "../italian-calendar.ts";
 import { capitalized, formatResult, italianDate, italianMoney, italianWeekday, MAX_MONEY } from "../italian-format.ts";
@@ -72,7 +72,7 @@ const RUB_LAST = "2022-03-01";
  * Exchange rates and conversions with the ECB's reference rates. The numbers come from outside
  * but are validated numbers, and the answer echoes no provider text: no fence is needed.
  */
-export function createExchangeTools(options: ExchangeToolsOptions): AnnieTool[] {
+export function createExchangeTools(options: ExchangeToolsOptions): OwniTool[] {
 	return [
 		{
 			name: "exchange_rate",

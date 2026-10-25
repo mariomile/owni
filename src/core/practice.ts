@@ -210,11 +210,11 @@ export class PracticeStore {
 
 /** Idempotent callback key: pratica + draft version + action. */
 export function callbackData(praticaId: string, draftVersion: number, action: "approve" | "edit" | "discard"): string {
-	return `annie:${praticaId}:${draftVersion}:${action}`;
+	return `owni:${praticaId}:${draftVersion}:${action}`;
 }
 
 export function parseCallbackData(data: string): { praticaId: string; draftVersion: number; action: "approve" | "edit" | "discard" } | undefined {
-	const m = /^annie:([a-f0-9]+):(\d+):(approve|edit|discard)$/.exec(data);
+	const m = /^owni:([a-f0-9]+):(\d+):(approve|edit|discard)$/.exec(data);
 	if (!m) return undefined;
 	return { praticaId: m[1]!, draftVersion: Number(m[2]), action: m[3] as "approve" | "edit" | "discard" };
 }

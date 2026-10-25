@@ -2,8 +2,8 @@ import { readdirSync, readFileSync } from "node:fs";
 import type { AddressInfo } from "node:net";
 import { join, sep } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { type RunningAnnie, startAnnie } from "../src/app.ts";
-import { loadAnnieConfig } from "../src/main/config.ts";
+import { type RunningOwni, startOwni } from "../src/app.ts";
+import { loadOwniConfig } from "../src/main/config.ts";
 import { tempDataDir } from "./helpers.ts";
 
 const ui = join(import.meta.dirname, "..", "src", "web", "ui");
@@ -38,16 +38,16 @@ describe("console modules", () => {
 });
 
 describe("console served from the UI directory", () => {
-	const running: RunningAnnie[] = [];
+	const running: RunningOwni[] = [];
 	afterEach(async () => {
 		for (const a of running.splice(0)) await a.stop();
 	});
 
 	it("serves every script with no-cache, so the modules of one deploy load together", async () => {
-		const config = loadAnnieConfig({ ANNIE_DATA_DIR: tempDataDir(), ANNIE_MODEL_PROVIDER: "faux", ANNIE_WEB_PORT: "1" });
-		const annie = await startAnnie({ ...config, web: { ...config.web, port: 0 } }, { schedulerIntervalMs: 3_600_000, log: () => {} });
-		running.push(annie);
-		const base = `http://127.0.0.1:${(annie.server.address() as AddressInfo).port}`;
+		const config = loadOwniConfig({ OWNI_DATA_DIR: tempDataDir(), OWNI_MODEL_PROVIDER: "faux", OWNI_WEB_PORT: "1" });
+		const owni = await startOwni({ ...config, web: { ...config.web, port: 0 } }, { schedulerIntervalMs: 3_600_000, log: () => {} });
+		running.push(owni);
+		const base = `http://127.0.0.1:${(owni.server.address() as AddressInfo).port}`;
 		for (const file of scripts) {
 			const res = await fetch(`${base}/${file}`);
 			expect(res.status, file).toBe(200);

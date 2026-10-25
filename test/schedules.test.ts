@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { piDurableEngine } from "../src/core/adapters/pi-durable.ts";
-import { AnnieRuntime, type Reply } from "../src/core/index.ts";
+import { OwniRuntime, type Reply } from "../src/core/index.ts";
 import { Scheduler } from "../src/core/scheduler.ts";
 import { ScheduleError, ScheduleStore } from "../src/core/schedules.ts";
 import { createScheduleTools } from "../src/core/tools/schedule-tools.ts";
 import { FAUX_MODEL, tempDataDir, waitFor } from "./helpers.ts";
 
 async function setup(dataDir = tempDataDir(), clock = { now: new Date("2026-10-15T08:00:00Z") }) {
-	const runtime: AnnieRuntime = new AnnieRuntime({
+	const runtime: OwniRuntime = new OwniRuntime({
 		dataDir,
 		engine: piDurableEngine,
 		tools: async (r) => createScheduleTools({ store: runtime.schedules(r.tenantId, r.id), defaultTimeZone: "Europe/Rome", now: () => clock.now }),

@@ -1,4 +1,4 @@
-import type { AnnieTool } from "../engine.ts";
+import type { OwniTool } from "../engine.ts";
 
 export type SlowCounterOptions = {
 	/** Simulated work per step. */
@@ -13,7 +13,7 @@ export type SlowCounterOptions = {
  * Example of a slow, replay-safe tool: counts to n, one durable step per number.
  * After a crash the call reruns, and steps already stored are skipped.
  */
-export function createSlowCounter(options: SlowCounterOptions = {}): AnnieTool {
+export function createSlowCounter(options: SlowCounterOptions = {}): OwniTool {
 	const stepMs = options.stepMs ?? 500;
 	return {
 		name: "slow_counter",

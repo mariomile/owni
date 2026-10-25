@@ -93,7 +93,7 @@ export async function viewChat(main) {
 				)
 			: entry.file
 			? fileLink(entry.file)
-			: entry.from === "annie"
+			: entry.from === "owni"
 			? reply(entry.text ?? "")
 			: h("div.body", entry.text ?? "");
 		const pictures = entry.images?.length
@@ -107,12 +107,12 @@ export async function viewChat(main) {
 					}),
 				)
 			: null;
-		const listen = entry.from === "annie" && entry.text ? listenButton(entry.text) : null;
+		const listen = entry.from === "owni" && entry.text ? listenButton(entry.text) : null;
 		// Under an answer, on hover (always on touch): copy it, listen to it.
-		const actions = entry.from === "annie" && entry.text ? h("div.msg-actions", copyButton(entry.text), listen) : null;
+		const actions = entry.from === "owni" && entry.text ? h("div.msg-actions", copyButton(entry.text), listen) : null;
 		// Which model wrote the reply: the chat's own, or the instance's when that could not answer.
 		const by = entry.model ? h("span.by", { title: `${entry.model.provider} · ${entry.model.modelId}` }, entry.model.name ?? entry.model.modelId) : null;
-		const el = h(`div.msg.${entry.from}`, h("div.meta", entry.from === "annie" ? [face(inst, 20), h("b.who", inst.name)] : null, fmt.time(entry.at), by), pictures, entry.text || entry.file || !pictures ? body : null, actions);
+		const el = h(`div.msg.${entry.from}`, h("div.meta", entry.from === "owni" ? [face(inst, 20), h("b.who", inst.name)] : null, fmt.time(entry.at), by), pictures, entry.text || entry.file || !pictures ? body : null, actions);
 		place(el);
 		return el;
 	};
@@ -149,7 +149,7 @@ export async function viewChat(main) {
 		if (event.threadId !== threadId) return false;
 		stopTyping();
 		show(event.entry);
-		if (event.entry.from === "annie") void drawAsks();
+		if (event.entry.from === "owni") void drawAsks();
 		browser.lively();
 		screen.lively();
 		follow();
@@ -180,8 +180,8 @@ export async function viewChat(main) {
 	conversation.append(transcript, h("div.dock", asks, box.el));
 	transcript.scrollTop = transcript.scrollHeight;
 	// A message written on the empty chat: sent as soon as its conversation opens.
-	if (main.isConnected && store(`annie.autosend.${threadId}`) === "1") {
-		store(`annie.autosend.${threadId}`, null);
+	if (main.isConnected && store(`owni.autosend.${threadId}`) === "1") {
+		store(`owni.autosend.${threadId}`, null);
 		void box.submit();
 	}
 	// Opening a conversation to read it must not summon the phone's keyboard.
@@ -195,7 +195,7 @@ export async function viewChat(main) {
  */
 function browserPanel(inst, threadId, onShow) {
 	const base = `/api/instances/${inst.id}/threads/${encodeURIComponent(threadId)}/browser`;
-	const seenKey = `annie.browser.${threadId}`;
+	const seenKey = `owni.browser.${threadId}`;
 	// This panel is for the signed-in person's private conversation; the API enforces its ownership.
 	let version = -1;
 	let wasOpen = false;
@@ -464,7 +464,7 @@ function browserPanel(inst, threadId, onShow) {
  */
 function screenPanel(inst, threadId, onShow) {
 	const base = `/api/instances/${inst.id}/threads/${encodeURIComponent(threadId)}/screen`;
-	const seenKey = `annie.screen.${threadId}`;
+	const seenKey = `owni.screen.${threadId}`;
 	let version = -1;
 	// A picture gone between the question and the download (the screen reset): asked again next time.
 	const picture = h("img.screen", { alt: "", hidden: true, onerror: () => { version = -1; } });
@@ -547,9 +547,9 @@ function landing(inst, conversation) {
 	let picked;
 	const box = chatBox(inst, `new.${inst.id}`, conversation, async (text, images) => {
 		const { thread } = await api(`/api/instances/${inst.id}/threads`, { method: "POST", body: picked ? { model: { provider: picked.provider, modelId: picked.modelId } } : {} });
-		store(`annie.draft.${thread.id}`, text);
-		if (images.length) store(`annie.pending.${thread.id}`, JSON.stringify(images));
-		store(`annie.autosend.${thread.id}`, "1");
+		store(`owni.draft.${thread.id}`, text);
+		if (images.length) store(`owni.pending.${thread.id}`, JSON.stringify(images));
+		store(`owni.autosend.${thread.id}`, "1");
 		go("chat", thread.id);
 	}, modelPill(inst, undefined, async (model) => {
 		picked = model;
@@ -772,10 +772,10 @@ export function closeModelMenu() {
  */
 function chatBox(inst, key, dropZone, onSend, extra = null) {
 	const picture = (path) => pictureUrl(inst, path);
-	const draftKey = `annie.draft.${key}`;
+	const draftKey = `owni.draft.${key}`;
 	const input = h("textarea", { rows: 1, placeholder: `Scrivi a ${inst.name}…`, title: "Invio per inviare, Maiusc+Invio per andare a capo", "aria-label": "Messaggio", value: store(draftKey) ?? "" });
 	// Photos uploaded for the next message: shown above the box until it is sent, kept with the draft.
-	const pendingKey = `annie.pending.${key}`;
+	const pendingKey = `owni.pending.${key}`;
 	const pending = (() => {
 		try {
 			const saved = JSON.parse(store(pendingKey) ?? "[]");

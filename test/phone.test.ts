@@ -1,12 +1,12 @@
 import { createHmac } from "node:crypto";
 import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
-import { type RunningAnnie, startAnnie } from "../src/app.ts";
+import { type RunningOwni, startOwni } from "../src/app.ts";
 import { connectTwilioNumber, type PendingReplies, PHONE_NOTE, PhoneAdapter, spoken } from "../src/channels/phone.ts";
 import { ChannelRefused, type InboundMessage } from "../src/channels/types.ts";
 import { type Schedule, type ScheduleStore, schedulePerson } from "../src/core/schedules.ts";
 import { createScheduleTools } from "../src/core/tools/schedule-tools.ts";
-import { loadAnnieConfig } from "../src/main/config.ts";
+import { loadOwniConfig } from "../src/main/config.ts";
 import { tempDataDir } from "./helpers.ts";
 
 const closers: (() => Promise<void>)[] = [];
@@ -49,8 +49,8 @@ function adapter(options: { pending?: PendingReplies; allowed?: string[]; waitMs
 	return new PhoneAdapter({
 		credentials: { accountSid: ACCOUNT, authToken: AUTH, number: NUMBER, numberSid: NUMBER_SID, pin: PIN },
 		tenantId: "default",
-		instanceId: "annie",
-		publicUrl: "https://annie.example.it",
+		instanceId: "owni",
+		publicUrl: "https://owni.example.it",
 		pending: options.pending ?? memoryPending(),
 		mayCall: async (n) => (options.allowed ?? [CALLER]).includes(n),
 		voice: "Polly.Bianca",
@@ -61,7 +61,7 @@ function adapter(options: { pending?: PendingReplies; allowed?: string[]; waitMs
 
 const call = (extra: Record<string, string> = {}) => new URLSearchParams({ CallSid: SID, AccountSid: ACCOUNT, From: CALLER, To: NUMBER, ...extra });
 const q = (s: string) => new URLSearchParams(s);
-const out = (text: string, key = "k") => ({ tenantId: "default", instanceId: "annie", channel: "phone", threadId: CALLER, text, idempotencyKey: key });
+const out = (text: string, key = "k") => ({ tenantId: "default", instanceId: "owni", channel: "phone", threadId: CALLER, text, idempotencyKey: key });
 
 /** A call through the code, ready to talk. */
 async function answered(phone: PhoneAdapter, sid = SID): Promise<string> {
@@ -76,7 +76,7 @@ describe("Phone adapter", () => {
 		const params = { CallSid: SID, From: CALLER, SpeechResult: "ciao" };
 		const body = new URLSearchParams(params);
 		expect(phone.signed(url, body, twilioSign(url, params))).toBe(true);
-		expect(phone.signed(url, body, twilioSign("https://annie.example.it:443/hooks/phone/annie?step=heard&turn=1", params))).toBe(true);
+		expect(phone.signed(url, body, twilioSign("https://owni.example.it:443/hooks/phone/owni?step=heard&turn=1", params))).toBe(true);
 		expect(phone.signed(url, body, twilioSign(url, params, "f".repeat(32)))).toBe(false);
 		expect(phone.signed(`${url}x`, body, twilioSign(url, params))).toBe(false);
 		expect(phone.signed(url, new URLSearchParams({ ...params, SpeechResult: "altro" }), twilioSign(url, params))).toBe(false);
@@ -141,7 +141,7 @@ describe("Phone adapter", () => {
 		await answered(phone);
 		const first = await phone.handle(q("step=heard&turn=1"), call({ SpeechResult: "Fammi un riassunto" }));
 		expect(first).toContain("Un momento.");
-		expect(first).toContain('<Redirect method="POST">https://annie.example.it/hooks/phone/annie?step=wait&amp;turn=1&amp;n=1</Redirect>');
+		expect(first).toContain('<Redirect method="POST">https://owni.example.it/hooks/phone/owni?step=wait&amp;turn=1&amp;n=1</Redirect>');
 		const last = await phone.handle(q("step=wait&turn=1&n=1"), call());
 		expect(last).toContain("Richiamami");
 		expect(last).toContain("<Hangup/>");
@@ -180,7 +180,7 @@ describe("Phone adapter", () => {
 	it("a file is named, not read, and does not count as the answer", async () => {
 		const pending = memoryPending();
 		const phone = adapter({ pending });
-		await phone.sendFile({ tenantId: "default", instanceId: "annie", channel: "phone", threadId: CALLER, name: "q3_summary.pdf", data: new Uint8Array([1]), path: "out/q3_summary.pdf", idempotencyKey: "f" });
+		await phone.sendFile({ tenantId: "default", instanceId: "owni", channel: "phone", threadId: CALLER, name: "q3_summary.pdf", data: new Uint8Array([1]), path: "out/q3_summary.pdf", idempotencyKey: "f" });
 		expect(pending.all.get(CALLER)?.[0]?.text).toBe("Ti ho preparato un file, q3 summary: lo trovi nella console, fra i file.");
 	});
 
@@ -252,39 +252,39 @@ function fakeTwilio() {
 describe("connectTwilioNumber", () => {
 	it("finds the number in the account and points its calls at the cell", async () => {
 		const twilio = fakeTwilio();
-		expect(await connectTwilioNumber({ accountSid: ACCOUNT, authToken: AUTH, number: NUMBER, voiceUrl: "https://annie.example.it/hooks/phone/annie", fetch: twilio.fn })).toEqual({ numberSid: NUMBER_SID });
+		expect(await connectTwilioNumber({ accountSid: ACCOUNT, authToken: AUTH, number: NUMBER, voiceUrl: "https://owni.example.it/hooks/phone/owni", fetch: twilio.fn })).toEqual({ numberSid: NUMBER_SID });
 		const set = twilio.calls.at(-1);
 		expect(set?.method).toBe("POST");
-		expect(new URLSearchParams(set?.body)).toEqual(new URLSearchParams({ VoiceUrl: "https://annie.example.it/hooks/phone/annie", VoiceMethod: "POST" }));
+		expect(new URLSearchParams(set?.body)).toEqual(new URLSearchParams({ VoiceUrl: "https://owni.example.it/hooks/phone/owni", VoiceMethod: "POST" }));
 		await expect(connectTwilioNumber({ accountSid: ACCOUNT, authToken: "f".repeat(32), number: NUMBER, voiceUrl: "x", fetch: twilio.fn })).rejects.toBeInstanceOf(ChannelRefused);
 		await expect(connectTwilioNumber({ accountSid: ACCOUNT, authToken: AUTH, number: "+390699999999", voiceUrl: "x", fetch: twilio.fn })).rejects.toThrow("non è nell'account");
 	});
 });
 
 describe("Phone in an instance", () => {
-	async function boot(publicUrl = "https://annie.example.it", dataDir = tempDataDir(), session?: string) {
+	async function boot(publicUrl = "https://owni.example.it", dataDir = tempDataDir(), session?: string) {
 		const twilio = fakeTwilio();
-		const config = loadAnnieConfig({ ANNIE_DATA_DIR: dataDir, ANNIE_MODEL_PROVIDER: "faux", ANNIE_WEB_PORT: "1", ANNIE_PUBLIC_URL: publicUrl });
-		const annie: RunningAnnie = await startAnnie({ ...config, web: { ...config.web, port: 0 } }, { phoneFetch: twilio.fn, phoneWait: { ms: 1_500, max: 3 }, schedulerIntervalMs: 60_000, log: () => {} });
+		const config = loadOwniConfig({ OWNI_DATA_DIR: dataDir, OWNI_MODEL_PROVIDER: "faux", OWNI_WEB_PORT: "1", OWNI_PUBLIC_URL: publicUrl });
+		const owni: RunningOwni = await startOwni({ ...config, web: { ...config.web, port: 0 } }, { phoneFetch: twilio.fn, phoneWait: { ms: 1_500, max: 3 }, schedulerIntervalMs: 60_000, log: () => {} });
 		let stopped = false;
 		const stop = async () => {
-			if (!stopped) await annie.stop();
+			if (!stopped) await owni.stop();
 			stopped = true;
 		};
 		closers.push(stop);
-		const base = `http://127.0.0.1:${(annie.server.address() as AddressInfo).port}`;
+		const base = `http://127.0.0.1:${(owni.server.address() as AddressInfo).port}`;
 		// After a restart there is no new owner link: the session from before still holds.
 		const cookie =
 			session ??
 			((
-				await fetch(`${base}/api/login`, { method: "POST", headers: { "x-annie": "1" }, body: JSON.stringify({ token: (annie.ownerLink as string).split("#")[1] }) })
+				await fetch(`${base}/api/login`, { method: "POST", headers: { "x-owni": "1" }, body: JSON.stringify({ token: (owni.ownerLink as string).split("#")[1] }) })
 			).headers.get("set-cookie") ?? "").split(";")[0] as string;
 		const api = async (path: string, body?: unknown, method?: string, as = cookie) => {
-			const res = await fetch(`${base}${path}`, { method: method ?? (body === undefined ? "GET" : "POST"), headers: { cookie: as, "x-annie": "1" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+			const res = await fetch(`${base}${path}`, { method: method ?? (body === undefined ? "GET" : "POST"), headers: { cookie: as, "x-owni": "1" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
 			return { status: res.status, ...((await res.json()) as any) };
 		};
 		const hook = async (query: string, params: Record<string, string>, signature?: string) => {
-			const res = await fetch(`${base}/hooks/phone/annie${query}`, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded", "x-twilio-signature": signature ?? twilioSign(`${publicUrl}/hooks/phone/annie${query}`, params) }, body: new URLSearchParams(params).toString() });
+			const res = await fetch(`${base}/hooks/phone/owni${query}`, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded", "x-twilio-signature": signature ?? twilioSign(`${publicUrl}/hooks/phone/owni${query}`, params) }, body: new URLSearchParams(params).toString() });
 			return { status: res.status, text: await res.text() };
 		};
 		return { api, hook, twilio, dataDir, stop, cookie };
@@ -293,21 +293,21 @@ describe("Phone in an instance", () => {
 
 	it("the owner connects a number; allowed callers talk to Owni after the code, strangers are rejected, forged webhooks refused", async () => {
 		const { api, hook, twilio, dataDir, stop, cookie } = await boot();
-		expect((await api("/api/instances/annie/phone")).phone).toMatchObject({ connected: false, https: true, allowedUsers: [] });
-		expect((await api("/api/instances/annie/phone", { accountSid: ACCOUNT, authToken: AUTH, number: NUMBER }, "PUT")).status).toBe(400);
-		expect((await api("/api/instances/annie/phone", { accountSid: ACCOUNT, authToken: AUTH, number: "0612345678", pin: PIN }, "PUT")).status).toBe(400);
-		expect((await api("/api/instances/annie/phone", { accountSid: ACCOUNT, authToken: AUTH, number: NUMBER, pin: "12" }, "PUT")).status).toBe(400);
-		expect((await api("/api/instances/annie/phone", { accountSid: ACCOUNT, authToken: "f".repeat(32), number: NUMBER, pin: PIN }, "PUT")).status).toBe(400);
-		expect((await api("/api/instances/annie/phone", { allowedUsers: ["393331234567"] }, "PUT")).status).toBe(400);
-		const connected = await api("/api/instances/annie/phone", { accountSid: ACCOUNT, authToken: AUTH, number: NUMBER, pin: PIN, allowedUsers: [CALLER] }, "PUT");
+		expect((await api("/api/instances/owni/phone")).phone).toMatchObject({ connected: false, https: true, allowedUsers: [] });
+		expect((await api("/api/instances/owni/phone", { accountSid: ACCOUNT, authToken: AUTH, number: NUMBER }, "PUT")).status).toBe(400);
+		expect((await api("/api/instances/owni/phone", { accountSid: ACCOUNT, authToken: AUTH, number: "0612345678", pin: PIN }, "PUT")).status).toBe(400);
+		expect((await api("/api/instances/owni/phone", { accountSid: ACCOUNT, authToken: AUTH, number: NUMBER, pin: "12" }, "PUT")).status).toBe(400);
+		expect((await api("/api/instances/owni/phone", { accountSid: ACCOUNT, authToken: "f".repeat(32), number: NUMBER, pin: PIN }, "PUT")).status).toBe(400);
+		expect((await api("/api/instances/owni/phone", { allowedUsers: ["393331234567"] }, "PUT")).status).toBe(400);
+		const connected = await api("/api/instances/owni/phone", { accountSid: ACCOUNT, authToken: AUTH, number: NUMBER, pin: PIN, allowedUsers: [CALLER] }, "PUT");
 		expect(connected.phone).toMatchObject({ connected: true, number: NUMBER, accountSid: ACCOUNT, allowedUsers: [CALLER] });
 		expect(JSON.stringify(connected)).not.toContain(AUTH);
 		expect(JSON.stringify(connected)).not.toContain(PIN);
-		expect(new URLSearchParams(twilio.calls.at(-1)?.body).get("VoiceUrl")).toBe("https://annie.example.it/hooks/phone/annie");
+		expect(new URLSearchParams(twilio.calls.at(-1)?.body).get("VoiceUrl")).toBe("https://owni.example.it/hooks/phone/owni");
 		// Saving only the list, or only the code, does not call Twilio.
 		const before = twilio.calls.length;
-		expect((await api("/api/instances/annie/phone", { allowedUsers: [CALLER, "+393479876543"] }, "PUT")).phone.allowedUsers).toHaveLength(2);
-		expect((await api("/api/instances/annie/phone", { pin: PIN }, "PUT")).status).toBe(200);
+		expect((await api("/api/instances/owni/phone", { allowedUsers: [CALLER, "+393479876543"] }, "PUT")).phone.allowedUsers).toHaveLength(2);
+		expect((await api("/api/instances/owni/phone", { pin: PIN }, "PUT")).status).toBe(200);
 		expect(twilio.calls).toHaveLength(before);
 
 		expect((await hook("", start(), "forged")).status).toBe(403);
@@ -323,19 +323,19 @@ describe("Phone in an instance", () => {
 		expect(twice.text).toContain("Un momento.");
 
 		// Only the owner.
-		expect((await api("/api/instances/annie/phone", undefined, "GET", "")).status).toBe(401);
+		expect((await api("/api/instances/owni/phone", undefined, "GET", "")).status).toBe(401);
 		expect((await api("/api/instances/nessuna/phone", undefined, "DELETE")).status).toBe(404);
 
 		// After a restart the number answers again, and is pointed at this cell again.
 		await stop();
-		const again = await boot("https://annie.example.it", dataDir, cookie);
+		const again = await boot("https://owni.example.it", dataDir, cookie);
 		for (const t = Date.now(); !again.twilio.calls.some((c) => c.method === "POST") && Date.now() - t < 5_000; ) await new Promise((r) => setTimeout(r, 20));
 		expect(again.twilio.calls.some((c) => c.method === "POST")).toBe(true);
 		expect((await again.hook("", start(SID2))).text).toContain("Digita il tuo codice");
 
 		// Disconnected: the number still points here, and its calls are refused before they are answered.
-		expect((await again.api("/api/instances/annie/phone", undefined, "DELETE")).status).toBe(200);
-		expect((await again.api("/api/instances/annie/phone")).phone.connected).toBe(false);
+		expect((await again.api("/api/instances/owni/phone", undefined, "DELETE")).status).toBe(200);
+		expect((await again.api("/api/instances/owni/phone")).phone.connected).toBe(false);
 		expect((await again.hook("", start(`CA${"5".repeat(32)}`))).text).toContain("<Reject/>");
 	}, 30_000);
 
@@ -348,9 +348,9 @@ describe("Phone in an instance", () => {
 	});
 
 	it("without a public https address the number cannot be connected", async () => {
-		const { api } = await boot("http://annie.example.it");
-		expect((await api("/api/instances/annie/phone")).phone.https).toBe(false);
-		const res = await api("/api/instances/annie/phone", { accountSid: ACCOUNT, authToken: AUTH, number: NUMBER, pin: PIN }, "PUT");
+		const { api } = await boot("http://owni.example.it");
+		expect((await api("/api/instances/owni/phone")).phone.https).toBe(false);
+		const res = await api("/api/instances/owni/phone", { accountSid: ACCOUNT, authToken: AUTH, number: NUMBER, pin: PIN }, "PUT");
 		expect([res.status, res.error]).toEqual([400, expect.stringContaining("https")]);
 	});
 });

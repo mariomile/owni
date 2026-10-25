@@ -157,7 +157,7 @@ describe("BrowserProfiles", () => {
 	};
 
 	beforeEach(() => {
-		dataDir = mkdtempSync(join(tmpdir(), "annie-profiles-"));
+		dataDir = mkdtempSync(join(tmpdir(), "owni-profiles-"));
 		mkdirSync(instance(), { recursive: true });
 	});
 	afterEach(() => rmSync(dataDir, { recursive: true, force: true }));

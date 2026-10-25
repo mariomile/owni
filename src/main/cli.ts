@@ -1,5 +1,5 @@
 /**
- * `pnpm annie <command>`: what the owner does from the command line.
+ * `pnpm owni <command>`: what the owner does from the command line.
  *
  *   person add <name> [--owner] [--instance <id>]...   create a person, print their login link
  *   person list
@@ -22,13 +22,13 @@ import { turnStats, UsageLedger } from "../core/usage.ts";
 import { TenantRegistry } from "../core/registry.ts";
 import { PeopleStore, SessionStore } from "../web/auth.ts";
 import { runChecks } from "./check.ts";
-import { ConfigError, loadAnnieConfig } from "./config.ts";
+import { ConfigError, loadOwniConfig } from "./config.ts";
 
 if (existsSync(".env")) process.loadEnvFile(".env");
 
-const dataDir = process.env.ANNIE_DATA_DIR?.trim() || "data";
-const tenant = process.env.ANNIE_TENANT_ID?.trim() || "default";
-const base = process.env.ANNIE_PUBLIC_URL?.trim().replace(/\/+$/, "") || `http://localhost:${process.env.ANNIE_WEB_PORT?.trim() || "8080"}`;
+const dataDir = process.env.OWNI_DATA_DIR?.trim() || "data";
+const tenant = process.env.OWNI_TENANT_ID?.trim() || "default";
+const base = process.env.OWNI_PUBLIC_URL?.trim().replace(/\/+$/, "") || `http://localhost:${process.env.OWNI_WEB_PORT?.trim() || "8080"}`;
 const dir = tenantDir(dataDir, toTenantId(tenant));
 const people = new PeopleStore(dir);
 const registry = new TenantRegistry(dataDir);
@@ -36,14 +36,14 @@ const registry = new TenantRegistry(dataDir);
 const [group, command, ...rest] = process.argv.slice(2);
 
 function usage(): never {
-	console.error("usage: pnpm annie person add <name> [--owner] [--instance <id>]... | person list | person link <id> | person remove <id> | person reset-2fa <id> | check | brief | usage");
+	console.error("usage: pnpm owni person add <name> [--owner] [--instance <id>]... | person list | person link <id> | person remove <id> | person reset-2fa <id> | check | brief | usage");
 	process.exit(2);
 }
 
 if (group === "check") {
-	let config: ReturnType<typeof loadAnnieConfig>;
+	let config: ReturnType<typeof loadOwniConfig>;
 	try {
-		config = loadAnnieConfig(process.env);
+		config = loadOwniConfig(process.env);
 	} catch (error) {
 		if (!(error instanceof ConfigError)) throw error;
 		console.log(`✗ Configurazione: ${error.message}`);
@@ -106,7 +106,7 @@ switch (command) {
 	case "link": {
 		const id = rest[0] ?? usage();
 		if ((await people.get(id)) === undefined) {
-			console.error(`No person ${id}. See: pnpm annie person list`);
+			console.error(`No person ${id}. See: pnpm owni person list`);
 			process.exit(1);
 		}
 		const token = await people.rotate(id);
@@ -124,7 +124,7 @@ switch (command) {
 	case "reset-2fa": {
 		const id = rest[0] ?? usage();
 		if ((await people.get(id)) === undefined) {
-			console.error(`No person ${id}. See: pnpm annie person list`);
+			console.error(`No person ${id}. See: pnpm owni person list`);
 			process.exit(1);
 		}
 		await people.clearTotp(id);

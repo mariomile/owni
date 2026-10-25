@@ -52,7 +52,7 @@ function catalogGallery(inst, catalog, oauth, redirectUrl, added) {
 		"section.catalog",
 		h("h2", "Aggiungi in un clic"),
 		h("p.muted", "Servizi noti con un collegamento ufficiale per gli assistenti. Premi «Accedi e aggiungi»: entri con il tuo account sulla pagina del servizio e torni qui. L'accesso resta sul server di Owni, mai nel browser."),
-		oauth && !returnWorks(redirectUrl) ? h("p.chip.warn", "Questo server non ha un indirizzo https (ANNIE_PUBLIC_URL): molti servizi rifiutano di rimandarti qui dopo l'accesso.") : null,
+		oauth && !returnWorks(redirectUrl) ? h("p.chip.warn", "Questo server non ha un indirizzo https (OWNI_PUBLIC_URL): molti servizi rifiutano di rimandarti qui dopo l'accesso.") : null,
 		CATALOG_GROUPS.map(([group, label]) => {
 			const items = left.filter((e) => e.category === group);
 			return items.length ? h("div.stack", h("h3.section-title", label), h("div.gallery", items.map(card))) : null;

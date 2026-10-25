@@ -8,19 +8,19 @@ import { rmSync } from "node:fs";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
 import { afterEach, describe, expect, it } from "vitest";
-import type { AnnieRuntime, AnnieTool, ToolContext } from "../src/core/index.ts";
+import type { OwniRuntime, OwniTool, ToolContext } from "../src/core/index.ts";
 import { inputsOrigin } from "../src/core/adapters/pi-durable.ts";
 import { requirePersonFor, type TurnOrigin } from "../src/core/turn-origin.ts";
 import { runtimeWithInstance, tempDataDir, waitFor } from "./helpers.ts";
 
 const dirs: string[] = [];
-const runtimes: AnnieRuntime[] = [];
+const runtimes: OwniRuntime[] = [];
 afterEach(async () => {
 	for (const r of runtimes.splice(0)) await r.close();
 	for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
 });
 
-function probe(seen: (TurnOrigin | undefined)[]): AnnieTool {
+function probe(seen: (TurnOrigin | undefined)[]): OwniTool {
 	return {
 		name: "origin_probe",
 		description: "Says where the turn comes from.",
@@ -113,7 +113,7 @@ describe("turn origin (ADR 0088)", () => {
 
 describe("the inputs a run answers (ADR 0088)", () => {
 	type E = { kind: string; data?: unknown; model?: unknown[] };
-	const input = (origin?: TurnOrigin): E => (origin === undefined ? { kind: "pi.user", model: [{ role: "user", content: "x" }] } : { kind: "annie.input", data: { origin }, model: [{ role: "user", content: "x" }] });
+	const input = (origin?: TurnOrigin): E => (origin === undefined ? { kind: "pi.user", model: [{ role: "user", content: "x" }] } : { kind: "owni.input", data: { origin }, model: [{ role: "user", content: "x" }] });
 	const answer: E = { kind: "pi.assistant", model: [{ role: "assistant", content: [{ type: "text", text: "ok" }], stopReason: "stop" }] };
 	const calling: E = { kind: "pi.assistant", model: [{ role: "assistant", content: [{ type: "toolCall", id: "t", name: "x", arguments: {} }], stopReason: "toolUse" }] };
 	const result: E = { kind: "pi.toolResult", model: [{ role: "toolResult", toolCallId: "t", content: [] }] };
@@ -153,7 +153,7 @@ describe("the inputs a run answers (ADR 0088)", () => {
 		const long = [answer, input("notice"), ...Array.from({ length: 60 }, () => input("person"))];
 		const said: string[] = [];
 		expect(await inputsOrigin(of(long), 1 as never, (m) => said.push(m))).toBe("scheduled");
-		expect(said).toEqual(["annie: the scan for a turn's run reached its bound before the start of the run; the turn is not taken for a person's"]);
+		expect(said).toEqual(["owni: the scan for a turn's run reached its bound before the start of the run; the turn is not taken for a person's"]);
 		// The default logger says it once per process.
 		const errors: unknown[] = [];
 		const original = console.error;

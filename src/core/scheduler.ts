@@ -6,7 +6,7 @@ export type SchedulerTarget = {
 	readonly tenantId: string;
 	readonly instanceId: string;
 	readonly store: ScheduleStore;
-	/** Admit the run into the instance (AnnieRuntime.submitScheduled). */
+	/** Admit the run into the instance (OwniRuntime.submitScheduled). */
 	readonly submit: (request: { channel: string; threadId: string; text: string; messageId: string; scheduleId: string; onBehalfOf: { channel: string; userId: string } | undefined; kind?: "brief" | "watch" }) => Promise<unknown>;
 	/** The instance's sentinelle and how to read a page under its policy (ADR 0018). */
 	readonly watches?: { readonly store: WatchStore; readonly read: (url: string) => Promise<{ title: string; text: string }> };

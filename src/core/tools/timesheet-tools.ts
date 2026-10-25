@@ -3,7 +3,7 @@ import { isAgentTurn } from "../turn-origin.ts";
 import { makeDocumentFile } from "../document-reader.ts";
 import { DocumentError } from "../documents.ts";
 import { clockText, hoursText, parseDuration } from "../durations.ts";
-import type { AnnieTool, ToolContext } from "../engine.ts";
+import type { OwniTool, ToolContext } from "../engine.ts";
 import type { InvoiceScanner } from "../invoice-scan.ts";
 import type { InvoiceStore } from "../invoice-store.ts";
 import type { Company } from "../invoices.ts";
@@ -106,13 +106,13 @@ const NO_PERSON = "Errore: qui non so chi sta scrivendo (una conversazione di gr
  * projects, descriptions and references come from the person and are fenced. Which client is
  * meant: timesheet-clients.ts.
  */
-export function createTimesheetTools(options: TimesheetToolsOptions): AnnieTool[] {
+export function createTimesheetTools(options: TimesheetToolsOptions): OwniTool[] {
 	const { store, workspace, timeZone } = options;
 	const now = options.now ?? (() => new Date());
 	const make = options.make ?? ((input: MakeInput) => makeDocumentFile(input));
 	const names = clientNames(options);
 	/** Who did something: the person, or the thread when it is not known. */
-	const who = (ctx: ToolContext) => (ctx.thread === undefined ? "annie" : (options.whoIs(ctx.thread) ?? `${ctx.thread.channel}:${ctx.thread.threadId}`));
+	const who = (ctx: ToolContext) => (ctx.thread === undefined ? "owni" : (options.whoIs(ctx.thread) ?? `${ctx.thread.channel}:${ctx.thread.threadId}`));
 	/** Whose timer: the person; undefined where who writes is not known (a group, or no conversation at all): no timer there. */
 	const person = (ctx: ToolContext) => (ctx.thread === undefined ? undefined : options.whoIs(ctx.thread));
 	const today = () => todayIn(timeZone, now());

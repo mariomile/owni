@@ -14,7 +14,7 @@ import { forceQuote, type PipelineDeps, processInboundMail } from "../src/segret
 import type { InboundMail } from "../src/connectors/types.ts";
 
 function harness() {
-	const dataDir = mkdtempSync(join(tmpdir(), "annie-seg-"));
+	const dataDir = mkdtempSync(join(tmpdir(), "owni-seg-"));
 	const tenantId = "acme";
 	const instanceId = "segreteria";
 	const practices = new PracticeStore(join(dataDir, tenantId, "instances", instanceId));

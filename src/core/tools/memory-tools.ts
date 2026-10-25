@@ -1,4 +1,4 @@
-import type { AnnieTool } from "../engine.ts";
+import type { OwniTool } from "../engine.ts";
 import { type Memory, MemoryError, type MemoryStore, SHARED } from "../memory.ts";
 
 type Thread = { readonly channel: string; readonly threadId: string };
@@ -16,7 +16,7 @@ export function createMemoryTools(options: {
 	readonly whoIs: (thread: Thread) => string | undefined;
 	/** Saved and forgotten memories, for the audit (never their text). */
 	readonly record?: (event: { type: "memory.saved" | "memory.forgotten"; memoryId: string }) => Promise<void>;
-}): AnnieTool[] {
+}): OwniTool[] {
 	const { store } = options;
 	const subject = (thread: Thread | undefined) => (thread === undefined ? undefined : options.whoIs(thread));
 	const notPrivate = "Errore: la memoria vale solo nelle conversazioni con una persona sola, non nei gruppi.";
@@ -45,7 +45,7 @@ export function createMemoryTools(options: {
 				if (about === undefined) return notPrivate;
 				return ctx.step("remember", async () => {
 					try {
-						const memory = store.add({ about, text: String(args.text), source: "annie", archived: args.essential === false });
+						const memory = store.add({ about, text: String(args.text), source: "owni", archived: args.essential === false });
 						await options.record?.({ type: "memory.saved", memoryId: memory.id });
 						return `Ricordato${memory.archived === true ? " in archivio" : ""} (id ${memory.id}).`;
 					} catch (error) {

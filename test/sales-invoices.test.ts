@@ -6,7 +6,7 @@ import { AGENT_CHANNEL } from "../src/core/agent-messages.ts";
 import { BRIEF_INSTRUCTION, readOnlyInBriefs } from "../src/core/brief.ts";
 import type { ClientCard } from "../src/core/clients.ts";
 import { documentFattura } from "../src/core/documents.ts";
-import type { AnnieTool, PersonCall, ToolContext } from "../src/core/engine.ts";
+import type { OwniTool, PersonCall, ToolContext } from "../src/core/engine.ts";
 import { fatturaData, fatturaText } from "../src/core/fattura-pa.ts";
 import { fatturaXml } from "../src/core/fattura-pa-writer.ts";
 import { InvoiceScanner } from "../src/core/invoice-scan.ts";
@@ -48,7 +48,7 @@ afterEach(() => {
 });
 
 function temp(): string {
-	const dir = mkdtempSync(join(tmpdir(), "annie-sales-"));
+	const dir = mkdtempSync(join(tmpdir(), "owni-sales-"));
 	dirs.push(dir);
 	return dir;
 }
@@ -772,7 +772,7 @@ describe("who may ask", () => {
 
 	it("only reads in the brief's thread", async () => {
 		const s = setup();
-		const [tool] = readOnlyInBriefs([s.tool as AnnieTool], async () => true);
+		const [tool] = readOnlyInBriefs([s.tool as OwniTool], async () => true);
 		const brief = fresh(undefined, { channel: "web", threadId: "w1" });
 		expect(String(await tool?.execute({ op: "draft", ...DELTA, lines: [line("A", 1)], vat: 22 }, brief))).toContain("legge soltanto");
 		expect(String(await tool?.execute({ op: "list" }, brief))).toContain("Nessuna fattura emessa con me nel 2026");

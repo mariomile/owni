@@ -36,7 +36,7 @@ describe("Stripe webhook signatures", () => {
 		await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", () => resolve()));
 		try {
 			const failing = new StripeBilling({ ...config, apiBase: `http://127.0.0.1:${(server.address() as AddressInfo).port}` });
-			const error = await failing.portal("cus_1", "https://annie.example").catch((e: Error) => e);
+			const error = await failing.portal("cus_1", "https://owni.example").catch((e: Error) => e);
 			expect(error).toBeInstanceOf(Error);
 			expect((error as Error).message).toBe("Stripe /v1/billing_portal/sessions: 401 Invalid API Key provided: [chiave]");
 		} finally {

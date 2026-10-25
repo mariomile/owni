@@ -4,7 +4,7 @@ import { recordTurn, UsageLedger } from "./usage.ts";
 import { SerialQueue } from "./serial-queue.ts";
 import { AgentAsks, AgentRequestStore } from "./agent-requests.ts";
 import { ConnectorActionStore } from "./connector-actions.ts";
-import type { AnnieTool, DurableEngine, EngineImage, EngineReply, EngineSession, EngineRunEvent, EngineRunState, TurnUsage } from "./engine.ts";
+import type { OwniTool, DurableEngine, EngineImage, EngineReply, EngineSession, EngineRunEvent, EngineRunState, TurnUsage } from "./engine.ts";
 import { RunStore, isActiveRun, runId, runRequestId, type RunRecord, type RunEvent, type RunFilter } from "./run-store.ts";
 export type { RunRecord, RunEvent, RunFilter, RunStatus } from "./run-store.ts";
 import type { TurnOrigin } from "./turn-origin.ts";
@@ -110,7 +110,7 @@ export type Reply = {
 );
 
 /** Tools of an instance, with what to release when it closes (connector connections). */
-export type ToolSet = readonly AnnieTool[] | { readonly tools: readonly AnnieTool[]; readonly close: () => Promise<void> };
+export type ToolSet = readonly OwniTool[] | { readonly tools: readonly OwniTool[]; readonly close: () => Promise<void> };
 
 export type RuntimeOptions = {
 	readonly dataDir: string;
@@ -120,7 +120,7 @@ export type RuntimeOptions = {
 	 * Tools of an instance: the same list for all, or computed from the instance's record
 	 * when it is opened (connectors, approved tools). A changed list applies on `reopen`.
 	 */
-	readonly tools?: readonly AnnieTool[] | ((record: InstanceRecord) => Promise<ToolSet>);
+	readonly tools?: readonly OwniTool[] | ((record: InstanceRecord) => Promise<ToolSet>);
 	/**
 	 * Waits before sending again a reply whose channel failed (network, timeout), one per
 	 * attempt; the last repeats. A reply the channel refused is not retried in the process.
@@ -145,9 +145,9 @@ export const DEFAULT_MAX_RETRIES = 14;
  * instance on its own durable engine session and storage. Knows nothing about channels
  * beyond their names.
  */
-export class AnnieRuntime {
+export class OwniRuntime {
 	readonly registry: TenantRegistry;
-	private readonly instances = new Map<string, Promise<AnnieInstance>>();
+	private readonly instances = new Map<string, Promise<OwniInstance>>();
 	private readonly listeners = new Set<(reply: Reply) => void>();
 	private readonly runListeners = new Set<(event: RunEvent) => void>();
 	private readonly participantStores = new Map<string, Participants>();
@@ -392,7 +392,7 @@ export class AnnieRuntime {
 	}
 
 	/** Open an instance's engine session once per process; later calls share it. */
-	openInstance(tenant: string, instance: string): Promise<AnnieInstance> {
+	openInstance(tenant: string, instance: string): Promise<OwniInstance> {
 		const key = `${tenantId(tenant)}/${instanceId(instance)}`;
 		if (this.removing.has(key)) return Promise.reject(new NotFound(`Instance "${instanceId(instance)}" is being deleted`));
 		let opening = this.instances.get(key);
@@ -435,7 +435,7 @@ export class AnnieRuntime {
 	private runStore(tenant: string, instance: string): RunStore {
 		return new RunStore(instanceDir(this.options.dataDir, tenantId(tenant), instanceId(instance)), (event) => {
 			for (const listener of this.runListeners) {
-				try { listener(event); } catch (error) { console.error(`annie: run listener failed: ${String(error)}`); }
+				try { listener(event); } catch (error) { console.error(`owni: run listener failed: ${String(error)}`); }
 			}
 		});
 	}
@@ -574,7 +574,7 @@ export class AnnieRuntime {
 		if (failed !== undefined) throw failed.reason;
 	}
 
-	private async open(tenant: string, instance: string): Promise<AnnieInstance> {
+	private async open(tenant: string, instance: string): Promise<OwniInstance> {
 		const record = await this.registry.getInstance(tenant, instance);
 		const audit = this.audit(record.tenantId);
 		try {
@@ -618,7 +618,7 @@ export class AnnieRuntime {
 				// Only this tenant's secrets, and only for providers the policy allows now.
 				apiKey: async (provider) => {
 					if (!(await fresh()).egress.modelProviders.includes(provider)) return undefined;
-					if (subscriptionProvider(provider) !== undefined) return this.localProviders(record.tenantId)?.connected(provider) ? "annie-local-subscription" : undefined;
+					if (subscriptionProvider(provider) !== undefined) return this.localProviders(record.tenantId)?.connected(provider) ? "owni-local-subscription" : undefined;
 					return secrets.get(modelApiKeySecret(provider));
 				},
 				localProviders: this.localProviders(record.tenantId),
@@ -648,7 +648,7 @@ export class AnnieRuntime {
 		}
 		const outbox = new Outbox(outboxDir(this.options.dataDir, record.tenantId, record.id));
 		const releaseTools = "close" in toolSet ? toolSet.close : async () => {};
-		return new AnnieInstance({
+		return new OwniInstance({
 			record,
 			runs,
 			session,
@@ -666,7 +666,7 @@ export class AnnieRuntime {
 					try {
 						listener(reply);
 					} catch (error) {
-						console.error(`annie: reply listener failed: ${String(error)}`);
+						console.error(`owni: reply listener failed: ${String(error)}`);
 					}
 				}
 			},
@@ -677,7 +677,7 @@ export class AnnieRuntime {
 /** Outbox keys of messages whose text goes once delivered. */
 const SECRET_KEY = "secret:";
 
-export interface AnnieInstanceOptions {
+export interface OwniInstanceOptions {
 	readonly record: InstanceRecord;
 	readonly runs: RunStore;
 	readonly session: EngineSession;
@@ -696,7 +696,7 @@ export interface AnnieInstanceOptions {
 	readonly emit: (reply: Reply) => void;
 }
 
-export class AnnieInstance {
+export class OwniInstance {
 	/** Outbox keys this process has handed to the channels. Each at most once per process. */
 	private readonly handedOff = new Set<string>();
 	/** Outbox operations on the same key run one after the other. */
@@ -722,11 +722,11 @@ export class AnnieInstance {
 	private readonly releaseTools: () => Promise<void>;
 	private readonly fresh: () => Promise<InstanceRecord>;
 	private readonly reachable: (provider: string) => Promise<boolean>;
-	private readonly retry: AnnieInstanceOptions["retry"];
-	private readonly memory: AnnieInstanceOptions["memory"];
+	private readonly retry: OwniInstanceOptions["retry"];
+	private readonly memory: OwniInstanceOptions["memory"];
 	private readonly emit: (reply: Reply) => void;
 
-	constructor(options: AnnieInstanceOptions) {
+	constructor(options: OwniInstanceOptions) {
 		const { record, session } = options;
 		this.record = record;
 		this.runs = options.runs;
@@ -743,11 +743,11 @@ export class AnnieInstance {
 		this.emit = options.emit;
 		session.onRunEvent?.((event) => {
 			if (this.closed) return;
-			this.events.run("events", () => this.applyRunEvent(event)).catch((error: unknown) => console.error(`annie: recording run progress failed: ${String(error)}`));
+			this.events.run("events", () => this.applyRunEvent(event)).catch((error: unknown) => console.error(`owni: recording run progress failed: ${String(error)}`));
 		});
 		session.onReply((engineReply) => {
 			this.deliver(engineReply).catch((error: unknown) => {
-				console.error(`annie: delivering a reply of ${record.tenantId}/${record.id} failed: ${String(error)}`);
+				console.error(`owni: delivering a reply of ${record.tenantId}/${record.id} failed: ${String(error)}`);
 			});
 		});
 	}
@@ -967,7 +967,7 @@ export class AnnieInstance {
 				} catch (lookupError) {
 					this.pendingAdmissions.add(id);
 					await this.runs.change(id, (current) => current === undefined || !isActiveRun(current) ? current : { ...current, error: "Submission acknowledgement could not be verified; retry safely." });
-					console.error(`annie: admission reconciliation failed: ${String(lookupError)}`);
+					console.error(`owni: admission reconciliation failed: ${String(lookupError)}`);
 				}
 				throw error;
 			}
@@ -1029,12 +1029,12 @@ export class AnnieInstance {
 				catch (error) {
 					// The adapter retains its restored guard. Healthy conversations may resume;
 					// this one retries the abort before accepting any new submission.
-					console.error(`annie: restoring Stop failed: ${String(error)}`);
+					console.error(`owni: restoring Stop failed: ${String(error)}`);
 				}
 			}));
 			for (const run of recoverable) {
 				try { await this.reconcileRun(run); }
-				catch (error) { console.error(`annie: restoring admission failed: ${String(error)}`); }
+				catch (error) { console.error(`owni: restoring admission failed: ${String(error)}`); }
 			}
 		})();
 		this.recovery = recovery;
@@ -1067,7 +1067,7 @@ export class AnnieInstance {
 			if (thread !== undefined) await this.reconcileRun(run);
 			else {
 				try { await this.submissions.run(threadKey(run.channel, run.threadId), () => this.reconcileRun(run)); }
-				catch (error) { console.error(`annie: admission reconciliation retry failed: ${String(error)}`); }
+				catch (error) { console.error(`owni: admission reconciliation retry failed: ${String(error)}`); }
 			}
 		}
 	}
@@ -1176,7 +1176,7 @@ export class AnnieInstance {
 					if (this.closed || current?.reply === undefined || current.deliveredAt !== undefined) return;
 					this.handedOff.delete(deliveryId);
 					await this.handOff(current);
-				}).catch((error: unknown) => console.error(`annie: retrying a reply of ${this.record.tenantId}/${this.record.id} failed: ${String(error)}`));
+				}).catch((error: unknown) => console.error(`owni: retrying a reply of ${this.record.tenantId}/${this.record.id} failed: ${String(error)}`));
 			}, delay);
 			timer.unref();
 			this.retries.set(deliveryId, timer);
@@ -1245,7 +1245,7 @@ export class AnnieInstance {
 			await this.events.idle();
 			await this.chains.idle();
 			await this.runs.idle();
-			await this.releaseTools().catch((error: unknown) => console.error(`annie: releasing tools of ${this.record.tenantId}/${this.record.id} failed: ${String(error)}`));
+			await this.releaseTools().catch((error: unknown) => console.error(`owni: releasing tools of ${this.record.tenantId}/${this.record.id} failed: ${String(error)}`));
 		} finally {
 			this.lock.release();
 		}
@@ -1266,7 +1266,7 @@ export class AnnieInstance {
 			const existing = await this.outbox.get(key);
 			if (existing?.deliveredAt !== undefined) return;
 			// Counted once: a reply the outbox already holds was counted when it first came.
-			if (existing?.reply === undefined && engineReply.status === "answered" && engineReply.usage !== undefined) await recordTurn(this.usage, this.audit, { instanceId: this.record.id, threadId, submissionId: engineReply.submissionId, model: engineReply.model, usage: engineReply.usage }).catch((error: unknown) => console.error(`annie: usage of ${this.record.tenantId}/${this.record.id} not recorded: ${String(error)}`));
+			if (existing?.reply === undefined && engineReply.status === "answered" && engineReply.usage !== undefined) await recordTurn(this.usage, this.audit, { instanceId: this.record.id, threadId, submissionId: engineReply.submissionId, model: engineReply.model, usage: engineReply.usage }).catch((error: unknown) => console.error(`owni: usage of ${this.record.tenantId}/${this.record.id} not recorded: ${String(error)}`));
 			await this.handOff(
 				existing === undefined
 					? { key, submissionId: engineReply.submissionId, channel, threadId, reply, createdAt: new Date().toISOString(), attempts: 0 }

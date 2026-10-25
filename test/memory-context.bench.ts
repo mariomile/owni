@@ -7,7 +7,7 @@ import { performance } from "node:perf_hooks";
 import { readJsonFile } from "../src/core/locked-json.ts";
 import { type Memory, memoryNote, MemoryStore, SHARED } from "../src/core/memory.ts";
 
-const dir = mkdtempSync(join(tmpdir(), "annie-memory-bench-"));
+const dir = mkdtempSync(join(tmpdir(), "owni-memory-bench-"));
 const file = join(dir, "memory.json");
 const subjects = Array.from({ length: 20 }, (_, i) => `test:synthetic-${i}`);
 const records: Memory[] = subjects.flatMap((about, person) => Array.from({ length: 1000 }, (_, i) => ({

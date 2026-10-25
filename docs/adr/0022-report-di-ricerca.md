@@ -4,7 +4,7 @@ Dalla settimana 22 Owni cerca sul web e apre le pagine trovate, una alla volta. 
 
 ## Come funziona
 
-- **Due tool**, offerti quando il server ha un servizio di ricerca (`ANNIE_SEARCH_API_KEY`), attivi quando l'owner accende la ricerca per l'istanza, come `web_search`.
+- **Due tool**, offerti quando il server ha un servizio di ricerca (`OWNI_SEARCH_API_KEY`), attivi quando l'owner accende la ricerca per l'istanza, come `web_search`.
 - **`research_gather`** riceve la domanda e da 2 a 6 ricerche diverse. Ogni ricerca conta nel limite giornaliero dell'account; se finisce a metà, quelle fatte bastano e il tool lo dice. Le ricerche partono insieme; dei risultati si prendono prima i primi di ogni ricerca, poi i secondi, così ogni lato della domanda ha posto. Lo stesso indirizzo (anche con un `#` diverso) si apre una volta.
 - **Le pagine** si aprono come con `web_read`: solo dai siti che l'owner consente, con gli stessi controlli a ogni redirect. Al massimo 8 pagine, 4 per sito, 4 alla volta. Di ogni pagina restano i paragrafi che parlano della domanda (parole in comune, singolare e plurale, sigle in maiuscolo; prima quelli con numeri), fino a 2.500 caratteri. Una pagina sparita (404, 410) non è una fonte. Un sito non consentito, una pagina che rifiuta (403), un PDF o una pagina che non si apre restano con l'estratto della ricerca, detto come tale.
 - **Il dossier** è in `ricerche/<domanda>/fonti.json` (e `fonti.md`, leggibile) nel workspace, con le fonti numerate. La stessa domanda entro un giorno aggiunge fonti allo stesso dossier, numerate di seguito, senza riaprire le pagine già lette; una domanda diversa con lo stesso nome, o la stessa dopo un giorno, ne apre uno nuovo (`-2`, `-3`). Al massimo 12 fonti per chiamata e 24 per dossier.

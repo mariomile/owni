@@ -11,13 +11,13 @@ Stato: settimana 2 (allowlist utenti, lock per istanza, outbox delle risposte). 
                         │ TenantRegistry
                         ▼
    ┌──────────────── src/core ─────────────────────────────────────┐
-   │ AnnieRuntime                                                   │
+   │ OwniRuntime                                                   │
    │   ├─ TenantRegistry   tenant.json, instance.json               │
    │   ├─ TenantSecrets    secrets.json (0600) per tenant           │
    │   ├─ AuditLog         audit.jsonl append-only per tenant       │
    │   ├─ EgressPolicy     default deny: provider modello + canali  │
    │   ├─ AllowedUsers     default deny: utenti per canale          │
-   │   └─ AnnieInstance ──► DurableEngine (interfaccia)             │
+   │   └─ OwniInstance ──► DurableEngine (interfaccia)             │
    │        ├─ InstanceLock  un solo processo per istanza           │
    │        └─ Outbox        risposte fino alla conferma del canale │
    │                           ▲                                    │
@@ -69,11 +69,11 @@ Gli ID di tenant e istanza diventano nomi di directory, quindi sono validati (`a
 ### Nucleo (`src/core`)
 
 ```ts
-class AnnieRuntime {
+class OwniRuntime {
   registry: TenantRegistry;                       // createTenant, createInstance, get/list
   secrets(tenantId): TenantSecrets;               // legato a un solo tenant
   audit(tenantId): AuditLog;                      // legato a un solo tenant
-  openInstance(tenantId, instanceId): Promise<AnnieInstance>;
+  openInstance(tenantId, instanceId): Promise<OwniInstance>;
   submit(req: SubmitRequest): Promise<{ submissionId }>;
   resume(tenantId, instanceId): Promise<{ pending, undelivered, reattached }>;
   onReply(listener: (reply: Reply) => void): () => void;
@@ -104,7 +104,7 @@ type EngineOpenOptions = {
   storageDir;                                   // directory esclusiva dell'istanza
   model: { provider, modelId };
   apiKey: (provider) => Promise<string | undefined>;   // unica fonte di credenziali
-  tools: AnnieTool[];
+  tools: OwniTool[];
   instructions?;
 };
 
@@ -117,7 +117,7 @@ interface EngineSession {
   close(): Promise<void>;
 }
 
-type AnnieTool = {
+type OwniTool = {
   name; description; parameters /* JSON Schema */;
   replaySafe: boolean;
   execute(args, ctx: { step(key, work), progress(text), signal }): Promise<string>;
@@ -148,7 +148,7 @@ type OutboundMessage = { tenantId, instanceId, channel, threadId, text, idempote
 
 ```text
 Telegram getUpdates ─► TelegramAdapter ─► InboundMessage
-  ─► gateway ─► AnnieRuntime.submit
+  ─► gateway ─► OwniRuntime.submit
        ├─ egress: il canale è consentito?        no ─► EgressDenied + audit "egress.denied"
        ├─ allowlist: l'utente è consentito su questo canale?
        │                                         no ─► UserNotAllowed + audit "user.denied", nessuna risposta
@@ -234,7 +234,7 @@ L'isolamento oggi è di processo condiviso: più tenant possono girare nello ste
 
 ### Un processo per istanza (lock)
 
-`AnnieRuntime` apre un'istanza solo dopo aver preso il lock `instance.lock`, prima di toccare lo storage di Pi o l'outbox, e lo rilascia in `close()`. Un secondo processo (o un secondo `AnnieRuntime` nello stesso processo) riceve subito:
+`OwniRuntime` apre un'istanza solo dopo aver preso il lock `instance.lock`, prima di toccare lo storage di Pi o l'outbox, e lo rilascia in `close()`. Un secondo processo (o un secondo `OwniRuntime` nello stesso processo) riceve subito:
 
 ```text
 InstanceLocked: Instance acme/ops is already open in another process (pid 4242 on host-a, since 2026-10-15T21:00:00.000Z).
@@ -249,7 +249,7 @@ Limite: i lock POSIX non sono affidabili su filesystem di rete (NFS, SMB). `data
 
 ### Utenti consentiti (allowlist)
 
-Ogni istanza ha `allowedUsers` in `instance.json`: per canale, gli ID utente nativi del canale (per Telegram lo user ID numerico). Default: nessuno. Il controllo sta nel nucleo, in `AnnieInstance.submit`, dopo il controllo egress del canale e prima di qualunque altra cosa: vale per ogni canale presente e futuro, non solo per Telegram.
+Ogni istanza ha `allowedUsers` in `instance.json`: per canale, gli ID utente nativi del canale (per Telegram lo user ID numerico). Default: nessuno. Il controllo sta nel nucleo, in `OwniInstance.submit`, dopo il controllo egress del canale e prima di qualunque altra cosa: vale per ogni canale presente e futuro, non solo per Telegram.
 
 Un messaggio da un utente non consentito:
 
@@ -257,7 +257,7 @@ Un messaggio da un utente non consentito:
 - non riceve risposta. Scelta: silenzio invece di una frase fissa, perché rispondere conferma a uno sconosciuto che il bot esiste e apre un canale in uscita verso chi non è autorizzato;
 - è registrato nell'audit del tenant come `user.denied` con `channel`, `userId`, `threadId` e `reason` (`no_users_allowed_on_channel` o `user_not_in_allowlist`), mai il testo.
 
-`registry.setAllowedUsers()` riscrive `instance.json` in modo atomico e registra `instance.allowlist.updated`; come la egress policy, vale dalla prossima apertura dell'istanza. `pnpm dev:telegram` la imposta all'avvio da `ANNIE_TELEGRAM_ALLOWED_USERS`.
+`registry.setAllowedUsers()` riscrive `instance.json` in modo atomico e registra `instance.allowlist.updated`; come la egress policy, vale dalla prossima apertura dell'istanza. `pnpm dev:telegram` la imposta all'avvio da `OWNI_TELEGRAM_ALLOWED_USERS`.
 
 ### Egress policy (default deny)
 
@@ -298,7 +298,7 @@ Due estensioni previste dell'interfaccia, da fare quando arriva il primo canale 
 | API che cambia senza preavviso tra release (README: "Experimental") | versione pinnata esatta (`1.3.0`, anche `pi-ai` e `chord`); tutto il codice Pi in un adapter (~280 righe in due file); `DurableEngine` è nostra; test di confine che impedisce import di Pi altrove |
 | Formato dello storage che cambia tra versioni | un upgrade va provato su una copia di `data/`; test crash-resume come gate di upgrade. Nessuna migrazione automatica per ora |
 | Un solo processo per storage, nessun lock tra processi (README Pi) | lock nostro per istanza, preso prima di aprire Pi e rilasciato dal kernel se il processo muore (sezione 5) |
-| `node:sqlite` è sperimentale in Node 22 (warning a runtime) | Node 22.19+ richiesto dal pacchetto; valutare Node 24 LTS |
+| `node:sqlite` non è ancora stabile in Node 24 (release candidate) | Node 24.22+ richiesto dal pacchetto (LTS) |
 | Replay dei tool: at-least-once, non exactly-once | `replaySafe` esplicito per tool; i tool con effetti esterni devono essere idempotenti; i tool non ripetibili (invio email) restano `replaySafe: false` e il modello riceve un risultato "interrupted" |
 | Comportamento di `resume()`: lo scheduler riparte anche al primo `submit` | `resume()` di Owni va chiamato all'avvio prima di accettare messaggi, per riagganciare le risposte in sospeso ai canali |
 | Progetto giovane, numeri GitHub anomali (vedi piano iniziale) | dipendiamo da poche primitive (Harness, conversation, submit/wait, tool con memo, SQLite storage); sostituibili dietro `DurableEngine` se necessario |

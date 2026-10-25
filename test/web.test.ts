@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { ConnectorStore } from "../src/connectors/mcp.ts";
 import { piDurableEngine } from "../src/core/adapters/pi-durable.ts";
-import { AnnieRuntime } from "../src/core/index.ts";
+import { OwniRuntime } from "../src/core/index.ts";
 import { instanceDir } from "../src/core/paths.ts";
 import { tenantId, instanceId } from "../src/core/ids.ts";
 import { UsageLedger } from "../src/core/usage.ts";
@@ -25,7 +25,7 @@ afterEach(async () => {
 
 async function setup(withBoard = false) {
 	const dataDir = tempDataDir();
-	const runtime = new AnnieRuntime({ dataDir, engine: piDurableEngine });
+	const runtime = new OwniRuntime({ dataDir, engine: piDurableEngine });
 	await runtime.registry.createTenant({ id: "acme", name: "acme" });
 	const tenantDir = join(dataDir, "tenants", "acme");
 	const people = new PeopleStore(tenantDir);
@@ -77,11 +77,11 @@ async function setup(withBoard = false) {
 	});
 	/** A logged-in client. */
 	const as = async (token: string) => {
-		const login = await fetch(`${base}/api/login`, { method: "POST", headers: { "x-annie": "1", "content-type": "application/json" }, body: JSON.stringify({ token }) });
+		const login = await fetch(`${base}/api/login`, { method: "POST", headers: { "x-owni": "1", "content-type": "application/json" }, body: JSON.stringify({ token }) });
 		expect(login.status).toBe(200);
 		const cookie = (login.headers.get("set-cookie") ?? "").split(";")[0] as string;
 		return async (path: string, init: RequestInit = {}) => {
-			const res = await fetch(`${base}${path}`, { ...init, headers: { cookie, "x-annie": "1", "content-type": "application/json", ...(init.headers ?? {}) } });
+			const res = await fetch(`${base}${path}`, { ...init, headers: { cookie, "x-owni": "1", "content-type": "application/json", ...(init.headers ?? {}) } });
 			const type = res.headers.get("content-type") ?? "";
 			const body: any = type.includes("json") ? await res.json() : await res.text();
 			return { status: res.status, body, headers: res.headers };
@@ -147,10 +147,10 @@ describe("web console", () => {
 	it("needs a valid link to log in, and a session for everything else", async () => {
 		const h = await setup();
 		expect((await fetch(`${h.base}/api/me`)).status).toBe(401);
-		const bad = await fetch(`${h.base}/api/login`, { method: "POST", headers: { "x-annie": "1" }, body: JSON.stringify({ token: "x".repeat(43) }) });
+		const bad = await fetch(`${h.base}/api/login`, { method: "POST", headers: { "x-owni": "1" }, body: JSON.stringify({ token: "x".repeat(43) }) });
 		expect(bad.status).toBe(401);
-		const login = await fetch(`${h.base}/api/login`, { method: "POST", headers: { "x-annie": "1" }, body: JSON.stringify({ token: h.anna.token }) });
-		expect(login.headers.get("set-cookie")).toMatch(/^annie_session=[\w-]+; HttpOnly; SameSite=Strict; Path=\//);
+		const login = await fetch(`${h.base}/api/login`, { method: "POST", headers: { "x-owni": "1" }, body: JSON.stringify({ token: h.anna.token }) });
+		expect(login.headers.get("set-cookie")).toMatch(/^owni_session=[\w-]+; HttpOnly; SameSite=Strict; Path=\//);
 		const anna = await h.as(h.anna.token);
 		expect((await anna("/api/me")).body.person).toMatchObject({ name: "Anna", role: "member" });
 		expect(JSON.stringify((await anna("/api/me")).body)).not.toContain("tokenHash");
@@ -183,14 +183,14 @@ describe("web console", () => {
 		const h = await setup();
 		const anna = await h.as(h.anna.token);
 		const thread = (await anna("/api/instances/ops/threads", { method: "POST", body: "{}" })).body.thread;
-		expect((await anna(`/api/instances/ops/threads/${thread.id}/messages`, { method: "POST", body: JSON.stringify({ text: "ciao annie" }) })).status).toBe(200);
+		expect((await anna(`/api/instances/ops/threads/${thread.id}/messages`, { method: "POST", body: JSON.stringify({ text: "ciao owni" }) })).status).toBe(200);
 		let entries: any[] = [];
 		await waitFor(() => entries.length === 2 || (void anna(`/api/instances/ops/threads/${thread.id}`).then((r) => (entries = r.body.entries ?? [])), false));
 		expect(entries.map((e) => [e.from, e.text])).toEqual([
-			["person", "ciao annie"],
-			["annie", "Owni (modello locale di sviluppo): hai scritto «ciao annie»"],
+			["person", "ciao owni"],
+			["owni", "Owni (modello locale di sviluppo): hai scritto «ciao owni»"],
 		]);
-		expect((await anna("/api/instances/ops/threads")).body.threads[0].title).toBe("ciao annie");
+		expect((await anna("/api/instances/ops/threads")).body.threads[0].title).toBe("ciao owni");
 		const luca = await h.as(h.luca.token);
 		expect((await luca(`/api/instances/ops/threads/${thread.id}`)).status).toBe(404);
 		expect((await luca(`/api/instances/ops/threads/${thread.id}/messages`, { method: "POST", body: JSON.stringify({ text: "intruso" }) })).status).toBe(400);
@@ -306,7 +306,7 @@ describe("web console", () => {
 });
 
 describe("web console: two-factor login", () => {
-	const login = (base: string, body: unknown) => fetch(`${base}/api/login`, { method: "POST", headers: { "x-annie": "1", "content-type": "application/json" }, body: JSON.stringify(body) });
+	const login = (base: string, body: unknown) => fetch(`${base}/api/login`, { method: "POST", headers: { "x-owni": "1", "content-type": "application/json" }, body: JSON.stringify(body) });
 
 	it("a person turns on 2FA; from then on the link alone does not log in", async () => {
 		const h = await setup();
@@ -330,7 +330,7 @@ describe("web console: two-factor login", () => {
 		expect((await login(h.base, { token: h.anna.token, code: "123456" })).status).toBe(401);
 		const ok = await login(h.base, { token: h.anna.token, code: totp(secret, Date.now() + 30_000) });
 		expect(ok.status).toBe(200);
-		expect(ok.headers.get("set-cookie")).toMatch(/^annie_session=/);
+		expect(ok.headers.get("set-cookie")).toMatch(/^owni_session=/);
 		// The same code does not work twice.
 		expect((await login(h.base, { token: h.anna.token, code: totp(secret, Date.now() + 30_000) })).status).toBe(401);
 		const audit = await h.runtime.audit("acme").read();
@@ -415,9 +415,9 @@ describe("web console: memoria", () => {
 	it("each person sees and edits what Owni remembers about them; shared facts are the owner's to edit", async () => {
 		const h = await setup();
 		const store = h.runtime.memory("acme", "ops");
-		store.add({ about: `web:${h.anna.person.id}`, text: "Anna preferisce il tu", source: "annie" });
-		store.add({ about: `web:${h.luca.person.id}`, text: "Luca segue i clienti di Milano", source: "annie" });
-		store.add({ about: "*", text: "Lo studio chiude ad agosto", source: "annie" });
+		store.add({ about: `web:${h.anna.person.id}`, text: "Anna preferisce il tu", source: "owni" });
+		store.add({ about: `web:${h.luca.person.id}`, text: "Luca segue i clienti di Milano", source: "owni" });
+		store.add({ about: "*", text: "Lo studio chiude ad agosto", source: "owni" });
 		const anna = await h.as(h.anna.token);
 		const mine = (await anna("/api/instances/ops/memory")).body;
 		expect(mine.mine.map((m: { text: string }) => m.text)).toEqual(["Anna preferisce il tu"]);
@@ -456,7 +456,7 @@ describe("web console: automazioni", () => {
 		// The other service: no session, no X-Owni header, the token as a bearer.
 		const hook = (auth: string, body = "nome=Anna&messaggio=Vorrei+un+preventivo") => fetch(`${h.base}${automation.path}`, { method: "POST", headers: { authorization: auth, "content-type": "application/x-www-form-urlencoded" }, body });
 		expect((await hook("Bearer sbagliato")).status).toBe(404);
-		const header = await fetch(`${h.base}${automation.path}`, { method: "POST", headers: { "x-annie-token": token, "idempotency-key": "evt_9" }, body: "{}" });
+		const header = await fetch(`${h.base}${automation.path}`, { method: "POST", headers: { "x-owni-token": token, "idempotency-key": "evt_9" }, body: "{}" });
 		expect(header.status).toBe(202);
 		expect((await hook(`Bearer ${token}`)).status).toBe(202);
 		const query = await fetch(`${h.base}${automation.path}?token=${token}`, { method: "POST", body: "{}" });

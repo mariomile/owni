@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "annie/evals/segreteria/case.schema.json",
+  "$id": "owni/evals/segreteria/case.schema.json",
   "title": "Caso eval segreteria commerciale",
   "type": "object",
   "required": [

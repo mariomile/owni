@@ -2,7 +2,7 @@ import { type CalendarEvent, EVENT_ID_PATTERN, type EventTime, type GoogleClient
 import { ConnectorHttpError } from "../../connectors/http.ts";
 import { EgressDenied } from "../errors.ts";
 import { type CurrentEvent, type EventDraft, eventTime, GOOGLE_ACTION_LIMITS, GoogleActionError, type GoogleAction, type GoogleActionStore, googleActionTitle, instant, type MailDraft, nextDay, validAddress } from "../google-actions.ts";
-import type { AnnieTool, ToolContext } from "../engine.ts";
+import type { OwniTool, ToolContext } from "../engine.ts";
 import { ATTACHMENT_LIMITS, AttachmentError, attachFiles } from "../mail-attachments.ts";
 import type { Workspace } from "../workspace.ts";
 import { fence } from "../untrusted.ts";
@@ -24,7 +24,7 @@ export function createGoogleTools(options: {
 	/** Which parts of the account the operator asks for: only their tools exist. */
 	readonly services: readonly GoogleService[];
 	readonly now?: () => number;
-	/** Writing with approval, when the operator turned it on (ANNIE_GOOGLE_WRITE). */
+	/** Writing with approval, when the operator turned it on (OWNI_GOOGLE_WRITE). */
 	readonly write?: {
 		readonly store: GoogleActionStore;
 		/** The person's account and whether it granted writing (connected before it was asked, it did not). */
@@ -32,7 +32,7 @@ export function createGoogleTools(options: {
 		/** The instance's files: what a mail may attach. */
 		readonly workspace?: Workspace;
 	};
-}): AnnieTool[] {
+}): OwniTool[] {
 	const now = options.now ?? Date.now;
 	const withClient = async (ctx: ToolContext, work: (client: GoogleClient, personId: string) => Promise<string>): Promise<string> => {
 		const personId = ctx.thread === undefined ? undefined : await options.personOf(ctx.thread);
@@ -50,7 +50,7 @@ export function createGoogleTools(options: {
 		}
 	};
 	const max = (value: unknown, fallback: number, limit: number) => Math.min(limit, Math.max(1, Number.isInteger(value) ? (value as number) : fallback));
-	const tools: (AnnieTool & { service: GoogleService })[] = [
+	const tools: (OwniTool & { service: GoogleService })[] = [
 		{
 			service: "gmail",
 			name: "google_mail_search",
@@ -125,7 +125,7 @@ const notify = { type: "boolean", description: "Google emails the guests about i
 type WriteOptions = NonNullable<Parameters<typeof createGoogleTools>[0]["write"]>;
 
 /** Asking to write: a request on disk, shown to the person in the console, done only when they approve. */
-function writeTools(write: WriteOptions, withClient: WithClient, timeZone: string): (AnnieTool & { service: GoogleService })[] {
+function writeTools(write: WriteOptions, withClient: WithClient, timeZone: string): (OwniTool & { service: GoogleService })[] {
 	const when = { type: "string", maxLength: 40, description: `YYYY-MM-DD for all day (end: the last day, included), or YYYY-MM-DDTHH:MM in ${timeZone}` };
 	const ask = (ctx: ToolContext, service: GoogleService, make: (client: GoogleClient, account: string) => Promise<Pick<GoogleAction, "kind" | "mail" | "event" | "current" | "notify" | "reason">>) =>
 		withClient(ctx, async (client, personId) => {

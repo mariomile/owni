@@ -4,7 +4,7 @@ Owni come app per Mac, Windows e Linux: una finestra sul tuo server Owni, l'icon
 
 ## Owni sul Mac
 
-L'app per Mac porta Owni con sé ([ADR 0096](adr/0096-annie-dentro-l-app-per-mac.md)): al primo avvio la accende su questo computer ed entra da sola. Riconosce gli abbonamenti già collegati alle CLI ufficiali di Claude Code e Codex. Puoi anche scegliere un provider con una chiave API in «Impostazioni → Provider». I dati restano in `~/Library/Application Support/app.owni.desktop/data`; se qualcosa non parte, il registro è in `~/Library/Logs/app.owni.desktop/server.log`.
+L'app per Mac porta Owni con sé ([ADR 0096](adr/0096-owni-dentro-l-app-per-mac.md)): al primo avvio la accende su questo computer ed entra da sola. Riconosce gli abbonamenti già collegati alle CLI ufficiali di Claude Code e Codex. Puoi anche scegliere un provider con una chiave API in «Impostazioni → Provider». I dati restano in `~/Library/Application Support/app.owni.desktop/data`; se qualcosa non parte, il registro è in `~/Library/Logs/app.owni.desktop/server.log`.
 
 L'app non è ancora firmata. La prima volta: trascina Owni in Applicazioni, poi tasto destro sull'icona, **Apri**, e ancora **Apri**. Se macOS non mostra il pulsante, vai in Impostazioni di Sistema, Privacy e sicurezza, e premi **Apri comunque** accanto a Owni.
 
@@ -18,7 +18,7 @@ Claude Code usa gli alias Sonnet, Opus e Haiku. Per Codex, **modello del tuo pia
 
 Owni non copia token o password dalle CLI. Il processo locale conserva solo le preferenze di connessione; l'autenticazione e il rinnovo dell'accesso restano delle CLI ufficiali. Gli strumenti di Owni continuano a passare dal suo motore durevole, dalle autorizzazioni e dalle approvazioni. Il provider riceve il contesto della chat e le immagini necessarie alla risposta, con un output strutturato per richiedere gli strumenti; le CLI non eseguono i propri strumenti. Le immagini e gli schemi temporanei vengono cancellati dopo ogni richiesta.
 
-Per sviluppare il server con gli abbonamenti locali, imposta `ANNIE_LOCAL_PROVIDERS=1`, `ANNIE_MODEL_PROVIDER=faux` e `ANNIE_MODEL_ID=annie-dev`: il modello di prova resta disponibile finché un abbonamento non è pronto, poi Owni lo seleziona automaticamente. Funziona solo su loopback (`127.0.0.1`, `localhost` o `::1`), senza `ANNIE_PUBLIC_URL` e senza `ANNIE_CELL_SECRET`, per il solo tenant configurato. Sui server remoti e nelle celle cloud il rilevamento è spento e gli account del computer che ospita il server non sono disponibili.
+Per sviluppare il server con gli abbonamenti locali, imposta `OWNI_LOCAL_PROVIDERS=1`, `OWNI_MODEL_PROVIDER=faux` e `OWNI_MODEL_ID=owni-dev`: il modello di prova resta disponibile finché un abbonamento non è pronto, poi Owni lo seleziona automaticamente. Funziona solo su loopback (`127.0.0.1`, `localhost` o `::1`), senza `OWNI_PUBLIC_URL` e senza `OWNI_CELL_SECRET`, per il solo tenant configurato. Sui server remoti e nelle celle cloud il rilevamento è spento e gli account del computer che ospita il server non sono disponibili.
 
 Riferimenti: [Claude Code CLI](https://code.claude.com/docs/en/cli-reference), [Claude Agent SDK con un piano Claude](https://support.claude.com/en/articles/15036540-use-the-claude-agent-sdk-with-your-claude-plan), [Codex CLI](https://developers.openai.com/codex/cli), [configurazione Codex](https://developers.openai.com/codex/config-reference).
 
@@ -34,13 +34,13 @@ Il consenso **Consenti a Owni di usare questo Mac** è separato per ciascun agen
 
 Owni non controlla tutte le app, nemmeno con il consenso acceso: un terminale (Terminale, iTerm2, Warp, Ghostty, kitty, Alacritty, WezTerm, cmux, Hyper, Tabby), un gestore di password (1Password, Bitwarden, Dashlane, Password, Accesso Portachiavi) o una richiesta di password di macOS. Se una di queste app è in primo piano, Owni non guarda lo schermo e non fa nessuna azione, e dice al modello quale app è. Se è dietro un'altra finestra, un clic, uno scorrimento o un trascinamento che la colpiscono sono rifiutati; mentre una richiesta di password di macOS è sullo schermo, Owni non scrive né preme tasti né usa il puntatore. Le foto non includono mai le finestre di queste app, e Owni non le apre. Un terminale aggirerebbe il computer isolato di Owni e le sue approvazioni; le password non devono passare dal modello. In quei casi l'app la usi tu. Non è un confine completo: editor con un terminale integrato, Script Editor e Comandi rapidi restano controllabili ([ADR 0107](adr/0107-app-che-computer-use-non-controlla.md)).
 
-Il componente nativo non viene esposto quando l'app si collega a un altro server. Il server locale richiede `ANNIE_LOCAL_PROVIDERS=1`, un indirizzo di ascolto loopback, nessun URL pubblico né cella cloud, `ANNIE_DESKTOP=local` e il percorso assoluto del componente in `ANNIE_LOCAL_DESKTOP_HELPER`. Questi valori sono impostati dall'app sul Mac; non occorre configurarli nei Settings.
+Il componente nativo non viene esposto quando l'app si collega a un altro server. Il server locale richiede `OWNI_LOCAL_PROVIDERS=1`, un indirizzo di ascolto loopback, nessun URL pubblico né cella cloud, `OWNI_DESKTOP=local` e il percorso assoluto del componente in `OWNI_LOCAL_DESKTOP_HELPER`. Questi valori sono impostati dall'app sul Mac; non occorre configurarli nei Settings.
 
 Per ricostruire il componente senza dipendenze aggiuntive: `bash desktop/scripts/build-computer-helper.sh`. Lo script compila le versioni Apple Silicon, Intel e universale; la preparazione dell'app lo include accanto a Node. Windows, Linux e macOS precedenti alla versione 14 possono continuare a usare lo schermo remoto già supportato.
 
 ### Finestra e scorciatoie
 
-1. Su Windows e Linux, al primo avvio scrivi l'indirizzo del tuo Owni (per esempio `annie.tuaazienda.it`), oppure incolla il tuo link personale per entrare subito. Sul Mac lo fai da «Cambia server…», se vuoi usare un server invece di Owni sul computer.
+1. Su Windows e Linux, al primo avvio scrivi l'indirizzo del tuo Owni (per esempio `owni.tuaazienda.it`), oppure incolla il tuo link personale per entrare subito. Sul Mac lo fai da «Cambia server…», se vuoi usare un server invece di Owni sul computer.
 2. **Ctrl+Shift+Spazio** (⌘⇧Spazio sul Mac) la apre e la nasconde da qualsiasi app. Su Linux con Wayland le scorciatoie globali non arrivano alle app: lì si usa l'icona nella barra.
 3. Chiudere la finestra la nasconde: Owni resta nella barra. Dall'icona: Apri Owni, Nuova chat, Cambia server, Esci. Sul Mac la riapre anche l'icona nel Dock.
 4. I link che portano fuori da Owni si aprono nel browser. Una pagina di Owni aperta "in una nuova scheda" (un file, un documento) si apre in una seconda finestra dell'app.
@@ -55,7 +55,7 @@ sudo apt-get install libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2
 ```
 
 ```bash
-pnpm start                        # un Owni locale, per esempio con ANNIE_MODEL_PROVIDER=faux
+pnpm start                        # un Owni locale, per esempio con OWNI_MODEL_PROVIDER=faux
 cd desktop && pnpm install
 pnpm dev                          # l'app; al primo avvio: localhost:8080 o il link di data/owner-login-link.txt
 pnpm build                        # l'installer di questo sistema in src-tauri/target/release/bundle
@@ -73,7 +73,7 @@ Le icone vengono da `src/web/ui/icon-512.png`: `pnpm icons` le rigenera.
 
 ## Installer
 
-Il workflow **Desktop app** (a mano da GitHub Actions, o con un tag `desktop-v0.6.0`) costruisce gli installer per Mac (universale), Windows e Linux e li mette in una bozza di release. Per il Mac prima `desktop/scripts/bundle-server.sh` prepara Node e il server compilato, e controlla che partano; `--config src-tauri/tauri.local.conf.json` li mette nell'app.
+Il workflow **Desktop app** (a mano da GitHub Actions, o con un tag `desktop-v0.7.0`) costruisce gli installer per Mac (universale), Windows e Linux e li mette in una bozza di release. Per il Mac prima `desktop/scripts/bundle-server.sh` prepara Node e il server compilato, e controlla che partano; `--config src-tauri/tauri.local.conf.json` li mette nell'app.
 
 ### Firma
 
@@ -87,4 +87,4 @@ bash desktop/scripts/sign-local-app.sh desktop/src-tauri/target/debug/bundle/mac
 
 Lo script applica una firma ad hoc al componente Computer Use e all'app, conserva la firma originale di Node e verifica il bundle completo. Serve a dare a macOS l'identità dell'app per i permessi: un eseguibile firmato da solo, senza il bundle sigillato, può essere riconosciuto soltanto dal suo percorso. Questa firma locale non sostituisce la firma Developer ID e la notarizzazione per la distribuzione; una nuova compilazione può richiedere di concedere nuovamente i permessi. Dopo la firma non modificare le risorse del bundle.
 
-Per conservare l'identità tra le compilazioni, imposta `ANNIE_CODESIGN_IDENTITY` sull'identità **Apple Development** o **Developer ID Application** presente nel Portachiavi prima di eseguire lo script. Usa la stessa identità per le build successive: lo script firma con quel certificato sia il componente Computer Use sia l'app, mantenendo la firma originale di Node. Senza un certificato configurato resta attiva la firma ad hoc per il collaudo locale.
+Per conservare l'identità tra le compilazioni, imposta `OWNI_CODESIGN_IDENTITY` sull'identità **Apple Development** o **Developer ID Application** presente nel Portachiavi prima di eseguire lo script. Usa la stessa identità per le build successive: lo script firma con quel certificato sia il componente Computer Use sia l'app, mantenendo la firma originale di Node. Senza un certificato configurato resta attiva la firma ad hoc per il collaudo locale.

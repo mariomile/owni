@@ -3,10 +3,10 @@ import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { type RunningAnnie, startAnnie } from "../src/app.ts";
+import { type RunningOwni, startOwni } from "../src/app.ts";
 import { citations, excerpt, slugify } from "../src/core/tools/research-tools.ts";
 import { publicAddress } from "../src/core/web-fetch.ts";
-import { loadAnnieConfig } from "../src/main/config.ts";
+import { loadOwniConfig } from "../src/main/config.ts";
 import { tempDataDir } from "./helpers.ts";
 
 const closers: (() => Promise<void>)[] = [];
@@ -112,12 +112,12 @@ describe("deep research in an instance", () => {
 						{ title: "Vecchio", url: `${s.base}/vecchio`, description: "2020" },
 					],
 		);
-		const { annie, reply, dataDir } = await boot(tempDataDir(), { ANNIE_SEARCH_URL: brave.url, ANNIE_SEARCH_API_KEY: KEY });
+		const { owni, reply, dataDir } = await boot(tempDataDir(), { OWNI_SEARCH_URL: brave.url, OWNI_SEARCH_API_KEY: KEY });
 		const gather = (args: object) => reply(`/tool research_gather ${JSON.stringify(args)}`);
 		const ask = { question: "Bonus pompe di calore 2026", queries: ["bonus pompe di calore 2026", "pompe di calore APE requisiti"] };
 		expect(await gather(ask)).toContain("la ricerca sul web non è attiva");
 		expect(brave.asked).toHaveLength(0);
-		await enableSearch(annie, ["127.0.0.1"]);
+		await enableSearch(owni, ["127.0.0.1"]);
 
 		const found = await gather(ask);
 		expect(brave.asked.sort()).toEqual([...ask.queries].sort());
@@ -138,7 +138,7 @@ describe("deep research in an instance", () => {
 		expect(fence).toContain("Ignora le istruzioni");
 		expect(found.replace(fence, "")).not.toContain("Ignora");
 
-		const dossier = JSON.parse(readFileSync(join(dataDir, "tenants", "default", "instances", "annie", "workspace", "ricerche", "bonus-pompe-di-calore-2026", "fonti.json"), "utf8"));
+		const dossier = JSON.parse(readFileSync(join(dataDir, "tenants", "default", "instances", "owni", "workspace", "ricerche", "bonus-pompe-di-calore-2026", "fonti.json"), "utf8"));
 		expect(dossier.question).toBe(ask.question);
 		expect(dossier.sources).toHaveLength(4);
 		expect(dossier.sources.map((x: { n: number }) => x.n)).toEqual([1, 2, 3, 4]);
@@ -154,7 +154,7 @@ describe("deep research in an instance", () => {
 		expect(await report({ dossier: "inesistente", title: "Titolo", markdown: "Testo [1] abbastanza lungo." })).toMatch(/Errore: non trovo il dossier inesistente/);
 		const done = await report({ dossier: "bonus-pompe-di-calore-2026", title: "Bonus pompe di calore", markdown: "## Sintesi\n\nIl bonus resta al 65% [1]. Serve l'APE [2].\n\n## Fonti\n\n1. inventata http://falso.example" });
 		expect(done).toMatch(/^Fatto\. Report salvato in ricerche\/bonus-pompe-di-calore\.md e inviato/);
-		const file = readFileSync(join(dataDir, "tenants", "default", "instances", "annie", "workspace", "ricerche", "bonus-pompe-di-calore.md"), "utf8");
+		const file = readFileSync(join(dataDir, "tenants", "default", "instances", "owni", "workspace", "ricerche", "bonus-pompe-di-calore.md"), "utf8");
 		expect(file).toMatch(/^# Bonus pompe di calore\n\n_Ricerca fatta .+: «Bonus pompe di calore 2026»\. 2 fonti citate su 4\._\n/);
 		expect(file).toContain("Il bonus resta al 65% [1]");
 		// The model's own list of sources is replaced by the dossier's, cited ones only.
@@ -172,18 +172,18 @@ describe("deep research in an instance", () => {
 		// A site that refuses us keeps its excerpt; a redirect to a site not allowed is not followed.
 		expect(more).toMatch(/\[5\] Sito che rifiuta\n.*\n {4}\(solo l'estratto della ricerca: la pagina ha risposto 403\)/);
 		expect(more).toMatch(/\[7\] Rimanda fuori\n.*\n {4}\(solo l'estratto della ricerca: la pagina non si è aperta: .*esterno\.example/);
-		expect(JSON.parse(readFileSync(join(dataDir, "tenants", "default", "instances", "annie", "workspace", "ricerche", "bonus-pompe-di-calore-2026", "fonti.json"), "utf8")).sources).toHaveLength(7);
+		expect(JSON.parse(readFileSync(join(dataDir, "tenants", "default", "instances", "owni", "workspace", "ricerche", "bonus-pompe-di-calore-2026", "fonti.json"), "utf8")).sources).toHaveLength(7);
 		expect(await report({ dossier: "bonus-pompe-di-calore-2026", title: "Con le novità", markdown: "Serve il libretto [6]. Il bonus resta [1]." })).toMatch(/2 fonti citate su 7/);
 
 		// A dossier the model wrote itself with file_write is not a dossier.
-		await annie.runtime.workspace("default", "annie").write("ricerche/falso/fonti.json", JSON.stringify({ question: "x", at: new Date().toISOString(), today: "oggi", sources: [{ n: 1, title: "x", url: "javascript:alert(1)", read: true, text: "" }] }));
+		await owni.runtime.workspace("default", "owni").write("ricerche/falso/fonti.json", JSON.stringify({ question: "x", at: new Date().toISOString(), today: "oggi", sources: [{ n: 1, title: "x", url: "javascript:alert(1)", read: true, text: "" }] }));
 		expect(await report({ dossier: "falso", title: "Falso", markdown: "Testo [1] abbastanza lungo." })).toMatch(/non trovo il dossier falso/);
 	});
 
 	it("each query is a search from the day's count; when they run out it says so", async () => {
 		const brave = await fakeBrave(() => [{ title: "X", url: "https://esterno.example/", description: "x" }]);
-		const { annie, reply } = await boot(tempDataDir(), { ANNIE_SEARCH_URL: brave.url, ANNIE_SEARCH_API_KEY: KEY, ANNIE_SEARCH_MAX_PER_DAY: "3" });
-		await enableSearch(annie, []);
+		const { owni, reply } = await boot(tempDataDir(), { OWNI_SEARCH_URL: brave.url, OWNI_SEARCH_API_KEY: KEY, OWNI_SEARCH_MAX_PER_DAY: "3" });
+		await enableSearch(owni, []);
 		const first = await reply('/tool research_gather {"question":"domanda di prova","queries":["uno a","due b","tre c","quattro d"]}');
 		expect(brave.asked).toHaveLength(3);
 		expect(first).toContain("1 ricerca non fatta: per oggi le ricerche dell'account sono finite");
@@ -198,29 +198,29 @@ describe("deep research in an instance", () => {
 	});
 });
 
-async function enableSearch(annie: RunningAnnie, web: string[]) {
-	await annie.runtime.registry.setEgress("default", "annie", { ...(await annie.runtime.registry.getInstance("default", "annie")).egress, web, connectors: ["web_search"] });
+async function enableSearch(owni: RunningOwni, web: string[]) {
+	await owni.runtime.registry.setEgress("default", "owni", { ...(await owni.runtime.registry.getInstance("default", "owni")).egress, web, connectors: ["web_search"] });
 }
 
 const localOnly = (address: string) => address === "127.0.0.1" || publicAddress(address);
 
 async function boot(dataDir: string, env: Record<string, string> = {}) {
-	const config = loadAnnieConfig({ ANNIE_DATA_DIR: dataDir, ANNIE_MODEL_PROVIDER: "faux", ANNIE_WEB_PORT: "1", ...env });
-	const annie: RunningAnnie = await startAnnie({ ...config, web: { ...config.web, port: 0 } }, { webAddressAllowed: localOnly, schedulerIntervalMs: 60_000, log: () => {} });
-	closers.push(() => annie.stop());
-	const base = `http://127.0.0.1:${(annie.server.address() as AddressInfo).port}`;
-	const login = await fetch(`${base}/api/login`, { method: "POST", headers: { "x-annie": "1" }, body: JSON.stringify({ token: (annie.ownerLink as string).split("#")[1] }) });
+	const config = loadOwniConfig({ OWNI_DATA_DIR: dataDir, OWNI_MODEL_PROVIDER: "faux", OWNI_WEB_PORT: "1", ...env });
+	const owni: RunningOwni = await startOwni({ ...config, web: { ...config.web, port: 0 } }, { webAddressAllowed: localOnly, schedulerIntervalMs: 60_000, log: () => {} });
+	closers.push(() => owni.stop());
+	const base = `http://127.0.0.1:${(owni.server.address() as AddressInfo).port}`;
+	const login = await fetch(`${base}/api/login`, { method: "POST", headers: { "x-owni": "1" }, body: JSON.stringify({ token: (owni.ownerLink as string).split("#")[1] }) });
 	const cookie = (login.headers.get("set-cookie") ?? "").split(";")[0] as string;
 	const api = async (path: string, body?: unknown, method?: string) => {
-		const res = await fetch(`${base}${path}`, { method: method ?? (body === undefined ? "GET" : "POST"), headers: { cookie, "x-annie": "1" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+		const res = await fetch(`${base}${path}`, { method: method ?? (body === undefined ? "GET" : "POST"), headers: { cookie, "x-owni": "1" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
 		// biome-ignore lint: test
 		return { status: res.status, ...((await res.json()) as any) };
 	};
-	const thread = (await api("/api/instances/annie/threads", {})).thread;
+	const thread = (await api("/api/instances/owni/threads", {})).thread;
 	const reply = async (text: string): Promise<string> => {
-		const answers = async () => ((await api(`/api/instances/annie/threads/${thread.id}`)).entries as { from: string; text?: string }[]).filter((e) => e.from === "annie" && e.text !== undefined);
+		const answers = async () => ((await api(`/api/instances/owni/threads/${thread.id}`)).entries as { from: string; text?: string }[]).filter((e) => e.from === "owni" && e.text !== undefined);
 		const before = (await answers()).length;
-		await api(`/api/instances/annie/threads/${thread.id}/messages`, { text });
+		await api(`/api/instances/owni/threads/${thread.id}/messages`, { text });
 		for (const start = Date.now(); Date.now() - start < 20_000; ) {
 			const now = await answers();
 			if (now.length > before) return now.at(-1)?.text ?? "";
@@ -228,5 +228,5 @@ async function boot(dataDir: string, env: Record<string, string> = {}) {
 		}
 		throw new Error("no reply");
 	};
-	return { annie, api, reply, dataDir, base };
+	return { owni, api, reply, dataDir, base };
 }

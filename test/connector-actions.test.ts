@@ -5,13 +5,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { afterEach, describe, expect, it } from "vitest";
-import { type RunningAnnie, startAnnie } from "../src/app.ts";
+import { type RunningOwni, startOwni } from "../src/app.ts";
 import type { CatalogEntry } from "../src/connectors/catalog.ts";
 import { needsApproval } from "../src/connectors/mcp.ts";
 import { webActionReport } from "../src/core/approvals.ts";
 import { ConnectorActionStore, connectorActionReport, fitsInChat } from "../src/core/connector-actions.ts";
 import { WebActionStore } from "../src/core/web-actions.ts";
-import { loadAnnieConfig } from "../src/main/config.ts";
+import { loadOwniConfig } from "../src/main/config.ts";
 import { createDemoServer } from "./fixtures/mcp-demo-server.ts";
 import { tempDataDir } from "./helpers.ts";
 
@@ -45,29 +45,29 @@ async function demo() {
 
 async function boot(url: string) {
 	const catalog: CatalogEntry[] = [{ id: "demo", name: "Demo", description: "Demo.", url, auth: "none", category: "lavoro" }];
-	const config = loadAnnieConfig({ ANNIE_DATA_DIR: tempDataDir(), ANNIE_MODEL_PROVIDER: "faux", ANNIE_WEB_PORT: "1" });
-	const annie: RunningAnnie = await startAnnie({ ...config, web: { ...config.web, port: 0 } }, { schedulerIntervalMs: 3_600_000, log: () => {}, connectorCatalog: catalog });
-	closers.push(() => annie.stop());
-	const base = `http://127.0.0.1:${(annie.server.address() as AddressInfo).port}`;
+	const config = loadOwniConfig({ OWNI_DATA_DIR: tempDataDir(), OWNI_MODEL_PROVIDER: "faux", OWNI_WEB_PORT: "1" });
+	const owni: RunningOwni = await startOwni({ ...config, web: { ...config.web, port: 0 } }, { schedulerIntervalMs: 3_600_000, log: () => {}, connectorCatalog: catalog });
+	closers.push(() => owni.stop());
+	const base = `http://127.0.0.1:${(owni.server.address() as AddressInfo).port}`;
 	const loginWith = async (token: string) => {
-		const login = await fetch(`${base}/api/login`, { method: "POST", headers: { "x-annie": "1" }, body: JSON.stringify({ token }) });
+		const login = await fetch(`${base}/api/login`, { method: "POST", headers: { "x-owni": "1" }, body: JSON.stringify({ token }) });
 		const cookie = (login.headers.get("set-cookie") ?? "").split(";")[0] as string;
 		// biome-ignore lint: test
 		return async (path: string, body?: unknown, method?: string): Promise<any> => {
-			const res = await fetch(`${base}${path}`, { method: method ?? (body === undefined ? "GET" : "POST"), headers: { cookie, "x-annie": "1" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+			const res = await fetch(`${base}${path}`, { method: method ?? (body === undefined ? "GET" : "POST"), headers: { cookie, "x-owni": "1" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
 			return { status: res.status, ...((await res.json()) as object) };
 		};
 	};
-	const api = await loginWith((annie.ownerLink as string).split("#")[1] as string);
-	expect((await api("/api/instances/annie/connectors/catalog/demo", {})).status).toMatchObject({ connected: true });
+	const api = await loginWith((owni.ownerLink as string).split("#")[1] as string);
+	expect((await api("/api/instances/owni/connectors/catalog/demo", {})).status).toMatchObject({ connected: true });
 	const chat = async (as: typeof api) => {
-		const thread = (await as("/api/instances/annie/threads", {})).thread;
-		const entries = async () => (await as(`/api/instances/annie/threads/${thread.id}`)).entries as { from: string; text?: string }[];
+		const thread = (await as("/api/instances/owni/threads", {})).thread;
+		const entries = async () => (await as(`/api/instances/owni/threads/${thread.id}`)).entries as { from: string; text?: string }[];
 		const reply = async (text: string, count = 1): Promise<string> => {
-			const before = (await entries()).filter((e) => e.from === "annie").length;
-			if (text !== "") await as(`/api/instances/annie/threads/${thread.id}/messages`, { text });
+			const before = (await entries()).filter((e) => e.from === "owni").length;
+			if (text !== "") await as(`/api/instances/owni/threads/${thread.id}/messages`, { text });
 			for (const start = Date.now(); Date.now() - start < 20_000; ) {
-				const now = (await entries()).filter((e) => e.from === "annie");
+				const now = (await entries()).filter((e) => e.from === "owni");
 				if (now.length >= before + count) return now.at(-1)?.text ?? "";
 				await new Promise((r) => setTimeout(r, 30));
 			}
@@ -75,35 +75,35 @@ async function boot(url: string) {
 		};
 		return { reply };
 	};
-	return { annie, api, loginWith, chat };
+	return { owni, api, loginWith, chat };
 }
 
-const NOTE = (text: string) => `/tool demo__create_note ${JSON.stringify({ text, annie_reason: "Segno la nota che mi hai chiesto" })}`;
+const NOTE = (text: string) => `/tool demo__create_note ${JSON.stringify({ text, owni_reason: "Segno la nota che mi hai chiesto" })}`;
 
 describe("connector tools that change something wait for a person (ADR 0025)", () => {
 	it("read-only tools run at once; a write is asked, approved once and run once, without Owni's reason", async () => {
 		const d = await demo();
-		const { annie, api, chat } = await boot(d.url);
-		const status = (await api("/api/instances/annie/connectors")).connectors[0].status;
+		const { owni, api, chat } = await boot(d.url);
+		const status = (await api("/api/instances/owni/connectors")).connectors[0].status;
 		expect(status).toMatchObject({ connected: true, approval: ["demo__create_note"] });
 		const { reply } = await chat(api);
 		expect(await reply('/tool demo__add {"a":2,"b":3}')).toBe("Fatto. 5");
 		expect(await reply(NOTE("comprare il latte"))).toMatch(/Richiesta [0-9a-f]{12} pronta \(Crea una nota su Demo\)[\s\S]*sopra la chat[\s\S]*Non richiamare lo strumento/);
 		expect(d.notes).toEqual([]);
-		const [action] = (await api("/api/instances/annie/connector-actions")).actions;
+		const [action] = (await api("/api/instances/owni/connector-actions")).actions;
 		expect(action).toMatchObject({ status: "pending", connectorId: "demo", tool: "create_note", toolTitle: "Crea una nota", reason: "Segno la nota che mi hai chiesto", destructive: false, args: { text: "comprare il latte" } });
 		expect(action.shown).toEqual([["text", "comprare il latte"]]);
-		const decided = await api(`/api/instances/annie/connector-actions/${action.id}/decision`, { decision: "approved" });
+		const decided = await api(`/api/instances/owni/connector-actions/${action.id}/decision`, { decision: "approved" });
 		expect(decided.action).toMatchObject({ status: "done", result: { text: "note 1 created" } });
 		expect(d.notes).toEqual([{ text: "comprare il latte" }]);
 		expect(d.calls.filter((c) => c.includes("create_note"))).toHaveLength(1);
-		expect(d.calls.join()).not.toContain("annie_reason");
+		expect(d.calls.join()).not.toContain("owni_reason");
 		// The outcome comes back to the conversation, fenced as data.
 		expect(await reply("", 1)).toMatch(/Esito della richiesta [0-9a-f]{12}[\s\S]*note 1 created/);
 		// Deciding again changes nothing and runs nothing.
-		expect((await api(`/api/instances/annie/connector-actions/${action.id}/decision`, { decision: "approved" })).action.status).toBe("done");
+		expect((await api(`/api/instances/owni/connector-actions/${action.id}/decision`, { decision: "approved" })).action.status).toBe("done");
 		expect(d.notes).toHaveLength(1);
-		const audit = JSON.stringify(await annie.runtime.audit("default").read());
+		const audit = JSON.stringify(await owni.runtime.audit("default").read());
 		expect(audit).toContain('"type":"connector_action.done"');
 		expect(audit).not.toContain("comprare il latte");
 	});
@@ -113,28 +113,28 @@ describe("connector tools that change something wait for a person (ADR 0025)", (
 		const { api, chat } = await boot(d.url);
 		const { reply } = await chat(api);
 		await reply(NOTE("no"));
-		const [first] = (await api("/api/instances/annie/connector-actions")).actions;
-		expect((await api(`/api/instances/annie/connector-actions/${first.id}/decision`, { decision: "rejected" })).action.status).toBe("rejected");
+		const [first] = (await api("/api/instances/owni/connector-actions")).actions;
+		expect((await api(`/api/instances/owni/connector-actions/${first.id}/decision`, { decision: "rejected" })).action.status).toBe("rejected");
 		expect(await reply("", 1)).toMatch(/Rifiutata dalla persona che l'ha chiesta|Rifiutata da un approvatore/);
 		await reply(NOTE("fail"));
-		const second = (await api("/api/instances/annie/connector-actions")).actions.find((a: { status: string }) => a.status === "pending");
-		expect((await api(`/api/instances/annie/connector-actions/${second.id}/decision`, { decision: "approved" })).action).toMatchObject({ status: "failed", result: { error: "Demo ha risposto con un errore: note refused" } });
+		const second = (await api("/api/instances/owni/connector-actions")).actions.find((a: { status: string }) => a.status === "pending");
+		expect((await api(`/api/instances/owni/connector-actions/${second.id}/decision`, { decision: "approved" })).action).toMatchObject({ status: "failed", result: { error: "Demo ha risposto con un errore: note refused" } });
 		expect(d.notes).toEqual([]);
-		expect((await api("/api/instances/annie/connector-actions/nope/decision", { decision: "approved" })).status).toBe(404);
+		expect((await api("/api/instances/owni/connector-actions/nope/decision", { decision: "approved" })).status).toBe(404);
 	});
 
 	it("with approval off for the connector, writes run at once", async () => {
 		const d = await demo();
 		const { api, chat } = await boot(d.url);
-		const [connector] = (await api("/api/instances/annie/connectors")).connectors;
-		expect((await api("/api/instances/annie/connectors/demo", { name: connector.name, transport: connector.transport, approval: "none" }, "PUT")).status).not.toHaveProperty("approval");
-		expect((await api("/api/instances/annie/connectors")).connectors[0]).toMatchObject({ approval: "none" });
+		const [connector] = (await api("/api/instances/owni/connectors")).connectors;
+		expect((await api("/api/instances/owni/connectors/demo", { name: connector.name, transport: connector.transport, approval: "none" }, "PUT")).status).not.toHaveProperty("approval");
+		expect((await api("/api/instances/owni/connectors")).connectors[0]).toMatchObject({ approval: "none" });
 		const { reply } = await chat(api);
 		expect(await reply(NOTE("subito"))).toBe("Fatto. note 1 created");
 		expect(d.notes).toEqual([{ text: "subito" }]);
 		// Saved again without it, approval is back on.
-		await api("/api/instances/annie/connectors/demo", { name: connector.name, transport: connector.transport }, "PUT");
-		const again = (await api("/api/instances/annie/connectors")).connectors[0];
+		await api("/api/instances/owni/connectors/demo", { name: connector.name, transport: connector.transport }, "PUT");
+		const again = (await api("/api/instances/owni/connectors")).connectors[0];
 		expect(again.approval).toBeUndefined();
 		expect(again.status.approval).toEqual(["demo__create_note"]);
 	});
@@ -145,10 +145,10 @@ describe("connector tools that change something wait for a person (ADR 0025)", (
 		const { api, chat } = await boot(d.url);
 		const { reply } = await chat(api);
 		await reply(NOTE("per il primo"));
-		const [action] = (await api("/api/instances/annie/connector-actions")).actions;
-		const [connector] = (await api("/api/instances/annie/connectors")).connectors;
-		await api("/api/instances/annie/connectors/demo", { name: connector.name, transport: { ...connector.transport, url: other.url } }, "PUT");
-		const decided = await api(`/api/instances/annie/connector-actions/${action.id}/decision`, { decision: "approved" });
+		const [action] = (await api("/api/instances/owni/connector-actions")).actions;
+		const [connector] = (await api("/api/instances/owni/connectors")).connectors;
+		await api("/api/instances/owni/connectors/demo", { name: connector.name, transport: { ...connector.transport, url: other.url } }, "PUT");
+		const decided = await api(`/api/instances/owni/connector-actions/${action.id}/decision`, { decision: "approved" });
 		expect(decided.action).toMatchObject({ status: "failed", result: { error: expect.stringContaining("altro servizio") } });
 		expect(d.notes).toEqual([]);
 		expect(other.notes).toEqual([]);
@@ -156,19 +156,19 @@ describe("connector tools that change something wait for a person (ADR 0025)", (
 
 	it("a request nobody decides in 24 hours is told to the conversation once, and can no longer be approved", async () => {
 		const d = await demo();
-		const { annie, api, chat } = await boot(d.url);
+		const { owni, api, chat } = await boot(d.url);
 		const { reply } = await chat(api);
 		await reply(NOTE("dimenticata"));
 		const later = new Date(Date.now() + 24 * 3600_000 + 60_000);
 		// Count Owni's replies before the sweep, which may answer quickly.
 		const told = reply("", 1);
 		await new Promise((r) => setTimeout(r, 200));
-		await annie.scheduler.tick(later);
+		await owni.scheduler.tick(later);
 		expect(await told).toMatch(/Esito della richiesta [0-9a-f]{12} su Demo\] Nessuno l'ha approvata né rifiutata entro 24 ore: è scaduta e non è stata fatta[\s\S]*Crea una nota: Segno la nota/);
-		await annie.scheduler.tick(new Date(later.getTime() + 60_000));
-		const audit = (await annie.runtime.audit("default").read()) as { type: string }[];
+		await owni.scheduler.tick(new Date(later.getTime() + 60_000));
+		const audit = (await owni.runtime.audit("default").read()) as { type: string }[];
 		expect(audit.filter((e) => e.type === "connector_action.expired")).toHaveLength(1);
-		const store = annie.runtime.connectorActions("default", "annie");
+		const store = owni.runtime.connectorActions("default", "owni");
 		const [action] = await store.list(later);
 		expect(action).toMatchObject({ status: "expired", expiryTold: true });
 		const decided = await store.decide((action as { id: string }).id, "approved", { channel: "owner", userId: "owner" }, async () => ({ text: "no" }), later);
@@ -178,38 +178,38 @@ describe("connector tools that change something wait for a person (ADR 0025)", (
 
 	it("a request that expired long ago (Owni was off) is closed without a notice", async () => {
 		const d = await demo();
-		const { annie, api, chat } = await boot(d.url);
+		const { owni, api, chat } = await boot(d.url);
 		const { reply } = await chat(api);
 		await reply(NOTE("vecchia"));
-		await annie.scheduler.tick(new Date(Date.now() + 31 * 3600_000));
-		const audit = (await annie.runtime.audit("default").read()) as { type: string; told?: boolean; reason?: string }[];
+		await owni.scheduler.tick(new Date(Date.now() + 31 * 3600_000));
+		const audit = (await owni.runtime.audit("default").read()) as { type: string; told?: boolean; reason?: string }[];
 		expect(audit.filter((e) => e.type === "connector_action.expired")).toEqual([expect.objectContaining({ told: false, reason: "stale" })]);
-		const thread = (await api("/api/instances/annie/threads")).threads[0];
-		const entries = (await api(`/api/instances/annie/threads/${thread.id}`)).entries as { from: string }[];
-		expect(entries.filter((e) => e.from === "annie")).toHaveLength(1);
+		const thread = (await api("/api/instances/owni/threads")).threads[0];
+		const entries = (await api(`/api/instances/owni/threads/${thread.id}`)).entries as { from: string }[];
+		expect(entries.filter((e) => e.from === "owni")).toHaveLength(1);
 	});
 
 	it("another person can neither see nor decide someone's request; the owner can", async () => {
 		const d = await demo();
-		const { annie, api, loginWith, chat } = await boot(d.url);
+		const { owni, api, loginWith, chat } = await boot(d.url);
 		const people = [];
 		for (const name of ["Luca", "Sara"]) {
 			const { person, link } = await api("/api/people", { name });
 			people.push({ person, as: await loginWith(String(link).split("#")[1] as string) });
 		}
-		const record = await annie.runtime.registry.getInstance("default", "annie");
-		await annie.runtime.registry.setAllowedUsers("default", "annie", "web", [...(record.allowedUsers.web ?? []), ...people.map((p) => p.person.id)]);
+		const record = await owni.runtime.registry.getInstance("default", "owni");
+		await owni.runtime.registry.setAllowedUsers("default", "owni", "web", [...(record.allowedUsers.web ?? []), ...people.map((p) => p.person.id)]);
 		const [luca, sara] = people as [(typeof people)[0], (typeof people)[0]];
 		const { reply } = await chat(luca.as);
 		expect(await reply(NOTE("di Luca"))).toMatch(/pronta/);
-		const [action] = (await luca.as("/api/instances/annie/connector-actions")).actions;
+		const [action] = (await luca.as("/api/instances/owni/connector-actions")).actions;
 		expect(action.requester).toBe(`web:${luca.person.id}`);
-		expect((await sara.as("/api/instances/annie/connector-actions")).actions).toEqual([]);
-		expect((await sara.as(`/api/instances/annie/connector-actions/${action.id}/decision`, { decision: "approved" })).status).toBe(403);
+		expect((await sara.as("/api/instances/owni/connector-actions")).actions).toEqual([]);
+		expect((await sara.as(`/api/instances/owni/connector-actions/${action.id}/decision`, { decision: "approved" })).status).toBe(403);
 		expect(d.notes).toEqual([]);
-		expect((await api("/api/instances/annie/connector-actions")).actions).toHaveLength(1);
+		expect((await api("/api/instances/owni/connector-actions")).actions).toHaveLength(1);
 		// The person who asked may approve their own request.
-		expect((await luca.as(`/api/instances/annie/connector-actions/${action.id}/decision`, { decision: "approved" })).action.status).toBe("done");
+		expect((await luca.as(`/api/instances/owni/connector-actions/${action.id}/decision`, { decision: "approved" })).action.status).toBe("done");
 		expect(d.notes).toEqual([{ text: "di Luca" }]);
 	});
 });

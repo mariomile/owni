@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { ConnectorStore } from "../src/connectors/mcp.ts";
 import { piDurableEngine } from "../src/core/adapters/pi-durable.ts";
 import { instanceId, tenantId } from "../src/core/ids.ts";
-import { AnnieRuntime } from "../src/core/index.ts";
+import { OwniRuntime } from "../src/core/index.ts";
 import { instanceDir } from "../src/core/paths.ts";
 import { UsageLedger } from "../src/core/usage.ts";
 import { type Browser, BrowseSessions, viewportPoint } from "../src/core/web-session.ts";
@@ -82,7 +82,7 @@ describe("a click on the browser panel's picture (ADR 0103)", () => {
 
 	async function setup() {
 		const dataDir = tempDataDir();
-		const runtime = new AnnieRuntime({ dataDir, engine: piDurableEngine });
+		const runtime = new OwniRuntime({ dataDir, engine: piDurableEngine });
 		await runtime.registry.createTenant({ id: "acme", name: "acme" });
 		const tenantDir = join(dataDir, "tenants", "acme");
 		const people = new PeopleStore(tenantDir);
@@ -138,10 +138,10 @@ describe("a click on the browser panel's picture (ADR 0103)", () => {
 			await runtime.close();
 		});
 		const as = async (token: string) => {
-			const login = await fetch(`${base}/api/login`, { method: "POST", headers: { "x-annie": "1", "content-type": "application/json" }, body: JSON.stringify({ token }) });
+			const login = await fetch(`${base}/api/login`, { method: "POST", headers: { "x-owni": "1", "content-type": "application/json" }, body: JSON.stringify({ token }) });
 			const cookie = (login.headers.get("set-cookie") ?? "").split(";")[0] as string;
 			return async (path: string, body?: unknown, method = "POST") => {
-				const res = await fetch(`${base}${path}`, { method, headers: { cookie, "x-annie": "1", "content-type": "application/json" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+				const res = await fetch(`${base}${path}`, { method, headers: { cookie, "x-owni": "1", "content-type": "application/json" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
 				return { status: res.status, body: (await res.json()) as any };
 			};
 		};
@@ -227,7 +227,7 @@ describe("a click on the browser panel's picture (ADR 0103)", () => {
 		// Another person: it is not their conversation. Nobody logged in: nothing.
 		const luca = await h.as(h.luca.token);
 		expect((await luca(path, { x: 0.5, y: 0.5 })).status).toBe(404);
-		const anonymous = await fetch(`${h.base}${path}`, { method: "POST", headers: { "x-annie": "1" }, body: JSON.stringify({ x: 0.5, y: 0.5 }) });
+		const anonymous = await fetch(`${h.base}${path}`, { method: "POST", headers: { "x-owni": "1" }, body: JSON.stringify({ x: 0.5, y: 0.5 }) });
 		expect(anonymous.status).toBe(401);
 		// A person no longer allowed to write to the agente does not drive its browser.
 		await h.runtime.registry.setAllowedUsers("acme", "ops", "web", [h.luca.person.id]);

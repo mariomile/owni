@@ -16,12 +16,12 @@ describe("web channel", () => {
 		await delivered;
 		expect((await channel.transcript(thread.id)).map((e) => [e.from, e.text])).toEqual([
 			["person", "domanda"],
-			["annie", "risposta"],
+			["owni", "risposta"],
 		]);
 	});
 
 	it("a chat started with a command is titled in words", () => {
-		expect(chatTitle("  ciao   annie ")).toBe("ciao annie");
+		expect(chatTitle("  ciao   owni ")).toBe("ciao owni");
 		expect(chatTitle("/chiusura-del-mese ottobre")).toBe("Chiusura del mese ottobre");
 		expect(chatTitle('/tool tool_propose {"name":"cambio_eur"}')).toBe("Tool tool_propose");
 		expect(chatTitle("/modello")).toBe("Modello");

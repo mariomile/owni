@@ -42,8 +42,8 @@ type Exec = { readonly exitCode: number; readonly stdout: string; readonly stder
 type Result = { readonly done: boolean; readonly missing?: boolean; readonly exitCode?: number | null; readonly stdout?: string; readonly stderr?: string; readonly truncated?: boolean; readonly timedOut?: boolean; readonly killed?: boolean; readonly ms?: number; readonly diskKb?: number };
 
 const API_TIMEOUT_MS = 30_000;
-/** docker/annie-run.py in the `fly` image. */
-const RUNNER = "/usr/local/bin/annie-run";
+/** docker/owni-run.py in the `fly` image. */
+const RUNNER = "/usr/local/bin/owni-run";
 /** Fly's exec answers within 60 seconds: a command is waited for in slices shorter than that. */
 const WAIT_SLICE_S = 45;
 /** Fly's exec takes its input as a string, and gives its output as one: files go in pieces. */
@@ -58,9 +58,9 @@ const TIMED_OUT = Symbol("timed out");
 /**
  * A computer per instance as a Fly.io Machine (ADR 0015): a micro-VM with a kernel of its own,
  * in an app of its own on a private network of its own, with no public address and no service,
- * and a volume for /work. Its first process seals it off the network (docker/annie-fly-init) and
+ * and a volume for /work. Its first process seals it off the network (docker/owni-fly-init) and
  * stops it after a while with nothing to do. Commands and files go through Fly's exec API to
- * docker/annie-run, which runs them as uid 1000: a command starts in the background and is
+ * docker/owni-run, which runs them as uid 1000: a command starts in the background and is
  * waited for in slices, because an exec answers within 60 seconds.
  */
 export class FlyComputerProvider implements ComputerProvider {
@@ -197,7 +197,7 @@ export class FlyComputerProvider implements ComputerProvider {
 				await new Promise((resolve) => setTimeout(resolve, 500));
 				continue;
 			}
-			if (/not sealed/.test(out.stderr)) throw new Error("computer: the machine is not cut off from the network (annie-fly-init failed): no command runs there");
+			if (/not sealed/.test(out.stderr)) throw new Error("computer: the machine is not cut off from the network (owni-fly-init failed): no command runs there");
 			throw new Error(`computer: start failed (${out.exitCode}): ${out.stderr.slice(0, 200)}`);
 		}
 	}
@@ -227,7 +227,7 @@ export class FlyComputerProvider implements ComputerProvider {
 		return last.done ? { ...last, exitCode: null, timedOut: true, killed: false } : { done: true, exitCode: null, timedOut: true };
 	}
 
-	/** One of annie-run's file tools, as uid 1000: its output, or a ComputerError for what it refused. */
+	/** One of owni-run's file tools, as uid 1000: its output, or a ComputerError for what it refused. */
 	private async tool(key: string, machine: string, args: string[], stdin?: string): Promise<string> {
 		const out = await this.exec(key, machine, [RUNNER, ...args], 50, stdin);
 		if (out.exitCode === 0) return out.stdout;
@@ -278,13 +278,13 @@ export class FlyComputerProvider implements ComputerProvider {
 					await this.call("POST", "/v1/apps", { app_name: app, name: app, org_slug: this.options.org, network: app }, [200, 201]);
 				} catch (error) {
 					// App names are global on Fly: taken by another organization means a clash of prefixes.
-					if (/HTTP (409|422)/.test(message(error))) throw new Error(`computer: the Fly app name ${app} is taken outside ${this.options.org}: set ANNIE_FLY_APP_PREFIX to a name of this installation`);
+					if (/HTTP (409|422)/.test(message(error))) throw new Error(`computer: the Fly app name ${app} is taken outside ${this.options.org}: set OWNI_FLY_APP_PREFIX to a name of this installation`);
 					throw error;
 				}
 			}
 			const list = ((await this.call("GET", `/v1/apps/${app}/machines`, undefined, [200])) ?? []) as Machine[];
-			machine = list.find((m) => m.config?.metadata?.annie_computer === key && m.state !== "destroyed" && m.state !== "destroying");
-			if (list.some((m) => m.config?.metadata?.annie_computer !== key)) throw new Error(`computer: app ${app} has machines that are not this computer`);
+			machine = list.find((m) => m.config?.metadata?.owni_computer === key && m.state !== "destroyed" && m.state !== "destroying");
+			if (list.some((m) => m.config?.metadata?.owni_computer !== key)) throw new Error(`computer: app ${app} has machines that are not this computer`);
 		}
 		let version: string | undefined;
 		if (machine === undefined) {
@@ -297,7 +297,7 @@ export class FlyComputerProvider implements ComputerProvider {
 			if (typeof created?.id !== "string") throw new Error("computer: Fly gave no machine id");
 			machine = created;
 			version = created.instance_id;
-		} else if (machine.config?.metadata?.annie_spec !== hash) {
+		} else if (machine.config?.metadata?.owni_spec !== hash) {
 			const volume = machine.config?.mounts?.[0]?.volume;
 			if (volume === undefined) throw new Error(`computer: machine ${machine.id} has no volume`);
 			// A bigger quota grows the volume; a volume never shrinks.
@@ -349,7 +349,7 @@ export class FlyComputerProvider implements ComputerProvider {
 		return {
 			image: spec.image,
 			guest: spec.guest,
-			env: { ANNIE_IDLE_S: String(spec.idleS) },
+			env: { OWNI_IDLE_S: String(spec.idleS) },
 			mounts: [{ volume, path: "/work" }],
 			// No services: nothing reaches it through Fly's proxy, and it has no public address.
 			services: [],
@@ -357,7 +357,7 @@ export class FlyComputerProvider implements ComputerProvider {
 			restart: { policy: "no" },
 			auto_destroy: false,
 			dns: { skip_registration: true },
-			metadata: { annie_computer: spec.key as string, annie_spec: hash },
+			metadata: { owni_computer: spec.key as string, owni_spec: hash },
 		};
 	}
 
@@ -374,7 +374,7 @@ export class FlyComputerProvider implements ComputerProvider {
 	}
 
 	private prefix(): string {
-		return this.options.appPrefix ?? "annie-computer";
+		return this.options.appPrefix ?? "owni-computer";
 	}
 
 	/** App names are global on Fly: the organization goes into it, so two installations never clash. */

@@ -10,9 +10,9 @@ for target in aarch64 x86_64; do
   xcrun swiftc -parse-as-library -swift-version 5 -O \
     -target "$swift_arch-apple-macos12.0" \
     "$root/desktop/native/computer-use.swift" \
-    -o "$bin/annie-computer-use-$target-apple-darwin"
+    -o "$bin/owni-computer-use-$target-apple-darwin"
 done
-lipo -create "$bin/annie-computer-use-aarch64-apple-darwin" \
-  "$bin/annie-computer-use-x86_64-apple-darwin" \
-  -output "$bin/annie-computer-use-universal-apple-darwin"
-"$bin/annie-computer-use-universal-apple-darwin" --self-test
+lipo -create "$bin/owni-computer-use-aarch64-apple-darwin" \
+  "$bin/owni-computer-use-x86_64-apple-darwin" \
+  -output "$bin/owni-computer-use-universal-apple-darwin"
+"$bin/owni-computer-use-universal-apple-darwin" --self-test

@@ -1,7 +1,7 @@
 import type { BankStore } from "../bank-store.ts";
 import { formNote } from "../client-find.ts";
 import { cardCf, goodVat } from "../clients.ts";
-import type { AnnieTool, ToolContext } from "../engine.ts";
+import type { OwniTool, ToolContext } from "../engine.ts";
 import type { ExpenseStore } from "../expense-store.ts";
 import { InvoiceScanner } from "../invoice-scan.ts";
 import type { InvoiceStore } from "../invoice-store.ts";
@@ -116,12 +116,12 @@ const meant = (candidates: readonly Supplier[], more = "") => meantSupplier(cand
 type Loaded = { readonly suppliers: Supplier[]; readonly ledger: Ledger; readonly notes: string[]; readonly unnamed: number };
 
 /** I fornitori (suppliers.ts): the cards kept here; everything else read from the registers, never written. Today is read once per call. */
-export function createSupplierTools(options: SupplierToolsOptions): AnnieTool[] {
+export function createSupplierTools(options: SupplierToolsOptions): OwniTool[] {
 	const { store, workspace, timeZone } = options;
 	const now = options.now ?? (() => new Date());
 	const scanner = options.scanner ?? new InvoiceScanner(workspace);
 	const dayOf = dayOfIn(timeZone);
-	const who = (ctx: ToolContext) => (ctx.thread === undefined ? "annie" : (options.whoIs(ctx.thread) ?? `${ctx.thread.channel}:${ctx.thread.threadId}`));
+	const who = (ctx: ToolContext) => (ctx.thread === undefined ? "owni" : (options.whoIs(ctx.thread) ?? `${ctx.thread.channel}:${ctx.thread.threadId}`));
 	const marker = (ctx: ToolContext): Marker => ({ by: who(ctx), at: now().toISOString() });
 	const audit = async (ctx: ToolContext, op: SupplierEvent["op"], count: number) => {
 		// Its own step: an audit that failed is written on the rerun, after the change it records.

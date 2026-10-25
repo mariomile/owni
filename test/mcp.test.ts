@@ -5,7 +5,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { afterEach, describe, expect, it } from "vitest";
 import { ConnectorStore, connectorEgressName, McpConnections, type McpConnector } from "../src/connectors/mcp.ts";
 import { piDurableEngine } from "../src/core/adapters/pi-durable.ts";
-import { AnnieRuntime, type Reply } from "../src/core/index.ts";
+import { OwniRuntime, type Reply } from "../src/core/index.ts";
 import { createDemoServer } from "./fixtures/mcp-demo-server.ts";
 import { FAUX_MODEL, tempDataDir, waitFor } from "./helpers.ts";
 
@@ -37,7 +37,7 @@ async function httpDemo(): Promise<string> {
 async function setup(connectors: McpConnector[], allowed: string[]) {
 	const dataDir = tempDataDir();
 	const connections = new Map<string, McpConnections>();
-	const runtime: AnnieRuntime = new AnnieRuntime({
+	const runtime: OwniRuntime = new OwniRuntime({
 		dataDir,
 		engine: piDurableEngine,
 		tools: async (record) => {
@@ -76,7 +76,7 @@ describe("MCP connectors", () => {
 	});
 
 	it("a stdio connector gets only the environment it names, never Owni's", async () => {
-		process.env.ANNIE_SHOULD_NOT_LEAK = "leak";
+		process.env.OWNI_SHOULD_NOT_LEAK = "leak";
 		const h = await setup(
 			[{ id: "local", name: "Local", transport: { type: "stdio", command: join(import.meta.dirname, "..", "node_modules", ".bin", "tsx"), args: [join(import.meta.dirname, "fixtures", "mcp-demo-server.ts"), "stdio"], envSecrets: { DEMO_TOKEN: "connector.local.token" } }, enabled: true }],
 			[connectorEgressName("local")],

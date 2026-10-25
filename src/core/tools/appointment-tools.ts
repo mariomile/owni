@@ -16,7 +16,7 @@ import { type Appointment, APPOINTMENT_LIMITS, AppointmentError, type Appointmen
 import { type Block, fits, type Fit, type FitInput, freeSlots, gapsOf, localNow, nearestFree, openOn, type Span } from "../appointment-slots.ts";
 import { APPOINTMENTS_BROKEN, type AppointmentBook, type AppointmentStore } from "../appointment-store.ts";
 import type { ClientStore } from "../client-store.ts";
-import type { AnnieTool, ToolContext } from "../engine.ts";
+import type { OwniTool, ToolContext } from "../engine.ts";
 import { n1 } from "../format-words.ts";
 import { addDays, daysBetween, weekdayOf } from "../italian-calendar.ts";
 import { italianLongDate, italianWeekday } from "../italian-format.ts";
@@ -133,10 +133,10 @@ function gapsWords(settings: AppointmentSettings | undefined, appointments: read
 	return rows.length === 0 ? [] : ["Libero per risorsa, nel riquadro.", fencedAppointments(`Libero: ${rows.join("; ")}`)];
 }
 
-export function createAppointmentTools(options: AppointmentToolsOptions): AnnieTool[] {
+export function createAppointmentTools(options: AppointmentToolsOptions): OwniTool[] {
 	const { store, workspace, timeZone } = options;
 	const now = options.now ?? (() => new Date());
-	const who = (ctx: ToolContext) => (ctx.thread === undefined ? "annie" : (options.whoIs(ctx.thread) ?? `${ctx.thread.channel}:${ctx.thread.threadId}`));
+	const who = (ctx: ToolContext) => (ctx.thread === undefined ? "owni" : (options.whoIs(ctx.thread) ?? `${ctx.thread.channel}:${ctx.thread.threadId}`));
 	const marker = (ctx: ToolContext): Marker => ({ by: who(ctx), at: now().toISOString() });
 	const audit = async (ctx: ToolContext, op: AppointmentEvent["op"], count: number) => {
 		await ctx.step(`audit-${op}`, async () => {

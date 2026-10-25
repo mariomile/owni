@@ -3,6 +3,6 @@ data
 dist
 .env
 .git
-.annie-run
+.owni-run
 *.log
 evals/segreteria/last-report

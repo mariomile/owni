@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { TelegramAdapter } from "../src/channels/telegram.ts";
 import { piDurableEngine } from "../src/core/adapters/pi-durable.ts";
 import { IMAGE_LIMITS, imageProblem, imageType } from "../src/core/images.ts";
-import { AnnieRuntime } from "../src/core/index.ts";
+import { OwniRuntime } from "../src/core/index.ts";
 import { createWorkspaceTools } from "../src/core/tools/workspace-tools.ts";
 import { connectChannel } from "../src/gateway.ts";
 import { randomBytes } from "node:crypto";
@@ -50,7 +50,7 @@ describe("images reach the model", () => {
 
 	it("from Telegram: a photo, in its largest size, lands in uploads/ and the model sees it; a stranger's is never downloaded", async () => {
 		const dataDir = tempDataDir();
-		const runtime = new AnnieRuntime({ dataDir, engine: piDurableEngine });
+		const runtime = new OwniRuntime({ dataDir, engine: piDurableEngine });
 		await runtime.registry.createTenant({ id: "acme", name: "acme" });
 		await runtime.registry.createInstance("acme", { id: "ops", name: "ops", model: FAUX_MODEL, egress: { modelProviders: ["faux"], channels: ["telegram"] }, allowedUsers: { telegram: ["7"] } });
 		const texts: string[] = [];
@@ -82,7 +82,7 @@ describe("images reach the model", () => {
 
 	it("from Telegram: an album is one message; a document that is a picture is seen; a photo that cannot be had is said, with its caption", async () => {
 		const dataDir = tempDataDir();
-		const runtime = new AnnieRuntime({ dataDir, engine: piDurableEngine });
+		const runtime = new OwniRuntime({ dataDir, engine: piDurableEngine });
 		await runtime.registry.createTenant({ id: "acme", name: "acme" });
 		await runtime.registry.createInstance("acme", { id: "ops", name: "ops", model: FAUX_MODEL, egress: { modelProviders: ["faux"], channels: ["telegram"] }, allowedUsers: { telegram: ["7"] } });
 		const texts: string[] = [];

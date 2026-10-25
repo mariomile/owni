@@ -1,4 +1,4 @@
-import type { AnnieTool, ToolContext } from "../engine.ts";
+import type { OwniTool, ToolContext } from "../engine.ts";
 import { addDays, dayOfIn, todayIn } from "../italian-calendar.ts";
 import { italianLongDate as long, withDate } from "../italian-format.ts";
 import { agendaOf, amountAt, deadlineFor, effectiveDue, effectiveTermEnd, lastCharge, movesBySelf, nextDue, normalised, noticeAlerts, noticeDeadline, placeDue, readDue, remindDays } from "../renewal-dates.ts";
@@ -69,10 +69,10 @@ type Payment = { readonly amount?: string; readonly day: string };
  * cancelled and reactivated, changed, removed, exported. Dates, amounts and ids are this tool's;
  * names, providers, notes and paths come from the person and are fenced.
  */
-export function createRenewalTools(options: RenewalToolsOptions): AnnieTool[] {
+export function createRenewalTools(options: RenewalToolsOptions): OwniTool[] {
 	const { store, workspace, timeZone } = options;
 	const now = options.now ?? (() => new Date());
-	const who = (ctx: ToolContext) => (ctx.thread === undefined ? "annie" : (options.whoIs(ctx.thread) ?? `${ctx.thread.channel}:${ctx.thread.threadId}`));
+	const who = (ctx: ToolContext) => (ctx.thread === undefined ? "owni" : (options.whoIs(ctx.thread) ?? `${ctx.thread.channel}:${ctx.thread.threadId}`));
 	const today = () => todayIn(timeZone, now());
 	const localDay = dayOfIn(timeZone);
 	const audit = async (ctx: ToolContext, op: RenewalEvent["op"], count: number) => {

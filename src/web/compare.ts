@@ -9,10 +9,10 @@ export function sameSecret(given: string, expected: string): boolean {
 
 /** What the control plane sends with every request it forwards to a cell: derived from the cell's secret, never the secret itself. */
 export function proxyToken(cellSecret: string): string {
-	return createHmac("sha256", cellSecret).update("annie-proxy").digest("hex");
+	return createHmac("sha256", cellSecret).update("owni-proxy").digest("hex");
 }
 
 /** What a cell sends to reach its computers through the control plane (ADR 0015): derived from the cell's secret, never the secret itself. */
 export function computerToken(cellSecret: string): string {
-	return createHmac("sha256", cellSecret).update("annie-computer").digest("hex");
+	return createHmac("sha256", cellSecret).update("owni-computer").digest("hex");
 }

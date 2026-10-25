@@ -7,10 +7,10 @@
  * stdout: OPENED <pid>, CLOSED, or LOCKED <error message> (then exit code 3).
  */
 import { piDurableEngine } from "../../src/core/adapters/pi-durable.ts";
-import { AnnieRuntime, InstanceLocked } from "../../src/core/index.ts";
+import { OwniRuntime, InstanceLocked } from "../../src/core/index.ts";
 
 const [mode, dataDir] = process.argv.slice(2) as [string, string];
-const runtime = new AnnieRuntime({ dataDir, engine: piDurableEngine });
+const runtime = new OwniRuntime({ dataDir, engine: piDurableEngine });
 try {
 	await runtime.openInstance("acme", "ops");
 	console.log(`OPENED ${process.pid}`);

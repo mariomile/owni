@@ -18,7 +18,7 @@ export type WebThread = {
 export type WebEntry = {
 	readonly id: string;
 	readonly at: string;
-	readonly from: "person" | "annie";
+	readonly from: "person" | "owni";
 	readonly text?: string;
 	/** A workspace file the instance sent. */
 	readonly file?: { readonly path: string; readonly caption?: string };
@@ -182,7 +182,7 @@ export class WebChannel implements ChannelAdapter {
 			// goes there again (the stanza keeps each message once).
 			const sent = (await this.transcript(threadId)).find((e) => e.id === id);
 			if (sent !== undefined) return thread?.room === undefined ? undefined : { entry: sent, room: thread.room };
-			const entry: WebEntry = { id, at: new Date().toISOString(), from: "annie", ...body };
+			const entry: WebEntry = { id, at: new Date().toISOString(), from: "owni", ...body };
 			await this.append(threadId, entry);
 			if (thread !== undefined) await this.saveThread({ ...thread, updatedAt: entry.at });
 			return { entry, room: thread?.room };

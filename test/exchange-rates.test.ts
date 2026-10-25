@@ -1,14 +1,14 @@
 import { readFileSync } from "node:fs";
 import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
-import { type RunningAnnie, startAnnie } from "../src/app.ts";
+import { type RunningOwni, startOwni } from "../src/app.ts";
 import { readOnlyInBriefs } from "../src/core/brief.ts";
 import type { ToolContext } from "../src/core/engine.ts";
 import { DEFAULT_RATES_URL, ecbRates, parseEcbXml, targetHoliday, targetWorkingDay } from "../src/core/exchange-rates.ts";
 import { italianDate, italianMoney, MAX_MONEY } from "../src/core/italian-format.ts";
 import { createExchangeTools } from "../src/core/tools/exchange-tools.ts";
 import { runChecks } from "../src/main/check.ts";
-import { loadAnnieConfig } from "../src/main/config.ts";
+import { loadOwniConfig } from "../src/main/config.ts";
 import { tempDataDir } from "./helpers.ts";
 
 const closers: (() => Promise<void>)[] = [];
@@ -542,40 +542,40 @@ describe("exchange_rate", () => {
 });
 
 describe("exchange rates configuration", () => {
-	const base = { ANNIE_DATA_DIR: "/tmp/annie-rates", ANNIE_MODEL_PROVIDER: "faux" };
+	const base = { OWNI_DATA_DIR: "/tmp/owni-rates", OWNI_MODEL_PROVIDER: "faux" };
 
-	it("is off unless the operator sets ANNIE_EXCHANGE_RATES=1; the ECB's address by default, a mirror's checked", () => {
-		expect(loadAnnieConfig(base).exchangeRates).toBeUndefined();
-		expect(loadAnnieConfig({ ...base, ANNIE_EXCHANGE_RATES: "0" }).exchangeRates).toBeUndefined();
-		expect(loadAnnieConfig({ ...base, ANNIE_EXCHANGE_RATES: "1" }).exchangeRates).toEqual({ url: "https://www.ecb.europa.eu/stats/eurofxref" });
-		expect(loadAnnieConfig({ ...base, ANNIE_EXCHANGE_RATES: "true", ANNIE_EXCHANGE_RATES_URL: "http://localhost:8080/ecb" }).exchangeRates).toEqual({ url: "http://localhost:8080/ecb" });
-		expect(() => loadAnnieConfig({ ...base, ANNIE_EXCHANGE_RATES: "si" })).toThrow("ANNIE_EXCHANGE_RATES: 1 to offer the ECB exchange rates, 0 (default) for none");
-		expect(() => loadAnnieConfig({ ...base, ANNIE_EXCHANGE_RATES_URL: "https://mirror.example/ecb" })).toThrow("ANNIE_EXCHANGE_RATES_URL set without ANNIE_EXCHANGE_RATES=1");
-		const on = { ...base, ANNIE_EXCHANGE_RATES: "1" };
-		expect(() => loadAnnieConfig({ ...on, ANNIE_EXCHANGE_RATES_URL: "http://mirror.example/ecb" })).toThrow("ANNIE_EXCHANGE_RATES_URL: an https address (http only on localhost)");
-		expect(() => loadAnnieConfig({ ...on, ANNIE_EXCHANGE_RATES_URL: "https://u:p@mirror.example/ecb" })).toThrow("ANNIE_EXCHANGE_RATES_URL: no user name or password");
-		expect(() => loadAnnieConfig({ ...on, ANNIE_EXCHANGE_RATES_URL: "https://mirror.example/ecb?x=1" })).toThrow("ANNIE_EXCHANGE_RATES_URL: an address without a query or a fragment");
+	it("is off unless the operator sets OWNI_EXCHANGE_RATES=1; the ECB's address by default, a mirror's checked", () => {
+		expect(loadOwniConfig(base).exchangeRates).toBeUndefined();
+		expect(loadOwniConfig({ ...base, OWNI_EXCHANGE_RATES: "0" }).exchangeRates).toBeUndefined();
+		expect(loadOwniConfig({ ...base, OWNI_EXCHANGE_RATES: "1" }).exchangeRates).toEqual({ url: "https://www.ecb.europa.eu/stats/eurofxref" });
+		expect(loadOwniConfig({ ...base, OWNI_EXCHANGE_RATES: "true", OWNI_EXCHANGE_RATES_URL: "http://localhost:8080/ecb" }).exchangeRates).toEqual({ url: "http://localhost:8080/ecb" });
+		expect(() => loadOwniConfig({ ...base, OWNI_EXCHANGE_RATES: "si" })).toThrow("OWNI_EXCHANGE_RATES: 1 to offer the ECB exchange rates, 0 (default) for none");
+		expect(() => loadOwniConfig({ ...base, OWNI_EXCHANGE_RATES_URL: "https://mirror.example/ecb" })).toThrow("OWNI_EXCHANGE_RATES_URL set without OWNI_EXCHANGE_RATES=1");
+		const on = { ...base, OWNI_EXCHANGE_RATES: "1" };
+		expect(() => loadOwniConfig({ ...on, OWNI_EXCHANGE_RATES_URL: "http://mirror.example/ecb" })).toThrow("OWNI_EXCHANGE_RATES_URL: an https address (http only on localhost)");
+		expect(() => loadOwniConfig({ ...on, OWNI_EXCHANGE_RATES_URL: "https://u:p@mirror.example/ecb" })).toThrow("OWNI_EXCHANGE_RATES_URL: no user name or password");
+		expect(() => loadOwniConfig({ ...on, OWNI_EXCHANGE_RATES_URL: "https://mirror.example/ecb?x=1" })).toThrow("OWNI_EXCHANGE_RATES_URL: an address without a query or a fragment");
 	});
 
 	it("reaches the cells of Owni Cloud", () => {
 		const passed = /const passed = \[([^\]]*)\]/.exec(readFileSync("src/main/cloud.ts", "utf8"))?.[1] ?? "";
-		for (const name of ["ANNIE_EXCHANGE_RATES", "ANNIE_EXCHANGE_RATES_URL"]) expect(passed).toContain(`"${name}"`);
+		for (const name of ["OWNI_EXCHANGE_RATES", "OWNI_EXCHANGE_RATES_URL"]) expect(passed).toContain(`"${name}"`);
 	});
 
-	it("pnpm annie check asks the ECB once, only when on, with its own timeout; a failure names the host and the variable", async () => {
+	it("pnpm owni check asks the ECB once, only when on, with its own timeout; a failure names the host and the variable", async () => {
 		const cambi = (results: Awaited<ReturnType<typeof runChecks>>) => results.find((r) => r.name === "Cambi");
 		const today = new Date().toISOString().slice(0, 10);
 		const off = fakeEcb({ "eurofxref-daily.xml": dailyXml(today) });
-		expect(cambi(await runChecks(loadAnnieConfig(base), off.fetch))).toBeUndefined();
+		expect(cambi(await runChecks(loadOwniConfig(base), off.fetch))).toBeUndefined();
 		expect(off.asked).toHaveLength(0);
 		const on = fakeEcb({ "eurofxref-daily.xml": dailyXml(today) });
-		expect(cambi(await runChecks(loadAnnieConfig({ ...base, ANNIE_EXCHANGE_RATES: "1" }), on.fetch))).toEqual({ name: "Cambi", ok: true, detail: `www.ecb.europa.eu risponde, cambi del ${today} per 4 valute` });
+		expect(cambi(await runChecks(loadOwniConfig({ ...base, OWNI_EXCHANGE_RATES: "1" }), on.fetch))).toEqual({ name: "Cambi", ok: true, detail: `www.ecb.europa.eu risponde, cambi del ${today} per 4 valute` });
 		expect(on.asked).toEqual([expect.objectContaining({ file: "eurofxref-daily.xml", signal: expect.any(AbortSignal) })]);
 		const broken = fakeEcb({ "eurofxref-daily.xml": () => new Response("down", { status: 502 }) });
-		expect(cambi(await runChecks(loadAnnieConfig({ ...base, ANNIE_EXCHANGE_RATES: "1", ANNIE_EXCHANGE_RATES_URL: "https://mirror.example/ecb" }), broken.fetch))).toEqual({
+		expect(cambi(await runChecks(loadOwniConfig({ ...base, OWNI_EXCHANGE_RATES: "1", OWNI_EXCHANGE_RATES_URL: "https://mirror.example/ecb" }), broken.fetch))).toEqual({
 			name: "Cambi",
 			ok: false,
-			detail: "il servizio dei cambi della BCE risponde 502: controlla che mirror.example sia raggiungibile, o ANNIE_EXCHANGE_RATES_URL",
+			detail: "il servizio dei cambi della BCE risponde 502: controlla che mirror.example sia raggiungibile, o OWNI_EXCHANGE_RATES_URL",
 		});
 		expect(broken.asked[0]?.host).toBe("mirror.example");
 	});
@@ -584,7 +584,7 @@ describe("exchange rates configuration", () => {
 describe("exchange_rate in an instance", () => {
 	it("is offered when the operator turned it on, through the faux model, and leaves no audit line", async () => {
 		const fake = fakeEcb();
-		const { reply, dataDir } = await boot(tempDataDir(), { ANNIE_EXCHANGE_RATES: "1" }, fake.fetch);
+		const { reply, dataDir } = await boot(tempDataDir(), { OWNI_EXCHANGE_RATES: "1" }, fake.fetch);
 		const answer = await reply('/tool exchange_rate {"from":"USD","amount":1250,"date":"2024-05-17"}');
 		expect(answer).toContain("1.250,00 USD = 1.152,71 EUR");
 		expect(answer).toContain("Cambio BCE del 17/05/2024: 1 EUR = 1,0844 USD (1 USD = 0,9222 EUR).");
@@ -602,22 +602,22 @@ describe("exchange_rate in an instance", () => {
 });
 
 async function boot(dataDir: string, env: Record<string, string>, exchangeRatesFetch: typeof fetch) {
-	const config = loadAnnieConfig({ ANNIE_DATA_DIR: dataDir, ANNIE_MODEL_PROVIDER: "faux", ANNIE_WEB_PORT: "1", ...env });
-	const annie: RunningAnnie = await startAnnie({ ...config, web: { ...config.web, port: 0 } }, { exchangeRatesFetch, schedulerIntervalMs: 60_000, log: () => {} });
-	closers.push(() => annie.stop());
-	const base = `http://127.0.0.1:${(annie.server.address() as AddressInfo).port}`;
-	const login = await fetch(`${base}/api/login`, { method: "POST", headers: { "x-annie": "1" }, body: JSON.stringify({ token: (annie.ownerLink as string).split("#")[1] }) });
+	const config = loadOwniConfig({ OWNI_DATA_DIR: dataDir, OWNI_MODEL_PROVIDER: "faux", OWNI_WEB_PORT: "1", ...env });
+	const owni: RunningOwni = await startOwni({ ...config, web: { ...config.web, port: 0 } }, { exchangeRatesFetch, schedulerIntervalMs: 60_000, log: () => {} });
+	closers.push(() => owni.stop());
+	const base = `http://127.0.0.1:${(owni.server.address() as AddressInfo).port}`;
+	const login = await fetch(`${base}/api/login`, { method: "POST", headers: { "x-owni": "1" }, body: JSON.stringify({ token: (owni.ownerLink as string).split("#")[1] }) });
 	const cookie = (login.headers.get("set-cookie") ?? "").split(";")[0] as string;
 	const api = async (path: string, body?: unknown) => {
-		const res = await fetch(`${base}${path}`, { method: body === undefined ? "GET" : "POST", headers: { cookie, "x-annie": "1" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+		const res = await fetch(`${base}${path}`, { method: body === undefined ? "GET" : "POST", headers: { cookie, "x-owni": "1" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
 		// biome-ignore lint: test
 		return (await res.json()) as any;
 	};
-	const thread = (await api("/api/instances/annie/threads", {})).thread;
+	const thread = (await api("/api/instances/owni/threads", {})).thread;
 	const reply = async (text: string): Promise<string> => {
-		const answers = async () => ((await api(`/api/instances/annie/threads/${thread.id}`)).entries as { from: string; text?: string }[]).filter((e) => e.from === "annie");
+		const answers = async () => ((await api(`/api/instances/owni/threads/${thread.id}`)).entries as { from: string; text?: string }[]).filter((e) => e.from === "owni");
 		const before = (await answers()).length;
-		await api(`/api/instances/annie/threads/${thread.id}/messages`, { text });
+		await api(`/api/instances/owni/threads/${thread.id}/messages`, { text });
 		for (const start = Date.now(); Date.now() - start < 20_000; ) {
 			const now = await answers();
 			if (now.length > before) return now.at(-1)?.text ?? "";

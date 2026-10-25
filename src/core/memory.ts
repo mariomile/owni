@@ -14,7 +14,7 @@ export type Memory = {
 	readonly id: string;
 	readonly about: string;
 	readonly text: string;
-	readonly source: "annie" | "person";
+	readonly source: "owni" | "person";
 	readonly createdAt: string;
 	/**
 	 * In the archivio (ADR 0062): kept, and found with memory_search when a conversation needs

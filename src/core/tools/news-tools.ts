@@ -1,5 +1,5 @@
 import { localMinute } from "../cron.ts";
-import type { AnnieTool } from "../engine.ts";
+import type { OwniTool } from "../engine.ts";
 import { italianWeekday } from "../italian-format.ts";
 import { type FeedResult, type Headline, LATE, NEWS_SECTIONS, type News, type NewsFeed, type NewsSection } from "../news.ts";
 import { fold, parseQuery, QUERY_LIMITS, type QueryTerm } from "../text-match.ts";
@@ -37,7 +37,7 @@ const WEB_SEARCH_HINT = "web_search, se ce l'hai";
  * anywhere. Headlines, summaries and links come from outside and are fenced as data; the links are
  * shown, never fetched by this tool.
  */
-export function createNewsTools(options: NewsToolsOptions): AnnieTool[] {
+export function createNewsTools(options: NewsToolsOptions): OwniTool[] {
 	const now = options.now ?? (() => new Date());
 	return [
 		{

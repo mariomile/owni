@@ -1,7 +1,7 @@
 import { isAgentTurn } from "../turn-origin.ts";
 import { makeDocumentFile } from "../document-reader.ts";
 import { DocumentError } from "../documents.ts";
-import type { AnnieTool, ToolContext } from "../engine.ts";
+import type { OwniTool, ToolContext } from "../engine.ts";
 import type { Company } from "../invoices.ts";
 import { BROKEN_WRITE, type InvoiceStore } from "../invoice-store.ts";
 import { todayIn } from "../italian-calendar.ts";
@@ -101,16 +101,16 @@ export type CreateQuote = (input: QuoteCreateInput, ctx: ToolContext) => Promise
  * Preventivi (quotes.ts): made, redone, listed and marked accepted or declined. The numbers and
  * totals are this tool's; the customer, descriptions and notes come from the person and are fenced.
  */
-export function createQuoteTools(options: QuoteToolsOptions): AnnieTool[] {
+export function createQuoteTools(options: QuoteToolsOptions): OwniTool[] {
 	return quotesOf(options).tools;
 }
 
 /** The quotes tool, and the same quotes' create for another tool. */
-export function quotesOf(options: QuoteToolsOptions): { readonly tools: AnnieTool[]; readonly create: CreateQuote } {
+export function quotesOf(options: QuoteToolsOptions): { readonly tools: OwniTool[]; readonly create: CreateQuote } {
 	const { store, workspace, timeZone } = options;
 	const now = options.now ?? (() => new Date());
 	const make = options.make ?? ((input: MakeInput) => makeDocumentFile(input));
-	const who = (ctx: ToolContext) => (ctx.thread === undefined ? "annie" : (options.whoIs(ctx.thread) ?? `${ctx.thread.channel}:${ctx.thread.threadId}`));
+	const who = (ctx: ToolContext) => (ctx.thread === undefined ? "owni" : (options.whoIs(ctx.thread) ?? `${ctx.thread.channel}:${ctx.thread.threadId}`));
 	const view = (): QuoteView => ({ today: todayIn(timeZone, now()), timeZone });
 	const audit = async (ctx: ToolContext, key: string, event: QuoteEvent) => {
 		await ctx.step(key, async () => {
@@ -134,7 +134,7 @@ export function quotesOf(options: QuoteToolsOptions): { readonly tools: AnnieToo
 		const quote = book.broken ? undefined : book.quotes.find((q) => q.callId === ctx.callId);
 		return { text, ...(quote?.file === undefined ? {} : { number: quote.number }) };
 	};
-	const tools: AnnieTool[] = [
+	const tools: OwniTool[] = [
 		{
 			name: "quotes",
 			description: DESCRIPTION,

@@ -1,6 +1,6 @@
 import { isAgentTurn } from "../turn-origin.ts";
 import { cashBook } from "../cash-book.ts";
-import type { AnnieTool, ToolContext } from "../engine.ts";
+import type { OwniTool, ToolContext } from "../engine.ts";
 import { CATEGORIES, type Category, DOC_TYPES, type Method, EXPENSE_LIMITS, type Expense, ExpenseError, expenseCallReads, expenseId, findExpenses, idOrder, lookalike, matchCategory, matchesSupplier, METHODS, newestFirst, parseExpenseId } from "../expenses.ts";
 import { EXPENSES_BROKEN, type ExpenseStore } from "../expense-store.ts";
 import { inPeriod, type Period, PeriodError, periodOf, underWay } from "../periods.ts";
@@ -62,7 +62,7 @@ function sameDraft(draft: ExpenseDraft, e: Expense): boolean {
  * removed, the prima nota with the invoices collected, and CSV exports. Amounts and totals are
  * this tool's; suppliers, notes and receipt paths come from the person and are fenced.
  */
-export function createExpenseTools(options: ExpenseToolsOptions): AnnieTool[] {
+export function createExpenseTools(options: ExpenseToolsOptions): OwniTool[] {
 	return expensesOf(options).tools;
 }
 
@@ -101,11 +101,11 @@ export type ExpenseSeam = {
 };
 
 /** The expenses tool, and the same expenses' add for another tool. */
-export function expensesOf(options: ExpenseToolsOptions): { readonly tools: AnnieTool[]; readonly seam: ExpenseSeam } {
+export function expensesOf(options: ExpenseToolsOptions): { readonly tools: OwniTool[]; readonly seam: ExpenseSeam } {
 	const { store, workspace, timeZone } = options;
 	const now = options.now ?? (() => new Date());
 	const scanner = options.scanner ?? new InvoiceScanner(workspace);
-	const who = (ctx: ToolContext) => (ctx.thread === undefined ? "annie" : (options.whoIs(ctx.thread) ?? `${ctx.thread.channel}:${ctx.thread.threadId}`));
+	const who = (ctx: ToolContext) => (ctx.thread === undefined ? "owni" : (options.whoIs(ctx.thread) ?? `${ctx.thread.channel}:${ctx.thread.threadId}`));
 	const today = () => todayIn(timeZone, now());
 	const audit = async (ctx: ToolContext, event: ExpenseEvent) => {
 		// Its own step: an audit that failed is written on the rerun, after the change it records.
@@ -168,7 +168,7 @@ export function expensesOf(options: ExpenseToolsOptions): { readonly tools: Anni
 		const twin = lookalike(readable(), expense);
 		return { id: expense.id, line: expenseLine(expense), ...(twin === undefined ? {} : { twin }) };
 	}
-	const tools: AnnieTool[] = [
+	const tools: OwniTool[] = [
 		{
 			name: "expenses",
 			description: DESCRIPTION,

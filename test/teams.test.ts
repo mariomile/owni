@@ -1,30 +1,30 @@
 import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
-import { type RunningAnnie, startAnnie } from "../src/app.ts";
+import { type RunningOwni, startOwni } from "../src/app.ts";
 import { TEAMS, team, teamJob } from "../src/core/teams.ts";
-import { loadAnnieConfig } from "../src/main/config.ts";
+import { loadOwniConfig } from "../src/main/config.ts";
 import { tempDataDir } from "./helpers.ts";
 
-const running: RunningAnnie[] = [];
+const running: RunningOwni[] = [];
 afterEach(async () => {
 	for (const a of running.splice(0)) await a.stop();
 });
 
 async function boot() {
-	const config = loadAnnieConfig({ ANNIE_DATA_DIR: tempDataDir(), ANNIE_MODEL_PROVIDER: "faux", ANNIE_WEB_PORT: "1" });
-	const annie = await startAnnie({ ...config, web: { ...config.web, port: 0 } }, { schedulerIntervalMs: 60_000, log: () => {} });
-	running.push(annie);
-	const base = `http://127.0.0.1:${(annie.server.address() as AddressInfo).port}`;
+	const config = loadOwniConfig({ OWNI_DATA_DIR: tempDataDir(), OWNI_MODEL_PROVIDER: "faux", OWNI_WEB_PORT: "1" });
+	const owni = await startOwni({ ...config, web: { ...config.web, port: 0 } }, { schedulerIntervalMs: 60_000, log: () => {} });
+	running.push(owni);
+	const base = `http://127.0.0.1:${(owni.server.address() as AddressInfo).port}`;
 	const login = async (link: string) => {
-		const res = await fetch(`${base}/api/login`, { method: "POST", headers: { "x-annie": "1" }, body: JSON.stringify({ token: link.split("#")[1] }) });
+		const res = await fetch(`${base}/api/login`, { method: "POST", headers: { "x-owni": "1" }, body: JSON.stringify({ token: link.split("#")[1] }) });
 		const cookie = (res.headers.get("set-cookie") ?? "").split(";")[0] as string;
 		return async (path: string, body?: unknown, method?: string) => {
-			const r = await fetch(`${base}${path}`, { method: method ?? (body === undefined ? "GET" : "POST"), headers: { cookie, "x-annie": "1" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+			const r = await fetch(`${base}${path}`, { method: method ?? (body === undefined ? "GET" : "POST"), headers: { cookie, "x-owni": "1" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
 			// biome-ignore lint: test
 			return { status: r.status, ...((await r.json()) as any) };
 		};
 	};
-	return { api: await login(annie.ownerLink as string), login };
+	return { api: await login(owni.ownerLink as string), login };
 }
 
 describe("ready-made squadre", () => {
@@ -69,7 +69,7 @@ describe("ready-made squadre", () => {
 		expect(of("caporedattore")?.acceptsFrom.sort()).toEqual(["ricercatore", "scrittore"]);
 		expect(of("scrittore")?.acceptsFrom.sort()).toEqual(["caporedattore", "ricercatore"]);
 		// Nobody outside the squadra: the main agente does not ask them, nor they it.
-		expect(of("annie")?.acceptsFrom).toEqual([]);
+		expect(of("owni")?.acceptsFrom).toEqual([]);
 		const settings = (await api("/api/instances/caporedattore/settings")).settings;
 		expect(settings.persona).toMatchObject({ emoji: "🗂️", named: true });
 		expect(settings.instructions).toContain("Fai parte della squadra «Contenuti»");

@@ -1,5 +1,5 @@
 import { isAgentTurn } from "../turn-origin.ts";
-import type { AnnieTool, ToolContext } from "../engine.ts";
+import type { OwniTool, ToolContext } from "../engine.ts";
 import { euros } from "../format-words.ts";
 import { InvoiceScanner } from "../invoice-scan.ts";
 import type { InvoiceStore } from "../invoice-store.ts";
@@ -60,12 +60,12 @@ const DESCRIPTION = [
  * calendar, the acconto and the what_if from the invoices the other registers read, read only; the
  * CSV. Today is read once per call.
  */
-export function createVatSettlementTools(options: VatToolsOptions): AnnieTool[] {
+export function createVatSettlementTools(options: VatToolsOptions): OwniTool[] {
 	const { store, workspace, timeZone } = options;
 	const now = options.now ?? (() => new Date());
 	const scanner = options.scanner ?? new InvoiceScanner(workspace);
 	const dayOf = dayOfIn(timeZone);
-	const who = (ctx: ToolContext) => (ctx.thread === undefined ? "annie" : (options.whoIs(ctx.thread) ?? `${ctx.thread.channel}:${ctx.thread.threadId}`));
+	const who = (ctx: ToolContext) => (ctx.thread === undefined ? "owni" : (options.whoIs(ctx.thread) ?? `${ctx.thread.channel}:${ctx.thread.threadId}`));
 	const audit = async (ctx: ToolContext, op: VatEvent["op"], count: number) => {
 		// Its own step: an audit that failed is written on the rerun, after the change it records.
 		await ctx.step("audit", async () => {

@@ -1,13 +1,13 @@
 import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
-import { DEFAULT_INSTRUCTIONS, type RunningAnnie, startAnnie } from "../src/app.ts";
+import { DEFAULT_INSTRUCTIONS, type RunningOwni, startOwni } from "../src/app.ts";
 import { readOnlyInBriefs } from "../src/core/brief.ts";
 import { addMonths, addTo, ageOn, DateError, dueDates, endOfMonth, isoWeek, parseDate, parseMonth, parsePatrono, readDate, span, workingDaysIn } from "../src/core/dates.ts";
 import type { ToolContext } from "../src/core/engine.ts";
 import { targetHoliday } from "../src/core/exchange-rates.ts";
 import { addDays, easterSunday, holidayOn, italianHolidays, leapYear, realDate, todayIn, workingDay } from "../src/core/italian-calendar.ts";
 import { createDateTools } from "../src/core/tools/date-tools.ts";
-import { loadAnnieConfig } from "../src/main/config.ts";
+import { loadOwniConfig } from "../src/main/config.ts";
 import { tempDataDir } from "./helpers.ts";
 
 const closers: (() => Promise<void>)[] = [];
@@ -547,22 +547,22 @@ describe("date_calc", () => {
 
 /** An Owni with the faux model, and a way to send a message and read the reply. */
 async function boot(dataDir: string) {
-	const config = loadAnnieConfig({ ANNIE_DATA_DIR: dataDir, ANNIE_MODEL_PROVIDER: "faux", ANNIE_WEB_PORT: "1" });
-	const annie: RunningAnnie = await startAnnie({ ...config, web: { ...config.web, port: 0 } }, { schedulerIntervalMs: 60_000, log: () => {} });
-	closers.push(() => annie.stop());
-	const base = `http://127.0.0.1:${(annie.server.address() as AddressInfo).port}`;
-	const login = await fetch(`${base}/api/login`, { method: "POST", headers: { "x-annie": "1" }, body: JSON.stringify({ token: (annie.ownerLink as string).split("#")[1] }) });
+	const config = loadOwniConfig({ OWNI_DATA_DIR: dataDir, OWNI_MODEL_PROVIDER: "faux", OWNI_WEB_PORT: "1" });
+	const owni: RunningOwni = await startOwni({ ...config, web: { ...config.web, port: 0 } }, { schedulerIntervalMs: 60_000, log: () => {} });
+	closers.push(() => owni.stop());
+	const base = `http://127.0.0.1:${(owni.server.address() as AddressInfo).port}`;
+	const login = await fetch(`${base}/api/login`, { method: "POST", headers: { "x-owni": "1" }, body: JSON.stringify({ token: (owni.ownerLink as string).split("#")[1] }) });
 	const cookie = (login.headers.get("set-cookie") ?? "").split(";")[0] as string;
 	const api = async (path: string, body?: unknown) => {
-		const res = await fetch(`${base}${path}`, { method: body === undefined ? "GET" : "POST", headers: { cookie, "x-annie": "1" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+		const res = await fetch(`${base}${path}`, { method: body === undefined ? "GET" : "POST", headers: { cookie, "x-owni": "1" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
 		// biome-ignore lint: test
 		return (await res.json()) as any;
 	};
-	const thread = (await api("/api/instances/annie/threads", {})).thread;
+	const thread = (await api("/api/instances/owni/threads", {})).thread;
 	return async (text: string): Promise<string> => {
-		const answers = async () => ((await api(`/api/instances/annie/threads/${thread.id}`)).entries as { from: string; text?: string }[]).filter((e) => e.from === "annie");
+		const answers = async () => ((await api(`/api/instances/owni/threads/${thread.id}`)).entries as { from: string; text?: string }[]).filter((e) => e.from === "owni");
 		const before = (await answers()).length;
-		await api(`/api/instances/annie/threads/${thread.id}/messages`, { text });
+		await api(`/api/instances/owni/threads/${thread.id}/messages`, { text });
 		for (const start = Date.now(); Date.now() - start < 20_000; ) {
 			const now = await answers();
 			if (now.length > before) return now.at(-1)?.text ?? "";

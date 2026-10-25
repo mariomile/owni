@@ -31,7 +31,7 @@ describe("agent context in product navigation", () => {
 		expect(common.state.instance?.id).toBe("sales");
 		expect(common.selectInstance("research")).toBe(true);
 		expect(common.state.instance).toBe(common.state.instances[1]);
-		expect(common.data.get("annie.instance")).toBe("research");
+		expect(common.data.get("owni.instance")).toBe("research");
 	});
 
 	it("gives new agent-scoped links an explicit context without filtering the work overview", () => {

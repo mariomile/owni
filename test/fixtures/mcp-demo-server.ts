@@ -37,5 +37,5 @@ export function createDemoServer(identity: () => string, notes?: { text: string 
 }
 
 if (process.argv[2] === "stdio") {
-	await createDemoServer(() => `env:${process.env.DEMO_TOKEN ?? "none"} leak:${process.env.ANNIE_SHOULD_NOT_LEAK ?? "none"}`).connect(new StdioServerTransport());
+	await createDemoServer(() => `env:${process.env.DEMO_TOKEN ?? "none"} leak:${process.env.OWNI_SHOULD_NOT_LEAK ?? "none"}`).connect(new StdioServerTransport());
 }

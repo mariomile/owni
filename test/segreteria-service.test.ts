@@ -51,7 +51,7 @@ const request = (over: Partial<InboundMail> = {}): InboundMail => ({
 	...over,
 });
 
-function setup(dataDir = mkdtempSync(join(tmpdir(), "annie-svc-")), shared?: { mail: FakeMailAdapter; crm: FakeCrmAdapter }) {
+function setup(dataDir = mkdtempSync(join(tmpdir(), "owni-svc-")), shared?: { mail: FakeMailAdapter; crm: FakeCrmAdapter }) {
 	const telegram = fakeTelegram();
 	const bot = new TelegramAdapter({ token: "1:T", tenantId: "acme", instanceId: "segreteria", fetch: telegram.fetch });
 	const mail = shared?.mail ?? new FakeMailAdapter();

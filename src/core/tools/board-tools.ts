@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import { BOARD_LIMITS, type Card, CARD_PRIORITIES, CARD_STATUSES, type CardPriority, type CardStatus, type CheckChange, BoardError, type BoardStore, dueDay, dueIn, dueLabel, dueText, STATUS_LABEL, waitingFor } from "../board.ts";
 import { digestText } from "../board-digest.ts";
 import { type BoardWork, checklistText } from "../board-work.ts";
-import type { AnnieTool } from "../engine.ts";
+import type { OwniTool } from "../engine.ts";
 import type { CardSubjects } from "../subjects.ts";
 
 /** The most records a scheda is linked to in one call. */
@@ -41,7 +41,7 @@ export function createBoardTools(options: {
 	readonly personOf: (thread: Thread) => string | undefined;
 	/** The agente's records a scheda is about (ADR 0110). */
 	readonly subjects: CardSubjects;
-}): AnnieTool[] {
+}): OwniTool[] {
 	const { store } = options;
 	const name = (all: readonly { id: string; name: string }[], id: string | undefined) => (id === undefined ? "nessuno" : (all.find((a) => a.id === id)?.name ?? id));
 	/** «parte di #n», only for a scheda the caller sees: `seen` are the visible ones. */

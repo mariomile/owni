@@ -8,8 +8,8 @@ Branch `week-14`. Fase 4 del [piano](piano-cloud.md) (voce, primo passo).
 - **Servizio scelto dall'operatore**: qualunque servizio con l'API di trascrizione di OpenAI. Il consigliato è Mistral (Voxtral, server in UE), che è anche il modello predefinito quando l'indirizzo è il suo. Senza configurazione Owni riceve una nota e chiede di scrivere.
 - **Consenso per istanza**: l'owner accende la trascrizione in Impostazioni → Messaggi vocali (connettore `voice` nella egress policy, nell'audit). Spenta, l'audio non esce e Owni chiede di scrivere.
 - **Privacy**: il vocale di un estraneo non viene scaricato né trascritto; l'audio va solo al servizio configurato; la chiave non compare nei log, nemmeno se il servizio la ripete nel suo errore.
-- **Limiti**: su Telegram un vocale oltre `ANNIE_TRANSCRIBE_MAX_SECONDS` (300 di default) non viene nemmeno scaricato; oltre 20 MB, su entrambi i canali, arriva una nota. Un servizio che fallisce o non riconosce parole produce una nota chiara, mai testo inventato. I file audio mantengono il loro formato (mp3, m4a, …) anche nel nome.
-- **`pnpm annie check`** controlla chiave e modello del servizio.
+- **Limiti**: su Telegram un vocale oltre `OWNI_TRANSCRIBE_MAX_SECONDS` (300 di default) non viene nemmeno scaricato; oltre 20 MB, su entrambi i canali, arriva una nota. Un servizio che fallisce o non riconosce parole produce una nota chiara, mai testo inventato. I file audio mantengono il loro formato (mp3, m4a, …) anche nel nome.
+- **`pnpm owni check`** controlla chiave e modello del servizio.
 - **Owni Cloud**: le variabili del control plane passano a tutte le celle.
 
 ## Review indipendente

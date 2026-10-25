@@ -46,7 +46,7 @@ afterEach(() => {
 });
 
 function temp(): string {
-	const dir = mkdtempSync(join(tmpdir(), "annie-attach-"));
+	const dir = mkdtempSync(join(tmpdir(), "owni-attach-"));
 	dirs.push(dir);
 	return dir;
 }
@@ -144,7 +144,7 @@ describe("mail attachments: MIME", () => {
 		expect(headers.subject).toBe(MAIL.subject);
 		expect(headers["mime-version"]).toBe("1.0");
 		expect(headers["content-type"]).toBe(`multipart/mixed; boundary="${boundary}"`);
-		expect(boundary).toMatch(/^=_annie_[0-9a-f]{36}$/);
+		expect(boundary).toMatch(/^=_owni_[0-9a-f]{36}$/);
 		expect(parts).toHaveLength(3);
 		const [text, pdf, xml] = parts as [Part, Part, Part];
 		expect(text.headers["content-type"]).toBe("text/plain; charset=UTF-8");

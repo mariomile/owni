@@ -914,7 +914,7 @@ export class BrowseSessions {
 		const traffic: Traffic = { sends: new Set(), hosts: new Set(), files: new Set(), overBudget: false, inflight: 0 };
 		const budget = { ...PAGE_BUDGET };
 		const current = { current: guard };
-		const flag = `__annie${randomBytes(6).toString("hex")}`;
+		const flag = `__owni${randomBytes(6).toString("hex")}`;
 		const humanFlag = `__person${randomBytes(6).toString("hex")}`;
 		const privateAttr = `data-private-${randomBytes(6).toString("hex")}`;
 		const privateBinding = `__private${randomBytes(12).toString("hex")}`;
@@ -1052,7 +1052,7 @@ export class BrowseSessions {
 					s.version += 1;
 					s.used = Date.now();
 					if (this.sessions.get(key) === s) {
-						s.timer = setTimeout(() => void this.end(s, "chiusa dopo qualche minuto senza azioni").catch(() => console.error("annie: browser profile could not be saved")), this.limits.idleMs);
+						s.timer = setTimeout(() => void this.end(s, "chiusa dopo qualche minuto senza azioni").catch(() => console.error("owni: browser profile could not be saved")), this.limits.idleMs);
 						s.timer.unref();
 						await this.save(s);
 					}
@@ -1093,7 +1093,7 @@ export class BrowseSessions {
 	}
 
 	private async snapshot(s: Session, failure: string | undefined, options: ViewOptions): Promise<View> {
-		const attr = `data-annie-${randomBytes(4).toString("hex")}`;
+		const attr = `data-owni-${randomBytes(4).toString("hex")}`;
 		const forms = this.privateForms(s);
 		const padding = Math.max(0, ...forms.map((form) => form.length));
 		const clean = (text: string, limit: number) => privateSlice(text, forms, 0, limit).slice(0, limit);

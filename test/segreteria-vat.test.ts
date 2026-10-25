@@ -336,7 +336,7 @@ describe("segreteria: a model draft that repeats the wrong number", () => {
 
 describe("segreteria: a wrong VAT number through the pipeline", () => {
 	it("goes to the CRM as missing, never as the number; the draft and the audit never repeat it", async () => {
-		const dataDir = mkdtempSync(join(tmpdir(), "annie-seg-vat-"));
+		const dataDir = mkdtempSync(join(tmpdir(), "owni-seg-vat-"));
 		const crm = new FakeCrmAdapter();
 		const audit = new AuditLog(dataDir, tid("acme"));
 		const notifications: string[] = [];

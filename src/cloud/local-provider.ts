@@ -62,10 +62,10 @@ export class LocalCellProvider implements CellProvider {
 
 	private async launch(id: string): Promise<void> {
 		const { port, env } = this.meta(id);
-		const child = spawn(process.execPath, [join(this.options.repoRoot, "node_modules", "tsx", "dist", "cli.mjs"), join("src", "main", "annie.ts")], {
+		const child = spawn(process.execPath, [join(this.options.repoRoot, "node_modules", "tsx", "dist", "cli.mjs"), join("src", "main", "owni.ts")], {
 			cwd: this.options.repoRoot,
 			// Only what the cell needs: never the control plane's own secrets.
-			env: { PATH: process.env.PATH ?? "", HOME: process.env.HOME ?? "", ...env, ANNIE_DATA_DIR: join(this.dir(id), "data"), ANNIE_WEB_HOST: "127.0.0.1", ANNIE_WEB_PORT: String(port) },
+			env: { PATH: process.env.PATH ?? "", HOME: process.env.HOME ?? "", ...env, OWNI_DATA_DIR: join(this.dir(id), "data"), OWNI_WEB_HOST: "127.0.0.1", OWNI_WEB_PORT: String(port) },
 			stdio: ["ignore", "ignore", "pipe"],
 		});
 		let stderr = "";

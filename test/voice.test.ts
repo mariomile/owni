@@ -4,12 +4,12 @@ import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { startAnnie } from "../src/app.ts";
+import { startOwni } from "../src/app.ts";
 import { TelegramAdapter } from "../src/channels/telegram.ts";
 import type { InboundMessage } from "../src/channels/types.ts";
 import { WhatsAppAdapter, type WhatsAppWebhook } from "../src/channels/whatsapp.ts";
 import { type TranscriberConfig, transcriber, voiceText } from "../src/channels/voice.ts";
-import { ConfigError, loadAnnieConfig } from "../src/main/config.ts";
+import { ConfigError, loadOwniConfig } from "../src/main/config.ts";
 import { runChecks } from "../src/main/check.ts";
 import { tempDataDir } from "./helpers.ts";
 
@@ -66,7 +66,7 @@ describe("voice messages", () => {
 			if (method === "getFile") return Response.json({ ok: true, result: { file_path: `voice/${JSON.parse(String(init?.body)).file_id}.oga` } });
 			return Response.json({ ok: true, result: true });
 		}) as typeof fetch;
-		const adapter = new TelegramAdapter({ token: "1:T", tenantId: "default", instanceId: "annie", fetch: telegramFetch, transcribe: transcriber(config, service.fetch), mayDownload: async (userId) => userId === "7" });
+		const adapter = new TelegramAdapter({ token: "1:T", tenantId: "default", instanceId: "owni", fetch: telegramFetch, transcribe: transcriber(config, service.fetch), mayDownload: async (userId) => userId === "7" });
 		adapter.onAction(async () => {});
 		const inbound: InboundMessage[] = [];
 		adapter.onInbound(async (m) => void inbound.push(m));
@@ -102,7 +102,7 @@ describe("voice messages", () => {
 			if (href.startsWith("https://lookaside.fbsbx.com/")) return new Response(new Uint8Array([7, 7]));
 			return Response.json({ error: { message: "unknown", code: 100 } }, { status: 404 });
 		}) as typeof fetch;
-		const wa = new WhatsAppAdapter({ accessToken: "EAAGtoken0123456789abcdef", phoneNumberId: "111", appSecret: "a".repeat(32), verifyToken: "v", tenantId: "default", instanceId: "annie", apiBase: "https://graph.facebook.com/v26.0", fetch: graphFetch, transcribe: transcriber(config, service.fetch), mayDownload: async (n) => n === "393331234567" });
+		const wa = new WhatsAppAdapter({ accessToken: "EAAGtoken0123456789abcdef", phoneNumberId: "111", appSecret: "a".repeat(32), verifyToken: "v", tenantId: "default", instanceId: "owni", apiBase: "https://graph.facebook.com/v26.0", fetch: graphFetch, transcribe: transcriber(config, service.fetch), mayDownload: async (n) => n === "393331234567" });
 		const inbound: InboundMessage[] = [];
 		wa.onInbound(async (m) => void inbound.push(m));
 		const payload: unknown = {
@@ -141,7 +141,7 @@ describe("voice messages", () => {
 			if (href.startsWith("https://lookaside.fbsbx.com/")) return new Response(recording);
 			return Response.json({ error: { message: "unknown", code: 100 } }, { status: 404 });
 		}) as typeof fetch;
-		const wa = new WhatsAppAdapter({ accessToken: "EAAGtoken0123456789abcdef", phoneNumberId: "111", appSecret: "a".repeat(32), verifyToken: "v", tenantId: "default", instanceId: "annie", apiBase: "https://graph.facebook.com/v26.0", fetch: graphFetch, transcribe: transcriber({ ...config, maxSeconds: 10 }, service.fetch) });
+		const wa = new WhatsAppAdapter({ accessToken: "EAAGtoken0123456789abcdef", phoneNumberId: "111", appSecret: "a".repeat(32), verifyToken: "v", tenantId: "default", instanceId: "owni", apiBase: "https://graph.facebook.com/v26.0", fetch: graphFetch, transcribe: transcriber({ ...config, maxSeconds: 10 }, service.fetch) });
 		const inbound: InboundMessage[] = [];
 		wa.onInbound(async (m) => void inbound.push(m));
 		const messages = [
@@ -156,13 +156,13 @@ describe("voice messages", () => {
 		expect(service.received).toEqual([]);
 	});
 
-	it("configuration: both or neither; Mistral's model by default; pnpm annie check asks the service", async () => {
-		const base = { ANNIE_DATA_DIR: "/tmp/x", ANNIE_MODEL_PROVIDER: "faux" };
-		expect(loadAnnieConfig(base).transcription).toBeUndefined();
-		expect(() => loadAnnieConfig({ ...base, ANNIE_TRANSCRIBE_URL: "https://api.mistral.ai/v1" })).toThrow(ConfigError);
-		expect(() => loadAnnieConfig({ ...base, ANNIE_TRANSCRIBE_URL: "http://example.com/v1", ANNIE_TRANSCRIBE_API_KEY: KEY })).toThrow(/https/);
-		expect(() => loadAnnieConfig({ ...base, ANNIE_TRANSCRIBE_URL: "https://stt.example.com/v1", ANNIE_TRANSCRIBE_API_KEY: KEY })).toThrow(/ANNIE_TRANSCRIBE_MODEL/);
-		const loaded = loadAnnieConfig({ ...base, ANNIE_TRANSCRIBE_URL: "https://api.mistral.ai/v1", ANNIE_TRANSCRIBE_API_KEY: KEY });
+	it("configuration: both or neither; Mistral's model by default; pnpm owni check asks the service", async () => {
+		const base = { OWNI_DATA_DIR: "/tmp/x", OWNI_MODEL_PROVIDER: "faux" };
+		expect(loadOwniConfig(base).transcription).toBeUndefined();
+		expect(() => loadOwniConfig({ ...base, OWNI_TRANSCRIBE_URL: "https://api.mistral.ai/v1" })).toThrow(ConfigError);
+		expect(() => loadOwniConfig({ ...base, OWNI_TRANSCRIBE_URL: "http://example.com/v1", OWNI_TRANSCRIBE_API_KEY: KEY })).toThrow(/https/);
+		expect(() => loadOwniConfig({ ...base, OWNI_TRANSCRIBE_URL: "https://stt.example.com/v1", OWNI_TRANSCRIBE_API_KEY: KEY })).toThrow(/OWNI_TRANSCRIBE_MODEL/);
+		const loaded = loadOwniConfig({ ...base, OWNI_TRANSCRIBE_URL: "https://api.mistral.ai/v1", OWNI_TRANSCRIBE_API_KEY: KEY });
 		expect(loaded.transcription).toEqual({ url: "https://api.mistral.ai/v1", apiKey: KEY, model: "voxtral-mini-latest", maxSeconds: 300, timestamps: "mistral", speakers: true, maxMinutes: 180, minutesPerDay: 600 });
 		const asked: string[] = [];
 		const results = await runChecks(loaded, (async (url: string | URL | Request) => {
@@ -194,19 +194,19 @@ describe("voice messages", () => {
 		await new Promise<void>((resolve) => graph.listen(0, "127.0.0.1", () => resolve()));
 		const service = fakeTranscriber();
 		const dataDir = tempDataDir();
-		const loaded = loadAnnieConfig({ ANNIE_DATA_DIR: dataDir, ANNIE_MODEL_PROVIDER: "faux", ANNIE_WEB_PORT: "1", ANNIE_PUBLIC_URL: "https://annie.example.it", ANNIE_TRANSCRIBE_URL: "https://api.mistral.ai/v1", ANNIE_TRANSCRIBE_API_KEY: KEY });
-		const annie = await startAnnie({ ...loaded, web: { ...loaded.web, port: 0 } }, { whatsappApiBase: `http://127.0.0.1:${(graph.address() as AddressInfo).port}`, transcribeFetch: service.fetch, schedulerIntervalMs: 60_000, log: () => {} });
+		const loaded = loadOwniConfig({ OWNI_DATA_DIR: dataDir, OWNI_MODEL_PROVIDER: "faux", OWNI_WEB_PORT: "1", OWNI_PUBLIC_URL: "https://owni.example.it", OWNI_TRANSCRIBE_URL: "https://api.mistral.ai/v1", OWNI_TRANSCRIBE_API_KEY: KEY });
+		const owni = await startOwni({ ...loaded, web: { ...loaded.web, port: 0 } }, { whatsappApiBase: `http://127.0.0.1:${(graph.address() as AddressInfo).port}`, transcribeFetch: service.fetch, schedulerIntervalMs: 60_000, log: () => {} });
 		try {
-			const base = `http://127.0.0.1:${(annie.server.address() as AddressInfo).port}`;
-			const login = await fetch(`${base}/api/login`, { method: "POST", headers: { "x-annie": "1" }, body: JSON.stringify({ token: (annie.ownerLink as string).split("#")[1] }) });
+			const base = `http://127.0.0.1:${(owni.server.address() as AddressInfo).port}`;
+			const login = await fetch(`${base}/api/login`, { method: "POST", headers: { "x-owni": "1" }, body: JSON.stringify({ token: (owni.ownerLink as string).split("#")[1] }) });
 			const cookie = (login.headers.get("set-cookie") ?? "").split(";")[0] as string;
-			const api = async (path: string, body?: unknown, method = "PUT") => (await fetch(`${base}${path}`, { method: body === undefined ? "GET" : method, headers: { cookie, "x-annie": "1" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) })).json() as Promise<any>;
+			const api = async (path: string, body?: unknown, method = "PUT") => (await fetch(`${base}${path}`, { method: body === undefined ? "GET" : method, headers: { cookie, "x-owni": "1" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) })).json() as Promise<any>;
 			expect(await api("/api/voice")).toEqual({ available: true, host: "api.mistral.ai" });
-			const connected = await api("/api/instances/annie/whatsapp", { accessToken: "EAAGtoken0123456789abcdef", phoneNumberId: "1110001", appSecret: "a".repeat(32), allowedUsers: ["393331234567"] });
+			const connected = await api("/api/instances/owni/whatsapp", { accessToken: "EAAGtoken0123456789abcdef", phoneNumberId: "1110001", appSecret: "a".repeat(32), allowedUsers: ["393331234567"] });
 			expect(connected.whatsapp?.connected, JSON.stringify(connected)).toBe(true);
 			const voiceNote = (id: string) => {
 				const raw = JSON.stringify({ entry: [{ changes: [{ field: "messages", value: { metadata: { phone_number_id: "1110001" }, messages: [{ from: "393331234567", id, type: "audio", audio: { id: "audio-1", mime_type: "audio/ogg", voice: true } }] } }] }] });
-				return fetch(`${base}/hooks/whatsapp/annie`, { method: "POST", headers: { "x-hub-signature-256": `sha256=${createHmac("sha256", "a".repeat(32)).update(raw).digest("hex")}` }, body: raw });
+				return fetch(`${base}/hooks/whatsapp/owni`, { method: "POST", headers: { "x-hub-signature-256": `sha256=${createHmac("sha256", "a".repeat(32)).update(raw).digest("hex")}` }, body: raw });
 			};
 			const answered = async (n: number) => {
 				for (const start = Date.now(); replies.length < n && Date.now() - start < 10_000; ) await new Promise((r) => setTimeout(r, 30));
@@ -216,13 +216,13 @@ describe("voice messages", () => {
 			expect((await voiceNote("wamid.1")).status).toBe(200);
 			expect(await answered(1)).toContain("non è attiva per questa istanza");
 			expect(service.received).toHaveLength(0);
-			expect(await api("/api/instances/annie/voice", { allowed: true })).toEqual({ allowed: true });
+			expect(await api("/api/instances/owni/voice", { allowed: true })).toEqual({ allowed: true });
 			expect((await voiceNote("wamid.2")).status).toBe(200);
 			expect(await answered(2)).toContain("Ciao, richiamami domani");
 			expect(service.received).toHaveLength(1);
 			expect(readFileSync(join(dataDir, "tenants", "default", "audit.jsonl"), "utf8")).toContain('"type":"voice.allowed"');
 		} finally {
-			await annie.stop();
+			await owni.stop();
 			await new Promise((r) => graph.close(() => r(undefined)));
 		}
 	}, 30_000);
