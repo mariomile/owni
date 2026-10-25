@@ -6,6 +6,7 @@
 mod local;
 mod server;
 mod settings;
+mod update;
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -165,6 +166,8 @@ pub fn run() {
         }))
         .plugin(tauri_plugin_window_state::Builder::default().build())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(|app, shortcut, event| {
@@ -207,6 +210,7 @@ pub fn run() {
                 None => open_main(&handle, Page::Connect)?,
             }
             tray(&handle)?;
+            update::watch(&handle);
             // Another app may hold the shortcut: Owni still works from the tray.
             if let Err(error) = handle.global_shortcut().register(summon()) {
                 eprintln!("owni: shortcut not registered: {error}");
@@ -386,6 +390,7 @@ fn tray(app: &AppHandle) -> tauri::Result<()> {
     let open = MenuItem::with_id(app, "open", "Apri Owni", true, None::<&str>)?;
     let chat = MenuItem::with_id(app, "chat", "Nuova chat", true, None::<&str>)?;
     let change = MenuItem::with_id(app, "server", "Cambia server…", true, None::<&str>)?;
+    let updates = MenuItem::with_id(app, "update", "Cerca aggiornamenti…", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Esci", true, None::<&str>)?;
     let menu = Menu::with_items(
         app,
@@ -394,6 +399,7 @@ fn tray(app: &AppHandle) -> tauri::Result<()> {
             &chat,
             &PredefinedMenuItem::separator(app)?,
             &change,
+            &updates,
             &PredefinedMenuItem::separator(app)?,
             &quit,
         ],
@@ -421,6 +427,7 @@ fn tray(app: &AppHandle) -> tauri::Result<()> {
             "server" => {
                 let _ = open_main(app, Page::Connect);
             }
+            "update" => update::check_now(app),
             "quit" => app.exit(0),
             _ => {}
         })

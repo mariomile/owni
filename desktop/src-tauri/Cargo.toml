@@ -1,6 +1,6 @@
 [package]
 name = "owni-desktop"
-version = "0.7.0"
+version = "0.8.0"
 description = "Owni as a desktop app: a window on an Owni server"
 license = "Apache-2.0"
 edition = "2021"
@@ -18,7 +18,9 @@ tauri-build = { version = "2.7.3", features = [] }
 tauri = { version = "2.12.4", features = ["tray-icon"] }
 tauri-plugin-global-shortcut = "2.4.1"
 tauri-plugin-opener = "2.7.2"
+tauri-plugin-dialog = "2.7.3"
 tauri-plugin-single-instance = "2.5.4"
+tauri-plugin-updater = "2.12.0"
 tauri-plugin-window-state = "2.5.0"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

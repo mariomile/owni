@@ -67,17 +67,26 @@ La pagina di collegamento è in `desktop/connect/` (HTML, CSS e JS senza build, 
 - `server.rs`: legge l'indirizzo, decide cosa resta nella finestra, controlla `/healthz`;
 - `settings.rs`: il file con l'indirizzo del server;
 - `local.rs`: Owni su questo computer (avvio, attesa, accesso dell'owner, arresto);
+- `update.rs`: gli aggiornamenti;
 - `lib.rs`: finestra, icona, scorciatoia, comandi.
 
 Le icone vengono da `src/web/ui/icon-512.png`: `pnpm icons` le rigenera.
 
 ## Installer
 
-Il workflow **Desktop app** (a mano da GitHub Actions, o con un tag `desktop-v0.7.0`) costruisce gli installer per Mac (universale), Windows e Linux e li mette in una bozza di release. Per il Mac prima `desktop/scripts/bundle-server.sh` prepara Node e il server compilato, e controlla che partano; `--config src-tauri/tauri.local.conf.json` li mette nell'app.
+Il workflow **Desktop app** (a mano da GitHub Actions, o con un tag `desktop-v0.8.0`) costruisce gli installer per Mac (universale), Windows e Linux e li mette in una bozza di release. Per il Mac prima `desktop/scripts/bundle-server.sh` prepara Node e il server compilato, e controlla che partano; `--config src-tauri/tauri.local.conf.json` li mette nell'app.
+
+### Aggiornamenti
+
+L'app si aggiorna da sola. All'avvio e ogni sei ore chiede all'ultima release pubblicata su GitHub (`latest.json`) se c'è una versione più nuova; se c'è, lo dice in una finestra con **Installa e riavvia** e **Più tardi**. Installando, scarica il pacchetto, ne controlla la firma, sostituisce l'app, ferma il server di questo computer e riapre Owni: i dati restano dove sono. **Cerca aggiornamenti…** nel menu dell'icona controlla subito e dice anche quando l'app è già aggiornata.
+
+La firma degli aggiornamenti è separata da quella di Apple. Il workflow firma i pacchetti con la chiave privata nel segreto `TAURI_SIGNING_PRIVATE_KEY` (senza password) e l'app accetta solo pacchetti firmati con la chiave pubblica scritta in `tauri.conf.json`. Senza quella chiave privata non si possono più pubblicare aggiornamenti per le app già installate: chi la perde deve far reinstallare l'app a mano. Una copia sta in `~/.tauri/owni-updater.key` sul Mac di chi l'ha creata.
+
+Una release conta solo quando è pubblicata come ultima (la bozza del workflow non basta). Finché l'app per Mac non ha la firma Developer ID, ogni aggiornamento è per macOS un'app diversa: dopo l'aggiornamento vanno dati di nuovo i permessi di Computer Use.
 
 ### Firma
 
-Per ora gli installer non sono firmati. Per firmarli si mettono nei segreti del repository e si passano come env al passo `tauri-action` del workflow: per il Mac `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID` (account Apple Developer, 99 dollari l'anno); per Windows un certificato di firma del codice. Gli aggiornamenti automatici non sono implementati: La firma da sola non li abilita. Per aggiornare l'app si scarica e installa una nuova release.
+Per ora gli installer non sono firmati. Per firmarli si mettono nei segreti del repository e si passano come env al passo `tauri-action` del workflow: per il Mac `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID` (account Apple Developer, 99 dollari l'anno); per Windows un certificato di firma del codice.
 
 Per collaudare sul Mac una build locale creata con `--no-sign`, chiudi Owni e firma il bundle completo dopo l'ultima copia delle risorse:
 
