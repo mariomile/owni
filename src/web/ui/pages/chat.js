@@ -41,7 +41,16 @@ export async function viewDm(main) {
 	if (needInstance(main)) return;
 	const inst = state.instance;
 	if (!inst.canChat) {
-		mount(main, h("section.conversation.empty-chat", h("div.welcome", h("h2", "Chat non disponibile"), state.me.role === "owner" ? h("p", "Aggiungi te stesso alle persone che possono scrivere a questo agente, in ", h("a", { href: instanceHref("impostazioni", ["accessi"], inst.id) }, "Configurazione"), ".") : h("p", "Non sei tra le persone che possono scrivere a questo agente."))));
+		const owner = state.me.role === "owner";
+		const note = h("section.conversation.empty-chat", h("div.welcome", h("h2", "Chat non disponibile"), owner
+			? h("p", "Aggiungi te stesso alle persone che possono scrivere a questo agente, in ", h("a", { href: instanceHref("impostazioni", ["accessi"], inst.id) }, "Configurazione"), ". Documenti, memoria e procedure sono nel ", h("a", { href: agentInfoHref(inst.id) }, "suo pannello"), ".")
+			: h("p", "Non sei tra le persone che possono scrivere a questo agente.")));
+		if (!owner) return void mount(main, note);
+		// The owner keeps the agente's panel (ADR 0114), next to the note.
+		const { agent, artifact } = agentSide(inst);
+		mount(main, h("div.chat-split", note, agent.el, artifact.el));
+		const { rest } = route();
+		if (rest[1] === "info") agent.show(true, rest[2]);
 		return;
 	}
 	chatModelCache.clear();
@@ -114,9 +123,11 @@ function agentSide(inst, others = () => []) {
 			const href = agentInfoHref(inst.id, section);
 			if (location.hash !== href) history[route().rest[1] === "info" ? "replaceState" : "pushState"](null, "", href);
 		},
+		// Closed by the person: a step of its own, so Back opens it again, as for a thread. Closed
+		// because another panel opened: that panel writes the address.
 		onHide: () => {
 			context?.setAttribute("aria-expanded", "false");
-			if (route().rest[1] === "info") history.replaceState(null, "", dmHref(inst.id));
+			if (route().rest[1] === "info") history[switching ? "replaceState" : "pushState"](null, "", dmHref(inst.id));
 		},
 		openArtifact: (threadId, page) => { void artifact.openArtifact(inst.id, threadId, page); fromPanel = true; },
 		openFile: (path) => { artifact.openFile(inst.id, path); fromPanel = true; },

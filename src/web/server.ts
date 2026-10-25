@@ -841,17 +841,16 @@ export function createWebApp(options: WebAppOptions): Server {
 			const top = seat?.parent === undefined ? seat : await room(seat.parent.roomId);
 			return { kind: "channel", ...(top === undefined ? {} : { roomId: top.id, title: top.title }), ...(seat?.parent === undefined ? {} : { inThread: true }) };
 		};
-		const out = [];
-		for (const thread of await channel.threads(p.id, { seats: true })) {
+		const perThread = await Promise.all((await channel.threads(p.id, { seats: true })).map(async (thread) => {
 			const metas = await channel.artifacts.all(thread.id);
-			if (metas.length === 0) continue;
+			if (metas.length === 0) return [];
 			const made = await where(thread);
-			for (const meta of metas) {
+			return metas.flatMap((meta) => {
 				const last = meta.versions[meta.versions.length - 1];
-				if (last !== undefined) out.push({ id: meta.id, threadId: thread.id, createdAt: meta.createdAt, title: last.title, version: last.version, at: last.at, where: made });
-			}
-		}
-		return { artifacts: out.sort((a, b) => b.at.localeCompare(a.at)) };
+				return last === undefined ? [] : [{ id: meta.id, threadId: thread.id, createdAt: meta.createdAt, title: last.title, version: last.version, at: last.at, where: made }];
+			});
+		}));
+		return { artifacts: perThread.flat().sort((a, b) => b.at.localeCompare(a.at)) };
 	});
 	route("GET", "/api/instances/:id/artifacts/:thread/:artifact", "person", async ({ person, params }) => {
 		await ownThread(person as Person, params[0] as string, params[1] as string);

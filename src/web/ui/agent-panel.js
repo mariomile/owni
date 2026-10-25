@@ -76,7 +76,8 @@ export function routineRows(inst, { schedules = [], watches = [], automations = 
  */
 export function agentPanel(inst, { onShow = () => {}, onHide = () => {}, openArtifact, openFile } = {}) {
 	let current = "attivita";
-	let loading = 0;
+	/** The section on screen: a load that ends after another tab opened shows nothing. */
+	let shown;
 	const status = h("p.agent-panel-status.muted.small");
 	const body = h("div.agent-panel-body");
 	const tabs = AGENT_SECTIONS.map(([id, label]) => h("button.agent-tab", { type: "button", role: "tab", "data-section": id, "aria-selected": "false", onclick: () => select(id) }, label));
@@ -131,11 +132,10 @@ export function agentPanel(inst, { onShow = () => {}, onHide = () => {}, openArt
 		procedure: (box) => skillsSection(inst, box),
 	};
 	const load = async (box, id) => {
-		const mine = ++loading;
 		try {
 			await sections[id](box);
 		} catch (error) {
-			if (mine === loading) mount(box, h("p.error", error.message));
+			if (box === shown) mount(box, h("p.error", error.message));
 		}
 	};
 	const select = (id) => {
@@ -146,6 +146,7 @@ export function agentPanel(inst, { onShow = () => {}, onHide = () => {}, openArt
 		}
 		const box = h("div.agent-section", { role: "tabpanel", "aria-label": AGENT_SECTIONS.find(([s]) => s === current)?.[1] }, h("p.muted.small", "Caricamento…"));
 		mount(body, box);
+		shown = box;
 		void load(box, current);
 		if (!el.hidden) onShow(current);
 	};
@@ -161,6 +162,7 @@ export function agentPanel(inst, { onShow = () => {}, onHide = () => {}, openArt
 		if (!on) {
 			if (el.hidden) return;
 			el.hidden = true;
+			shown = undefined;
 			mount(body);
 			return onHide();
 		}

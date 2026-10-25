@@ -83,6 +83,9 @@ describe("agent context in product navigation", () => {
 		expect(moved("#/memoria?agent=sales")).toBe("#/dm/sales/info/memoria");
 		expect(moved("#/skill?agent=sales/team")).toBe("#/dm/sales%2Fteam/info/procedure");
 		expect(moved("#/file")).toBe("#/agenti");
+		common.state.instance = { id: "ops" };
+		expect(moved("#/file")).toBe("#/dm/ops/info/documenti");
+		expect(moved("#/toString")).toBeUndefined();
 		expect(moved("#/connettori?agent=sales")).toBe("#/impostazioni/servizi?agent=sales");
 		expect(moved("#/connettori")).toBe("#/impostazioni/servizi");
 		expect(moved("#/dm/sales/info/memoria")).toBeUndefined();

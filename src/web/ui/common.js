@@ -443,7 +443,10 @@ const MATERIALS = { file: "documenti", memoria: "memoria", skill: "procedure" };
 export function movedHref({ view, rest, instanceId }) {
 	if (view === "chat") return instanceId ? dmHref(instanceId, rest[0]) : "#/";
 	if (view === "stanze") return `#/${["canali", ...rest].map(encodeURIComponent).join("/")}`;
-	if (view in MATERIALS) return instanceId ? agentInfoHref(instanceId, MATERIALS[view]) : "#/agenti";
+	if (Object.hasOwn(MATERIALS, view)) {
+		const id = instanceId ?? state.instance?.id;
+		return id ? agentInfoHref(id, MATERIALS[view]) : "#/agenti";
+	}
 	if (view === "connettori") return instanceHref("impostazioni", ["servizi"], instanceId ?? null);
 	return undefined;
 }

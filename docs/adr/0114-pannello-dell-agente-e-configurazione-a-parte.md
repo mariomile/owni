@@ -20,5 +20,6 @@ Mario vuole che il dettaglio di ogni agente si apra a destra, accanto alla conve
 ## Conseguenze
 
 - Il pannello a destra mostra una cosa per volta: Browser, Schermo, un thread, un artifact o l'agente. Sostituisce, di ADR 0113, l'elenco «Browser, Schermo o un thread».
-- Un membro vede il pannello degli agenti con cui può parlare, senza l'ingranaggio; un agente con cui la persona non parla non ha pannello, e i suoi materiali restano raggiungibili all'owner dalla configurazione.
+- Un membro vede il pannello degli agenti con cui può parlare, senza l'ingranaggio. L'owner lo vede anche per un agente a cui non può scrivere, accanto all'avviso «Chat non disponibile», così documenti, memoria e procedure restano suoi da raggiungere.
+- Chiudere il pannello è un passo della cronologia, come chiudere un thread: Indietro lo riapre.
 - Nessun dato cambia di posto: memoria, documenti, procedure e routine usano le API di prima. L'unica API nuova è l'elenco degli artifact di un agente.
