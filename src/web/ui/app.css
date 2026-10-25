@@ -685,6 +685,28 @@ main.is-chat { position: relative; }
 .browser-note { margin: 0; font-size: 12px; line-height: 1.5; color: var(--fg-3); }
 .busy-note { font-size: 12px; color: var(--fg-3); white-space: nowrap; }
 .browser-toggle.news::after { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--fg); }
+/* a thread under a message (ADR 0112): in the same place as the browser, one at a time */
+.thread-panel { overflow: hidden; padding-bottom: max(14px, env(safe-area-inset-bottom)); }
+.thread-panel .browser-head { flex: none; }
+.thread-list { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 24px; padding: 10px 2px 16px; font-size: 15px; }
+.thread-list .msg.owni { max-width: 100%; }
+.thread-count { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--fg-3); }
+.thread-count::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+.thread-dock { flex: none; }
+.thread-panel .thread-back { display: none; }
+.thread-summary { display: inline-flex; align-items: center; gap: 8px; margin-top: 8px; min-height: 32px; padding: 4px 10px 4px 6px; border: 1px solid var(--border); border-radius: 10px; background: transparent; color: var(--fg-2); font: inherit; font-size: 12.5px; cursor: pointer; transition: background 0.15s var(--ease), border-color 0.15s var(--ease); }
+.thread-summary:hover { background: var(--hover); border-color: var(--border-2); }
+.thread-summary b { font-weight: 600; color: var(--fg); }
+.thread-summary .who { display: inline-flex; }
+.thread-summary .who > * + * { margin-left: -4px; }
+.avatar.mini { width: 18px; height: 18px; font-size: 8.5px; }
+.msg.person .thread-slot, .msg.person .msg-actions { display: flex; justify-content: flex-end; }
+.msg.person .msg-actions { margin: 4px -12px 0 0; }
+/* Answering in a thread shows on hover with a mouse, always on touch. */
+@media (hover: hover) {
+	.msg .reply-thread { opacity: 0; transition: opacity 0.15s var(--ease); }
+	.msg:hover .reply-thread, .msg:focus-within .reply-thread { opacity: 1; }
+}
 /* Tools keep their own place in the context bar, including on a phone. */
 @media (max-width: 560px) {
 	.conversation-tools .browser-toggle { position: relative; width: 44px; padding: 0; justify-content: center; }
@@ -693,6 +715,8 @@ main.is-chat { position: relative; }
 }
 @media (max-width: 860px) {
 	.browser-panel { position: absolute; inset: 0; z-index: 4; flex-basis: auto; border-left: 0; }
+	.thread-panel .thread-back { display: inline-grid; }
+	.thread-panel .thread-close { display: none; }
 	.browser-bar .address { font-size: 16px; }
 	.browser-human input.browser-private-text, .browser-keys select { font-size: 16px; }
 	.browser-control .btn, .browser-human .btn, .browser-profile .btn { min-height: 36px; }

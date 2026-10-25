@@ -1,5 +1,5 @@
 // Chat page.
-import { api, face, faceColor, fmt, h, icon, mount, needInstance, state, store, thinking, toast } from "../common.js";
+import { api, dmHref, face, faceColor, fmt, h, icon, initials, mount, needInstance, route, state, store, thinking, toast } from "../common.js";
 import { boardNote, copyButton, listenButton } from "../listen.js";
 import { connectorActionCard, googleActionCard } from "../cards.js";
 import { agentCommands, commandMenu } from "../commands.js";
@@ -45,11 +45,26 @@ export async function viewDm(main) {
 	chatModelCache.clear();
 	let { thread, entries, model } = await api(`/api/instances/${inst.id}/dm`);
 	if (!main.isConnected || state.instance !== inst) return;
-	if (entries.length === 0) return landing(inst, main, thread, model);
+	// `#/dm/<agente>/t/<thread>`: a thread open next to the conversation.
+	const { rest } = route();
+	const open = rest[1] === "t" ? rest[2] : undefined;
+	if (entries.length === 0) {
+		if (open !== undefined) history.replaceState(null, "", dmHref(inst.id));
+		return landing(inst, main, thread, model);
+	}
 	// Only chats from before so far: the conversation that goes on under them.
 	thread ??= (await api(`/api/instances/${inst.id}/dm`, { method: "POST", body: {} })).thread;
 	if (!main.isConnected || state.instance !== inst) return;
-	conversationView(inst, main, thread, entries, model);
+	const view = conversationView(inst, main, thread, entries, model);
+	if (open === undefined) return;
+	const root = entries.find((e) => e.thread?.id === open);
+	// The conversation itself, or a thread that is not there (another person's, deleted): just the conversation.
+	if (root === undefined) {
+		history.replaceState(null, "", dmHref(inst.id));
+		if (open !== thread.id) toast("Questo thread non c'è più", true);
+		return;
+	}
+	void view.openThread(root, open);
 }
 
 /** The person had the conversation on screen: the rail stops showing it unread. */
@@ -64,9 +79,10 @@ function conversationView(inst, main, thread, entries, model) {
 	const threadId = thread.id;
 	const conversation = h("section.conversation");
 	// One panel at a time next to the chat, also when one opens by itself.
-	const browser = browserPanel(inst, threadId, () => screen.show(false));
-	const screen = screenPanel(inst, threadId, () => browser.show(false));
-	mount(main, h("div.chat-split", conversation, browser.el, screen.el));
+	const browser = browserPanel(inst, threadId, () => { screen.show(false); replies.show(false); });
+	const screen = screenPanel(inst, threadId, () => { browser.show(false); replies.show(false); });
+	const replies = threadPanel(inst, (entry, into) => show(entry, into), () => { browser.show(false); screen.show(false); }, () => void refreshSummaries());
+	mount(main, h("div.chat-split", conversation, browser.el, screen.el, replies.el));
 	markRead(inst, threadId);
 	// Tools belong to the fixed context bar, after the conversation has loaded successfully.
 	mount(main.parentElement.querySelector(".conversation-tools"), screen.toggle, browser.toggle);
@@ -90,11 +106,12 @@ function conversationView(inst, main, thread, entries, model) {
 	const picture = (path) => pictureUrl(inst, path);
 	// A file to download; also what a picture that does not show (deleted, not really a picture) becomes.
 	const fileLink = (file) => h("a.file", { href: `/api/instances/${inst.id}/files/raw?path=${encodeURIComponent(file.path)}` }, h("span.ext", (file.path.split(".").pop() ?? "file").slice(0, 4)), h("span", h("b", file.path.split("/").pop()), file.caption ? h("div.muted", file.caption) : null));
-	const show = (entry) => {
+	// `into`: where the message goes, the conversation by default or the thread panel.
+	const show = (entry, into = place, here = into === place) => {
 		// What the board sends the agente reads as a scheda, not as a wall of instructions the person never typed.
 		const brief = entry.from === "person" ? boardNote(entry) : null;
 		if (brief) {
-			place(brief);
+			into(brief);
 			return brief;
 		}
 		const shown = entry.file && /\.(png|jpe?g|webp|gif)$/i.test(entry.file.path);
@@ -125,13 +142,33 @@ function conversationView(inst, main, thread, entries, model) {
 				)
 			: null;
 		const listen = entry.from === "owni" && entry.text ? listenButton(entry.text) : null;
+		// In the conversation, under every message: answer it in a thread (ADR 0112), and the thread's replies so far.
+		const threaded = here && entry.id !== undefined;
+		const answer = threaded ? h("button.listen.reply-thread", { type: "button", title: "Rispondi nel thread", "aria-label": "Rispondi nel thread", onclick: () => void replies.open(entry, entry.thread?.id) }, icon("thread")) : null;
 		// Under an answer, on hover (always on touch): copy it, listen to it.
-		const actions = entry.from === "owni" && entry.text ? h("div.msg-actions", copyButton(entry.text), listen) : null;
+		const actions = entry.from === "owni" && entry.text ? h("div.msg-actions", copyButton(entry.text), listen, answer) : answer ? h("div.msg-actions", answer) : null;
 		// Which model wrote the reply: the chat's own, or the instance's when that could not answer.
 		const by = entry.model ? h("span.by", { title: `${entry.model.provider} · ${entry.model.modelId}` }, entry.model.name ?? entry.model.modelId) : null;
-		const el = h(`div.msg.${entry.from}`, h("div.meta", entry.from === "owni" ? [face(inst, 20), h("b.who", inst.name)] : null, fmt.time(entry.at), by), pictures, entry.text || entry.file || !pictures ? body : null, actions);
-		place(el);
+		const slot = threaded ? h("div.thread-slot", threadSummary(inst, entry, () => void replies.open(entry, entry.thread?.id))) : null;
+		if (slot) summaries.set(entry.id, slot);
+		const el = h(`div.msg.${entry.from}`, h("div.meta", entry.from === "owni" ? [face(inst, 20), h("b.who", inst.name)] : null, fmt.time(entry.at), by), pictures, entry.text || entry.file || !pictures ? body : null, actions, slot);
+		into(el);
 		return el;
+	};
+	/** The replies under each message, as the server counts them now. */
+	const summaries = new Map();
+	const known = new Set(entries.flatMap((e) => (e.thread ? [e.thread.id] : [])));
+	const refreshSummaries = async () => {
+		const { entries: now } = await api(`/api/instances/${inst.id}/dm`).catch(() => ({ entries: [] }));
+		for (const entry of now) {
+			const slot = summaries.get(entry.id);
+			if (!entry.thread || !slot) continue;
+			known.add(entry.thread.id);
+			mount(slot, threadSummary(inst, entry, () => void replies.open(entry, entry.thread.id)));
+			// Its reply button opens the same thread from now on.
+			const button = slot.parentElement?.querySelector(".reply-thread");
+			if (button) button.onclick = () => void replies.open(entry, entry.thread.id);
+		}
 	};
 	for (const e of entries) show(e);
 	// Google writes this conversation asked for: decided here, above the box, without leaving the chat.
@@ -163,7 +200,12 @@ function conversationView(inst, main, thread, entries, model) {
 	});
 	transcript.append(work.el);
 	state.onEntry = (event) => {
-		if (event.threadId !== threadId) return false;
+		if (event.threadId !== threadId) {
+			if (replies.onEntry(event)) return true;
+			// A reply in a thread not on screen: counted under its message, and announced.
+			if (event.instanceId === inst.id && known.has(event.threadId)) void refreshSummaries();
+			return false;
+		}
 		stopTyping();
 		show(event.entry);
 		if (event.entry.from === "owni") void drawAsks();
@@ -179,7 +221,9 @@ function conversationView(inst, main, thread, entries, model) {
 		const bubble = show({ from: "person", text, images, at: new Date().toISOString() });
 		startTyping();
 		try {
-			await api(`/api/instances/${inst.id}/threads/${encodeURIComponent(threadId)}/messages`, { method: "POST", body: images.length ? { text, images } : { text } });
+			const { entry } = await api(`/api/instances/${inst.id}/threads/${encodeURIComponent(threadId)}/messages`, { method: "POST", body: images.length ? { text, images } : { text } });
+			// The message as written down, so a thread can start under it.
+			show(entry, (el) => bubble.replaceWith(el), true);
 			void work.refresh();
 		} catch (error) {
 			stopTyping();
@@ -198,6 +242,132 @@ function conversationView(inst, main, thread, entries, model) {
 	}
 	// Opening a conversation to read it must not summon the phone's keyboard.
 	if (!matchMedia("(pointer: coarse)").matches) box.input.focus({ preventScroll: true });
+	return { openThread: replies.open };
+}
+
+/** Under a message with a thread: who answered, how many replies, the last one. Nothing when none yet. */
+function threadSummary(inst, entry, open) {
+	const t = entry.thread;
+	if (!t || t.count === 0) return null;
+	const who = t.who.map((w) => (w === "owni" ? face(inst, 18) : h("span.avatar.mini", { "aria-hidden": "true" }, initials(state.me.name))));
+	const count = t.count === 1 ? "1 risposta" : `${t.count} risposte`;
+	return h(
+		"button.thread-summary",
+		{ type: "button", "aria-label": `${count}${t.unread ? ", non lette" : ""}: apri il thread`, onclick: open },
+		h("span.who", who),
+		h("b", count),
+		t.lastAt ? h("span.muted", `ultima ${fmt.time(t.lastAt)}`) : null,
+		t.unread ? h("span.dot", { "aria-hidden": "true" }) : null,
+	);
+}
+
+/**
+ * A thread under one message (ADR 0112), in the place next to the conversation the browser and the
+ * screen use: the message, its replies and a box to answer. The thread is made on the first open; a
+ * chat from before opens here whole. `render(entry, into)` draws a message the conversation's way.
+ */
+function threadPanel(inst, render, onShow, onChange) {
+	const title = h("span.page-title", "Thread");
+	const list = h("div.thread-list", { role: "log", "aria-live": "polite" });
+	const dock = h("div.thread-dock");
+	const el = h(
+		"aside.browser-panel.thread-panel",
+		{ hidden: true, "aria-label": "Thread" },
+		h(
+			"div.browser-head",
+			h("button.icon-btn.thread-back", { type: "button", title: "Torna alla conversazione", "aria-label": "Torna alla conversazione", onclick: () => show(false) }, icon("back")),
+			icon("thread"),
+			title,
+			h("button.icon-btn.thread-close", { type: "button", title: "Chiudi", "aria-label": "Chiudi il thread", onclick: () => show(false) }, icon("close")),
+		),
+		list,
+		dock,
+	);
+	let current;
+	let typing;
+	let opening = 0;
+	// Under the message, how many replies the thread has.
+	let said = 0;
+	let count;
+	const counted = (more) => {
+		said += more;
+		if (count) count.textContent = said === 1 ? "1 risposta" : said ? `${said} risposte` : "Nessuna risposta, per ora";
+	};
+	const follow = () => { list.scrollTop = list.scrollHeight; };
+	const stopTyping = () => {
+		typing?.remove();
+		typing = undefined;
+	};
+	const put = (node) => list.insertBefore(node, typing?.parentNode === list ? typing : null);
+	/** Closed: the address is the conversation's again. */
+	const show = (on) => {
+		if (on || el.hidden) return;
+		el.hidden = true;
+		current = undefined;
+		stopTyping();
+		mount(dock);
+		if (route().rest[1] === "t") history.pushState(null, "", dmHref(inst.id));
+	};
+	const open = async (root, threadId) => {
+		const mine = ++opening;
+		try {
+			const id = threadId ?? (await api(`/api/instances/${inst.id}/threads`, { method: "POST", body: { parent: root.id } })).thread.id;
+			const { thread, entries } = await api(`/api/instances/${inst.id}/threads/${encodeURIComponent(id)}`);
+			if (mine !== opening || !el.isConnected) return;
+			onShow();
+			stopTyping();
+			current = id;
+			el.hidden = false;
+			title.textContent = thread.parent ? "Thread" : thread.title;
+			mount(list);
+			// Under a message of the conversation: that message first. A chat from before starts with its own.
+			said = entries.length;
+			count = thread.parent ? h("div.thread-count") : undefined;
+			if (count) {
+				render(root, put);
+				list.append(count);
+				counted(0);
+			}
+			for (const entry of entries) render(entry, put);
+			const box = chatBox(inst, id, el, async (text, images) => {
+				const bubble = render({ from: "person", text, images, at: new Date().toISOString() }, put);
+				stopTyping();
+				typing = thinking([inst]);
+				list.append(typing);
+				follow();
+				try {
+					const { entry } = await api(`/api/instances/${inst.id}/threads/${encodeURIComponent(id)}/messages`, { method: "POST", body: images.length ? { text, images } : { text } });
+					render(entry, (node) => bubble.replaceWith(node));
+					counted(1);
+					onChange();
+				} catch (error) {
+					stopTyping();
+					bubble.remove();
+					throw error;
+				}
+			});
+			mount(dock, box.el);
+			if (route().rest[2] !== id) history.pushState(null, "", dmHref(inst.id, id));
+			markRead(inst, id);
+			if (threadId === undefined) onChange();
+			follow();
+			if (!matchMedia("(pointer: coarse)").matches) box.input.focus({ preventScroll: true });
+		} catch (error) {
+			if (mine === opening) toast(error.message, true);
+		}
+	};
+	/** A reply in the thread on screen: shown here and read. */
+	const onEntry = (event) => {
+		if (current === undefined || event.threadId !== current) return false;
+		stopTyping();
+		render(event.entry, put);
+		counted(1);
+		follow();
+		markRead(inst, current);
+		onChange();
+		return true;
+	};
+	return { el, show, open, onEntry };
 }
 
 /**
