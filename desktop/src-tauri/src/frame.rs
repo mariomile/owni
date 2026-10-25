@@ -4,6 +4,7 @@
 //! `data-fullscreen` when macOS hides them in full screen. The bands the console marks with
 //! `data-tauri-drag-region` move the window; a double click on them zooms it.
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use tauri::ipc::CapabilityBuilder;
 use tauri::{AppHandle, Manager, Runtime, WebviewWindow, WebviewWindowBuilder};
@@ -33,16 +34,28 @@ pub fn apply<'a, R: Runtime, M: Manager<R>>(
     builder
 }
 
-/// Tell the page whether the window is in full screen: the buttons are gone there, and so is
-/// the room for them.
+/// Full screen as the page last heard it.
+static FULL: AtomicBool = AtomicBool::new(false);
+
+/// Tell a page just loaded whether the window is in full screen: the buttons are gone there, and
+/// so is the room for them.
 pub fn sync<R: Runtime>(window: &WebviewWindow<R>) {
     if !cfg!(target_os = "macos") {
         return;
     }
     let full = window.is_fullscreen().unwrap_or(false);
+    FULL.store(full, Ordering::Relaxed);
     let _ = window.eval(format!(
         "document.documentElement.toggleAttribute(\"data-fullscreen\", {full})"
     ));
+}
+
+/// The window was resized: the page hears only when full screen changed.
+pub fn resized<R: Runtime>(window: &WebviewWindow<R>) {
+    let full = window.is_fullscreen().unwrap_or(false);
+    if cfg!(target_os = "macos") && FULL.load(Ordering::Relaxed) != full {
+        sync(window);
+    }
 }
 
 /// Pages of the Owni server get the two commands a drag region sends, and nothing else

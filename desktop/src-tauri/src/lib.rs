@@ -231,7 +231,7 @@ pub fn run() {
                 if let Some(main) =
                     main_window(window.app_handle()).filter(|_| window.label() == MAIN)
                 {
-                    frame::sync(&main);
+                    frame::resized(&main);
                 }
             }
         })

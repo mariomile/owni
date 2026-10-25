@@ -93,16 +93,19 @@ function agentPicker(inst, choices) {
 	return trigger;
 }
 
+/** On the Mac app, which has no title bar, a band that moves the window (docs/desktop.md). */
+const windowDrag = () => document.documentElement.dataset.desktop === "mac" ? { "data-tauri-drag-region": "deep" } : {};
+
 function workspaceNav(item) {
 	const { view } = route();
 	const link = (label, href, active) => h("a", { href, "aria-current": active ? "page" : undefined }, label);
-	if (item.workspace === "work") return h("nav.workspace-nav", { "aria-label": "Lavori", "data-tauri-drag-region": "deep" },
+	if (item.workspace === "work") return h("nav.workspace-nav", { "aria-label": "Lavori", ...windowDrag() },
 		link("Incarichi", "#/lavori", view === "lavori" && !route().rest[0]),
 		link("Richiede te", "#/lavori/attenzione", view === "approvazioni" || (view === "lavori" && route().rest[0] === "attenzione")),
 		link("Automazioni", "#/programmi", ["programmi", "task", "automazioni"].includes(view)),
 		state.instances.some((i) => i.hasSegreteria) ? link("Pratiche", instanceHref("segreteria", [], state.instances.find((i) => i.hasSegreteria)?.id), view === "segreteria") : null,
 	);
-	if (item.workspace === "agents" && state.instance) return h("nav.workspace-nav", { "aria-label": `Materiali e configurazione di ${state.instance.name}`, "data-tauri-drag-region": "deep" },
+	if (item.workspace === "agents" && state.instance) return h("nav.workspace-nav", { "aria-label": `Materiali e configurazione di ${state.instance.name}`, ...windowDrag() },
 		link("Documenti", instanceHref("file"), view === "file"), link("Memoria", instanceHref("memoria"), view === "memoria"), link("Procedure", instanceHref("skill"), view === "skill"),
 		state.me.role === "owner" ? link("Configurazione", instanceHref("impostazioni"), ["impostazioni", "connettori", "inizia"].includes(view)) : null,
 	);
@@ -111,7 +114,7 @@ function workspaceNav(item) {
 		const choices = state.instances.filter((i) => i.canChat);
 		const who = !route().rest[0] && choices.length > 1 && inst ? agentPicker(inst, choices)
 			: h("a.agent-context", { href: agentHome(inst?.id) }, inst ? face(inst, 20) : null, h("span.agent-context-label", route().rest[0] ? `Conversazione con ${inst?.name ?? "l'agente"}` : inst?.name ?? "Il tuo assistente"));
-		return h("div.conversation-context", { "data-tauri-drag-region": "deep" }, who, h("div.conversation-context-actions", h("div.conversation-tools", { role: "group", "aria-label": "Strumenti della conversazione" })));
+		return h("div.conversation-context", windowDrag(), who, h("div.conversation-context-actions", h("div.conversation-tools", { role: "group", "aria-label": "Strumenti della conversazione" })));
 	}
 	return null;
 }
@@ -151,7 +154,7 @@ export function render() {
 	mount(main, workspaceNav(item), content);
 	const shell = h(
 		`div.shell${store("owni.rail") === "closed" ? ".collapsed" : ""}`,
-		h("header.topbar", { "data-tauri-drag-region": "deep" }, h("button.icon-btn.rail-menu", {
+		h("header.topbar", windowDrag(), h("button.icon-btn.rail-menu", {
 			"aria-label": "Apri la barra laterale", "aria-controls": "rail", "aria-expanded": "false",
 			onclick: () => { shell.classList.toggle("open"); syncRailControls(); },
 		}, icon("menu")), h("b.topbar-brand", "Owni"), h("button.icon-btn", { "aria-label": "Nuova conversazione", title: "Nuova conversazione", onclick: () => go("chat") }, icon("compose"))),
@@ -269,7 +272,7 @@ export function renderRail() {
 		rail,
 		h(
 			"div.rail-top",
-			{ "data-tauri-drag-region": "deep" },
+			windowDrag(),
 			h("a.brand", { href: "#/chat", "aria-label": "Owni", title: "Owni", onclick: closeRailOnPhone }, h("img", { src: "/icon.svg", alt: "", width: "22", height: "22" }), h("b", "Owni")),
 			h("button.icon-btn.collapse", { "aria-label": "Chiudi la barra laterale", "aria-controls": "rail", "aria-expanded": "true", title: "Chiudi la barra laterale", onclick: toggleRail }, icon("sidebar")),
 		),
