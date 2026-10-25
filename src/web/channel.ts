@@ -3,6 +3,7 @@ import { EventEmitter } from "node:events";
 import { appendFile, mkdir, readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { ChannelAdapter, InboundMessage, OutboundFile, OutboundMessage } from "../channels/types.ts";
+import { type ArtifactRef, ArtifactStore } from "../core/artifacts.ts";
 import { writeFileAtomic } from "../core/atomic-file.ts";
 
 export type WebThread = {
@@ -28,6 +29,8 @@ export type WebEntry = {
 	readonly text?: string;
 	/** A workspace file the instance sent. */
 	readonly file?: { readonly path: string; readonly caption?: string };
+	/** An HTML page the instance made or changed in this thread (ADR 0112): the version shown. */
+	readonly artifact?: ArtifactRef;
 	/** Pictures the person sent with the message, by workspace path. */
 	readonly images?: readonly string[];
 	/** The model that wrote Owni's reply; `name` is added for the console, never stored. */
@@ -64,12 +67,15 @@ export class WebChannel implements ChannelAdapter {
 	readonly events = new EventEmitter();
 	private handler: ((message: InboundMessage) => Promise<void>) | undefined;
 	private readonly dir: string;
+	/** The thread's HTML pages (ADR 0112). */
+	readonly artifacts: ArtifactStore;
 
 	constructor(
 		private readonly instance: { readonly tenantId: string; readonly instanceId: string },
 		instanceDir: string,
 	) {
 		this.dir = join(instanceDir, "web");
+		this.artifacts = new ArtifactStore(join(this.dir, "artifacts"));
 		this.events.setMaxListeners(1000);
 	}
 
@@ -216,7 +222,12 @@ export class WebChannel implements ChannelAdapter {
 		await this.deliver(file.threadId, file.idempotencyKey, { file: { path: file.path ?? file.name, ...(file.caption === undefined ? {} : { caption: file.caption }) } });
 	}
 
-	private async deliver(threadId: string, key: string, body: Pick<WebEntry, "text" | "file" | "model">): Promise<void> {
+	/** Show a saved version of an artifact in its thread, once per key. */
+	async sendArtifact(threadId: string, artifact: ArtifactRef, key: string): Promise<void> {
+		await this.deliver(threadId, key, { artifact: { id: artifact.id, version: artifact.version, title: artifact.title } });
+	}
+
+	private async deliver(threadId: string, key: string, body: Pick<WebEntry, "text" | "file" | "model" | "artifact">): Promise<void> {
 		if (!THREAD_ID.test(threadId)) throw new Error(`Not a web thread: ${threadId}`);
 		const id = `r_${createHash("sha256").update(key).digest("hex").slice(0, 24)}`;
 		const done = await this.serial(threadId, async () => {

@@ -221,6 +221,16 @@ button.who-id .icon { color: var(--fg-3); }
 a.btn { text-decoration: none; }
 
 .topbar { display: none; }
+/* The Mac app has no title bar (docs/desktop.md): the window buttons sit in the sidebar's top corner, so its first row starts after them. Full screen hides them, and the room goes with them. */
+:root[data-desktop="mac"]:not([data-fullscreen]) .rail-top { padding-left: 72px; }
+@media (min-width: 861px) {
+	:root[data-desktop="mac"]:not([data-fullscreen]) .shell.collapsed { grid-template-columns: 80px minmax(0, 1fr); }
+	:root[data-desktop="mac"]:not([data-fullscreen]) .shell.collapsed .rail-top { padding: 34px 0 8px; }
+}
+@media (max-width: 860px) {
+	:root[data-desktop="mac"]:not([data-fullscreen]) .topbar { padding: 11px 8px 6px 80px; }
+	:root[data-desktop="mac"]:not([data-fullscreen]) main.is-chat { height: calc(100dvh - 50px); }
+}
 main { min-width: 0; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
 main.is-page { width: 100%; max-width: 1080px; margin: 0 auto; padding: 0 clamp(16px, 4vw, 48px) 64px; animation: fade 0.22s var(--ease); }
 @keyframes fade { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
@@ -707,6 +717,14 @@ main.is-chat { position: relative; }
 	.msg .reply-thread { opacity: 0; transition: opacity 0.15s var(--ease); }
 	.msg:hover .reply-thread, .msg:focus-within .reply-thread { opacity: 1; }
 }
+/* Artifacts (ADR 0112): the agente's HTML page, rendered in a sandboxed frame next to the chat. */
+.artifact-panel { padding-bottom: 14px; }
+.artifact-panel .browser-head { min-height: 32px; }
+.artifact-versions { flex: none; width: auto; height: 28px; padding: 0 8px; font-size: 12.5px; }
+.artifact-back { display: none; }
+.artifact-view { display: flex; overflow: hidden; background: #fff; }
+.artifact-frame { flex: 1; width: 100%; min-height: 100%; border: 0; background: #fff; }
+.artifact-panel.floating { position: fixed; top: 0; right: 0; bottom: 0; z-index: 30; width: min(46vw, 640px); box-shadow: var(--shadow-lg); }
 /* Tools keep their own place in the context bar, including on a phone. */
 @media (max-width: 560px) {
 	.conversation-tools .browser-toggle { position: relative; width: 44px; padding: 0; justify-content: center; }
@@ -717,6 +735,9 @@ main.is-chat { position: relative; }
 	.browser-panel { position: absolute; inset: 0; z-index: 4; flex-basis: auto; border-left: 0; }
 	.thread-panel .thread-back { display: inline-grid; }
 	.thread-panel .thread-close { display: none; }
+	.artifact-panel.floating { width: auto; left: 0; box-shadow: none; }
+	.artifact-back { display: inline-grid; }
+	.artifact-close { display: none; }
 	.browser-bar .address { font-size: 16px; }
 	.browser-human input.browser-private-text, .browser-keys select { font-size: 16px; }
 	.browser-control .btn, .browser-human .btn, .browser-profile .btn { min-height: 36px; }
@@ -835,6 +856,13 @@ main.is-chat { position: relative; }
 .msg .file { display: inline-flex; align-items: center; gap: 10px; max-width: 100%; margin-top: 2px; padding: 8px 12px 8px 8px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); text-decoration: none; color: var(--fg); transition: border-color 0.15s var(--ease), background 0.15s var(--ease); }
 .msg .file:hover { border-color: var(--border-2); }
 .msg .file > span:last-child { min-width: 0; overflow-wrap: anywhere; }
+.artifact-card, .file-open { display: flex; align-items: center; gap: 10px; max-width: 100%; margin-top: 2px; }
+.artifact-card { width: min(100%, 420px); padding: 8px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+.artifact-mark { flex: none; display: grid; place-items: center; width: 38px; height: 34px; border-radius: 6px; background: var(--hover); color: var(--fg-2); }
+.artifact-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.artifact-text b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.artifact-text small { color: var(--fg-3); font-size: 12px; }
+.file-open .file { margin-top: 0; }
 .msg .file .ext { font: 600 10.5px/1 var(--mono); padding: 8px 5px; border-radius: 6px; background: var(--hover); border: 0; color: var(--fg-2); text-transform: uppercase; min-width: 38px; text-align: center; }
 /* an answer on its way: the face looks around, the words breathe */
 .thinking { align-self: flex-start; display: inline-flex; align-items: center; gap: 10px; animation: rise 0.25s var(--ease) both; }

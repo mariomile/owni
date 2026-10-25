@@ -4,6 +4,7 @@ import { agentCommands, commandMenu } from "../commands.js";
 import { renderMarkdown } from "../markdown.js";
 import { copyButton, listenButton } from "../listen.js";
 import { refreshConversations, render, renderRail } from "../shell.js";
+import { artifactCard, artifactPanel, isHtml } from "../artifacts.js";
 
 // ---------- canali (ADR 0063, 0113) ----------
 export async function viewRooms(main) {
@@ -82,9 +83,14 @@ function markRead(roomId) {
 		.catch(() => {});
 }
 
+/** The artifact panel of the canale on screen (ADR 0112): an agente's HTML pages open there. */
+let artifacts;
 const fileLink = (instanceId, file) => h("a.file", { href: `/api/instances/${encodeURIComponent(instanceId)}/files/raw?path=${encodeURIComponent(file.path)}` }, h("span.ext", (file.path.split(".").pop() ?? "file").slice(0, 4)), h("span", h("b", file.path.split("/").pop()), file.caption ? h("div.muted", file.caption) : null));
 
 /** A message of a canale or of a thread. `answer`: in the canale, the button that opens its thread; `slot`: where its replies are counted. */
+/** A file an agente sent; an HTML page also opens rendered in the panel, the link still downloads it. */
+const fileCard = (instanceId, file) => (isHtml(file.path) ? h("div.file-open", fileLink(instanceId, file), h("button.btn.small", { type: "button", onclick: () => void artifacts?.openFile(instanceId, file.path) }, "Apri")) : fileLink(instanceId, file));
+
 function roomMessage(room, entry, answer, slot) {
 	if (entry.from === "note") return h("div.room-note", entry.text);
 	if (entry.from === "person") return h("div.msg.person", h("div.meta", fmt.time(entry.at)), h("div.body", entry.text), answer ? h("div.msg-actions", answer) : null, slot);
@@ -94,7 +100,9 @@ function roomMessage(room, entry, answer, slot) {
 	const who = h("b.who", `${agent?.emoji ? `${agent.emoji} ` : ""}${agent?.name ?? entry.instanceId}`);
 	who.style.setProperty("--agent", faceColor(agent ?? { id: entry.instanceId }));
 	const actions = entry.text || answer ? h("div.msg-actions", entry.text ? [copyButton(entry.text), listenButton(entry.text)] : null, answer) : null;
-	return h("div.msg.owni", h("div.meta", face(agent ?? { id: entry.instanceId }, 20), who, h("span", fmt.time(entry.at)), by), entry.file ? fileLink(entry.instanceId, entry.file) : h("div.body", renderMarkdown(entry.text ?? "")), actions, slot);
+	return h("div.msg.owni", h("div.meta", face(agent ?? { id: entry.instanceId }, 20), who, h("span", fmt.time(entry.at)), by), entry.artifact ? artifactCard(entry.instanceId, entry.artifact.threadId, entry.artifact, (a) => void artifacts?.openArtifact(entry.instanceId, entry.artifact.threadId, a))
+		: entry.file ? fileCard(entry.instanceId, entry.file)
+		: h("div.body", renderMarkdown(entry.text ?? "")), actions, slot);
 }
 
 /** Under a message with a thread: who answered, how many replies, the last one. Nothing when none yet. */
@@ -175,7 +183,9 @@ async function viewRoom(main, roomId, openId) {
 	void markRead(roomId);
 	const transcript = h("div.transcript", { role: "log", "aria-live": "polite" });
 	const typing = thinking(room.agents.filter((a) => a.present));
-	const panel = threadPanel(room, () => void refreshSummaries());
+	// One panel at a time next to the canale: a thread or a page.
+	const panel = threadPanel(room, () => void refreshSummaries(), () => artifacts.show(false));
+	artifacts = artifactPanel(() => panel.close());
 	/** The replies under each message, as the server counts them now. */
 	const slots = new Map();
 	const children = new Set(entries.flatMap((e) => (e.thread ? [e.thread.id] : [])));
@@ -206,6 +216,8 @@ async function viewRoom(main, roomId, openId) {
 			// An answer ends the wait; one that calls another agente starts the next on the server.
 			typing.remove();
 			show(event.entry);
+			// A new page opens by itself when the place next to the canale is free; on a phone it would cover it.
+			if (event.entry.artifact && panel.el.hidden && !matchMedia("(max-width: 860px)").matches) void artifacts.openArtifact(event.entry.instanceId, event.entry.artifact.threadId, event.entry.artifact);
 			transcript.scrollTop = transcript.scrollHeight;
 			void markRead(roomId);
 			return true;
@@ -258,7 +270,7 @@ async function viewRoom(main, roomId, openId) {
 		h("button.icon-btn.room-remove", { onclick: remove, title: "Cancella il canale", "aria-label": `Cancella il canale ${channelName(room.title)}` }, icon("trash")),
 	);
 	if (entries.length === 0) transcript.append(h("div.room-note", `Nel canale: ${room.agents.map((a) => a.name).join(", ")}. Scrivi @nome per chiamarne uno, @tutti per tutti.`));
-	mount(main, h("div.chat-split", h("section.conversation", header, transcript, box.el), panel.el));
+	mount(main, h("div.chat-split", h("section.conversation", header, transcript, box.el), panel.el, artifacts.el));
 	box.fit();
 	transcript.scrollTop = transcript.scrollHeight;
 	if (openId !== undefined) {
@@ -275,7 +287,7 @@ async function viewRoom(main, roomId, openId) {
  * browser uses in the direct messages: the message, its replies and a box to answer, with the agenti
  * of the canale. The thread is made on the first open.
  */
-function threadPanel(channel, onChange) {
+function threadPanel(channel, onChange, onShow) {
 	const list = h("div.thread-list", { role: "log", "aria-live": "polite" });
 	const dock = h("div.thread-dock");
 	const el = h(
@@ -318,6 +330,7 @@ function threadPanel(channel, onChange) {
 			const id = threadId ?? (await api(`/api/rooms/${encodeURIComponent(channel.id)}/threads`, { method: "POST", body: { parent: root.id } })).room.id;
 			const { room, entries } = await api(`/api/rooms/${encodeURIComponent(id)}`);
 			if (mine !== opening || !el.isConnected) return;
+			onShow();
 			typing?.remove();
 			current = id;
 			shown = room;
@@ -365,5 +378,5 @@ function threadPanel(channel, onChange) {
 		void markRead(current).then(onChange);
 		return true;
 	};
-	return { el, open, onEntry };
+	return { el, open, close, onEntry };
 }

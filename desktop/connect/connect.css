@@ -30,6 +30,12 @@ body {
 	background: var(--bg);
 	color: var(--fg);
 }
+/* The Mac window has no title bar: this band moves it. */
+.titlebar {
+	position: fixed;
+	inset: 0 0 auto;
+	height: 40px;
+}
 main {
 	width: min(420px, 100% - 32px);
 	text-align: center;

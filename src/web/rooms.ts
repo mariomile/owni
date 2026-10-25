@@ -38,6 +38,8 @@ export type RoomEntry = {
 	readonly text?: string;
 	readonly file?: WebEntry["file"];
 	readonly model?: WebEntry["model"];
+	/** An agente's HTML page (ADR 0112), with the seat thread it lives in. */
+	readonly artifact?: NonNullable<WebEntry["artifact"]> & { readonly threadId: string };
 };
 
 /** `parent`: for a thread, the canale it is under. */
@@ -314,7 +316,7 @@ export class Rooms {
 			const seat = room?.seats.find((s) => s.instanceId === event.instanceId && s.threadId === event.threadId);
 			if (room === undefined || seat === undefined) return undefined; // the stanza was deleted
 			const e = event.entry;
-			const entry: RoomEntry = { id: e.id, at: e.at, from: "agent", instanceId: event.instanceId, ...(e.text === undefined ? {} : { text: e.text }), ...(e.file === undefined ? {} : { file: e.file }), ...(e.model === undefined ? {} : { model: e.model }) };
+			const entry: RoomEntry = { id: e.id, at: e.at, from: "agent", instanceId: event.instanceId, ...(e.text === undefined ? {} : { text: e.text }), ...(e.file === undefined ? {} : { file: e.file }), ...(e.model === undefined ? {} : { model: e.model }), ...(e.artifact === undefined ? {} : { artifact: { ...e.artifact, threadId: event.threadId } }) };
 			const entries = await this.store.entries(room.id);
 			if (entries.some((x) => x.id === entry.id)) return undefined;
 			await this.store.append(room.id, entry);
@@ -358,7 +360,7 @@ export class Rooms {
 			// Its own answers are no news to it.
 			const missed = entries.slice(seat.seen).filter((e) => e.from !== "note" && e.instanceId !== instanceId);
 			const lastPerson = by === undefined ? [...missed].reverse().find((e) => e.from === "person") : undefined;
-			const lines = missed.filter((e) => e !== lastPerson).map((e) => `[${e.from === "person" ? "Persona" : nameOf(e.instanceId)}] ${(e.text ?? (e.file ? `(file ${e.file.path})` : "")).replace(/\n/g, "\n  ")}`);
+			const lines = missed.filter((e) => e !== lastPerson).map((e) => `[${e.from === "person" ? "Persona" : nameOf(e.instanceId)}] ${(e.text ?? (e.file ? `(file ${e.file.path})` : e.artifact ? `(artifact «${e.artifact.title}», versione ${e.artifact.version})` : "")).replace(/\n/g, "\n  ")}`);
 			const kept = recent(lines);
 			const short = handles(present);
 			const others = present.filter((a) => a.instanceId !== instanceId).map((a) => `${a.name} (@${short.get(a.instanceId)})`);

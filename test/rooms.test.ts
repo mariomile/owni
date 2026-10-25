@@ -183,4 +183,20 @@ describe("stanze", () => {
 		await waitFor(() => seen.filter((e) => e.from === "agent").length === 3);
 		expect(commands.vendite).toEqual([undefined, undefined]);
 	});
+
+	it("an agente's artifact joins the stanza with the seat it lives in, and the others hear of it", async () => {
+		const { rooms, channels, got, seen } = setup((id) => `ok ${id}`);
+		const room = await rooms.create(PERSON, "Cruscotto", ["ricerca", "vendite"]);
+		const seat = room.seats.find((s) => s.instanceId === "ricerca")?.threadId as string;
+		const ricerca = channels.get("ricerca") as WebChannel;
+		const made = await ricerca.artifacts.create(seat, { title: "Cruscotto bandi", html: "<h1>Bandi</h1>", key: "c1" });
+		await ricerca.sendArtifact(seat, made, "c1");
+		await waitFor(() => seen.some((e) => e.artifact !== undefined));
+		const artifact = { id: made.id, version: 1, title: "Cruscotto bandi", threadId: seat };
+		expect(seen.find((e) => e.artifact !== undefined)).toMatchObject({ from: "agent", instanceId: "ricerca", artifact });
+		expect((await rooms.open(PERSON, room.id))?.entries.find((e) => e.artifact !== undefined)?.artifact).toEqual(artifact);
+		await rooms.post(PERSON, room.id, "@vendite guardalo");
+		await waitFor(() => (got.vendite?.length ?? 0) === 1);
+		expect(got.vendite?.[0]).toContain("[Ricercatore] (artifact «Cruscotto bandi», versione 1)");
+	});
 });

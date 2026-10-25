@@ -3,6 +3,7 @@
 //! server's own; the app adds only what a browser tab cannot do. The Mac app also carries a
 //! server of its own (local.rs), used until the person connects another one.
 
+mod frame;
 mod local;
 mod server;
 mod settings;
@@ -13,7 +14,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Mutex;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::webview::{DownloadEvent, NewWindowResponse};
+use tauri::webview::{DownloadEvent, NewWindowResponse, PageLoadEvent};
 use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder, WindowEvent};
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 use tauri_plugin_opener::OpenerExt;
@@ -225,6 +226,14 @@ pub fn run() {
                     let _ = window.hide();
                 }
             }
+            // Full screen in or out: the window buttons come and go.
+            if let WindowEvent::Resized(_) = event {
+                if let Some(main) =
+                    main_window(window.app_handle()).filter(|_| window.label() == MAIN)
+                {
+                    frame::resized(&main);
+                }
+            }
         })
         .build(tauri::generate_context!())
         .expect("owni: the app could not start")
@@ -264,7 +273,10 @@ fn settings_file(app: &AppHandle) -> Result<PathBuf, String> {
 fn open_main(app: &AppHandle, page: Page) -> tauri::Result<()> {
     let url = match page {
         Page::Connect => server::bundled_page(),
-        Page::Server(start) => start,
+        Page::Server(start) => {
+            frame::grant(app, &start);
+            start
+        }
     };
     if let Some(window) = main_window(app) {
         window.navigate(url)?;
@@ -272,11 +284,16 @@ fn open_main(app: &AppHandle, page: Page) -> tauri::Result<()> {
         return Ok(());
     }
     let guard = app.clone();
-    let window = WebviewWindowBuilder::new(app, MAIN, WebviewUrl::External(url))
+    let builder = WebviewWindowBuilder::new(app, MAIN, WebviewUrl::External(url))
         .title("Owni")
         .inner_size(1180.0, 800.0)
         .min_inner_size(380.0, 520.0)
         .visible(false)
+        .on_page_load(|window, load| {
+            if load.event() == PageLoadEvent::Finished {
+                frame::sync(&window);
+            }
+        })
         // Pages of the server stay in the window; any other link opens in the browser.
         .on_navigation(move |target| allowed(&guard, target))
         // A link that asks for a new window (target=_blank, window.open): a server page opens in a
@@ -306,8 +323,8 @@ fn open_main(app: &AppHandle, page: Page) -> tauri::Result<()> {
                 }
                 true
             }
-        })
-        .build()?;
+        });
+    let window = frame::apply(builder).build()?;
     // Shown once built: no white flash before the page.
     window.show()?;
     window.set_focus()?;

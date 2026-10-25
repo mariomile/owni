@@ -1,6 +1,7 @@
 // File page.
 import { agentLabel, api, confirmDialog, emptyNote, fmt, h, head, icon, mount, needInstance, state, toast } from "../common.js";
 import { render } from "../shell.js";
+import { artifactPanel, isHtml } from "../artifacts.js";
 
 // ---------- file ----------
 /** What a file is, from its name: the label and the colour of its tile. */
@@ -37,6 +38,9 @@ export async function viewFiles(main) {
 	const upload = h("input", { type: "file", class: "sr", multiple: true });
 	upload.addEventListener("change", () => upload.files?.length && send([...upload.files]));
 	const raw = (f) => `/api/instances/${inst.id}/files/raw?path=${encodeURIComponent(f.path)}`;
+	// An HTML page opens rendered and sandboxed in a panel over the page (ADR 0112).
+	const viewer = artifactPanel();
+	viewer.el.classList.add("floating");
 	const tile = (f, name) => {
 		const kind = fileKind(name);
 		const box = h(`span.file-kind.k-${kind}`, h("span", fileExt(name)));
@@ -61,6 +65,7 @@ export async function viewFiles(main) {
 			h("div.task-text", h("b", h("a", { href: raw(f), download: name }, name)), h("small", `${fmt.bytes(f.size)} · ${fmt.time(f.modifiedAt)}`)),
 			h(
 				"div.person-actions",
+				isHtml(name) ? h("button.btn.small", { type: "button", "aria-label": `Apri ${name}`, onclick: () => viewer.openFile(inst.id, f.path) }, "Apri") : null,
 				h("a.icon-btn", { href: raw(f), download: name, title: "Scarica", "aria-label": `Scarica ${name}` }, icon("install")),
 				state.me.role === "owner" ? h("button.icon-btn.task-remove", { title: "Elimina", "aria-label": `Elimina ${f.path}`, onclick: () => remove(f) }, icon("trash")) : null,
 			),
@@ -85,6 +90,7 @@ export async function viewFiles(main) {
 				: emptyNote("div.empty", "Nessun file", `Caricane uno, trascinalo qui, o chiedi a ${inst.name} di preparare un report.`),
 		),
 		drop,
+		viewer.el,
 	);
 	// Files dropped anywhere on the page go up like the button's.
 	let depth = 0;

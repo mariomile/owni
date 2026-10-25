@@ -11,6 +11,7 @@ import { refreshConversations, renderRail } from "../shell.js";
 import { conversationRuns } from "../runs.js";
 import { renderMarkdown } from "../markdown.js";
 import { linkPreviews, sources } from "../sources.js";
+import { artifactCard, artifactPanel, isHtml } from "../artifacts.js";
 
 // ---------- chat ----------
 /** A workspace picture shown in the page (not downloaded). */
@@ -79,10 +80,11 @@ function conversationView(inst, main, thread, entries, model) {
 	const threadId = thread.id;
 	const conversation = h("section.conversation");
 	// One panel at a time next to the chat, also when one opens by itself.
-	const browser = browserPanel(inst, threadId, () => { screen.show(false); replies.show(false); });
-	const screen = screenPanel(inst, threadId, () => { browser.show(false); replies.show(false); });
-	const replies = threadPanel(inst, (entry, into) => show(entry, into), () => { browser.show(false); screen.show(false); }, () => void refreshSummaries());
-	mount(main, h("div.chat-split", conversation, browser.el, screen.el, replies.el));
+	const browser = browserPanel(inst, threadId, () => { screen.show(false); replies.show(false); artifact.show(false); });
+	const screen = screenPanel(inst, threadId, () => { browser.show(false); replies.show(false); artifact.show(false); });
+	const replies = threadPanel(inst, (entry, into, where) => show(entry, into, false, where), () => { browser.show(false); screen.show(false); artifact.show(false); }, () => void refreshSummaries());
+	const artifact = artifactPanel(() => { browser.show(false); screen.show(false); replies.show(false); });
+	mount(main, h("div.chat-split", conversation, browser.el, screen.el, replies.el, artifact.el));
 	markRead(inst, threadId);
 	// Tools belong to the fixed context bar, after the conversation has loaded successfully.
 	mount(main.parentElement.querySelector(".conversation-tools"), screen.toggle, browser.toggle);
@@ -106,8 +108,11 @@ function conversationView(inst, main, thread, entries, model) {
 	const picture = (path) => pictureUrl(inst, path);
 	// A file to download; also what a picture that does not show (deleted, not really a picture) becomes.
 	const fileLink = (file) => h("a.file", { href: `/api/instances/${inst.id}/files/raw?path=${encodeURIComponent(file.path)}` }, h("span.ext", (file.path.split(".").pop() ?? "file").slice(0, 4)), h("span", h("b", file.path.split("/").pop()), file.caption ? h("div.muted", file.caption) : null));
-	// `into`: where the message goes, the conversation by default or the thread panel.
-	const show = (entry, into = place, here = into === place) => {
+	// An HTML page the agente sent opens rendered in the panel, like an artifact; the link still downloads it.
+	const fileCard = (file) => (isHtml(file.path) ? h("div.file-open", fileLink(file), h("button.btn.small", { type: "button", onclick: () => artifact.openFile(inst.id, file.path) }, "Apri")) : fileLink(file));
+	// `into`: where the message goes, the conversation by default or the thread panel; `where`: the
+	// thread it was written in, whose artifacts it shows.
+	const show = (entry, into = place, here = into === place, where = threadId) => {
 		// What the board sends the agente reads as a scheda, not as a wall of instructions the person never typed.
 		const brief = entry.from === "person" ? boardNote(entry) : null;
 		if (brief) {
@@ -125,8 +130,10 @@ function conversationView(inst, main, thread, entries, model) {
 					),
 					entry.file.caption ? h("div.muted", entry.file.caption) : null,
 				)
+			: entry.artifact
+			? artifactCard(inst.id, where, entry.artifact, (a) => void artifact.openArtifact(inst.id, where, a))
 			: entry.file
-			? fileLink(entry.file)
+			? fileCard(entry.file)
 			: entry.from === "owni"
 			? reply(entry.text ?? "")
 			: h("div.body", entry.text ?? "");
@@ -208,6 +215,10 @@ function conversationView(inst, main, thread, entries, model) {
 		}
 		stopTyping();
 		show(event.entry);
+		// A new page or version opens by itself while the conversation is on screen, unless a thread,
+		// the browser or the screen is open there; on a phone it would cover the chat. The card opens it.
+		const busy = [browser.el, screen.el, replies.el].some((panel) => !panel.hidden);
+		if (event.entry.artifact && !busy && !matchMedia("(max-width: 860px)").matches) void artifact.openArtifact(inst.id, threadId, event.entry.artifact);
 		if (event.entry.from === "owni") void drawAsks();
 		browser.lively();
 		screen.lively();
@@ -264,7 +275,7 @@ function threadSummary(inst, entry, open) {
 /**
  * A thread under one message (ADR 0113), in the place next to the conversation the browser and the
  * screen use: the message, its replies and a box to answer. The thread is made on the first open; a
- * chat from before opens here whole. `render(entry, into)` draws a message the conversation's way.
+ * chat from before opens here whole. `render(entry, into, where)` draws a message the conversation's way, `where` being the thread it is in.
  */
 function threadPanel(inst, render, onShow, onChange) {
 	const title = h("span.page-title", "Thread");
@@ -328,7 +339,7 @@ function threadPanel(inst, render, onShow, onChange) {
 				list.append(count);
 				counted(0);
 			}
-			for (const entry of entries) render(entry, put);
+			for (const entry of entries) render(entry, put, id);
 			const box = chatBox(inst, id, el, async (text, images) => {
 				const bubble = render({ from: "person", text, images, at: new Date().toISOString() }, put);
 				stopTyping();
@@ -337,7 +348,7 @@ function threadPanel(inst, render, onShow, onChange) {
 				follow();
 				try {
 					const { entry } = await api(`/api/instances/${inst.id}/threads/${encodeURIComponent(id)}/messages`, { method: "POST", body: images.length ? { text, images } : { text } });
-					render(entry, (node) => bubble.replaceWith(node));
+					render(entry, (node) => bubble.replaceWith(node), id);
 					counted(1);
 					onChange();
 				} catch (error) {
@@ -360,7 +371,7 @@ function threadPanel(inst, render, onShow, onChange) {
 	const onEntry = (event) => {
 		if (current === undefined || event.threadId !== current) return false;
 		stopTyping();
-		render(event.entry, put);
+		render(event.entry, put, current);
 		counted(1);
 		follow();
 		markRead(inst, current);
