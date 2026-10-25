@@ -1,7 +1,11 @@
 {
 	"$schema": "../gen/schemas/desktop-schema.json",
 	"identifier": "default",
-	"description": "The bundled connect page only. The Owni server's own pages get no access to the app: Tauri gives remote content no IPC unless a capability names it, and none does.",
+	"description": "The bundled connect page only, which can also move the window from its top band. The Owni server's own pages get no access to the app beyond moving the window on a Mac (src/frame.rs grants that one at run time, for the server the window shows): Tauri gives remote content no IPC unless a capability names it.",
 	"windows": ["main"],
-	"permissions": ["core:default"]
+	"permissions": [
+		"core:default",
+		"core:window:allow-start-dragging",
+		"core:window:allow-internal-toggle-maximize"
+	]
 }

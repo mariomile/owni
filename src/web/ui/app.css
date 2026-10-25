@@ -223,6 +223,16 @@ button.who-id .icon { color: var(--fg-3); }
 a.btn { text-decoration: none; }
 
 .topbar { display: none; }
+/* The Mac app has no title bar (docs/desktop.md): the window buttons sit in the sidebar's top corner, so its first row starts after them. Full screen hides them, and the room goes with them. */
+:root[data-desktop="mac"]:not([data-fullscreen]) .rail-top { padding-left: 72px; }
+@media (min-width: 861px) {
+	:root[data-desktop="mac"]:not([data-fullscreen]) .shell.collapsed { grid-template-columns: 80px minmax(0, 1fr); }
+	:root[data-desktop="mac"]:not([data-fullscreen]) .shell.collapsed .rail-top { padding: 34px 0 8px; }
+}
+@media (max-width: 860px) {
+	:root[data-desktop="mac"]:not([data-fullscreen]) .topbar { padding: 11px 8px 6px 80px; }
+	:root[data-desktop="mac"]:not([data-fullscreen]) main.is-chat { height: calc(100dvh - 50px); }
+}
 main { min-width: 0; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
 main.is-page { width: 100%; max-width: 1080px; margin: 0 auto; padding: 0 clamp(16px, 4vw, 48px) 64px; animation: fade 0.22s var(--ease); }
 @keyframes fade { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
