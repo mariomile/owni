@@ -3,6 +3,7 @@ import { api, confirmDialog, emptyNote, face, faceColor, fmt, go, h, head, icon,
 import { agentCommands, commandMenu } from "../commands.js";
 import { renderMarkdown } from "../markdown.js";
 import { copyButton, listenButton } from "../listen.js";
+import { artifactCard, artifactPanel, isHtml } from "../artifacts.js";
 
 // ---------- stanze (ADR 0063) ----------
 export async function viewRooms(main) {
@@ -73,6 +74,10 @@ async function viewRoom(main, roomId) {
 	const agentOf = (id) => room.agents.find((a) => a.instanceId === id);
 	const transcript = h("div.transcript", { role: "log", "aria-live": "polite" });
 	const fileLink = (instanceId, file) => h("a.file", { href: `/api/instances/${encodeURIComponent(instanceId)}/files/raw?path=${encodeURIComponent(file.path)}` }, h("span.ext", (file.path.split(".").pop() ?? "file").slice(0, 4)), h("span", h("b", file.path.split("/").pop()), file.caption ? h("div.muted", file.caption) : null));
+	// An agente's HTML page (ADR 0112) lives in its seat of the stanza, and opens next to it.
+	const panel = artifactPanel();
+	const fileCard = (instanceId, file) => (isHtml(file.path) ? h("div.file-open", fileLink(instanceId, file), h("button.btn.small", { type: "button", onclick: () => panel.openFile(instanceId, file.path) }, "Apri")) : fileLink(instanceId, file));
+	const openArtifact = (instanceId, a) => void panel.openArtifact(instanceId, a.threadId, a);
 	const typing = thinking(room.agents.filter((a) => a.present));
 	const show = (entry) => {
 		if (entry.from === "note") return transcript.append(h("div.room-note", entry.text));
@@ -83,7 +88,7 @@ async function viewRoom(main, roomId) {
 		const who = h("b.who", `${agent?.emoji ? `${agent.emoji} ` : ""}${agent?.name ?? entry.instanceId}`);
 		who.style.setProperty("--agent", faceColor(agent ?? { id: entry.instanceId }));
 		const actions = entry.text ? h("div.msg-actions", copyButton(entry.text), listenButton(entry.text)) : null;
-		transcript.append(h("div.msg.owni", h("div.meta", face(agent ?? { id: entry.instanceId }, 20), who, h("span", fmt.time(entry.at)), by), entry.file ? fileLink(entry.instanceId, entry.file) : h("div.body", renderMarkdown(entry.text ?? "")), actions));
+		transcript.append(h("div.msg.owni", h("div.meta", face(agent ?? { id: entry.instanceId }, 20), who, h("span", fmt.time(entry.at)), by), entry.artifact ? artifactCard(entry.instanceId, entry.artifact.threadId, entry.artifact, (a) => openArtifact(entry.instanceId, a)) : entry.file ? fileCard(entry.instanceId, entry.file) : h("div.body", renderMarkdown(entry.text ?? "")), actions));
 	};
 	for (const e of entries) show(e);
 	state.onRoom = (event) => {
@@ -92,6 +97,7 @@ async function viewRoom(main, roomId) {
 		// An answer ends the wait; one that calls another agente starts the next on the server.
 		typing.remove();
 		show(event.entry);
+		if (event.entry.artifact && !matchMedia("(max-width: 860px)").matches) openArtifact(event.entry.instanceId, event.entry.artifact);
 		transcript.scrollTop = transcript.scrollHeight;
 		return true;
 	};
@@ -166,7 +172,7 @@ async function viewRoom(main, roomId) {
 		},
 		fit,
 	);
-	mount(main, h("section.conversation", header, transcript, h("div.dock", chips, h("div.box", commands, h("div.composer", input, send)))));
+	mount(main, h("div.chat-split", h("section.conversation", header, transcript, h("div.dock", chips, h("div.box", commands, h("div.composer", input, send)))), panel.el));
 	fit();
 	transcript.scrollTop = transcript.scrollHeight;
 	if (!matchMedia("(pointer: coarse)").matches) input.focus({ preventScroll: true });

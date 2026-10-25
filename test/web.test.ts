@@ -301,7 +301,72 @@ describe("web console", () => {
 		expect(page.status).toBe(200);
 		expect(page.headers.get("content-security-policy")).toContain("default-src 'self'");
 		expect(page.headers.get("x-frame-options")).toBe("DENY");
+		// The console frames only its own pages: the artifacts (ADR 0112).
+		expect(page.headers.get("content-security-policy")).toContain("frame-src 'self'");
 		expect((await fetch(`${h.base}/../package.json`)).status).toBe(404);
+	});
+
+	it("an artifact is served sandboxed, framable only by the console, and only to the person of the conversation", async () => {
+		const h = await setup();
+		const thread = await h.channel.createThread(h.anna.person.id);
+		const page = "<!doctype html><title>Conti</title><script>document.title = 'ok'</script>";
+		const made = await h.channel.artifacts.create(thread.id, { title: "Conti di ottobre", html: page, key: "c1" });
+		await h.channel.artifacts.update(thread.id, made.id, { html: `${page}<p>2</p>`, key: "c2" });
+		const at = `/api/instances/ops/artifacts/${thread.id}/${made.id}`;
+		const anna = await h.as(h.anna.token);
+		const shown = await anna(`${at}/1`);
+		expect(shown.status).toBe(200);
+		expect(shown.body).toBe(page);
+		const csp = shown.headers.get("content-security-policy") ?? "";
+		expect(csp).toMatch(/^sandbox allow-scripts allow-modals;/);
+		expect(csp).not.toContain("allow-same-origin");
+		expect(csp).toContain("frame-ancestors 'self'");
+		// Nothing goes out: no requests, no forms, no pictures from any https address.
+		expect(csp).toContain("connect-src 'none'");
+		expect(csp).toContain("form-action 'none'");
+		expect(csp).not.toMatch(/(img|media)-src[^;]* https:(;| |$)/);
+		expect(shown.headers.get("x-frame-options")).toBeNull();
+		expect(shown.headers.get("content-type")).toBe("text/html; charset=utf-8");
+		expect(shown.headers.get("x-content-type-options")).toBe("nosniff");
+		expect(shown.headers.get("cache-control")).toBe("private, no-store");
+		expect(shown.headers.get("content-disposition")).toBeNull();
+		expect((await anna(`${at}/2`)).body).toContain("<p>2</p>");
+		const download = await anna(`${at}/2?download=1`);
+		expect(download.headers.get("content-disposition")).toBe(`attachment; filename*=UTF-8''${encodeURIComponent("Conti di ottobre.html")}`);
+		expect(download.headers.get("content-security-policy")).toBe(csp);
+		expect((await anna(at)).body.artifact.versions.map((v: any) => [v.version, v.title, v.key])).toEqual([
+			[1, "Conti di ottobre", undefined],
+			[2, "Conti di ottobre", undefined],
+		]);
+		for (const missing of [`${at}/3`, `${at}/0`, `${at}/01`, `${at}/x`, `/api/instances/ops/artifacts/${thread.id}/a_000000000000/1`]) expect((await anna(missing)).status).toBe(404);
+		// Another member, and the owner too: a member's chat is theirs alone.
+		const luca = await h.as(h.luca.token);
+		const owner = await h.as(h.owner.token);
+		for (const other of [luca, owner]) {
+			expect((await other(`${at}/1`)).status).toBe(404);
+			expect((await other(at)).status).toBe(404);
+		}
+		expect((await fetch(`${h.base}${at}/1`)).status).toBe(401);
+	});
+
+	it("an HTML file of the workspace opens sandboxed like an artifact; other files stay downloads", async () => {
+		const h = await setup();
+		const anna = await h.as(h.anna.token);
+		const raw = (name: string, body: string) => anna(`/api/instances/ops/files/raw?name=${name}`, { method: "PUT", body, headers: { "content-type": "application/octet-stream" } });
+		const html = (await raw("report.html", "<h1>Report</h1>")).body.file.path;
+		const csv = (await raw("dati.csv", "a,b\n")).body.file.path;
+		const view = await anna(`/api/instances/ops/files/raw?path=${encodeURIComponent(html)}&view=1`);
+		expect(view.body).toBe("<h1>Report</h1>");
+		expect(view.headers.get("content-security-policy")).toMatch(/^sandbox allow-scripts /);
+		expect(view.headers.get("content-security-policy")).toContain("frame-ancestors 'self'");
+		expect(view.headers.get("x-frame-options")).toBeNull();
+		expect(view.headers.get("content-type")).toBe("text/html; charset=utf-8");
+		// Without view=1 it is the download it always was; a CSV never renders.
+		expect((await anna(`/api/instances/ops/files/raw?path=${encodeURIComponent(html)}`)).headers.get("content-disposition")).toMatch(/^attachment;/);
+		const notHtml = await anna(`/api/instances/ops/files/raw?path=${encodeURIComponent(csv)}&view=1`);
+		expect(notHtml.headers.get("content-disposition")).toMatch(/^attachment;/);
+		expect(notHtml.headers.get("content-type")).toBe("application/octet-stream");
+		expect(notHtml.headers.get("x-frame-options")).toBe("DENY");
 	});
 });
 

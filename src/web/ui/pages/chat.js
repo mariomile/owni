@@ -11,6 +11,7 @@ import { refreshThreads, renderRail } from "../shell.js";
 import { conversationRuns } from "../runs.js";
 import { renderMarkdown } from "../markdown.js";
 import { linkPreviews, sources } from "../sources.js";
+import { artifactCard, artifactPanel, isHtml } from "../artifacts.js";
 
 // ---------- chat ----------
 /** A workspace picture shown in the page (not downloaded). */
@@ -44,9 +45,10 @@ export async function viewChat(main) {
 	mount(main, conversation);
 	if (!threadId) return landing(inst, conversation);
 	// One panel at a time next to the chat, also when one opens by itself.
-	const browser = browserPanel(inst, threadId, () => screen.show(false));
-	const screen = screenPanel(inst, threadId, () => browser.show(false));
-	mount(main, h("div.chat-split", conversation, browser.el, screen.el));
+	const browser = browserPanel(inst, threadId, () => (screen.show(false), artifact.show(false)));
+	const screen = screenPanel(inst, threadId, () => (browser.show(false), artifact.show(false)));
+	const artifact = artifactPanel(() => (browser.show(false), screen.show(false)));
+	mount(main, h("div.chat-split", conversation, browser.el, screen.el, artifact.el));
 	state.unread.delete(threadId);
 	renderRail();
 	const { entries, model } = await api(`/api/instances/${inst.id}/threads/${encodeURIComponent(threadId)}`);
@@ -73,6 +75,9 @@ export async function viewChat(main) {
 	const picture = (path) => pictureUrl(inst, path);
 	// A file to download; also what a picture that does not show (deleted, not really a picture) becomes.
 	const fileLink = (file) => h("a.file", { href: `/api/instances/${inst.id}/files/raw?path=${encodeURIComponent(file.path)}` }, h("span.ext", (file.path.split(".").pop() ?? "file").slice(0, 4)), h("span", h("b", file.path.split("/").pop()), file.caption ? h("div.muted", file.caption) : null));
+	// An HTML page the agente sent opens rendered in the panel, like an artifact; the link still downloads it.
+	const fileCard = (file) => (isHtml(file.path) ? h("div.file-open", fileLink(file), h("button.btn.small", { type: "button", onclick: () => artifact.openFile(inst.id, file.path) }, "Apri")) : fileLink(file));
+	const openArtifact = (a) => void artifact.openArtifact(inst.id, threadId, a);
 	const show = (entry) => {
 		// What the board sends the agente reads as a scheda, not as a wall of instructions the person never typed.
 		const brief = entry.from === "person" ? boardNote(entry) : null;
@@ -91,8 +96,10 @@ export async function viewChat(main) {
 					),
 					entry.file.caption ? h("div.muted", entry.file.caption) : null,
 				)
+			: entry.artifact
+			? artifactCard(inst.id, threadId, entry.artifact, openArtifact)
 			: entry.file
-			? fileLink(entry.file)
+			? fileCard(entry.file)
 			: entry.from === "owni"
 			? reply(entry.text ?? "")
 			: h("div.body", entry.text ?? "");
@@ -149,6 +156,9 @@ export async function viewChat(main) {
 		if (event.threadId !== threadId) return false;
 		stopTyping();
 		show(event.entry);
+		// A new page or version opens by itself while the conversation is on screen; on a phone it
+		// would cover the chat, and the card is there to open it.
+		if (event.entry.artifact && !matchMedia("(max-width: 860px)").matches) openArtifact(event.entry.artifact);
 		if (event.entry.from === "owni") void drawAsks();
 		browser.lively();
 		screen.lively();

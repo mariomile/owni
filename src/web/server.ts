@@ -765,6 +765,8 @@ export function createWebApp(options: WebAppOptions): Server {
 		const name = path.split("/").at(-1) ?? "file";
 		// A picture can be shown in the page (thumbnails in the chat): only one whose bytes are a JPEG, PNG, GIF or WebP, never SVG.
 		const picture = url.searchParams.get("inline") === "1" ? imageType(data) : undefined;
+		// An HTML file can be opened in the page, sandboxed like an artifact (ADR 0112).
+		if (url.searchParams.get("view") === "1" && /\.html?$/i.test(name)) return sandboxedHtml(res, data);
 		if (picture !== undefined) {
 			res.writeHead(200, { "content-type": picture, "content-length": data.length, "content-disposition": "inline", "x-content-type-options": "nosniff", "cache-control": "no-store" });
 			res.end(data);
@@ -778,6 +780,23 @@ export function createWebApp(options: WebAppOptions): Server {
 		});
 		res.end(data);
 		return STREAMED;
+	});
+	// --- artifacts (ADR 0112): an agente's HTML pages, only to the person of the conversation ---
+	route("GET", "/api/instances/:id/artifacts/:thread/:artifact", "person", async ({ person, params }) => {
+		await ownThread(person as Person, params[0] as string, params[1] as string);
+		const meta = await channelOf(params[0] as string).artifacts.meta(params[1] as string, params[2] as string);
+		if (meta === undefined) throw new HttpError(404, "No such artifact");
+		return { artifact: { id: meta.id, createdAt: meta.createdAt, versions: meta.versions.map(({ key: _key, ...v }) => v) } };
+	});
+	route("GET", "/api/instances/:id/artifacts/:thread/:artifact/:version", "person", async ({ person, params, url, res }) => {
+		await ownThread(person as Person, params[0] as string, params[1] as string);
+		const store = channelOf(params[0] as string).artifacts;
+		const version = Number(params[3]);
+		const data = /^[1-9]\d{0,3}$/.test(params[3] as string) ? await store.read(params[1] as string, params[2] as string, version) : undefined;
+		if (data === undefined) throw new HttpError(404, "No such artifact");
+		if (url.searchParams.get("download") !== "1") return sandboxedHtml(res, data);
+		const title = (await store.meta(params[1] as string, params[2] as string))?.versions.find((v) => v.version === version)?.title ?? "artifact";
+		return sandboxedHtml(res, data, `${title.replace(/[\\/:*?"<>|]+/g, "_")}.html`);
 	});
 	route("PUT", "/api/instances/:id/files/raw", "person", async ({ person, params, url, req }) => {
 		const { member } = await instanceAccess(person as Person, params[0] as string);
@@ -1628,7 +1647,7 @@ export function createWebApp(options: WebAppOptions): Server {
 					// The last thing said, for the list: who and the start of it.
 					const last = (await roomsOf().open(p.id, r.id))?.entries.findLast((e) => e.from !== "note");
 					const who = last?.from === "person" ? "Tu" : view.agents.find((a) => a.instanceId === last?.instanceId)?.name;
-					const said = last?.text ?? (last?.file === undefined ? undefined : `file ${last.file.path}`);
+					const said = last?.text ?? (last?.file !== undefined ? `file ${last.file.path}` : last?.artifact !== undefined ? `artifact ${last.artifact.title}` : undefined);
 					return { ...view, ...(last === undefined || said === undefined ? {} : { last: { who: who ?? "?", text: said.replace(/\s+/g, " ").slice(0, 140) } }) };
 				}),
 			),
@@ -2390,10 +2409,35 @@ function publicWatch(watch: Watch) {
 }
 
 function securityHeaders(res: ServerResponse): void {
-	res.setHeader("content-security-policy", "default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; font-src 'self'; connect-src 'self'; manifest-src 'self'; worker-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
+	res.setHeader("content-security-policy", "default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; font-src 'self'; connect-src 'self'; manifest-src 'self'; worker-src 'self'; frame-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
 	res.setHeader("x-content-type-options", "nosniff");
 	res.setHeader("referrer-policy", "no-referrer");
 	res.setHeader("x-frame-options", "DENY");
+}
+
+/**
+ * An HTML page the console shows in a frame (ADR 0112): sandboxed by its own CSP, so it runs with
+ * an opaque origin (no session cookie, no calls to Owni), loads nothing but a few CDNs, sends
+ * nothing out (no requests, forms or pictures from elsewhere), and is framed only by the console. `download`: sent as a file with this name instead.
+ */
+const ARTIFACT_CSP =
+	"sandbox allow-scripts allow-modals; default-src 'none'; " +
+	"script-src 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://unpkg.com https://cdnjs.cloudflare.com; " +
+	"style-src 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com https://cdnjs.cloudflare.com https://fonts.googleapis.com; " +
+	"font-src https://fonts.gstatic.com data:; img-src data: blob: https://cdn.jsdelivr.net https://unpkg.com https://cdnjs.cloudflare.com; media-src data: blob:; connect-src 'none'; form-action 'none'; frame-ancestors 'self'";
+
+function sandboxedHtml(res: ServerResponse, data: Buffer, download?: string): typeof STREAMED {
+	res.removeHeader("x-frame-options");
+	res.writeHead(200, {
+		"content-type": "text/html; charset=utf-8",
+		"content-length": data.length,
+		"content-security-policy": ARTIFACT_CSP,
+		"x-content-type-options": "nosniff",
+		"cache-control": "private, no-store",
+		...(download === undefined ? {} : { "content-disposition": `attachment; filename*=UTF-8''${encodeURIComponent(download)}` }),
+	});
+	res.end(data);
+	return STREAMED;
 }
 
 function send(res: ServerResponse, status: number, body: unknown): void {
