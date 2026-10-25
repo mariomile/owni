@@ -1,5 +1,5 @@
 // Board page.
-import { api, confirmDialog, face, fmt, go, h, head, icon, mount, route, instanceHref, state, store, toast } from "../common.js";
+import { api, confirmDialog, dmHref, face, fmt, h, head, icon, mount, route, instanceHref, state, store, toast } from "../common.js";
 import { refreshInstances, refreshSetup } from "../session.js";
 import { render } from "../shell.js";
 
@@ -346,7 +346,7 @@ export async function viewBoard(main) {
 				return toast("Non puoi più scrivere a questo agente", true);
 			}
 			void refreshSetup();
-			go("chat", c.work.threadId);
+			location.hash = dmHref(c.work.agent, c.work.threadId);
 		};
 		const moves = [];
 		// «Esegui da solo» (ADR 0061): the agente goes on without waiting for answers, then to review.

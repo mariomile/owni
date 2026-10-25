@@ -1,5 +1,5 @@
 // Primi passi page.
-import { agentLabel, api, go, h, head, icon, mount, needInstance, state, store, toast } from "../common.js";
+import { agentLabel, api, dmHref, go, h, head, icon, mount, needInstance, state, store, toast } from "../common.js";
 import { providerOverview } from "../models.js";
 import { setupLeft, setupSteps } from "../setup.js";
 import { appleTouch, install, installOffer } from "../pwa.js";
@@ -64,7 +64,7 @@ export async function viewStart(main) {
 						try {
 							const { thread } = await api(`/api/instances/${inst.id}/dm`, { method: "POST", body: {} });
 							store(`owni.draft.${thread.id}`, "Cosa sai fare per me?");
-							go("chat", thread.id);
+							location.hash = dmHref(inst.id);
 						} catch (error) {
 							toast(error.message, true);
 						}
@@ -117,7 +117,7 @@ export async function viewStart(main) {
 						setupHidden(inst.id, true);
 						state.setupLeft = 0;
 						toast("Li ritrovi in Impostazioni, in alto");
-						go("chat");
+						location.hash = dmHref(inst.id);
 					},
 				},
 				"Nascondi",

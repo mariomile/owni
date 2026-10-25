@@ -1,5 +1,5 @@
 // Task page, with sentinelle and the morning brief.
-import { agentLabel, api, emptyNote, fmt, go, h, head, icon, mount, needInstance, route, state, toast } from "../common.js";
+import { agentLabel, api, dmHref, emptyNote, fmt, h, head, icon, mount, needInstance, route, state, toast } from "../common.js";
 import { render } from "../shell.js";
 import { runHistory } from "../runs.js";
 
@@ -285,7 +285,7 @@ function briefCard(inst, { brief, google }) {
 			h("label.field.inline", h("span", "Ora"), time),
 			h("label.row-gap", weekdays, h("span", "Solo giorni feriali")),
 			h("button.btn.accent", { onclick: save }, brief ? "Aggiorna" : "Attiva"),
-			brief ? h("button.btn.ghost", { onclick: () => go("chat", brief.threadId) }, "Apri la chat del brief") : null,
+			brief ? h("button.btn.ghost", { onclick: () => (location.hash = dmHref(inst.id, brief.threadId)) }, "Apri la chat del brief") : null,
 			brief ? h("button.btn.danger", { onclick: off }, "Disattiva") : null,
 		),
 	);

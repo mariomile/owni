@@ -61,6 +61,8 @@ La densità visiva è una conseguenza. Il problema più profondo è la presenza 
 
 ## Nuova struttura
 
+> Aggiornamento: [ADR 0113](adr/0113-canali-messaggi-diretti-e-thread.md) sostituisce «Nuova conversazione» e le conversazioni recenti. Le Conversazioni sono ora i canali (più agenti) e un messaggio diretto per agente, con i thread sotto i messaggi; le chat di prima sono thread nel messaggio diretto del loro agente.
+
 ```text
 Conversazioni
   Nuova conversazione / ricerca / conversazioni recenti
