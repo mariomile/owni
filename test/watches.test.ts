@@ -435,7 +435,7 @@ describe("sentinelle from the console", () => {
 			const res = await fetch(`${base}${path}`, { method, headers: { cookie, "x-owni": "1" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
 			return { status: res.status, ...((await res.json()) as object) };
 		};
-		const thread = (await api("/api/instances/owni/threads", "POST", {})).thread;
+		const thread = (await api("/api/instances/owni/dm", "POST", {})).thread;
 		const record = await owni.runtime.registry.getInstance("default", "owni");
 		await owni.runtime.registry.setEgress("default", "owni", { ...record.egress, web: ["example.com"] });
 		const refused = await api("/api/instances/owni/watches", "POST", { url: `${s.base}/orari`, threadId: thread.id });

@@ -36,7 +36,7 @@ const mocks = vi.hoisted(() => {
 	const mount = (node: TestNode, ...children: unknown[]) => { node.children = children.flat(Infinity).filter((child) => child != null && child !== false) as (TestNode | string)[]; };
 	const state = { me: { id: "person", role: "owner" }, instance: { id: "unrelated", name: "Unrelated" }, instances: [] as unknown[], onRun: undefined as unknown, onRunsReconnect: undefined as unknown, onBoard: undefined as unknown };
 	const instanceHref = (view: string, rest: string[] = [], instanceId: string | null = state.instance.id) => `#/${[view, ...rest].map(encodeURIComponent).join("/")}${instanceId ? `?agent=${encodeURIComponent(instanceId)}` : ""}`;
-	return { h, mount, state, instanceHref, api: vi.fn(), route: vi.fn(() => ({ view: "lavori", rest: [] as string[] })), icon: (name: string) => h("svg", name), emptyNote: (spec: string, title: string, ...children: unknown[]) => h(spec, h("h2", title), ...children), head: (_: unknown, title: string, description: string, ...actions: unknown[]) => h("header", h("h1", title), description, ...actions) };
+	return { h, mount, state, instanceHref, dmHref: (id: string, thread?: string) => `#/dm/${encodeURIComponent(id)}${thread ? `/t/${encodeURIComponent(thread)}` : ""}`, api: vi.fn(), route: vi.fn(() => ({ view: "lavori", rest: [] as string[] })), icon: (name: string) => h("svg", name), emptyNote: (spec: string, title: string, ...children: unknown[]) => h(spec, h("h2", title), ...children), head: (_: unknown, title: string, description: string, ...actions: unknown[]) => h("header", h("h1", title), description, ...actions) };
 });
 vi.mock("../src/web/ui/common.js", () => mocks);
 
@@ -96,7 +96,7 @@ describe("person-facing work transformations", () => {
 		expect(execution.title).toBe("Preventivo cliente");
 		expect(execution.statusLabel).toBe("Risposta pronta · Consegna non riuscita");
 		expect(execution.action).toBe("Vedi problema");
-		expect(execution.href).toBe("#/chat/thread-r?agent=sales");
+		expect(execution.href).toBe("#/dm/sales/t/thread-r");
 		expect(execution.attention).toBe(false);
 		expect(mocks.state.instance.id).toBe("unrelated");
 	});

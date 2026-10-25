@@ -1,5 +1,7 @@
 # Stanze: più agenti nella stessa conversazione
 
+> Aggiornata da [ADR 0113](0113-canali-messaggi-diretti-e-thread.md): nella console le stanze si chiamano canali (`#nome`), si modificano (nome e agenti) e hanno thread sotto i messaggi. Il resto di questa decisione vale ancora.
+
 Con più agenti (ADR 0041) una persona parla con uno alla volta, e gli agenti si chiedono le cose fra loro dietro le quinte (ADR 0042), dove la persona non vede lo scambio. Per un lavoro che tocca più competenze («trova il bando, prepara l'offerta, fai i conti») serve una conversazione sola, dove la persona chiama chi le serve e vede tutti rispondere. Le alternative a Grok Bot che abbiamo guardato hanno le chat di gruppo fra agenti; ADR 0042 le aveva scartate *fra agenti*, perché nessuno decide chi parla e quando si ferma. Qui decide la persona.
 
 ## Decisione

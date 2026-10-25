@@ -1,7 +1,6 @@
 // Automazioni page.
-import { agentLabel, api, confirmDialog, emptyNote, fmt, h, head, icon, mount, needInstance, route, state, toast } from "../common.js";
+import { agentLabel, api, confirmDialog, dmHref, emptyNote, fmt, h, head, icon, mount, needInstance, route, state, toast } from "../common.js";
 import { copyBox } from "../listen.js";
-import { refreshThreads } from "../shell.js";
 import { runHistory } from "../runs.js";
 
 // ---------- automazioni (ADR 0060) ----------
@@ -13,6 +12,8 @@ export async function viewAutomations(main) {
 	const listBox = h("div.card");
 	const panel = h("div.card.pad.stack", { hidden: true });
 	const names = new Map();
+	// The person's conversations with this agente, to say where each automation answers.
+	let threads = [];
 	const remove = (a) =>
 		confirmDialog(`Cancellare «${a.name}»?`, "L'indirizzo smette di funzionare: il servizio che lo chiama riceverà un errore.", "Cancella", async () => {
 			await api(`/api/instances/${inst.id}/automations/${a.id}`, { method: "DELETE" }).catch((e) => toast(e.message, true));
@@ -20,12 +21,14 @@ export async function viewAutomations(main) {
 		});
 	const where = (a) => {
 		if (a.channel !== "web") return `risponde su ${CHANNEL_NAME[a.channel] ?? a.channel}`;
-		const t = state.threads.find((x) => x.id === a.threadId && (!x.instanceId || x.instanceId === inst.id));
-		return t ? h("a", { href: `#/chat/${encodeURIComponent(t.id)}` }, `risponde in «${t.title}»`) : "risponde nella sua chat";
+		const t = threads.find((x) => x.id === a.threadId);
+		if (t?.dm) return h("a", { href: dmHref(inst.id) }, "risponde nei messaggi diretti");
+		return t ? h("a", { href: dmHref(inst.id, t.id) }, `risponde in «${t.title}»`) : "risponde nella sua chat";
 	};
 	const runs = (a) => `${a.runs === 1 ? "1 chiamata" : `${a.runs} chiamate`}, l'ultima ${fmt.time(a.lastRunAt)}`;
 	async function refresh() {
-		const { automations } = await api(`/api/instances/${inst.id}/automations`);
+		const [{ automations }, listed] = await Promise.all([api(`/api/instances/${inst.id}/automations`), inst.canChat ? api(`/api/instances/${inst.id}/threads`).catch(() => ({ threads })) : { threads }]);
+		threads = listed.threads;
 		for (const automation of automations) names.set(automation.id, automation.name);
 		mount(
 			listBox,
@@ -66,14 +69,13 @@ export async function viewAutomations(main) {
 		if (!inst.canChat) return toast(`Per creare un'automazione devi poter scrivere a ${inst.name}`, true);
 		const name = h("input", { type: "text", maxlength: 80, placeholder: "Es. Ordini dal sito" });
 		const instruction = h("textarea", { rows: 3, maxlength: 2000, placeholder: "Es. Riassumi l'ordine e dimmi se c'è da spedire oggi" });
-		const chat = h("select", h("option", { value: "" }, "Una chat nuova, con il nome dell'automazione"), state.threads.filter((t) => !t.instanceId || t.instanceId === inst.id).map((t) => h("option", { value: t.id }, t.title)));
+		const chat = h("select", h("option", { value: "" }, `I messaggi diretti con ${inst.name}`), threads.filter((t) => !t.dm).map((t) => h("option", { value: t.id }, t.title)));
 		const save = async () => {
 			if (!name.value.trim() || !instruction.value.trim()) return toast("Servono un nome e cosa deve fare", true);
 			try {
-				const threadId = chat.value || (await api(`/api/instances/${inst.id}/threads`, { method: "POST", body: { title: `Automazione: ${name.value.trim()}` } })).thread.id;
+				const threadId = chat.value || (await api(`/api/instances/${inst.id}/dm`, { method: "POST", body: {} })).thread.id;
 				const { automation, token } = await api(`/api/instances/${inst.id}/automations`, { method: "POST", body: { name: name.value, instruction: instruction.value, threadId } });
 				showOnce(automation, token);
-				await refreshThreads();
 				refresh();
 			} catch (error) {
 				toast(error.message, true);

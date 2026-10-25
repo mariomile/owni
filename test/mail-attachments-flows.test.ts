@@ -476,7 +476,7 @@ describe("attachments in the app, through the approval card", () => {
 		const workspace = workspaceDir(dataDir, tenantId(config.tenantId), instanceId(config.instanceId));
 		mkdirSync(join(workspace, "fatture"), { recursive: true });
 		writeFileSync(join(workspace, "fatture", "g1.xml"), G1);
-		const thread = (await api(`/api/instances/${config.instanceId}/threads`, {})).thread as { id: string };
+		const thread = (await api(`/api/instances/${config.instanceId}/dm`, {})).thread as { id: string };
 		const entries = async () => (await api(`/api/instances/${config.instanceId}/threads/${thread.id}`)).entries as { from: string; text?: string }[];
 		const reply = async (text: string): Promise<string> => {
 			const before = (await entries()).filter((e) => e.from === "owni").length;

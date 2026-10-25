@@ -5,7 +5,15 @@ Piattaforma open source di agenti sempre attivi per aziende attente a privacy e 
 ## Esperienza quotidiana
 
 **Conversazioni**:
-L’elenco delle conversazioni della persona, anche con agenti diversi e con più agenti insieme. Unifica gli ingressi a chat singole e stanze; non rende visibili le conversazioni di altre persone.
+I canali e i messaggi diretti della persona, nella barra laterale. Non rende visibili le conversazioni di altre persone.
+
+**Messaggio diretto**:
+La conversazione continua di una persona con un agente: una sola per agente, sempre la stessa. Vedi ADR 0113.
+_Avoid_: nuova chat, DM nei testi per le persone
+
+**Thread di un messaggio**:
+Le risposte a un messaggio di un messaggio diretto o di un canale, tenute a parte: l'agente sa a quale messaggio rispondono, e la conversazione principale resta pulita. Vedi ADR 0113.
+_Avoid_: risposta citata
 
 **Lavori**:
 La vista degli incarichi consentiti, delle autorizzazioni e degli esiti nelle conversazioni della persona. Gli agenti si filtrano dentro la vista; cambiare agente nella chat non ne cambia implicitamente il perimetro.
@@ -138,7 +146,7 @@ _Avoid_: piano, licenza, subscription
 ## Conversazioni
 
 **Canale**:
-Un luogo dove le persone parlano con un'istanza: Telegram, WhatsApp, il telefono, l'interfaccia web.
+Un luogo dove le persone parlano con un'istanza: Telegram, WhatsApp, il telefono, l'interfaccia web. Da non confondere con il canale della console, che è una stanza.
 _Avoid_: gateway, integrazione
 
 **Thread**:
@@ -150,7 +158,7 @@ Tre agenti creati insieme dalla pagina Agenti, ciascuno con un compito (per esem
 _Avoid_: team, modello di agenti
 
 **Stanza**:
-Una conversazione della console fra una persona e da 2 a 5 agenti: la persona chiama chi le serve con @nome, ogni agente risponde dal suo posto (una sua conversazione con la persona, nascosta fra le chat) e può chiamarne un altro. Vedi ADR 0063.
+Una conversazione della console fra una persona e da 2 a 5 agenti: la persona chiama chi le serve con @nome, ogni agente risponde dal suo posto (una sua conversazione con la persona, nascosta fra le chat) e può chiamarne un altro. Nella console si chiama canale e si legge `#nome`. Vedi ADR 0063 e 0113.
 _Avoid_: gruppo (è di Telegram e WhatsApp), room
 
 **Chiamata**:

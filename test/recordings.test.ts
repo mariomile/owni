@@ -536,7 +536,7 @@ describe("recordings in an instance", () => {
 		const cookie = (login.headers.get("set-cookie") ?? "").split(";")[0] as string;
 		// biome-ignore lint: test
 		const api = async (path: string, body?: unknown): Promise<any> => (await fetch(`${base}${path}`, { method: body === undefined ? "GET" : "POST", headers: { cookie, "x-owni": "1" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) })).json();
-		const thread = (await api("/api/instances/owni/threads", {})).thread;
+		const thread = (await api("/api/instances/owni/dm", {})).thread;
 		const reply = async (text: string): Promise<string> => {
 			const answers = async () => ((await api(`/api/instances/owni/threads/${thread.id}`)).entries as { from: string; text?: string }[]).filter((e) => e.from === "owni" && e.text !== undefined);
 			const before = (await answers()).length;

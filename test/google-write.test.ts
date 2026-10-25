@@ -140,7 +140,7 @@ async function ready(env: Record<string, string> = ENV) {
 	const owner = await client(booted.base, booted.owni.ownerLink as string);
 	await connect(booted.base, owner);
 	await owner("/api/instances/owni/google", { allowed: true }, "PUT");
-	const thread = (await owner("/api/instances/owni/threads", {})).thread as { id: string };
+	const thread = (await owner("/api/instances/owni/dm", {})).thread as { id: string };
 	return { ...booted, owner, thread };
 }
 
@@ -157,7 +157,7 @@ describe("Google: scrivere con approvazione", () => {
 		expect(done.status).toBe(200);
 		expect(await owner("/api/google")).toMatchObject({ write: true, account: { canWrite: false } });
 		await owner("/api/instances/owni/google", { allowed: true }, "PUT");
-		const thread = (await owner("/api/instances/owni/threads", {})).thread as { id: string };
+		const thread = (await owner("/api/instances/owni/dm", {})).thread as { id: string };
 		expect(await reply(owner, thread.id, tool("google_calendar_delete", { event_id: "e1", reason: "Annullare" }))).toContain("solo in lettura");
 		expect(await reply(owner, thread.id, tool("google_calendar_events", {}))).toContain("Call con Rossi");
 		await connect(base, owner, "good");

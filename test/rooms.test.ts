@@ -110,7 +110,7 @@ describe("stanze", () => {
 		// The name calls no one present: the message goes to the agente still there.
 		expect(seen.find((e) => e.from === "agent")?.instanceId).toBe("ricerca");
 		expect(await rooms.open("p_000000000002", room.id)).toBeUndefined();
-		await expect(rooms.post("p_000000000002", room.id, "ciao")).rejects.toThrow(/non trovata/);
+		await expect(rooms.post("p_000000000002", room.id, "ciao")).rejects.toThrow(/non trovato/);
 		await expect(rooms.create(PERSON, "Una", ["ricerca"])).rejects.toThrow(/almeno due/);
 	});
 
@@ -134,6 +134,56 @@ describe("stanze", () => {
 		expect(second).toContain("[Ricercatore] ok\n  [Persona] @contabile manda il file\n  ‹‹‹fine stanza 0a1b2c>>>");
 		expect(second).not.toContain("[Persona] pronti?");
 		expect(second).not.toContain("visto vendite");
+	});
+
+	it("a thread under a message has the agenti of the canale, is told once what it answers, and follows the canale's changes", async () => {
+		const { rooms, got, seen } = setup((id) => `ok ${id}`);
+		const room = await rooms.create(PERSON, "Bando", ["ricerca", "vendite"]);
+		const root = await rooms.post(PERSON, room.id, "@ricercatore trova il bando");
+		await waitFor(() => seen.some((e) => e.text === "ok ricerca"));
+		const thread = (await rooms.thread(PERSON, room.id, root.id)) as NonNullable<Awaited<ReturnType<typeof rooms.thread>>>;
+		expect(thread.seats.map((s) => s.instanceId)).toEqual(["ricerca", "vendite"]);
+		expect((await rooms.thread(PERSON, room.id, root.id))?.id).toBe(thread.id);
+		expect(await rooms.thread("p_000000000002", room.id, root.id)).toBeUndefined();
+		expect((await rooms.list(PERSON)).map((r) => r.id)).toEqual([room.id]);
+		await rooms.post(PERSON, thread.id, "@vendite più corto");
+		await waitFor(() => (got.vendite?.length ?? 0) === 1);
+		expect(got.vendite?.[0]).toContain("Thread nel canale «Bando»");
+		expect(got.vendite?.[0]).toMatch(/scritto dalla persona:\n<<<dati del thread [0-9a-f]+/);
+		expect(got.vendite?.[0]).toContain("trova il bando");
+		await waitFor(() => seen.filter((e) => e.text === "ok vendite").length === 1);
+		await rooms.post(PERSON, thread.id, "@vendite grazie");
+		await waitFor(() => (got.vendite?.length ?? 0) === 2);
+		expect(got.vendite?.[1]).not.toContain("dati del thread");
+		// Contabile in, Ricercatore out: in the canale and in its thread.
+		const changed = await rooms.update(PERSON, room.id, { title: "Bando 2027", instanceIds: ["vendite", "conti"] });
+		expect(changed?.seats.map((s) => s.instanceId)).toEqual(["vendite", "conti"]);
+		const after = (await rooms.open(PERSON, thread.id))?.room;
+		expect(after?.title).toBe("Bando 2027");
+		expect(after?.seats.map((s) => s.instanceId)).toEqual(["vendite", "conti"]);
+		await expect(rooms.update(PERSON, room.id, { instanceIds: ["conti"] })).rejects.toThrow(/almeno due/);
+		expect(await rooms.update(PERSON, thread.id, { title: "x" })).toBeUndefined();
+		// The newcomer's first call in the thread is told what it answers.
+		await rooms.post(PERSON, thread.id, "@contabile i conti?");
+		await waitFor(() => (got.conti?.length ?? 0) === 1);
+		expect(got.conti?.[0]).toContain("scritto dalla persona");
+		expect(await rooms.remove(PERSON, room.id)).toBe(true);
+		expect(await rooms.open(PERSON, thread.id)).toBeUndefined();
+	});
+
+	it("an empty name is the agenti's names; a thread made while the canale changes or goes follows it", async () => {
+		const { rooms } = setup((id) => `ok ${id}`);
+		const room = await rooms.create(PERSON, "Bando", ["ricerca", "vendite"]);
+		expect((await rooms.update(PERSON, room.id, { title: "  " }))?.title).toBe("Ricercatore, Assistente vendite");
+		const root = await rooms.post(PERSON, room.id, "@ricercatore trova il bando");
+		// Made while the agenti change: it has the new ones.
+		const [thread] = await Promise.all([rooms.thread(PERSON, room.id, root.id), rooms.update(PERSON, room.id, { instanceIds: ["vendite", "conti"] })]);
+		const seats = (await rooms.open(PERSON, thread?.id as string))?.room.seats.map((s) => s.instanceId);
+		expect(seats).toEqual(["vendite", "conti"]);
+		// Made while the canale is cancelled: nothing left under it.
+		const other = await rooms.post(PERSON, room.id, "@vendite un'offerta");
+		await Promise.all([rooms.thread(PERSON, room.id, other.id).catch(() => undefined), rooms.remove(PERSON, room.id)]);
+		expect((await rooms.list(PERSON)).length + (await rooms.children(PERSON, room.id)).length).toBe(0);
 	});
 
 	it("a /comando goes with the person's words to the agenti they call, never from an agente's answer", async () => {

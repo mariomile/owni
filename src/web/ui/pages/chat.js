@@ -1,5 +1,5 @@
 // Chat page.
-import { api, face, faceColor, fmt, go, h, icon, mount, needInstance, route, state, store, thinking, toast } from "../common.js";
+import { api, batched, channelHref, dmHref, face, faceColor, fmt, h, icon, initials, mount, needInstance, route, state, store, thinking, toast, whenSeen } from "../common.js";
 import { boardNote, copyButton, listenButton } from "../listen.js";
 import { connectorActionCard, googleActionCard } from "../cards.js";
 import { agentCommands, commandMenu } from "../commands.js";
@@ -7,7 +7,7 @@ import { chatModelCache, chatModelChoices, chatModelList, modelAbilities, modelF
 import { stepsLeftText } from "../setup.js";
 import { install, installed, installOffer } from "../pwa.js";
 import { refreshCounters } from "../session.js";
-import { refreshThreads, renderRail } from "../shell.js";
+import { refreshConversations, renderRail } from "../shell.js";
 import { conversationRuns } from "../runs.js";
 import { renderMarkdown } from "../markdown.js";
 import { linkPreviews, sources } from "../sources.js";
@@ -32,27 +32,72 @@ const HINTS = [
 	{ icon: "task", label: "Ricordamelo", text: "Ricordami ogni lunedì alle 9 di " },
 ];
 
-export async function viewChat(main) {
+/**
+ * The person's direct conversation with an agente (ADR 0113): one, continuous, made with the first
+ * message. Empty, it is the welcome. The chats from before it show in it as messages with replies.
+ */
+export async function viewDm(main) {
 	if (needInstance(main)) return;
 	const inst = state.instance;
 	if (!inst.canChat) {
 		mount(main, h("section.conversation.empty-chat", h("div.welcome", h("h2", "Chat non disponibile"), h("p", state.me.role === "owner" ? "Aggiungi te stesso alle persone che possono scrivere a questo agente, in Impostazioni." : "Non sei tra le persone che possono scrivere a questo agente."))));
 		return;
 	}
-	const threadId = route().rest[0];
 	chatModelCache.clear();
-	const conversation = h("section.conversation");
-	mount(main, conversation);
-	if (!threadId) return landing(inst, conversation);
-	// One panel at a time next to the chat, also when one opens by itself.
-	const browser = browserPanel(inst, threadId, () => (screen.show(false), artifact.show(false)));
-	const screen = screenPanel(inst, threadId, () => (browser.show(false), artifact.show(false)));
-	const artifact = artifactPanel(() => (browser.show(false), screen.show(false)));
-	mount(main, h("div.chat-split", conversation, browser.el, screen.el, artifact.el));
-	state.unread.delete(threadId);
-	renderRail();
-	const { entries, model } = await api(`/api/instances/${inst.id}/threads/${encodeURIComponent(threadId)}`);
+	let { thread, entries, model } = await api(`/api/instances/${inst.id}/dm`);
 	if (!main.isConnected || state.instance !== inst) return;
+	// `#/dm/<agente>/t/<thread>`: a thread open next to the conversation.
+	const { rest } = route();
+	const open = rest[1] === "t" ? rest[2] : undefined;
+	if (entries.length === 0) {
+		landing(inst, main, thread, model);
+		if (open !== undefined) await elsewhere(inst, main, open, thread?.id);
+		return;
+	}
+	// Only chats from before so far: the conversation that goes on under them.
+	thread ??= (await api(`/api/instances/${inst.id}/dm`, { method: "POST", body: {} })).thread;
+	if (!main.isConnected || state.instance !== inst) return;
+	const view = conversationView(inst, main, thread, entries, model);
+	if (open === undefined) return;
+	const root = entries.find((e) => e.thread?.id === open);
+	if (root !== undefined) return void view.openThread(root, open);
+	await elsewhere(inst, main, open, thread.id);
+}
+
+/**
+ * A thread in the address that is not one of the conversation's. A link from the work done (a run, a
+ * scheda) may name the agente's place in a canale, or a chat nothing was written in yet: the canale,
+ * or just the conversation. Not there at all (another person's, deleted): said.
+ */
+async function elsewhere(inst, main, open, dmId) {
+	history.replaceState(null, "", dmHref(inst.id));
+	if (open === dmId) return;
+	const there = await api(`/api/instances/${inst.id}/threads/${encodeURIComponent(open)}`).catch(() => undefined);
+	if (!main.isConnected) return;
+	if (there === undefined) return toast("Questo thread non c'è più", true);
+	if (there.thread.room === undefined) return;
+	const { room } = await api(`/api/rooms/${encodeURIComponent(there.thread.room)}`).catch(() => ({}));
+	if (main.isConnected && room !== undefined) location.replace(room.parent ? channelHref(room.parent.roomId, room.id) : channelHref(room.id));
+}
+
+/** The person had the conversation on screen: the rail stops showing it unread. */
+function markRead(inst, threadId) {
+	return whenSeen(`${inst.id}/${threadId}`, () => api(`/api/instances/${inst.id}/threads/${encodeURIComponent(threadId)}/read`, { method: "POST", body: {} }))
+		.then(refreshConversations)
+		.then(renderRail)
+		.catch(() => {});
+}
+
+function conversationView(inst, main, thread, entries, model) {
+	const threadId = thread.id;
+	const conversation = h("section.conversation");
+	// One panel at a time next to the chat, also when one opens by itself.
+	const browser = browserPanel(inst, threadId, () => { screen.show(false); replies.show(false); artifact.show(false); });
+	const screen = screenPanel(inst, threadId, () => { browser.show(false); replies.show(false); artifact.show(false); });
+	const replies = threadPanel(inst, (entry, into, where) => show(entry, into, false, where), () => { browser.show(false); screen.show(false); artifact.show(false); }, () => void refreshSummaries());
+	const artifact = artifactPanel(() => { browser.show(false); screen.show(false); replies.show(false); });
+	mount(main, h("div.chat-split", conversation, browser.el, screen.el, replies.el, artifact.el));
+	markRead(inst, threadId);
 	// Tools belong to the fixed context bar, after the conversation has loaded successfully.
 	mount(main.parentElement.querySelector(".conversation-tools"), screen.toggle, browser.toggle);
 	const transcript = h("div.transcript", { role: "log", "aria-live": "polite" });
@@ -77,12 +122,13 @@ export async function viewChat(main) {
 	const fileLink = (file) => h("a.file", { href: `/api/instances/${inst.id}/files/raw?path=${encodeURIComponent(file.path)}` }, h("span.ext", (file.path.split(".").pop() ?? "file").slice(0, 4)), h("span", h("b", file.path.split("/").pop()), file.caption ? h("div.muted", file.caption) : null));
 	// An HTML page the agente sent opens rendered in the panel, like an artifact; the link still downloads it.
 	const fileCard = (file) => (isHtml(file.path) ? h("div.file-open", fileLink(file), h("button.btn.small", { type: "button", onclick: () => artifact.openFile(inst.id, file.path) }, "Apri")) : fileLink(file));
-	const openArtifact = (a) => void artifact.openArtifact(inst.id, threadId, a);
-	const show = (entry) => {
+	// `into`: where the message goes, the conversation by default or the thread panel; `where`: the
+	// thread it was written in, whose artifacts it shows.
+	const show = (entry, into = place, here = into === place, where = entry.threadId ?? threadId) => {
 		// What the board sends the agente reads as a scheda, not as a wall of instructions the person never typed.
 		const brief = entry.from === "person" ? boardNote(entry) : null;
 		if (brief) {
-			place(brief);
+			into(brief);
 			return brief;
 		}
 		const shown = entry.file && /\.(png|jpe?g|webp|gif)$/i.test(entry.file.path);
@@ -97,7 +143,7 @@ export async function viewChat(main) {
 					entry.file.caption ? h("div.muted", entry.file.caption) : null,
 				)
 			: entry.artifact
-			? artifactCard(inst.id, threadId, entry.artifact, openArtifact)
+			? artifactCard(inst.id, where, entry.artifact, (a) => void artifact.openArtifact(inst.id, where, a))
 			: entry.file
 			? fileCard(entry.file)
 			: entry.from === "owni"
@@ -115,14 +161,34 @@ export async function viewChat(main) {
 				)
 			: null;
 		const listen = entry.from === "owni" && entry.text ? listenButton(entry.text) : null;
+		// In the conversation, under every message: answer it in a thread (ADR 0113), and the thread's replies so far.
+		const threaded = here && entry.id !== undefined;
+		const answer = threaded ? h("button.listen.reply-thread", { type: "button", title: "Rispondi nel thread", "aria-label": "Rispondi nel thread", onclick: () => void replies.open(entry, entry.thread?.id) }, icon("thread")) : null;
 		// Under an answer, on hover (always on touch): copy it, listen to it.
-		const actions = entry.from === "owni" && entry.text ? h("div.msg-actions", copyButton(entry.text), listen) : null;
+		const actions = entry.from === "owni" && entry.text ? h("div.msg-actions", copyButton(entry.text), listen, answer) : answer ? h("div.msg-actions", answer) : null;
 		// Which model wrote the reply: the chat's own, or the instance's when that could not answer.
 		const by = entry.model ? h("span.by", { title: `${entry.model.provider} · ${entry.model.modelId}` }, entry.model.name ?? entry.model.modelId) : null;
-		const el = h(`div.msg.${entry.from}`, h("div.meta", entry.from === "owni" ? [face(inst, 20), h("b.who", inst.name)] : null, fmt.time(entry.at), by), pictures, entry.text || entry.file || !pictures ? body : null, actions);
-		place(el);
+		const slot = threaded ? h("div.thread-slot", threadSummary(inst, entry, () => void replies.open(entry, entry.thread?.id))) : null;
+		if (slot) summaries.set(entry.id, slot);
+		const el = h(`div.msg.${entry.from}`, h("div.meta", entry.from === "owni" ? [face(inst, 20), h("b.who", inst.name)] : null, fmt.time(entry.at), by), pictures, entry.text || entry.file || !pictures ? body : null, actions, slot);
+		into(el);
 		return el;
 	};
+	/** The replies under each message, as the server counts them now. */
+	const summaries = new Map();
+	const known = new Set(entries.flatMap((e) => (e.thread ? [e.thread.id] : [])));
+	const refreshSummaries = batched(async () => {
+		const { entries: now } = await api(`/api/instances/${inst.id}/dm`).catch(() => ({ entries: [] }));
+		for (const entry of now) {
+			const slot = summaries.get(entry.id);
+			if (!entry.thread || !slot) continue;
+			known.add(entry.thread.id);
+			mount(slot, threadSummary(inst, entry, () => void replies.open(entry, entry.thread.id)));
+			// Its reply button opens the same thread from now on.
+			const button = slot.parentElement?.querySelector(".reply-thread");
+			if (button) button.onclick = () => void replies.open(entry, entry.thread.id);
+		}
+	});
 	for (const e of entries) show(e);
 	// Google writes this conversation asked for: decided here, above the box, without leaving the chat.
 	const asks = h("div.asks", { hidden: true });
@@ -153,37 +219,40 @@ export async function viewChat(main) {
 	});
 	transcript.append(work.el);
 	state.onEntry = (event) => {
-		if (event.threadId !== threadId) return false;
+		if (event.threadId !== threadId) {
+			if (replies.onEntry(event)) return true;
+			// A reply in a thread not on screen: counted under its message, and announced.
+			if (event.instanceId === inst.id && known.has(event.threadId)) void refreshSummaries();
+			return false;
+		}
 		stopTyping();
 		show(event.entry);
-		// A new page or version opens by itself while the conversation is on screen; on a phone it
-		// would cover the chat, and the card is there to open it.
-		if (event.entry.artifact && !matchMedia("(max-width: 860px)").matches) openArtifact(event.entry.artifact);
+		// A new page or version opens by itself while the conversation is on screen, unless a thread,
+		// the browser or the screen is open there; on a phone it would cover the chat. The card opens it.
+		const busy = [browser.el, screen.el, replies.el].some((panel) => !panel.hidden);
+		if (event.entry.artifact && !busy && !matchMedia("(max-width: 860px)").matches) void artifact.openArtifact(inst.id, threadId, event.entry.artifact);
 		if (event.entry.from === "owni") void drawAsks();
 		browser.lively();
 		screen.lively();
 		follow();
+		markRead(inst, threadId);
 		return true;
 	};
 	const box = chatBox(inst, threadId, conversation, async (text, images) => {
 		browser.lively();
 		screen.lively();
 		const bubble = show({ from: "person", text, images, at: new Date().toISOString() });
-		const listed = state.threads.find((t) => t.id === threadId && (!t.instanceId || t.instanceId === inst.id));
-		if (listed && listed.title === "Nuova chat") {
-			listed.title = text ? text.replace(/\s+/g, " ").slice(0, 60) : "Foto";
-			renderRail();
-		}
 		startTyping();
 		try {
-			await api(`/api/instances/${inst.id}/threads/${encodeURIComponent(threadId)}/messages`, { method: "POST", body: images.length ? { text, images } : { text } });
+			const { entry } = await api(`/api/instances/${inst.id}/threads/${encodeURIComponent(threadId)}/messages`, { method: "POST", body: images.length ? { text, images } : { text } });
+			// The message as written down, so a thread can start under it.
+			show(entry, (el) => bubble.replaceWith(el), true);
 			void work.refresh();
 		} catch (error) {
 			stopTyping();
 			bubble.remove();
 			throw error;
 		}
-		void refreshThreads().then(renderRail);
 	}, modelPill(inst, model, async (picked) => {
 		await api(`/api/instances/${inst.id}/threads/${encodeURIComponent(threadId)}/model`, { method: "PUT", body: picked ? { provider: picked.provider, modelId: picked.modelId } : {} });
 	}));
@@ -196,6 +265,133 @@ export async function viewChat(main) {
 	}
 	// Opening a conversation to read it must not summon the phone's keyboard.
 	if (!matchMedia("(pointer: coarse)").matches) box.input.focus({ preventScroll: true });
+	return { openThread: replies.open };
+}
+
+/** Under a message with a thread: who answered, how many replies, the last one. Nothing when none yet. */
+function threadSummary(inst, entry, open) {
+	const t = entry.thread;
+	if (!t || t.count === 0) return null;
+	const who = t.who.map((w) => (w === "owni" ? face(inst, 18) : h("span.avatar.mini", { "aria-hidden": "true" }, initials(state.me.name))));
+	const count = t.count === 1 ? "1 risposta" : `${t.count} risposte`;
+	return h(
+		"button.thread-summary",
+		{ type: "button", "aria-label": `${count}${t.unread ? ", non lette" : ""}: apri il thread`, onclick: open },
+		h("span.who", who),
+		h("b", count),
+		t.lastAt ? h("span.muted", `ultima ${fmt.time(t.lastAt)}`) : null,
+		t.unread ? h("span.dot", { "aria-hidden": "true" }) : null,
+	);
+}
+
+/**
+ * A thread under one message (ADR 0113), in the place next to the conversation the browser and the
+ * screen use: the message, its replies and a box to answer. The thread is made on the first open; a
+ * chat from before opens here whole. `render(entry, into, where)` draws a message the conversation's way, `where` being the thread it is in.
+ */
+function threadPanel(inst, render, onShow, onChange) {
+	const title = h("span.page-title", "Thread");
+	const list = h("div.thread-list", { role: "log", "aria-live": "polite" });
+	const dock = h("div.thread-dock");
+	const el = h(
+		"aside.browser-panel.thread-panel",
+		{ hidden: true, "aria-label": "Thread" },
+		h(
+			"div.browser-head",
+			h("button.icon-btn.thread-back", { type: "button", title: "Torna alla conversazione", "aria-label": "Torna alla conversazione", onclick: () => show(false) }, icon("back")),
+			icon("thread"),
+			title,
+			h("button.icon-btn.thread-close", { type: "button", title: "Chiudi", "aria-label": "Chiudi il thread", onclick: () => show(false) }, icon("close")),
+		),
+		list,
+		dock,
+	);
+	let current;
+	let typing;
+	let opening = 0;
+	// Under the message, how many replies the thread has.
+	let said = 0;
+	let count;
+	const counted = (more) => {
+		said += more;
+		if (count) count.textContent = said === 1 ? "1 risposta" : said ? `${said} risposte` : "Nessuna risposta, per ora";
+	};
+	const follow = () => { list.scrollTop = list.scrollHeight; };
+	const stopTyping = () => {
+		typing?.remove();
+		typing = undefined;
+	};
+	const put = (node) => list.insertBefore(node, typing?.parentNode === list ? typing : null);
+	/** Closed: the address is the conversation's again. */
+	const show = (on) => {
+		if (on || el.hidden) return;
+		el.hidden = true;
+		current = undefined;
+		// An open still on its way stays closed.
+		opening++;
+		stopTyping();
+		mount(dock);
+		if (route().rest[1] === "t") history.pushState(null, "", dmHref(inst.id));
+	};
+	const open = async (root, threadId) => {
+		const mine = ++opening;
+		try {
+			const id = threadId ?? (await api(`/api/instances/${inst.id}/threads`, { method: "POST", body: { parent: root.id } })).thread.id;
+			const { thread, entries } = await api(`/api/instances/${inst.id}/threads/${encodeURIComponent(id)}`);
+			if (mine !== opening || !el.isConnected) return;
+			onShow();
+			stopTyping();
+			current = id;
+			el.hidden = false;
+			title.textContent = thread.parent ? "Thread" : thread.title;
+			mount(list);
+			// Under a message of the conversation: that message first. A chat from before starts with its own.
+			said = entries.length;
+			count = thread.parent ? h("div.thread-count") : undefined;
+			if (count) {
+				render(root, put);
+				list.append(count);
+				counted(0);
+			}
+			for (const entry of entries) render(entry, put, id);
+			const box = chatBox(inst, id, el, async (text, images) => {
+				const bubble = render({ from: "person", text, images, at: new Date().toISOString() }, put);
+				stopTyping();
+				typing = thinking([inst]);
+				list.append(typing);
+				follow();
+				try {
+					const { entry } = await api(`/api/instances/${inst.id}/threads/${encodeURIComponent(id)}/messages`, { method: "POST", body: images.length ? { text, images } : { text } });
+					render(entry, (node) => bubble.replaceWith(node), id);
+					counted(1);
+					onChange();
+				} catch (error) {
+					stopTyping();
+					bubble.remove();
+					throw error;
+				}
+			});
+			mount(dock, box.el);
+			if (route().rest[2] !== id) history.pushState(null, "", dmHref(inst.id, id));
+			// Read first, then the summary under the message: else it would still say unread.
+			void markRead(inst, id).then(onChange);
+			follow();
+			if (!matchMedia("(pointer: coarse)").matches) box.input.focus({ preventScroll: true });
+		} catch (error) {
+			if (mine === opening) toast(error.message, true);
+		}
+	};
+	/** A reply in the thread on screen: shown here and read. */
+	const onEntry = (event) => {
+		if (current === undefined || event.threadId !== current) return false;
+		stopTyping();
+		render(event.entry, put, current);
+		counted(1);
+		follow();
+		void markRead(inst, current).then(onChange);
+		return true;
+	};
+	return { el, show, open, onEntry };
 }
 
 /**
@@ -550,19 +746,23 @@ function screenPanel(inst, threadId, onShow) {
 	};
 }
 
-/** The empty chat: a greeting, the box in the middle and a few ideas. Sending opens a new conversation. */
-function landing(inst, conversation) {
-	conversation.classList.add("empty-chat");
-	// A model picked before the first message: the conversation it opens is created with it.
-	let picked;
+/**
+ * The empty direct conversation: a greeting, the box in the middle and a few ideas. The first message
+ * makes the conversation (with the model picked here) and is sent as soon as it shows.
+ */
+function landing(inst, main, thread, model) {
+	const conversation = h("section.conversation.empty-chat");
+	mount(main, conversation);
+	let picked = model;
 	const box = chatBox(inst, `new.${inst.id}`, conversation, async (text, images) => {
-		const { thread } = await api(`/api/instances/${inst.id}/threads`, { method: "POST", body: picked ? { model: { provider: picked.provider, modelId: picked.modelId } } : {} });
-		store(`owni.draft.${thread.id}`, text);
-		if (images.length) store(`owni.pending.${thread.id}`, JSON.stringify(images));
-		store(`owni.autosend.${thread.id}`, "1");
-		go("chat", thread.id);
-	}, modelPill(inst, undefined, async (model) => {
-		picked = model;
+		const made = thread ?? (await api(`/api/instances/${inst.id}/dm`, { method: "POST", body: picked ? { model: { provider: picked.provider, modelId: picked.modelId } } : {} })).thread;
+		store(`owni.draft.${made.id}`, text);
+		if (images.length) store(`owni.pending.${made.id}`, JSON.stringify(images));
+		store(`owni.autosend.${made.id}`, "1");
+		if (main.isConnected) conversationView(inst, main, made, [], picked);
+	}, modelPill(inst, model, async (choice) => {
+		picked = choice;
+		if (thread) await api(`/api/instances/${inst.id}/threads/${encodeURIComponent(thread.id)}/model`, { method: "PUT", body: choice ? { provider: choice.provider, modelId: choice.modelId } : {} });
 	}));
 	const hour = new Date().getHours();
 	const hello = hour < 5 || hour >= 18 ? "Buonasera" : "Buongiorno";

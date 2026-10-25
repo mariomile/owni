@@ -94,7 +94,7 @@ describe("Owni Cloud control plane (cells as local processes)", () => {
 		expect(anna.url.host).toMatch(new RegExp(`^[a-z0-9-]+\\.${DOMAIN.replace(".", "\\.")}$`));
 		// The address does not show the person's name.
 		expect(anna.url.host).not.toContain("anna");
-		const thread = (await anna.api("/api/instances/owni/threads", {})).body.thread;
+		const thread = (await anna.api("/api/instances/owni/dm", {})).body.thread;
 		await anna.api(`/api/instances/owni/threads/${thread.id}/messages`, { text: "ciao dal cloud" });
 		await until(async () => ((await anna.api(`/api/instances/owni/threads/${thread.id}`)).body.entries as { from: string }[]).some((e) => e.from === "owni"));
 		// The measure of Fase 1: from signup to first answer.
@@ -172,7 +172,7 @@ describe("Owni Cloud control plane (cells as local processes)", () => {
 		const dataDir = tempDataDir();
 		const first = await cloudAt(dataDir);
 		const anna = await signUp(first, "anna@studio.example");
-		const thread = (await anna.api("/api/instances/owni/threads", {})).body.thread;
+		const thread = (await anna.api("/api/instances/owni/dm", {})).body.thread;
 		const at = new Date(Date.now() + 3_600_000).toISOString();
 		await anna.api("/api/instances/owni/schedules", { instruction: "Promemoria", at, threadId: thread.id });
 		await first.cp.stop();
@@ -187,7 +187,7 @@ describe("Owni Cloud control plane (cells as local processes)", () => {
 	it("an idle cell is stopped, and the next request wakes it with everything still there", async () => {
 		const c = await cloud({ idleMs: 0 });
 		const anna = await signUp(c, "anna@studio.example");
-		const thread = (await anna.api("/api/instances/owni/threads", {})).body.thread;
+		const thread = (await anna.api("/api/instances/owni/dm", {})).body.thread;
 		await anna.api(`/api/instances/owni/threads/${thread.id}/messages`, { text: "ricordati di me" });
 		await until(async () => ((await anna.api(`/api/instances/owni/threads/${thread.id}`)).body.entries as { from: string }[]).some((e) => e.from === "owni"));
 		await c.cp.tick(new Date());
@@ -241,7 +241,7 @@ describe("Owni Cloud control plane (cells as local processes)", () => {
 	it("a sleeping cell is woken for its next task programmato", async () => {
 		const c = await cloud({ idleMs: 0 });
 		const anna = await signUp(c, "anna@studio.example");
-		const thread = (await anna.api("/api/instances/owni/threads", {})).body.thread;
+		const thread = (await anna.api("/api/instances/owni/dm", {})).body.thread;
 		const at = new Date(Date.now() + 3_600_000).toISOString();
 		await anna.api("/api/instances/owni/schedules", { instruction: "Promemoria", at, threadId: thread.id });
 		const cell = (await c.provider.list())[0] as string;

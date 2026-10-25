@@ -153,7 +153,7 @@ describe("a click on the browser panel's picture (ADR 0103)", () => {
 		const anna = await h.as(h.anna.token);
 		const luca = await h.as(h.luca.token);
 		const owner = await h.as(h.owner.token);
-		const thread = await h.channel.createThread(h.anna.person.id);
+		const thread = await h.channel.createThread(h.anna.person.id, "Chat");
 		const base = `/api/instances/ops/threads/${thread.id}/browser`;
 		const secret = "synthetic-login-value";
 		for (const other of [luca, owner]) {
@@ -174,7 +174,7 @@ describe("a click on the browser panel's picture (ADR 0103)", () => {
 		expect((await anna(`${base}/profile`, undefined, "GET")).body).toEqual({ hosts: ["example.test"] });
 		expect((await anna(`${base}/profile`, undefined, "DELETE")).status).toBe(200);
 		expect(h.cleared).toEqual([["ops", h.anna.person.id]]);
-		const room = await h.channel.createThread(h.anna.person.id, "Room", "shared-room");
+		const room = await h.channel.createThread(h.anna.person.id, "Room", { room: "shared-room" });
 		expect((await anna(`/api/instances/ops/threads/${room.id}/browser/takeover`, {})).status).toBe(404);
 		await h.runtime.registry.setAllowedUsers("acme", "ops", "web", [h.luca.person.id]);
 		expect((await anna(base, undefined, "GET")).status).toBe(404);
@@ -202,7 +202,7 @@ describe("a click on the browser panel's picture (ADR 0103)", () => {
 	it("the endpoint takes a click from the person who owns the conversation, and from nobody else", async () => {
 		const h = await setup();
 		const anna = await h.as(h.anna.token);
-		const thread = (await anna("/api/instances/ops/threads", {})).body.thread;
+		const thread = (await anna("/api/instances/ops/dm", {})).body.thread;
 		const path = `/api/instances/ops/threads/${thread.id}/browser/click`;
 		const done = await anna(path, { x: 0.5, y: 0.25 });
 		expect(done.status).toBe(200);

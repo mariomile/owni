@@ -326,7 +326,7 @@ describe("Vendite chiede ad Amministrazione la fattura di un preventivo accettat
 			sales.update("seed", (s) => ({ ...s, settings: { by: "test:u", at: now.toISOString(), lastBefore: { [year]: 0 } } }));
 
 			// Vendite asks; the dev model of Amministrazione runs the tool the request names (found first with tool_search, ADR 0100).
-			const thread = (await owner("/api/instances/vendite/threads", {})).thread;
+			const thread = (await owner("/api/instances/vendite/dm", {})).thread;
 			const entries = async () => (await owner(`/api/instances/vendite/threads/${thread.id}`)).entries as { from: string; text?: string }[];
 			const said = async (marker: string) => (await entries()).filter((e) => e.text?.includes(marker)).at(-1)?.text;
 			await owner(`/api/instances/vendite/threads/${thread.id}/messages`, { text: `/tool agent_message ${JSON.stringify({ agent: "amministrazione", message: '/tool tool_search {"query":"sales_invoices"}' })}` });

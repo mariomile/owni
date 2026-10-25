@@ -6,12 +6,15 @@ function browserCommon() {
 	const data = new Map<string, string>();
 	const storage = { getItem: (key: string) => data.get(key) ?? null, setItem: (key: string, value: string) => data.set(key, value), removeItem: (key: string) => data.delete(key) };
 	const source = readFileSync(new URL("../src/web/ui/common.js", import.meta.url), "utf8").replace(/^export /gm, "");
-	const common = new Function("document", "location", "localStorage", `${source}\nreturn { route, go, instanceHref, selectInstance, state };`)({ getElementById: () => null }, location, storage) as {
+	const common = new Function("document", "location", "localStorage", `${source}\nreturn { route, go, instanceHref, dmHref, movedHref, channelName, selectInstance, state };`)({ getElementById: () => null }, location, storage) as {
 		route(): { view: string; rest: string[]; instanceId?: string };
 		go(view: string, ...rest: string[]): void;
 		instanceHref(view: string, rest: string[], instanceId?: string | null): string;
+		dmHref(instanceId: string, threadId?: string): string;
+		movedHref(route: { view: string; rest: string[]; instanceId?: string }): string | undefined;
+		channelName(title: string): string;
 		selectInstance(id: string): boolean;
-		state: { instance?: { id: string }; instances: { id: string }[]; threads: unknown[] };
+		state: { instance?: { id: string }; instances: { id: string }[] };
 	};
 	return { ...common, location, data };
 }
@@ -19,8 +22,10 @@ function browserCommon() {
 describe("agent context in product navigation", () => {
 	it("round-trips a conversation and agent whose IDs contain route separators", () => {
 		const common = browserCommon();
-		common.location.hash = common.instanceHref("chat", ["thread/one?two"], "sales/team&one");
-		expect(common.route()).toMatchObject({ view: "chat", rest: ["thread/one?two"], instanceId: "sales/team&one" });
+		common.location.hash = common.instanceHref("file", ["notes/one?two"], "sales/team&one");
+		expect(common.route()).toMatchObject({ view: "file", rest: ["notes/one?two"], instanceId: "sales/team&one" });
+		common.location.hash = common.dmHref("sales/team&one", "p_1.a/b");
+		expect(common.route()).toMatchObject({ view: "dm", rest: ["sales/team&one", "t", "p_1.a/b"] });
 	});
 
 	it("only selects an agent present in the current person's visible list", () => {
@@ -37,19 +42,42 @@ describe("agent context in product navigation", () => {
 	it("gives new agent-scoped links an explicit context without filtering the work overview", () => {
 		const common = browserCommon();
 		common.state.instance = { id: "sales" };
-		common.go("chat", "conversation");
-		expect(common.route()).toMatchObject({ view: "chat", rest: ["conversation"], instanceId: "sales" });
+		common.go("file", "notes");
+		expect(common.route()).toMatchObject({ view: "file", rest: ["notes"], instanceId: "sales" });
 		common.go("lavori", "attenzione");
 		expect(common.location.hash).toBe("#/lavori/attenzione");
 		expect(common.route().instanceId).toBeUndefined();
 	});
 
-	it("keeps old routes valid and does not let malformed percent escapes break navigation", () => {
+	it("opens the home on the direct messages and does not let malformed percent escapes break navigation", () => {
 		const common = browserCommon();
-		common.location.hash = "#/chat/old-thread";
-		expect(common.route()).toMatchObject({ view: "chat", rest: ["old-thread"], instanceId: undefined });
+		common.location.hash = "#/";
+		expect(common.route()).toMatchObject({ view: "dm", rest: [] });
 		common.location.hash = "#/file/%broken?agent=sales";
 		expect(common.route()).toMatchObject({ view: "file", rest: ["%broken"], instanceId: "sales" });
+	});
+
+	it("sends links saved before ADR 0113 to where the conversation lives now", () => {
+		const common = browserCommon();
+		const moved = (hash: string) => {
+			common.location.hash = hash;
+			return common.movedHref(common.route());
+		};
+		expect(moved("#/chat/p_1.abc?agent=sales")).toBe("#/dm/sales/t/p_1.abc");
+		expect(moved("#/chat?agent=sales")).toBe("#/dm/sales");
+		expect(moved("#/chat")).toBe("#/");
+		expect(moved("#/stanze/p_1.r2")).toBe("#/canali/p_1.r2");
+		expect(moved("#/stanze/nuova")).toBe("#/canali/nuova");
+		expect(moved("#/canali/p_1.r2")).toBeUndefined();
+		expect(moved("#/dm/sales")).toBeUndefined();
+		expect(moved("#/lavori")).toBeUndefined();
+	});
+
+	it("names a canale the way a team chat does, the stored title untouched", () => {
+		const common = browserCommon();
+		expect(common.channelName("Bando regionale 2027")).toBe("#bando-regionale-2027");
+		expect(common.channelName("  Città & Più!  ")).toBe("#città-più");
+		expect(common.channelName("!!!")).toBe("#canale");
 	});
 });
 

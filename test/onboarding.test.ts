@@ -47,7 +47,7 @@ describe("primi passi", () => {
 		// Added to what Owni can do, not in its place.
 		expect(instructions).toContain("watch_");
 		expect(instructions.endsWith("Informazioni su chi ti usa:\nAssistente di Studio Rossi.")).toBe(true);
-		const thread = (await api("/api/instances/owni/threads", "POST", {})).thread;
+		const thread = (await api("/api/instances/owni/dm", "POST", {})).thread;
 		await api(`/api/instances/owni/threads/${thread.id}/messages`, "POST", { text: "Ciao" });
 		for (let i = 0; i < 200 && !(await api("/api/instances/owni/setup")).setup.tried; i++) await new Promise((r) => setTimeout(r, 30));
 		const record = await owni.runtime.registry.getInstance("default", "owni");

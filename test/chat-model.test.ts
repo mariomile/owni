@@ -142,8 +142,11 @@ describe("choosing a chat's model from the console", () => {
 
 	it("a chat answers with its own model; the owner's choice allows the provider; clearing goes back", async () => {
 		const { owni, api } = await boot();
-		const { thread } = await api("/api/instances/owni/threads", "POST", {});
-		const other = (await api("/api/instances/owni/threads", "POST", {})).thread;
+		const { thread } = await api("/api/instances/owni/dm", "POST", {});
+		expect(await ask(api, thread.id, "primo")).toContain("primo");
+		// A thread under that message: a conversation of its own.
+		const root = (await api(`/api/instances/owni/threads/${thread.id}`)).entries[0];
+		const other = (await api("/api/instances/owni/threads", "POST", { parent: root.id })).thread;
 		const path = `/api/instances/owni/threads/${thread.id}`;
 		expect((await api(path)).model).toBeUndefined();
 		await owni.runtime.secrets("default").set(modelApiKeySecret("xai"), "xai-key-0001");
@@ -162,19 +165,19 @@ describe("choosing a chat's model from the console", () => {
 		expect(audit).not.toContain("xai-key-0001");
 	});
 
-	it("a chat opened from the empty page gets its model with it, and a refused model opens none", async () => {
+	it("the direct conversation opened from the empty page gets its model with it, and a refused model opens none", async () => {
 		const { owni, api } = await boot();
 		await owni.runtime.secrets("default").set(modelApiKeySecret("xai"), "xai-key-0001");
-		expect((await api("/api/instances/owni/threads", "POST", { model: { provider: "xai", modelId: "grok-99" } })).status).toBe(400);
-		expect((await api("/api/instances/owni/threads")).threads).toEqual([]);
-		const opened = await api("/api/instances/owni/threads", "POST", { model: GROK });
+		expect((await api("/api/instances/owni/dm", "POST", { model: { provider: "xai", modelId: "grok-99" } })).status).toBe(400);
+		expect((await api("/api/instances/owni/dm")).thread).toBeUndefined();
+		const opened = await api("/api/instances/owni/dm", "POST", { model: GROK });
 		expect(opened.model).toMatchObject(GROK);
 		expect((await api(`/api/instances/owni/threads/${opened.thread.id}`)).model).toMatchObject(GROK);
 	});
 
 	it("refuses a model the provider lacks, a provider without a key, another person's chat, and a member allowing a provider", async () => {
 		const { owni, api, base } = await boot();
-		const { thread } = await api("/api/instances/owni/threads", "POST", {});
+		const { thread } = await api("/api/instances/owni/dm", "POST", {});
 		const path = `/api/instances/owni/threads/${thread.id}/model`;
 		expect((await api(path, "PUT", { provider: "xai", modelId: "grok-4.7" })).status).toBe(400);
 		await owni.runtime.secrets("default").set(modelApiKeySecret("xai"), "xai-key-0001");
@@ -185,7 +188,7 @@ describe("choosing a chat's model from the console", () => {
 		await allow(owni, added.person.id);
 		const giulia = await client(base, added.link);
 		expect((await giulia(path, "PUT", { provider: "faux", modelId: "owni-dev" })).status).toBe(404);
-		const mine = (await giulia("/api/instances/owni/threads", "POST", {})).thread;
+		const mine = (await giulia("/api/instances/owni/dm", "POST", {})).thread;
 		expect((await giulia(`/api/instances/owni/threads/${mine.id}/model`, "PUT", { provider: "xai", modelId: "grok-4.7" })).status).toBe(400);
 		expect((await owni.runtime.registry.getInstance("default", "owni")).egress.modelProviders).toEqual(["faux"]);
 		expect((await giulia(`/api/instances/owni/threads/${mine.id}/model`, "PUT", { provider: "faux", modelId: "owni-dev" })).status).toBe(200);
@@ -193,7 +196,7 @@ describe("choosing a chat's model from the console", () => {
 
 	it("a chat whose provider lost its key answers with the instance's model meanwhile", async () => {
 		const { owni, api } = await boot();
-		const { thread } = await api("/api/instances/owni/threads", "POST", {});
+		const { thread } = await api("/api/instances/owni/dm", "POST", {});
 		await owni.runtime.secrets("default").set(modelApiKeySecret("xai"), "xai-key-0001");
 		await api(`/api/instances/owni/threads/${thread.id}/model`, "PUT", { provider: "xai", modelId: "grok-4.7" });
 		await owni.runtime.secrets("default").delete(modelApiKeySecret("xai"));

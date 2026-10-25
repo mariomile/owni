@@ -77,7 +77,7 @@ it("persists visible outcomes and source metadata without exposing another perso
 it("does not count a Stop notice as the first successful conversation", async () => {
 	const s = await setup();
 	const owner = await s.client(s.owner.person.id);
-	const thread = await s.channel.createThread(s.owner.person.id);
+	const thread = await s.channel.createThread(s.owner.person.id, "Chat");
 	await s.channel.send({ tenantId: "acme", instanceId: "ops", channel: "web", threadId: thread.id, text: REPLY_CANCELLED, idempotencyKey: "stop-notice" });
 	expect((await owner.api("/api/instances/ops/setup")).setup.tried).toBe(false);
 	await s.channel.send({ tenantId: "acme", instanceId: "ops", channel: "web", threadId: thread.id, text: "La risposta richiesta", idempotencyKey: "answer" });
@@ -88,8 +88,8 @@ it("reports tool progress before completion and stops only the selected conversa
 	const s = await setup();
 	const a = await s.client(s.anna.person.id);
 	const l = await s.client(s.luca.person.id);
-	const first = await s.channel.createThread(s.anna.person.id);
-	const other = await s.channel.createThread(s.luca.person.id);
+	const first = await s.channel.createThread(s.anna.person.id, "Chat");
+	const other = await s.channel.createThread(s.luca.person.id, "Chat");
 	await s.channel.post(first.id, s.anna.person.id, "conta fino a 100");
 	await waitFor(() => s.steps.length >= 1);
 	const during = await a.api(`/api/instances/ops/threads/${first.id}/runs`);
@@ -114,8 +114,8 @@ it("reports tool progress before completion and stops only the selected conversa
 it("delivers live run events only to the owning session and closes them after session revocation", async () => {
 	const s = await setup();
 	const a = await s.client(s.anna.person.id);
-	const first = await s.channel.createThread(s.anna.person.id);
-	const other = await s.channel.createThread(s.luca.person.id);
+	const first = await s.channel.createThread(s.anna.person.id, "Chat");
+	const other = await s.channel.createThread(s.luca.person.id, "Chat");
 	const abort = new AbortController();
 	closers.push(async () => { abort.abort(); });
 	const response = await fetch(`${s.base}/api/events`, { headers: a.headers, signal: abort.signal });

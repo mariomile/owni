@@ -80,8 +80,9 @@ async function boot() {
 		const res = await fetch(`${base}${path}`, { method: method ?? (body === undefined ? "GET" : "POST"), headers: { cookie, "x-owni": "1" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
 		return { status: res.status, ...((await res.json()) as any) };
 	};
-	const chat = async () => {
-		const thread = (await api("/api/instances/owni/threads", {})).thread;
+	// The direct conversation, or a thread under one of its messages: another conversation (ADR 0113).
+	const chat = async (parent?: string) => {
+		const thread = (parent === undefined ? await api("/api/instances/owni/dm", {}) : await api("/api/instances/owni/threads", { parent })).thread;
 		return Object.assign(async (text: string): Promise<string> => {
 			const answers = async () => ((await api(`/api/instances/owni/threads/${thread.id}`)).entries as { from: string; text?: string }[]).filter((e) => e.from === "owni");
 			const before = (await answers()).length;
@@ -167,12 +168,14 @@ describe.skipIf(!chromium)("the browser with clicks (ADR 0014)", () => {
 
 	it("one browser per conversation; a screenshot of what is on screen goes to the workspace", async () => {
 		const s = await site();
-		const { owni, chat } = await boot();
+		const { owni, chat, api } = await boot();
 		const policy = (await owni.runtime.registry.getInstance("default", "owni")).egress;
 		await owni.runtime.registry.setEgress("default", "owni", { ...policy, web: ["127.0.0.1"] });
 		const first = await chat();
 		await first(`/tool web_browse {"url":"${s.base}/due"}`);
-		const other = await chat();
+		const other = await chat((await api("/api/instances/owni/dm")).entries[0].id);
+		// The thread's first turn carries the message it answers; the dev model reads a /tool only at the start.
+		await other("ciao");
 		expect(await other("/tool web_browse {}")).toContain("nessuna pagina aperta in questa conversazione");
 		const shot = await first('/tool web_browse {"screenshot":true}');
 		expect(shot).toMatch(/Screenshot salvato in screenshot\/browser-.*\.png/);

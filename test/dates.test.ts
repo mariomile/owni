@@ -558,7 +558,7 @@ async function boot(dataDir: string) {
 		// biome-ignore lint: test
 		return (await res.json()) as any;
 	};
-	const thread = (await api("/api/instances/owni/threads", {})).thread;
+	const thread = (await api("/api/instances/owni/dm", {})).thread;
 	return async (text: string): Promise<string> => {
 		const answers = async () => ((await api(`/api/instances/owni/threads/${thread.id}`)).entries as { from: string; text?: string }[]).filter((e) => e.from === "owni");
 		const before = (await answers()).length;

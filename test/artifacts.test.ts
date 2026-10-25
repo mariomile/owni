@@ -28,7 +28,7 @@ function context(thread: ToolContext["thread"], callId: string): ToolContext {
 async function setup() {
 	const dir = tempDataDir();
 	const channel = new WebChannel({ tenantId: "acme", instanceId: "ops" }, dir);
-	const thread = await channel.createThread(PERSON);
+	const thread = await channel.createThread(PERSON, "Conti");
 	const [create, update] = createArtifactTools({
 		artifacts: () => ({
 			create: (threadId, input) => channel.artifacts.create(threadId, input),

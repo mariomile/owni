@@ -222,7 +222,7 @@ describe.skipIf(!available)("no file uploads, in real Chromium", () => {
 			const res = await fetch(`${base}${path}`, { method: body === undefined ? "GET" : "POST", headers: { cookie, "x-owni": "1" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
 			return { status: res.status, ...((await res.json()) as any) };
 		};
-		const thread = (await api("/api/instances/owni/threads", {})).thread.id as string;
+		const thread = (await api("/api/instances/owni/dm", {})).thread.id as string;
 		const answers = async () => ((await api(`/api/instances/owni/threads/${thread}`)).entries as { from: string; text?: string }[]).filter((e) => e.from === "owni");
 		const say = async (text: string): Promise<string> => {
 			const before = (await answers()).length;

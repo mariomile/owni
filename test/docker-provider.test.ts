@@ -149,7 +149,7 @@ describe.skipIf(image === undefined)("Docker cell provider, real daemon", () => 
 		const url = new URL(verified.body.loginUrl);
 		const login = await call(url.host, "/api/login", { token: url.hash.slice(1) });
 		expect(login.status).toBe(200);
-		const thread = (await call(url.host, "/api/instances/owni/threads", {}, login.cookie)).body.thread;
+		const thread = (await call(url.host, "/api/instances/owni/dm", {}, login.cookie)).body.thread;
 		await call(url.host, `/api/instances/owni/threads/${thread.id}/messages`, { text: "ciao dal container" }, login.cookie);
 		const answered = async () => ((await call(url.host, `/api/instances/owni/threads/${thread.id}`, undefined, login.cookie)).body.entries as { from: string }[]).some((e) => e.from === "owni");
 		while (!(await answered())) await new Promise((r) => setTimeout(r, 100));
