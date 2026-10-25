@@ -1,5 +1,5 @@
 // Task page, with sentinelle and the morning brief.
-import { agentLabel, api, emptyNote, fmt, go, h, head, icon, mount, needInstance, state, toast } from "../common.js";
+import { agentLabel, api, emptyNote, fmt, go, h, head, icon, mount, needInstance, route, state, toast } from "../common.js";
 import { refreshThreads, render } from "../shell.js";
 import { runHistory } from "../runs.js";
 
@@ -13,6 +13,7 @@ export async function viewTasks(main) {
 		inst.canChat ? api(`/api/instances/${inst.id}/threads`).then((r) => r.threads) : Promise.resolve([]),
 		api(`/api/instances/${inst.id}/brief`).catch(() => undefined),
 	]);
+	if (!main.isConnected || state.instance !== inst) return;
 	const remove = (s) =>
 		h(
 			"button.icon-btn.task-remove",
@@ -117,23 +118,25 @@ export async function viewTasks(main) {
 			toast(error.message, true);
 		}
 	};
-	mount(main, 
-		head(agentLabel(inst), h("h1", "Task e sentinelle"), `Istruzioni che ${inst.name} esegue da solo, una volta o a ripetizione, e pagine che controlla per te. Il risultato arriva nella chat scelta.`),
-		inst.canChat && briefState ? briefCard(inst, briefState) : null,
-		h(
-			"div.grid-2",
-			h("div.card", schedules.length ? table : emptyNote("div.empty", "Nessun task", `Creane uno qui accanto, oppure chiedilo a ${inst.name} in chat.`)),
-			h(
-				"div.card.pad",
-				h("h2", "Nuovo task"),
-				inst.canChat
-					? [h("label.field", h("span", "Cosa deve fare"), instruction), h("div.field", h("span", "Quando"), seg), whenBox, h("label.field", h("span", "Risultato nella chat"), thread), h("button.btn.accent", { onclick: create }, "Programma")]
-					: h("p.muted", `Per programmare un task devi poter scrivere a ${inst.name}: il risultato arriva in una chat.`),
-			),
-		),
-		...watchSection(inst, watches, threads),
-		runHistory([inst], { sources: ["schedule", "brief", "watch"], names: new Map([...schedules.map((s) => [s.id, s.kind === "brief" ? "Brief del mattino" : s.instruction.slice(0, 100)]), ...watches.map((w) => [w.id, w.name ?? "Sentinella"])]), title: "Esiti dei tuoi task" }),
+	const intent = route().rest[0];
+	const scheduled = h("div.grid-2",
+		h("div.card", schedules.length ? table : emptyNote("div.empty", "Nessuna istruzione programmata", `Programmane una qui, oppure chiedilo a ${inst.name} in chat.`)),
+		h("div.card.pad", h("h2", "Programma un'istruzione"), inst.canChat
+			? [h("label.field", h("span", "Cosa deve fare"), instruction), h("div.field", h("span", "Quando"), seg), whenBox, h("label.field", h("span", "Risultato nella chat"), thread), h("button.btn.accent", { onclick: create }, "Programma")]
+			: h("p.muted", `Per programmare un'istruzione devi poter scrivere a ${inst.name}: il risultato arriva in una chat.`)),
 	);
+	mount(main,
+		head(agentLabel(inst), h("h1", intent === "pagina" ? "Controlla una pagina" : intent === "orario" ? "A un orario" : "Orari e pagine da controllare"), `Scegli cosa deve fare ${inst.name} e dove ricevere il risultato.`),
+		intent !== "pagina" && inst.canChat && briefState ? h("details.setup-optional", h("summary", "Parti dal brief del mattino"), briefCard(inst, briefState)) : null,
+		intent !== "pagina" ? scheduled : null,
+		intent !== "orario" ? watchSection(inst, watches, threads) : null,
+		runHistory([inst], { sources: intent === "pagina" ? ["watch"] : intent === "orario" ? ["schedule", "brief"] : ["schedule", "brief", "watch"], names: new Map([...schedules.map((s) => [s.id, s.kind === "brief" ? "Brief del mattino" : s.instruction.slice(0, 100)]), ...watches.map((w) => [w.id, w.name ?? "Controllo pagina"])]), title: "Esiti delle tue automazioni" }),
+	);
+	if (intent === "orario" || intent === "pagina") {
+		const target = intent === "orario" ? instruction : main.querySelector('input[type="url"]');
+		target?.focus();
+		target?.scrollIntoView({ block: "center" });
+	}
 }
 
 /** Sentinelle: pages Owni checks by itself, writing to a chat when they change or a price crosses a threshold. */
@@ -223,13 +226,13 @@ function watchSection(inst, watches, threads) {
 		}
 	};
 	return [
-		h("h2.subhead", "Sentinelle"),
+		h("h2.subhead", "Pagine controllate"),
 		h(
 			"div.grid-2",
 			h("div.card", watches.length ? table : emptyNote("div.empty", "Nessuna sentinella", "Owni controlla una pagina da sola e ti scrive quando cambia o quando un prezzo scende. Creane una qui accanto, oppure chiedi in chat: «avvisami quando questo scende sotto 50 €».")),
 			h(
 				"div.card.pad",
-				h("h2", "Nuova sentinella"),
+				h("h2", "Nuovo controllo"),
 				inst.canChat
 					? [
 							h("label.field", h("span", "Pagina da controllare"), url),

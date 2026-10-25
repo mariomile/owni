@@ -59,6 +59,11 @@ const ICONS = {
 	impostazioni: ["M4 7h9M17 7h3M4 17h3M11 17h9", "M15 5v4M9 15v4"],
 	persone: ["M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z", "M2.5 21a6.5 6.5 0 0 1 13 0", "M16 3.6a4 4 0 0 1 0 6.8", "M18.5 14.5A6.5 6.5 0 0 1 21.5 21"],
 	attivita: ["M3 12h4l3-8 4 16 3-8h4"],
+	conversazioni: ["M20 12a8 8 0 0 1-11.6 7.1L4 20l.9-4.4A8 8 0 1 1 20 12Z"],
+	lavori: ["M4 5h16v15H4Z", "M8 3v4M16 3v4M8 11h8M8 15h5"],
+	programmi: ["M13 3 5 14h6l-1 7 8-11h-6Z"],
+	agente: ["M8 4h8a3 3 0 0 1 3 3v6a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3Z", "M9.5 9.5h.01M14.5 9.5h.01", "M9 20h6"],
+	gestione: ["M4 7h9M17 7h3M4 17h3M11 17h9", "M15 5v4M9 15v4"],
 	search: ["M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14Z", "m20 20-4-4"],
 	theme: ["M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Z", "M12 3v18", "M12 7h4.5M12 11h6M12 15h5.5"],
 	logout: ["M14 4h5v16h-5", "M9.5 8 5.5 12l4 4", "M5.5 12H15"],
@@ -269,7 +274,7 @@ export const state = {
 	/** Schede waiting for this person's review (ADR 0051). */
 	boardReview: 0,
 	unread: new Set(),
-	/** The current instance's conversations, newest first, for the sidebar. */
+	/** This person's conversations across chat-enabled agents, newest first. */
 	threads: [],
 	/** Steps of «Primi passi» still to do, for the owner; 0 when done or put away. */
 	setupLeft: 0,
@@ -277,15 +282,43 @@ export const state = {
 	onEntry: undefined,
 	onRun: undefined,
 	onRunsReconnect: undefined,
+	onBoard: undefined,
 };
 
 export function route() {
-	const [view, ...rest] = location.hash.replace(/^#\/?/, "").split("/");
-	return { view: view || "chat", rest: rest.map(decodeURIComponent) };
+	const hash = location.hash.replace(/^#\/?/, "");
+	const question = hash.indexOf("?");
+	const path = question < 0 ? hash : hash.slice(0, question);
+	const params = new URLSearchParams(question < 0 ? "" : hash.slice(question + 1));
+	const [view, ...rest] = path.split("/");
+	const decode = (part) => { try { return decodeURIComponent(part); } catch { return part; } };
+	return { view: view || "chat", rest: rest.map(decode), instanceId: params.get("agent") ?? undefined, params };
+}
+
+const AGENT_VIEWS = new Set(["chat", "file", "memoria", "skill", "task", "automazioni", "impostazioni", "connettori", "segreteria", "inizia"]);
+
+/** A link carries its agent: opening it later never borrows another agent from the browser. */
+export function instanceHref(view, rest = [], instanceId = state.instance?.id) {
+	const path = `#/${[view, ...rest].map(encodeURIComponent).join("/")}`;
+	return instanceId ? `${path}?agent=${encodeURIComponent(instanceId)}` : path;
+}
+
+/** Only an agent already returned for this person may become the current context. */
+export function selectInstance(id) {
+	const instance = state.instances.find((i) => i.id === id);
+	if (!instance) return false;
+	if (state.instance !== instance) {
+		state.instance = instance;
+		state.threads = [];
+		state.setup = undefined;
+		state.setupLeft = 0;
+	}
+	store("annie.instance", id);
+	return true;
 }
 
 export function go(view, ...rest) {
-	location.hash = `#/${[view, ...rest].map(encodeURIComponent).join("/")}`;
+	location.hash = instanceHref(view, rest, AGENT_VIEWS.has(view) ? state.instance?.id : null);
 }
 
 
@@ -294,7 +327,7 @@ export function head(parent, title, text, ...actions) {
 	const here = (title instanceof Node ? title.textContent : title).trim();
 	return h(
 		"div.head",
-		parent ? h("nav.crumbs", { "aria-label": "Percorso" }, h("a", { href: "#/chat" }, parent), here ? [icon("chevron"), h("span.here", { "aria-current": "page" }, here)] : null) : null,
+		parent ? h("nav.crumbs", { "aria-label": "Percorso" }, h("a", { href: state.instance ? `#/agente/${encodeURIComponent(state.instance.id)}` : "#/agenti" }, parent), here ? [icon("chevron"), h("span.here", { "aria-current": "page" }, here)] : null) : null,
 		h("div.head-title", title instanceof Node ? title : h("h1", title), text ? h("p", text) : null),
 		actions.length ? h("div.row-gap.head-actions", actions) : null,
 	);

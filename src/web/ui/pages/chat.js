@@ -42,6 +42,7 @@ export async function viewChat(main) {
 	state.unread.delete(threadId);
 	renderRail();
 	const { entries, model } = await api(`/api/instances/${inst.id}/threads/${encodeURIComponent(threadId)}`);
+	if (!main.isConnected || state.instance !== inst) return;
 	const transcript = h("div.transcript", { role: "log", "aria-live": "polite" });
 	let typing;
 	const picture = (path) => pictureUrl(inst, path);
@@ -126,7 +127,7 @@ export async function viewChat(main) {
 		browser.lively();
 		screen.lively();
 		const bubble = show({ from: "person", text, images, at: new Date().toISOString() });
-		const listed = state.threads.find((t) => t.id === threadId);
+		const listed = state.threads.find((t) => t.id === threadId && (!t.instanceId || t.instanceId === inst.id));
 		if (listed && listed.title === "Nuova chat") {
 			listed.title = text ? text.replace(/\s+/g, " ").slice(0, 60) : "Foto";
 			renderRail();

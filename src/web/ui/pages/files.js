@@ -77,7 +77,7 @@ export async function viewFiles(main) {
 	const drop = h("div.file-drop", { "aria-hidden": "true" }, h("span.fold-glyph", icon("upload")), h("b", "Lascia qui i file"), h("small", `Finiscono nel workspace di ${inst.name}, in uploads.`));
 	mount(
 		main,
-		head(agentLabel(inst), h("h1", "File"), `Il workspace di ${inst.name}: i file che crea e quelli che riceve (legge anche PDF, Word, Excel e PowerPoint). ${files.length === 1 ? "1 file" : `${files.length} file`}, ${fmt.bytes(total)}. Puoi anche trascinarli qui.`, h("label.btn.accent", icon("upload"), "Carica file", upload)),
+		head(agentLabel(inst), h("h1", "Documenti e file"), `Il workspace di ${inst.name}: i file che crea e quelli che riceve (legge anche PDF, Word, Excel e PowerPoint). ${files.length === 1 ? "1 file" : `${files.length} file`}, ${fmt.bytes(total)}. Puoi anche trascinarli qui.`, h("label.btn.accent", icon("upload"), "Carica file", upload)),
 		h(
 			"div.card.files",
 			files.length

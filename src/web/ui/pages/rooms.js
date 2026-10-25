@@ -4,7 +4,7 @@ import { agentCommands, commandMenu } from "../commands.js";
 
 // ---------- stanze (ADR 0063) ----------
 export async function viewRooms(main) {
-	const roomId = route().rest[0];
+	const roomId = route().rest[0] === "nuova" ? undefined : route().rest[0];
 	if (roomId) return viewRoom(main, roomId);
 	const { rooms } = await api("/api/rooms");
 	const chatty = state.instances.filter((i) => i.canChat);
@@ -24,7 +24,7 @@ export async function viewRooms(main) {
 		};
 		mount(
 			form,
-			h("h2", "Nuova stanza"),
+			h("h2", "Nuova conversazione con più agenti"),
 			h("label.field", h("span", "Nome"), title, h("small", "Se lo lasci vuoto, la stanza prende i nomi degli agenti.")),
 			h("div.field", h("span", "Agenti (da 2 a 5)"), boxes.map((b) => h("label.row-gap", b.box, h("span", b.label)))),
 			h("div.actions", h("button.btn.accent", { onclick: save }, "Crea"), h("button.btn.ghost", { onclick: () => (form.hidden = true) }, "Annulla")),
@@ -35,7 +35,7 @@ export async function viewRooms(main) {
 	const names = (r) => r.agents.map((a) => `${a.emoji ? `${a.emoji} ` : ""}${a.name}`).join(", ");
 	mount(
 		main,
-		head(null, h("h1", "Stanze"), "Una conversazione con più agenti insieme. Scrivi @nome per chiamarne uno, @tutti per tutti; senza nome risponde l'ultimo che ha parlato. Un agente può chiamare in causa un altro. Le stanze sono solo tue.", chatty.length > 1 ? h("button.btn.accent", { onclick: create }, icon("plus"), "Nuova stanza") : null),
+		head(null, h("h1", "Conversazioni con più agenti"), "Una conversazione con più agenti insieme. Scrivi @nome per chiamarne uno, @tutti per tutti; senza nome risponde l'ultimo che ha parlato. Un agente può chiamare in causa un altro. Le stanze sono solo tue.", chatty.length > 1 ? h("button.btn.accent", { onclick: create }, icon("plus"), "Nuova conversazione con più agenti") : null),
 		h(
 			"div.stack",
 			form,
@@ -62,10 +62,12 @@ export async function viewRooms(main) {
 			),
 		),
 	);
+	if (route().rest[0] === "nuova" && chatty.length > 1) create();
 }
 
 async function viewRoom(main, roomId) {
 	const { room, entries } = await api(`/api/rooms/${encodeURIComponent(roomId)}`);
+	if (!main.isConnected) return;
 	const agentOf = (id) => room.agents.find((a) => a.instanceId === id);
 	const transcript = h("div.transcript", { role: "log", "aria-live": "polite" });
 	const fileLink = (instanceId, file) => h("a.file", { href: `/api/instances/${encodeURIComponent(instanceId)}/files/raw?path=${encodeURIComponent(file.path)}` }, h("span.ext", (file.path.split(".").pop() ?? "file").slice(0, 4)), h("span", h("b", file.path.split("/").pop()), file.caption ? h("div.muted", file.caption) : null));

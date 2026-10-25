@@ -1,13 +1,13 @@
 // Command palette.
-import { api, go, h, icon, mount, state } from "./common.js";
+import { api, go, h, icon, instanceHref, mount, state } from "./common.js";
 import { PAGES } from "./shell.js";
 
 // ---------- command palette (⌘K) ----------
 export function openPalette() {
 	if (!state.me || document.querySelector("dialog.palette")) return;
-	const items = PAGES.filter((p) => (!p.owner || state.me.role === "owner") && (!p.when || p.when(state.instance))).map((p) => ({ ...p, icon: p.id, to: [p.id] }));
+	const items = PAGES.filter((p) => p.palette !== false && (!p.owner || state.me.role === "owner") && (!p.when || p.when(state.instance))).map((p) => ({ ...p, icon: p.id, to: [p.id] }));
 	// Conversations by title, once something is typed: this agente's chats, and the stanze (loaded now).
-	const chats = state.threads.map((t) => ({ label: t.title, group: "Chat", icon: "chat", to: ["chat", t.id] }));
+	const chats = state.threads.map((t) => ({ label: t.title, group: t.agent?.name ?? "Conversazione", icon: "chat", href: instanceHref("chat", [t.id], t.instanceId ?? state.instance?.id) }));
 	let rooms = [];
 	if (PAGES.find((p) => p.id === "stanze")?.when()) {
 		void api("/api/rooms")
@@ -26,12 +26,13 @@ export function openPalette() {
 		dialog.close();
 		dialog.remove();
 		document.querySelector(".shell")?.classList.remove("open");
-		go(...item.to);
+		if (item.href) location.hash = item.href;
+		else go(...item.to);
 	};
 	const draw = () => {
 		const q = input.value.trim().toLowerCase();
 		const talks = q === "" ? [] : [...rooms, ...chats].filter((c) => c.label.toLowerCase().includes(q)).slice(0, 8);
-		shown = [...items.filter((i) => i.label.toLowerCase().includes(q)), ...talks];
+		shown = [...items.filter((i) => q ? i.label.toLowerCase().includes(q) : ["conversazioni", "lavori", "agenti", "gestione"].includes(i.id)), ...talks];
 		active = Math.min(active, Math.max(0, shown.length - 1));
 		mount(list, 
 			...shown.map((item, n) =>

@@ -1,6 +1,6 @@
 // Shell: sidebar, account menu, theme.
 import { accountDialog } from "./account.js";
-import { $app, api, ApiError, emptyNote, face, fmt, go, h, icon, initials, mount, route, state, store, toast } from "./common.js";
+import { $app, api, ApiError, emptyNote, face, fmt, go, h, icon, initials, instanceHref, mount, route, selectInstance, state, store, toast } from "./common.js";
 import { renderLogin } from "./login.js";
 import { viewActivity } from "./pages/activity.js";
 import { agentForm, viewAgents } from "./pages/agents.js";
@@ -18,6 +18,9 @@ import { viewSettings } from "./pages/settings.js";
 import { viewSkills } from "./pages/skills.js";
 import { viewStart } from "./pages/start.js";
 import { viewTasks } from "./pages/tasks.js";
+import { viewConversations } from "./pages/conversations.js";
+import { viewPrograms, viewWork } from "./pages/work.js";
+import { viewAgentProfile } from "./pages/agent-profile.js";
 import { openPalette } from "./palette.js";
 import { install, installed, installOffer } from "./pwa.js";
 import { applyTheme, refreshSetup } from "./session.js";
@@ -30,52 +33,92 @@ import { applyTheme, refreshSetup } from "./session.js";
  * one line in sw.js.
  */
 export const PAGES = [
-	{ id: "inizia", label: "Primi passi", group: "Lavoro", sidebar: true, owner: true, when: () => state.setupLeft > 0, count: () => state.setupLeft, view: viewStart },
-	{ id: "chat", label: "Chat", group: "Lavoro", view: viewChat },
-	{ id: "agenti", label: "Agenti", group: "Lavoro", sidebar: true, count: () => (state.instances.length > 1 ? state.instances.length : 0), view: viewAgents },
-	{ id: "stanze", label: "Stanze", group: "Lavoro", sidebar: true, when: () => state.instances.filter((i) => i.canChat).length > 1, view: viewRooms },
-	{ id: "board", label: "Board", group: "Lavoro", sidebar: true, count: () => state.boardReview, view: viewBoard },
-	{ id: "segreteria", label: "Segreteria", group: "Lavoro", sidebar: true, when: (i) => i?.hasSegreteria, view: viewSegreteria },
-	{ id: "approvazioni", label: "Approvazioni", group: "Lavoro", sidebar: true, count: () => state.pendingApprovals, view: viewApprovals },
-	{ id: "task", label: "Task e sentinelle", group: "Lavoro", sidebar: true, view: viewTasks },
-	{ id: "automazioni", label: "Automazioni", group: "Lavoro", sidebar: true, view: viewAutomations },
-	{ id: "file", label: "File", group: "Lavoro", sidebar: true, view: viewFiles },
-	{ id: "memoria", label: "Memoria", group: "Lavoro", sidebar: true, view: viewMemory },
-	{ id: "skill", label: "Skill", group: "Lavoro", sidebar: true, view: viewSkills },
-	{ id: "connettori", label: "Connettori", group: "Gestione", owner: true, view: viewConnectors },
-	{ id: "impostazioni", label: "Impostazioni", group: "Gestione", owner: true, view: viewSettings },
-	{ id: "persone", label: "Persone", group: "Gestione", owner: true, view: viewPeople },
-	{ id: "attivita", label: "Attività e spesa", group: "Gestione", view: viewActivity },
+	{ id: "conversazioni", label: "Conversazioni", group: "Lavoro", workspace: "conversations", sidebar: true, view: viewConversations },
+	{ id: "lavori", label: "Lavori", group: "Lavoro", workspace: "work", sidebar: true, view: viewWork },
+	{ id: "chat", label: "Nuova conversazione", group: "Lavoro", workspace: "conversations", view: viewChat },
+	{ id: "stanze", label: "Conversazioni con più agenti", group: "Lavoro", workspace: "conversations", when: () => state.instances.filter((i) => i.canChat).length > 1, view: viewRooms },
+	{ id: "board", label: "Board degli incarichi", group: "Lavoro", workspace: "work", view: viewBoard },
+	{ id: "programmi", label: "Automazioni", group: "Lavoro", workspace: "work", view: viewPrograms },
+	{ id: "segreteria", label: "Pratiche commerciali", group: "Lavoro", workspace: "work", when: (i) => i?.hasSegreteria, view: viewSegreteria },
+	{ id: "approvazioni", label: "Autorizzazioni", group: "Lavoro", workspace: "work", view: viewApprovals },
+	{ id: "task", label: "Orari e pagine da controllare", group: "Lavoro", workspace: "work", view: viewTasks },
+	{ id: "automazioni", label: "Eventi esterni", group: "Lavoro", workspace: "work", view: viewAutomations },
+	{ id: "agenti", label: "Agenti", group: "Gestione", workspace: "agents", view: viewAgents },
+	{ id: "agente", label: "Il tuo assistente", group: "Gestione", workspace: "agents", palette: false, view: viewAgentProfile },
+	{ id: "file", label: "Documenti dell'agente", group: "Materiali", workspace: "agents", view: viewFiles },
+	{ id: "memoria", label: "Memoria personale e condivisa", group: "Materiali", workspace: "agents", view: viewMemory },
+	{ id: "skill", label: "Procedure", group: "Materiali", workspace: "agents", view: viewSkills },
+	{ id: "connettori", label: "Servizi collegati", group: "Gestione", workspace: "agents", owner: true, view: viewConnectors },
+	{ id: "impostazioni", label: "Configurazione dell'agente", group: "Gestione", workspace: "agents", owner: true, view: viewSettings },
+	{ id: "inizia", label: "Primi passi", group: "Gestione", workspace: "agents", owner: true, view: viewStart },
+	{ id: "gestione", label: "Gestione", group: "Gestione", workspace: "management", view: viewManagement },
+	{ id: "persone", label: "Persone e accessi", group: "Gestione", workspace: "management", owner: true, view: viewPeople },
+	{ id: "attivita", label: "Attività e spesa", group: "Gestione", workspace: "management", view: viewActivity },
 ];
+
+function workspaceNav(item) {
+	const { view } = route();
+	const link = (label, href, active) => h("a", { href, "aria-current": active ? "page" : undefined }, label);
+	if (item.workspace === "work") return h("nav.workspace-nav", { "aria-label": "Lavori" },
+		link("Incarichi", "#/lavori", view === "lavori" && !route().rest[0]),
+		link("Richiede te", "#/lavori/attenzione", view === "approvazioni" || (view === "lavori" && route().rest[0] === "attenzione")),
+		link("Automazioni", "#/programmi", ["programmi", "task", "automazioni"].includes(view)),
+		state.instances.some((i) => i.hasSegreteria) ? link("Pratiche", instanceHref("segreteria", [], state.instances.find((i) => i.hasSegreteria)?.id), view === "segreteria") : null,
+	);
+	if (item.workspace === "agents" && state.instance) return h("nav.workspace-nav", { "aria-label": `Materiali e configurazione di ${state.instance.name}` },
+		link(state.instance.name, `#/agente/${encodeURIComponent(state.instance.id)}`, view === "agente"),
+		link("Documenti", instanceHref("file"), view === "file"), link("Memoria", instanceHref("memoria"), view === "memoria"), link("Procedure", instanceHref("skill"), view === "skill"),
+		state.me.role === "owner" ? link("Configurazione", instanceHref("impostazioni"), ["impostazioni", "connettori", "inizia"].includes(view)) : null,
+	);
+	if (view === "chat") {
+		const inst = state.instance;
+		const choices = state.instances.filter((i) => i.canChat);
+		const who = route().rest[0]
+			? h("a.agent-context", { href: inst ? `#/agente/${encodeURIComponent(inst.id)}` : "#/agenti" }, inst ? face(inst, 20) : null, `Conversazione con ${inst?.name ?? "l'agente"}`)
+			: h("label.chat-recipient", h("span", "Scrivi a"), choices.length > 1 ? h("select", { "aria-label": "Agente della nuova conversazione", value: inst?.id, onchange: (event) => { location.hash = instanceHref("chat", [], event.target.value); } }, choices.map((i) => h("option", { value: i.id, selected: i.id === inst?.id }, i.name))) : h("a", { href: inst ? `#/agente/${encodeURIComponent(inst.id)}` : "#/agenti" }, inst?.name ?? "Il tuo assistente"));
+		return h("div.conversation-context", who, h("a.btn.small.ghost", { href: "#/conversazioni" }, "Le tue conversazioni"));
+	}
+	return null;
+}
+
+async function viewManagement(main) {
+	const owner = state.me.role === "owner";
+	mount(main, h("div.head", h("div.head-title", h("h1", "Account e gestione"), h("p", "Le tue impostazioni personali e la gestione dell'installazione sono separate."))),
+		h("div.card.pad.stack", h("h2", "Il mio account"), h("p.muted", "Collegamenti personali e verifica in due passaggi."), h("button.btn", { onclick: accountDialog }, "Apri il tuo account")),
+		owner ? h("section.management-links", h("h2", "Installazione"), h("a.card.pad", { href: "#/persone" }, "Persone e accessi"), h("a.card.pad", { href: instanceHref("impostazioni", ["providers"]) }, "Provider disponibili"), h("a.card.pad", { href: "#/attivita" }, "Consumi e registro delle attività")) : h("a.btn.ghost", { href: "#/attivita" }, "Le tue esecuzioni e i consumi"),
+	);
+}
+
 const railPhone = matchMedia("(max-width: 860px)");
 railPhone.addEventListener("change", syncRailControls);
 
 export function render() {
 	if (!state.me) return renderLogin();
-	const { view } = route();
+	const current = route();
+	const { view } = current;
+	const requested = view === "agente" ? current.rest[0] : current.instanceId;
+	const previous = state.instance;
+	const unavailable = requested && !selectInstance(requested);
+	if (view === "chat" && !current.rest[0] && !requested && !state.instance?.canChat) {
+		const first = state.instances.find((i) => i.canChat);
+		if (first) selectInstance(first.id);
+	}
 	const item = PAGES.find((p) => p.id === view) ?? PAGES.find((p) => p.id === "chat");
 	if (item.owner && state.me.role !== "owner") return go("chat");
+	if (previous !== state.instance) void refreshSetup().then(() => { if (document.getElementById("rail")) renderRail(); });
 	closeMenu();
 	closeModelMenu();
-	const main = h("main", { id: "main", class: item.id === "chat" || (item.id === "stanze" && route().rest[0]) ? "is-chat" : "is-page" });
+	const chat = item.id === "chat" || (item.id === "stanze" && current.rest[0] && current.rest[0] !== "nuova");
+	const main = h("main", { id: "main", class: chat ? "is-chat" : "is-page" });
+	const content = h(chat ? "div.page-content.chat-content" : "div.page-content");
+	mount(main, workspaceNav(item), content);
 	const shell = h(
 		`div.shell${store("annie.rail") === "closed" ? ".collapsed" : ""}`,
-		h(
-			"header.topbar",
-			h("button.icon-btn.rail-menu", {
-				"aria-label": "Apri la barra laterale", "aria-controls": "rail", "aria-expanded": "false",
-				onclick: () => {
-					shell.classList.toggle("open");
-					syncRailControls();
-				},
-			}, icon("menu")),
-			// With more agenti, the open one: who a new chat goes to.
-			state.instances.length > 1 && state.instance ? h("b.topbar-who", face(state.instance, 22), state.instance.name) : h("b.topbar-brand", h("img", { src: "/icon.svg", alt: "", width: "20", height: "20" }), "Owni"),
-			h("button.icon-btn", { "aria-label": "Nuova chat", title: "Nuova chat", onclick: () => go("chat") }, icon("compose")),
-		),
-		h("div.scrim", { onclick: closeRailOnPhone }),
-		h("aside.rail", { id: "rail" }),
-		main,
+		h("header.topbar", h("button.icon-btn.rail-menu", {
+			"aria-label": "Apri la barra laterale", "aria-controls": "rail", "aria-expanded": "false",
+			onclick: () => { shell.classList.toggle("open"); syncRailControls(); },
+		}, icon("menu")), h("b.topbar-brand", "Owni"), h("button.icon-btn", { "aria-label": "Nuova conversazione", title: "Nuova conversazione", onclick: () => go("chat") }, icon("compose"))),
+		h("div.scrim", { onclick: closeRailOnPhone }), h("aside.rail", { id: "rail" }), main,
 	);
 	mount($app, shell);
 	renderRail();
@@ -84,9 +127,11 @@ export function render() {
 	state.onRoom = undefined;
 	state.onRun = undefined;
 	state.onRunsReconnect = undefined;
-	item.view(main).catch((error) => {
-		if (error instanceof ApiError && error.status === 401) return;
-		mount(main, emptyNote("div.empty", "Qualcosa non va", error.message));
+	state.onBoard = undefined;
+	if (unavailable) return mount(content, emptyNote("div.empty", "Agente non disponibile", "Scegli un agente a cui hai accesso."), h("a.btn", { href: "#/agenti" }, "Apri gli agenti"));
+	item.view(content).catch((error) => {
+		if (!content.isConnected || error instanceof ApiError && error.status === 401) return;
+		mount(content, emptyNote("div.empty", "Non riesco a caricare questa sezione", error.message), h("button.btn", { onclick: render }, "Riprova"));
 	});
 }
 
@@ -121,18 +166,20 @@ function syncRailControls() {
 }
 
 /** The current instance's conversations, for the sidebar; none for someone who cannot chat there. */
+let threadRead = 0;
 export async function refreshThreads() {
-	const inst = state.instance;
-	if (!inst?.canChat) {
-		state.threads = [];
-		return;
-	}
-	try {
-		const { threads } = await api(`/api/instances/${inst.id}/threads`);
-		if (state.instance === inst) state.threads = threads;
-	} catch {
-		/* the list stays as it was */
-	}
+	const read = ++threadRead;
+	const person = state.me;
+	if (!person) return;
+	const agents = state.instances.filter((i) => i.canChat);
+	const results = await Promise.allSettled(agents.map(async (agent) => {
+		const { threads } = await api(`/api/instances/${encodeURIComponent(agent.id)}/threads`);
+		return threads.map((thread) => ({ ...thread, instanceId: agent.id, agent }));
+	}));
+	if (state.me !== person || read !== threadRead) return;
+	const allowed = new Set(state.instances.filter((i) => i.canChat).map((i) => i.id));
+	state.threads = results.flatMap((result, i) => !allowed.has(agents[i].id) ? [] : result.status === "fulfilled" ? result.value : [401, 403, 404].includes(result.reason?.status) ? [] : state.threads.filter((thread) => thread.instanceId === agents[i].id));
+	state.threads.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
 
 /** Today, yesterday, this week, older: how the sidebar groups conversations. */
@@ -149,7 +196,7 @@ function closeRailOnPhone() {
 
 export function renderRail() {
 	const rail = document.getElementById("rail");
-	if (!rail) return;
+	if (!rail || !state.me) return;
 	const scrollTop = rail.querySelector(".rail-scroll")?.scrollTop ?? 0;
 	const { view, rest } = route();
 	const items = PAGES.filter((p) => p.sidebar && (!p.owner || state.me.role === "owner") && (!p.when || p.when(state.instance)));
@@ -157,24 +204,24 @@ export function renderRail() {
 	for (const item of items) {
 		const count = item.count?.() ?? 0;
 		const label = count > 0 ? `${item.label} (${count})` : item.label;
-		nav.append(h("a", { href: `#/${item.id}`, "aria-current": view === item.id ? "page" : undefined, "aria-label": label, title: label, onclick: closeRailOnPhone }, icon(item.id), h("span.label", item.label), count > 0 ? h("span.count", { "aria-hidden": "true" }, String(count)) : null));
+		nav.append(h("a", { href: `#/${item.id}`, "aria-current": PAGES.find((p) => p.id === view)?.workspace === item.workspace ? "page" : undefined, "aria-label": label, title: label, onclick: closeRailOnPhone }, icon(item.id), h("span.label", item.label), count > 0 ? h("span.count", { "aria-hidden": "true" }, String(count)) : null));
 	}
 	const past = h("nav.history", { "aria-label": "Conversazioni" });
-	const agent = state.instance;
 	let group;
-	for (const t of state.threads ?? []) {
+	for (const t of (state.threads ?? []).slice(0, 24)) {
 		const g = threadGroup(t.updatedAt);
 		if (g !== group) {
 			group = g;
 			past.append(h("div.group", g));
 		}
-		const current = view === "chat" && rest[0] === t.id;
+		const agent = t.agent ?? state.instances.find((i) => i.id === t.instanceId) ?? state.instance;
+		const current = view === "chat" && rest[0] === t.id && (!t.instanceId || t.instanceId === state.instance?.id);
 		const label = `${agent?.name ?? "Agente"} · ${t.title}`;
 		const unread = state.unread.has(t.id);
 		past.append(
 			h(
 				"a",
-				{ href: `#/chat/${encodeURIComponent(t.id)}`, "aria-current": current ? "page" : undefined, "aria-label": `${label}${unread ? ", non letto" : ""}`, title: label, onclick: closeRailOnPhone },
+				{ href: instanceHref("chat", [t.id], agent?.id), "aria-current": current ? "page" : undefined, "aria-label": `${label}${unread ? ", non letto" : ""}`, title: label, onclick: closeRailOnPhone },
 				face(agent, 24),
 				h("span.thread-text", h("span.name", agent?.name ?? "Agente"), h("span.title", t.title)),
 				unread ? h("span.dot", { "aria-hidden": "true" }) : null,
@@ -195,37 +242,10 @@ export function renderRail() {
 		),
 		h(
 			"div.rail-scroll",
-			state.instances.length
-				? h(
-						"nav.roster",
-						{ "aria-label": "Agenti" },
-						state.instances.map((i) =>
-							h(
-								"button.roster-item",
-								{
-									"aria-current": i.id === state.instance?.id ? "true" : undefined,
-									"aria-label": i.name,
-									title: i.tagline ? `${i.name}: ${i.tagline}` : i.name,
-									onclick: () => {
-										closeRailOnPhone();
-										if (i.id === state.instance?.id) return go("chat");
-										state.instance = i;
-										store("annie.instance", i.id);
-										state.threads = [];
-										// A conversation of the other instance does not exist here.
-										if (route().rest[0] && route().view === "chat") go("chat");
-										void refreshSetup().then(render);
-										render();
-									},
-								},
-								face(i, 24),
-								h("span.roster-text", h("span.name", i.name), i.tagline ? h("span.line", i.tagline) : null),
-							),
-						),
-					)
-				: null,
 			nav,
+			h("a.rail-btn.attention-link", { href: "#/lavori/attenzione", onclick: closeRailOnPhone, title: "Richiede te" }, icon("approvazioni"), h("span.label", "Richiede te"), state.pendingApprovals + state.boardReview ? h("span.count", String(state.pendingApprovals + state.boardReview)) : null),
 			past.childElementCount ? past : null,
+			h("nav.sections.rail-management", { "aria-label": "Gestione" }, h("a", { href: state.instances.length === 1 ? `#/agente/${encodeURIComponent(state.instances[0].id)}` : "#/agenti", onclick: closeRailOnPhone, title: "Agenti" }, icon("agenti"), h("span.label", state.instances.length === 1 ? "Il tuo assistente" : "Agenti")), h("a", { href: "#/gestione", onclick: closeRailOnPhone, title: "Account e gestione" }, icon("gestione"), h("span.label", "Account e gestione"))),
 		),
 		h(
 			"div.rail-foot",
@@ -238,6 +258,7 @@ export function renderRail() {
 			),
 		),
 	);
+	rail.querySelector(".rail-foot").before(rail.querySelector(".rail-management"));
 	rail.querySelector(".rail-scroll").scrollTop = scrollTop;
 	syncRailControls();
 }
@@ -285,10 +306,8 @@ function openMenu() {
 			"div",
 			{ role: "menu", "aria-label": "Account e gestione" },
 			h("hr", { role: "separator" }),
-			section("connettori"),
-			section("impostazioni"),
-			section("persone"),
-			section("attivita"),
+			section("gestione"),
+			section("agenti"),
 			owner ? entry("plus", "Nuovo agente", () => agentForm()) : null,
 			installOffer && !installed() ? entry("install", "Installa l'app", install) : null,
 			h("hr", { role: "separator" }),

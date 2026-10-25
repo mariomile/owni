@@ -45,8 +45,7 @@ export async function enter() {
 	if (location.hash.startsWith("#/google?")) await finishGoogle();
 	if (location.hash.startsWith("#/connettore?")) await finishConnector();
 	connectEvents();
-	const landing = location.hash === "" || location.hash === "#/";
-	window.addEventListener("hashchange", render);
+	window.addEventListener("hashchange", renderRoute);
 	render();
 	clearInterval(counterTimer);
 	counterTimer = setInterval(() => {
@@ -54,8 +53,13 @@ export async function enter() {
 	}, 30_000);
 	// After the first paint: the steps never hold the console up.
 	await refreshSetup();
-	// An owner who has not tried Owni yet lands on the steps when opening the console without a page in mind.
-	if (landing && (location.hash === "" || location.hash === "#/") && state.setup && !state.setup.tried && state.setupLeft > 0) history.replaceState(null, "", "#/inizia");
+	// Start with the assistant. Optional channels, devices and team setup stay contextual.
+	render();
+}
+
+/** A page-owned modal must not survive leaving its route, including browser Back. */
+function renderRoute() {
+	for (const dialog of document.querySelectorAll("dialog[open]")) dialog.close();
 	render();
 }
 
@@ -171,6 +175,7 @@ function connectEvents() {
 	es.addEventListener("board", (e) => {
 		const event = JSON.parse(e.data);
 		void refreshCounters();
+		if (["lavori", "programmi"].includes(route().view)) return state.onBoard?.(event);
 		if (route().view === "board" && !document.querySelector("dialog[open]")) return render();
 		toast(event.kind === "due" ? `Scheda #${event.n} ${event.text}: ${event.title}` : event.kind === "started" ? `Scheda #${event.n} partita da sola: ${event.title}` : `Scheda #${event.n} da rivedere: ${event.title}`);
 	});

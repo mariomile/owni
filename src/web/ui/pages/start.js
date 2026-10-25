@@ -84,18 +84,32 @@ export async function viewStart(main) {
 								: "Si installa solo dall'indirizzo https della console: chiedilo a chi gestisce Owni.",
 					),
 	};
-	const done = steps.filter((s) => s.done).length;
+	const essential = steps.filter((s) => ["model", "tried"].includes(s.id));
+	const optional = steps.filter((s) => !["model", "tried"].includes(s.id));
+	const done = essential.filter((s) => s.done).length;
 	// The first step left is the one to do now: it gets the accent, the others wait in line.
-	const next = steps.find((s) => !s.done);
+	const next = essential.find((s) => !s.done);
 	const bar = h("div.steps-bar", h("span"));
-	bar.firstChild.style.setProperty("width", `${Math.round((done / steps.length) * 100)}%`);
-	const progress = h("div.steps-progress", { role: "progressbar", "aria-valuemin": "0", "aria-valuemax": String(steps.length), "aria-valuenow": String(done), "aria-label": "Primi passi fatti" }, bar);
+	bar.firstChild.style.setProperty("width", `${Math.round((done / essential.length) * 100)}%`);
+	const progress = h("div.steps-progress", { role: "progressbar", "aria-valuemin": "0", "aria-valuemax": String(essential.length), "aria-valuenow": String(done), "aria-label": "Primi passi fatti" }, bar);
+	const stepRow = (step, i) => h(
+					`li.step${step.done ? ".done" : ""}${step === next ? ".next" : ""}`,
+					h("span.step-mark", { "aria-hidden": "true" }, step.done ? icon("check") : String(i + 1)),
+					h(
+						"div.step-text",
+						h("b", step.title, step.done ? h("span.visually-hidden", " (fatto)") : null),
+						step.done ? null : h("p", step.text),
+						!step.done && extra[step.id] ? extra[step.id]() : null,
+					),
+					!step.done && step.go ? h(`button.btn.small${step === next ? ".accent" : ".ghost"}`, { onclick: () => go(...step.go) }, "Vai") : null,
+				);
+
 	mount(
 		main,
 		head(
 			agentLabel(inst),
 			h("h1", "Primi passi"),
-			`${done} di ${steps.length} fatti. Ogni passo rende ${inst.name} più utile; li puoi fare in qualsiasi ordine.`,
+			`${done} di ${essential.length} passi per provare ${inst.name}. Collega il modello, poi affida un primo lavoro. Il resto si configura quando serve.`,
 			h(
 				"button.btn.small.ghost",
 				{
@@ -111,22 +125,7 @@ export async function viewStart(main) {
 		),
 		providerOverview(providers),
 		progress,
-		h(
-			"ol.steps",
-			steps.map((step, i) =>
-				h(
-					`li.step${step.done ? ".done" : ""}${step === next ? ".next" : ""}`,
-					h("span.step-mark", { "aria-hidden": "true" }, step.done ? icon("check") : String(i + 1)),
-					h(
-						"div.step-text",
-						h("b", step.title, step.done ? h("span.visually-hidden", " (fatto)") : null),
-						step.done ? null : h("p", step.text),
-						!step.done && extra[step.id] ? extra[step.id]() : null,
-					),
-					!step.done && step.go ? h(`button.btn.small${step === next ? ".accent" : ".ghost"}`, { onclick: () => go(...step.go) }, "Vai") : null,
-				),
-			),
-		),
+		h("ol.steps", essential.map(stepRow)),
+		h("details.setup-optional", h("summary", "Personalizza quando ti serve"), h("p.muted", "Queste capacità sono facoltative: puoi iniziare a lavorare senza configurarle tutte."), h("ol.steps", optional.map(stepRow))),
 	);
 }
-
