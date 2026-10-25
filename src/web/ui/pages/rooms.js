@@ -3,7 +3,7 @@ import { api, channelHref, channelName, confirmDialog, emptyNote, face, faceColo
 import { agentCommands, commandMenu } from "../commands.js";
 import { renderMarkdown } from "../markdown.js";
 import { copyButton, listenButton } from "../listen.js";
-import { refreshConversations, render, renderRail } from "../shell.js";
+import { refreshConversations, render, renderRail, windowDrag } from "../shell.js";
 import { artifactCard, artifactPanel, isHtml } from "../artifacts.js";
 
 // ---------- canali (ADR 0063, 0113) ----------
@@ -264,6 +264,7 @@ async function viewRoom(main, roomId, openId) {
 		});
 	const header = h(
 		"div.room-head",
+		windowDrag(),
 		h("span.room-faces", room.agents.slice(0, 3).map((a) => face(a, 26))),
 		h("div.room-head-text", h("b", channelName(room.title)), h("small", room.agents.map((a) => (a.present ? a.name : `${a.name} (non c'è più)`)).join(", "))),
 		h("button.icon-btn", { onclick: edit, title: "Modifica nome e agenti", "aria-label": `Modifica il canale ${channelName(room.title)}` }, icon("edit")),

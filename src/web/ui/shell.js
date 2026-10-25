@@ -53,7 +53,7 @@ export const PAGES = [
 ];
 
 /** On the Mac app, which has no title bar, a band that moves the window (docs/desktop.md). */
-const windowDrag = () => document.documentElement.dataset.desktop === "mac" ? { "data-tauri-drag-region": "deep" } : {};
+export const windowDrag = () => document.documentElement.dataset.desktop === "mac" ? { "data-tauri-drag-region": "deep" } : {};
 
 function workspaceNav(item) {
 	const { view } = route();
