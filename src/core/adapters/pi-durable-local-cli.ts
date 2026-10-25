@@ -16,8 +16,8 @@ import { subscriptionProvider } from "../model-providers.ts";
 const API = "owni-local-cli";
 const ZERO_USAGE = () => ({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } });
 const MODELS: Readonly<Record<string, readonly { id: string; name: string }[]>> = {
-	"claude-code": [{ id: "sonnet", name: "Claude Sonnet · abbonamento" }, { id: "opus", name: "Claude Opus · abbonamento" }, { id: "haiku", name: "Claude Haiku · abbonamento" }],
-	codex: [{ id: "default", name: "Codex · modello del tuo piano" }, { id: "gpt-5.5", name: "GPT-5.5 · abbonamento" }, { id: "gpt-5.4", name: "GPT-5.4 · abbonamento" }],
+	"claude-code": [{ id: "sonnet", name: "Claude Sonnet" }, { id: "opus", name: "Claude Opus" }, { id: "haiku", name: "Claude Haiku" }],
+	codex: [{ id: "default", name: "Codex" }, { id: "gpt-5.5", name: "GPT-5.5" }, { id: "gpt-5.4", name: "GPT-5.4" }],
 };
 
 /** Catalog creation never probes credentials. Without the capability it cannot infer. */

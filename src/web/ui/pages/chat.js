@@ -3,7 +3,7 @@ import { api, face, faceColor, fmt, go, h, icon, mount, needInstance, route, sta
 import { boardNote, copyButton, listenButton } from "../listen.js";
 import { connectorActionCard, googleActionCard } from "../cards.js";
 import { agentCommands, commandMenu } from "../commands.js";
-import { chatModelCache, chatModelChoices, chatModelList, modelFacts } from "../models.js";
+import { chatModelCache, chatModelChoices, chatModelList, modelAbilities, modelFacts, providerLogo } from "../models.js";
 import { stepsLeftText } from "../setup.js";
 import { install, installed, installOffer } from "../pwa.js";
 import { refreshCounters } from "../session.js";
@@ -607,10 +607,13 @@ function modelPill(inst, current, save) {
 	// The name without what is in brackets: «Claude Sonnet 4 (Anthropic)» reads «Claude Sonnet 4»; the full name is in the tooltip.
 	const short = (name) => name.replace(/\s*\([^)]*\)\s*$/, "") || name;
 	const label = h("span.model-name", short(current?.name ?? "Modello"));
-	const pill = h("button.model-pill", { type: "button", "aria-haspopup": "listbox", "aria-expanded": "false", title: "Modello di questa chat" }, label, icon("down"));
+	const mark = h("span.model-mark");
+	const pill = h("button.model-pill", { type: "button", "aria-haspopup": "listbox", "aria-expanded": "false", title: "Modello di questa chat" }, mark, label, icon("down"));
 	const draw = () => {
 		const shown = chosen ?? instanceModel;
 		label.textContent = short(shown?.name ?? "Modello");
+		mount(mark, shown?.provider ? providerLogo(shown.provider) : null);
+		mark.hidden = mark.childElementCount === 0;
 		pill.title = shown?.name ? `Modello di questa chat: ${shown.name}` : "Modello di questa chat";
 		pill.classList.toggle("own", chosen !== undefined);
 		pill.setAttribute("aria-label", `Modello di questa chat: ${shown?.name ?? "Modello"}${chosen ? "" : " (quello dell'agente)"}`);
@@ -678,8 +681,8 @@ async function openModelMenu(inst, pill, chosen, pick) {
 	// On a phone the search waits for a tap: focusing it would open the keyboard over the list.
 	const touch = window.matchMedia("(pointer: coarse)").matches;
 	if (!touch) search.focus();
-	const option = (text, note, selected, onPick) =>
-		h("button.model-option", { type: "button", role: "option", "aria-selected": selected ? "true" : "false", onclick: onPick }, h("span", h("span.model-option-name", text), note ? h("small", note) : null), selected ? icon("check") : null);
+	const option = (text, note, selected, onPick, tag = null) =>
+		h("button.model-option", { type: "button", role: "option", "aria-selected": selected ? "true" : "false", onclick: onPick }, h("span", h("span.model-option-name", text), note ? h("small", note) : null), tag ? h("span.model-tag", tag) : null, h("span.model-check", selected ? icon("check") : null));
 	let catalogs = [];
 	const fill = () => {
 		const words = search.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
@@ -696,9 +699,13 @@ async function openModelMenu(inst, pill, chosen, pick) {
 			return h(
 				"div",
 				{ role: "group", "aria-labelledby": head },
-				h("div.model-group", { id: head }, provider.label, provider.allowed ? null : h("small", " · sceglierlo lo permette all'agente")),
+				h("div.model-group", { id: head }, providerLogo(provider.id), h("span", provider.label, provider.allowed ? null : h("small", " · sceglierlo lo permette all'agente"))),
 				error === undefined
-					? ordered.map((m) => option(names.get(m.name) > 1 ? `${m.name} (${m.id})` : m.name, modelFacts(m, provider.id === "claude-code" || provider.id === "codex"), chosen?.provider === provider.id && chosen?.modelId === m.id, () => pick({ provider: provider.id, modelId: m.id, name: m.name })))
+					? ordered.map((m) => {
+							// A subscription costs nothing more per message: it says so instead of a price.
+							const subscription = provider.id === "claude-code" || provider.id === "codex";
+							return option(names.get(m.name) > 1 ? `${m.name} (${m.id})` : m.name, subscription ? modelAbilities(m) : modelFacts(m), chosen?.provider === provider.id && chosen?.modelId === m.id, () => pick({ provider: provider.id, modelId: m.id, name: m.name }), subscription ? "Abbonamento" : null);
+						})
 					: h("small.model-error", "Elenco non disponibile ora"),
 			);
 		});

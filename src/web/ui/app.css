@@ -864,15 +864,15 @@ main.is-chat { position: relative; }
 	background: var(--surface); border: 1px solid var(--border); box-shadow: var(--shadow-lg); animation: pop 0.16s var(--ease); transform-origin: bottom center;
 }
 .command-menu[hidden] { display: none; }
-/* One precise writing line; controls move below it when the conversation narrows. */
+/* The text on its own row, the tools under it: attach and model on the left, send on the right. */
 .composer {
-	display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; grid-template-areas: "attach text extra send";
-	gap: 4px; align-items: end; padding: 6px; border: 1px solid var(--border-2); border-radius: 20px; background: var(--surface);
+	display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto; grid-template-areas: "text text text text" "attach extra . send";
+	gap: 2px 4px; align-items: center; padding: 6px; border: 1px solid var(--border-2); border-radius: 20px; background: var(--surface);
 	transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease);
 }
 .composer:hover { border-color: color-mix(in srgb, var(--fg) 22%, var(--border-2)); }
 .composer:focus-within { border-color: color-mix(in srgb, var(--fg) 55%, var(--border-2)); box-shadow: 0 0 0 3px color-mix(in srgb, var(--fg) 8%, transparent); }
-.composer textarea { grid-area: text; min-width: 0; min-height: 44px; max-height: 220px; resize: none; border: 0; border-radius: 0; box-shadow: none; background: transparent; padding: 10px 6px; font-size: 16px; line-height: 1.5; }
+.composer textarea { grid-area: text; min-width: 0; min-height: 44px; max-height: 220px; resize: none; border: 0; border-radius: 0; box-shadow: none; background: transparent; padding: 10px 10px 4px; font-size: 16px; line-height: 1.5; }
 .composer .attach { grid-area: attach; }
 .composer .send { grid-area: send; }
 .composer .model-pill { grid-area: extra; }
@@ -888,28 +888,37 @@ main.is-chat { position: relative; }
 .composer .send[disabled] { background: var(--active); color: var(--fg-3); cursor: default; opacity: 1; }
 .composer .icon { width: 18px; height: 18px; }
 .composer .send .icon { stroke-width: 2.25; }
-/* the chat's model: a quiet pill next to send, its list opening upwards */
+/* the chat's model: the maker's mark and a short name, its list opening upwards */
 .composer .model-pill {
-	flex: none; display: flex; align-items: center; gap: 5px; min-width: 0; max-width: 176px; height: 44px; padding: 0 10px; border: 0; border-radius: 12px;
-	background: transparent; color: var(--fg-2); font-size: 12.5px; font-weight: 450; cursor: pointer; transition: background 0.15s var(--ease), color 0.15s var(--ease);
+	flex: none; justify-self: start; display: flex; align-items: center; gap: 6px; min-width: 0; max-width: 240px; height: 32px; padding: 0 9px 0 10px;
+	border: 1px solid var(--border); border-radius: 999px; background: transparent; color: var(--fg-2); font-size: 13px; font-weight: 500; cursor: pointer;
+	transition: background 0.15s var(--ease), color 0.15s var(--ease), border-color 0.15s var(--ease);
 }
-.composer .model-pill:hover, .composer .model-pill[aria-expanded="true"] { background: var(--hover); color: var(--fg); }
+.composer .model-pill:hover, .composer .model-pill[aria-expanded="true"] { background: var(--hover); border-color: var(--border-2); color: var(--fg); }
+.composer .model-pill:active { transform: scale(0.97); }
 .composer .model-pill.own { color: var(--fg); }
+.composer .model-pill .model-mark { display: grid; place-items: center; flex: none; }
+.composer .model-pill .model-mark[hidden] { display: none; }
+.composer .model-pill .provider-logo { width: 14px; height: 14px; }
 .composer .model-pill .model-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.composer .model-pill .icon { width: 14px; height: 14px; color: var(--fg-3); }
+.composer .model-pill .icon { width: 14px; height: 14px; color: var(--fg-3); flex: none; }
+@media (pointer: coarse) { .composer .model-pill { height: 44px; padding: 0 12px; } }
 .model-menu {
 	position: fixed; z-index: 60; display: flex; flex-direction: column; padding: 5px; border-radius: 12px;
 	background: var(--surface); border: 1px solid var(--border); box-shadow: var(--shadow-lg); animation: pop 0.16s var(--ease);
 }
 .model-menu input[type="search"] { margin: 2px 2px 6px; }
 .model-list { overflow-y: auto; min-height: 0; }
-.model-group { padding: 10px 9px 4px; font-size: 11.5px; font-weight: 550; color: var(--fg-3); }
+.model-group { display: flex; align-items: center; gap: 7px; padding: 10px 9px 4px; font-size: 11.5px; font-weight: 550; color: var(--fg-3); }
+.model-group .provider-logo { flex: none; width: 13px; height: 13px; color: var(--fg-2); }
 .model-group small { font-weight: 400; }
 .model-option {
 	display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; min-height: 44px; padding: 6px 9px; border: 0; border-radius: 7px;
 	background: transparent; color: var(--fg); text-align: left; cursor: default;
 }
-.model-option > span { display: flex; flex-direction: column; min-width: 0; }
+.model-option > span:first-child { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.model-tag { flex: none; padding: 2px 7px; border: 1px solid var(--border); border-radius: 999px; font-size: 11px; color: var(--fg-3); }
+.model-check { flex: none; display: grid; place-items: center; width: 16px; }
 .model-option-name { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .model-option small { font-size: 11.5px; color: var(--fg-3); }
 .model-option .icon { flex: none; width: 16px; height: 16px; color: var(--fg); }
@@ -917,11 +926,6 @@ main.is-chat { position: relative; }
 .model-option[aria-selected="true"] { background: var(--active); }
 .model-empty { padding: 10px; font-size: 13px; margin: 0; }
 .model-error { display: block; padding: 2px 10px 8px; font-size: 12px; color: var(--fg-3); }
-@container conversation (max-width: 640px) {
-	.composer:has(.model-pill) { grid-template-columns: 44px minmax(0, 1fr) 44px; grid-template-areas: "text text text" "attach extra send"; row-gap: 0; border-radius: 20px; }
-	.composer:has(.model-pill) textarea { min-height: 40px; padding: 8px 10px; }
-	.composer .model-pill { justify-self: end; max-width: 100%; padding: 0 8px; }
-}
 @media (max-width: 560px) {
 	/* 16px keeps phones from zooming into the field. */
 	.model-menu input[type="search"] { font-size: 16px; }
