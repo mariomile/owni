@@ -76,6 +76,7 @@ import { Scheduler } from "./core/scheduler.ts";
 import { syncServerModelKeys, TenantSecrets } from "./core/secrets.ts";
 import { createCustomTools } from "./core/tools/custom-tools.ts";
 import { createChartTools } from "./core/tools/chart-tools.ts";
+import { createArtifactTools } from "./core/tools/artifact-tools.ts";
 import { TranscriptionNotAllowed } from "./core/recordings.ts";
 import { createDataTools } from "./core/tools/data-tools.ts";
 import { createDateTools } from "./core/tools/date-tools.ts";
@@ -659,6 +660,18 @@ export async function startOwni(config: OwniConfig, options: OwniOptions = {}): 
 				...createWorkspaceTools({ workspace: runtime.workspace(record.tenantId, record.id), sendFile: (f) => runtime.sendFile(record.tenantId, record.id, f) }),
 				...createDocumentTools({ workspace: runtime.workspace(record.tenantId, record.id) }),
 				...createChartTools({ workspace: runtime.workspace(record.tenantId, record.id), sendFile: (f) => runtime.sendFile(record.tenantId, record.id, f) }),
+				...createArtifactTools({
+					artifacts: () => {
+						const channel = webChannels.get(record.id);
+						return channel === undefined
+							? undefined
+							: {
+									create: (threadId, input) => channel.artifacts.create(threadId, input),
+									update: (threadId, id, input) => channel.artifacts.update(threadId, id, input),
+									show: (threadId, artifact, key) => channel.sendArtifact(threadId, artifact, key),
+								};
+					},
+				}),
 				...createDataTools({ workspace: runtime.workspace(record.tenantId, record.id) }),
 				...createDateTools({ timeZone: config.timeZone }),
 				...registerTools({ runtime, record, config, mail, quotes, expenses, schedules, invoiceScanner, isBriefThread, recurringEnv, subjects: { seam: subjectSeam(record), log } }),
