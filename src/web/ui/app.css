@@ -725,6 +725,38 @@ main.is-chat { position: relative; }
 .artifact-view { display: flex; overflow: hidden; background: #fff; }
 .artifact-frame { flex: 1; width: 100%; min-height: 100%; border: 0; background: #fff; }
 .artifact-panel.floating { position: fixed; top: 0; right: 0; bottom: 0; z-index: 30; width: min(46vw, 640px); box-shadow: var(--shadow-lg); }
+/* The agente's panel (ADR 0114): who it is and what it has, next to the conversation. */
+.agent-panel { flex-basis: min(40%, 440px); gap: 12px; }
+.agent-panel .browser-head { flex: none; gap: 10px; min-height: 32px; }
+.agent-panel .browser-head .page-title { font-size: 15px; font-weight: 600; }
+.agent-back { display: none; }
+.agent-panel-tagline { flex: none; margin: -4px 0 0; color: var(--fg-2); font-size: 13px; line-height: 1.45; text-wrap: pretty; }
+.agent-panel-status { flex: none; margin: 0; min-height: 20px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.agent-panel-status:empty { display: none; }
+.agent-tabs { flex: none; display: flex; gap: 0; margin: 0 -14px; padding: 0 14px; border-bottom: 1px solid var(--border); overflow-x: auto; scrollbar-width: none; }
+.agent-tabs::-webkit-scrollbar { display: none; }
+.agent-tab { flex: 1 0 auto; height: 34px; padding: 0 6px; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; background: transparent; color: var(--fg-3); font: inherit; font-size: 13px; font-weight: 500; cursor: pointer; transition: color 0.15s var(--ease), border-color 0.15s var(--ease); }
+.agent-tab:hover { color: var(--fg); }
+.agent-tab[aria-selected="true"] { color: var(--fg); border-bottom-color: var(--fg); }
+.agent-panel-body { flex: 1; min-height: 0; }
+.agent-section { display: flex; flex-direction: column; gap: 12px; }
+.agent-section ul.task-list { padding: 0; }
+.agent-section .task-row { padding: 9px 8px; gap: 10px; align-items: center; }
+.agent-section .task-text b { font-size: 13.5px; -webkit-line-clamp: 2; }
+.agent-section .task-text small.error { color: var(--bad); }
+.agent-section .empty { padding: 28px 12px; }
+.agent-section > .card .empty { padding-block: 28px; }
+.agent-section .grid-2 { grid-template-columns: 1fr; }
+.agent-section-bar { display: flex; align-items: center; gap: 12px; }
+.agent-section-bar > p { flex: 1; min-width: 0; margin: 0; }
+.agent-section-bar > .btn { flex: none; }
+.agent-more { align-self: flex-start; margin-top: 4px; }
+.agent-section.dropping { outline: 2px dashed var(--border-2); outline-offset: 4px; border-radius: 10px; }
+dialog.skill-dialog { max-width: 640px; max-height: calc(100dvh - 48px); overflow-y: auto; }
+/* An agente's name on a message of a canale opens its panel. */
+.msg .meta button.who { border: 0; background: none; padding: 0; font: inherit; font-weight: 600; cursor: pointer; }
+.msg .meta button.who:hover { text-decoration: underline; text-underline-offset: 3px; }
+.agent-context[aria-expanded="true"] { color: var(--fg); }
 /* Tools keep their own place in the context bar, including on a phone. */
 @media (max-width: 560px) {
 	.conversation-tools .browser-toggle { position: relative; width: 44px; padding: 0; justify-content: center; }
@@ -738,6 +770,8 @@ main.is-chat { position: relative; }
 	.artifact-panel.floating { width: auto; left: 0; box-shadow: none; }
 	.artifact-back { display: inline-grid; }
 	.artifact-close { display: none; }
+	.agent-back { display: inline-grid; }
+	.agent-close { display: none; }
 	.browser-bar .address { font-size: 16px; }
 	.browser-human input.browser-private-text, .browser-keys select { font-size: 16px; }
 	.browser-control .btn, .browser-human .btn, .browser-profile .btn { min-height: 36px; }

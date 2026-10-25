@@ -84,6 +84,17 @@ export class ArtifactStore {
 		return text === undefined ? undefined : (JSON.parse(text.toString("utf8")) as ArtifactMeta);
 	}
 
+	/** Every artifact of a thread, in the order they were made. */
+	async all(threadId: string): Promise<ArtifactMeta[]> {
+		if (!THREAD.test(threadId)) return [];
+		const out: ArtifactMeta[] = [];
+		for (const id of await this.ids(threadId)) {
+			const meta = await this.meta(threadId, id);
+			if (meta !== undefined) out.push(meta);
+		}
+		return out;
+	}
+
 	/** The page of one version, or undefined when there is none. */
 	async read(threadId: string, id: string, version: number): Promise<Buffer | undefined> {
 		if (!THREAD.test(threadId) || !ARTIFACT_ID.test(id) || !Number.isInteger(version) || version < 1) return undefined;

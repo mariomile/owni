@@ -823,6 +823,36 @@ export function createWebApp(options: WebAppOptions): Server {
 		return STREAMED;
 	});
 	// --- artifacts (ADR 0112): an agente's HTML pages, only to the person of the conversation ---
+	// The person's pages made by one agente, newest first, with where each was made (ADR 0114).
+	route("GET", "/api/instances/:id/artifacts", "person", async ({ person, params }) => {
+		const p = person as Person;
+		const instanceId = params[0] as string;
+		await instanceAccess(p, instanceId);
+		const channel = channelOf(instanceId);
+		const rooms = new Map<string, Promise<Room | undefined>>();
+		const room = (roomId: string) => {
+			if (!rooms.has(roomId)) rooms.set(roomId, options.rooms?.get(p.id, roomId) ?? Promise.resolve(undefined));
+			return rooms.get(roomId) as Promise<Room | undefined>;
+		};
+		const where = async (thread: WebThread) => {
+			if (thread.dm === true) return { kind: "dm" };
+			if (thread.room === undefined) return { kind: thread.parent === undefined ? "chat" : "thread", title: thread.title };
+			const seat = await room(thread.room);
+			const top = seat?.parent === undefined ? seat : await room(seat.parent.roomId);
+			return { kind: "channel", ...(top === undefined ? {} : { roomId: top.id, title: top.title }), ...(seat?.parent === undefined ? {} : { inThread: true }) };
+		};
+		const out = [];
+		for (const thread of await channel.threads(p.id, { seats: true })) {
+			const metas = await channel.artifacts.all(thread.id);
+			if (metas.length === 0) continue;
+			const made = await where(thread);
+			for (const meta of metas) {
+				const last = meta.versions[meta.versions.length - 1];
+				if (last !== undefined) out.push({ id: meta.id, threadId: thread.id, createdAt: meta.createdAt, title: last.title, version: last.version, at: last.at, where: made });
+			}
+		}
+		return { artifacts: out.sort((a, b) => b.at.localeCompare(a.at)) };
+	});
 	route("GET", "/api/instances/:id/artifacts/:thread/:artifact", "person", async ({ person, params }) => {
 		await ownThread(person as Person, params[0] as string, params[1] as string);
 		const meta = await channelOf(params[0] as string).artifacts.meta(params[1] as string, params[2] as string);

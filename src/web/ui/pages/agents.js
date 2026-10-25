@@ -1,5 +1,5 @@
 // Agenti page.
-import { agentHome, agentLabel, api, dmHref, emptyNote, face, faceColor, go, h, head, icon, instanceHref, mount, state, store, toast } from "../common.js";
+import { agentHome, agentInfoHref, agentLabel, api, dmHref, emptyNote, face, faceColor, go, h, head, icon, instanceHref, mount, state, store, toast } from "../common.js";
 import { TONES } from "../tones.js";
 import { refreshInstances, refreshSetup } from "../session.js";
 import { render } from "../shell.js";
@@ -188,7 +188,7 @@ export async function viewAgents(main) {
 			h(
 				"div.agent-actions",
 				a.canChat ? h("a.btn.small.accent", { href: dmHref(a.id) }, "Scrivi") : null,
-				h("a.btn.small.ghost", { href: instanceHref("file", [], a.id) }, "Documenti"),
+				a.canChat ? h("a.btn.small.ghost", { href: agentInfoHref(a.id) }, "Dettagli") : null,
 				owner ? h("a.btn.small.ghost", { href: instanceHref("impostazioni", ["identita"], a.id) }, "Configura") : null,
 			),
 		);

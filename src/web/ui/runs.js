@@ -8,6 +8,8 @@ const stepText = (step) => ["tool_start", "tool_progress"].includes(step.kind) &
 export const activeRun = (run) => run.status === "queued" || run.status === "running";
 const clock = (at) => new Date(at).toLocaleString("it-IT", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 const label = (run) => run.cancelRequestedAt && activeRun(run) ? "Interruzione in corso…" : STATUS[run.status] ?? run.status;
+/** A run as the console says it: where it came from, and how it is going. */
+export const runText = (run) => ({ source: SOURCE[run.source] ?? "Esecuzione", status: label(run) });
 
 function details(run, compact = false) {
 	const progress = (run.progress ?? []).filter((step) => !compact || step.kind !== "model");

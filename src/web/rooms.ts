@@ -175,6 +175,12 @@ export class Rooms {
 		return (await this.store.list(personId)).filter((r) => r.parent === undefined);
 	}
 
+	/** One of the person's canali or of their threads, without its messages. */
+	async get(personId: string, roomId: string): Promise<Room | undefined> {
+		const room = await this.store.get(roomId);
+		return room?.personId === personId ? room : undefined;
+	}
+
 	/** The threads under the messages of a canale. */
 	async children(personId: string, roomId: string): Promise<Room[]> {
 		return (await this.store.list(personId)).filter((r) => r.parent?.roomId === roomId);

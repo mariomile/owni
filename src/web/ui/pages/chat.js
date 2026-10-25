@@ -1,5 +1,5 @@
 // Chat page.
-import { api, batched, channelHref, dmHref, face, faceColor, fmt, h, icon, initials, mount, needInstance, route, state, store, thinking, toast, whenSeen } from "../common.js";
+import { agentInfoHref, api, batched, channelHref, dmHref, face, faceColor, fmt, h, icon, initials, instanceHref, mount, needInstance, route, state, store, thinking, toast, whenSeen } from "../common.js";
 import { boardNote, copyButton, listenButton } from "../listen.js";
 import { connectorActionCard, googleActionCard } from "../cards.js";
 import { agentCommands, commandMenu } from "../commands.js";
@@ -12,6 +12,7 @@ import { conversationRuns } from "../runs.js";
 import { renderMarkdown } from "../markdown.js";
 import { linkPreviews, sources } from "../sources.js";
 import { artifactCard, artifactPanel, isHtml } from "../artifacts.js";
+import { agentPanel } from "../agent-panel.js";
 
 // ---------- chat ----------
 /** A workspace picture shown in the page (not downloaded). */
@@ -40,17 +41,20 @@ export async function viewDm(main) {
 	if (needInstance(main)) return;
 	const inst = state.instance;
 	if (!inst.canChat) {
-		mount(main, h("section.conversation.empty-chat", h("div.welcome", h("h2", "Chat non disponibile"), h("p", state.me.role === "owner" ? "Aggiungi te stesso alle persone che possono scrivere a questo agente, in Impostazioni." : "Non sei tra le persone che possono scrivere a questo agente."))));
+		mount(main, h("section.conversation.empty-chat", h("div.welcome", h("h2", "Chat non disponibile"), state.me.role === "owner" ? h("p", "Aggiungi te stesso alle persone che possono scrivere a questo agente, in ", h("a", { href: instanceHref("impostazioni", ["accessi"], inst.id) }, "Configurazione"), ".") : h("p", "Non sei tra le persone che possono scrivere a questo agente."))));
 		return;
 	}
 	chatModelCache.clear();
 	let { thread, entries, model } = await api(`/api/instances/${inst.id}/dm`);
 	if (!main.isConnected || state.instance !== inst) return;
 	// `#/dm/<agente>/t/<thread>`: a thread open next to the conversation.
+	// `#/dm/<agente>/info/<sezione>`: the agente's panel open next to it (ADR 0114).
 	const { rest } = route();
 	const open = rest[1] === "t" ? rest[2] : undefined;
+	const info = rest[1] === "info";
 	if (entries.length === 0) {
-		landing(inst, main, thread, model);
+		const view = landing(inst, main, thread, model);
+		if (info) view.agent.show(true, rest[2]);
 		if (open !== undefined) await elsewhere(inst, main, open, thread?.id);
 		return;
 	}
@@ -58,6 +62,7 @@ export async function viewDm(main) {
 	thread ??= (await api(`/api/instances/${inst.id}/dm`, { method: "POST", body: {} })).thread;
 	if (!main.isConnected || state.instance !== inst) return;
 	const view = conversationView(inst, main, thread, entries, model);
+	if (info) view.agent.show(true, rest[2]);
 	if (open === undefined) return;
 	const root = entries.find((e) => e.thread?.id === open);
 	if (root !== undefined) return void view.openThread(root, open);
@@ -88,15 +93,61 @@ function markRead(inst, threadId) {
 		.catch(() => {});
 }
 
+/**
+ * The agente's panel and the artifact panel its pages open in, next to a conversation, with the
+ * address kept: `#/dm/<agente>/info/<sezione>` while it is open. A page opened from the panel goes
+ * back to it when closed. `others()`: the page's other panels, closed when one of these opens.
+ */
+function agentSide(inst, others = () => []) {
+	const context = document.querySelector(".agent-context");
+	let fromPanel = false;
+	let switching = false;
+	const only = (keep) => {
+		switching = true;
+		for (const panel of [agent, artifact, ...others()]) if (panel !== keep) panel.show(false);
+		switching = false;
+	};
+	const agent = agentPanel(inst, {
+		onShow: (section) => {
+			only(agent);
+			context?.setAttribute("aria-expanded", "true");
+			const href = agentInfoHref(inst.id, section);
+			if (location.hash !== href) history[route().rest[1] === "info" ? "replaceState" : "pushState"](null, "", href);
+		},
+		onHide: () => {
+			context?.setAttribute("aria-expanded", "false");
+			if (route().rest[1] === "info") history.replaceState(null, "", dmHref(inst.id));
+		},
+		openArtifact: (threadId, page) => { void artifact.openArtifact(inst.id, threadId, page); fromPanel = true; },
+		openFile: (path) => { artifact.openFile(inst.id, path); fromPanel = true; },
+	});
+	const artifact = artifactPanel(() => { fromPanel = false; only(artifact); }, () => {
+		if (fromPanel && !switching) agent.show(true);
+		fromPanel = false;
+	});
+	// The agente's name over the conversation opens its panel, and closes it.
+	if (context) {
+		context.setAttribute("aria-controls", "agent-panel");
+		context.setAttribute("aria-expanded", "false");
+		context.onclick = (event) => {
+			if (event.metaKey || event.ctrlKey || event.shiftKey) return;
+			event.preventDefault();
+			agent.show(!agent.isOpen());
+		};
+	}
+	agent.el.id = "agent-panel";
+	return { agent, artifact, only };
+}
+
 function conversationView(inst, main, thread, entries, model) {
 	const threadId = thread.id;
 	const conversation = h("section.conversation");
 	// One panel at a time next to the chat, also when one opens by itself.
-	const browser = browserPanel(inst, threadId, () => { screen.show(false); replies.show(false); artifact.show(false); });
-	const screen = screenPanel(inst, threadId, () => { browser.show(false); replies.show(false); artifact.show(false); });
-	const replies = threadPanel(inst, (entry, into, where) => show(entry, into, false, where), () => { browser.show(false); screen.show(false); artifact.show(false); }, () => void refreshSummaries());
-	const artifact = artifactPanel(() => { browser.show(false); screen.show(false); replies.show(false); });
-	mount(main, h("div.chat-split", conversation, browser.el, screen.el, replies.el, artifact.el));
+	const { agent, artifact, only } = agentSide(inst, () => [browser, screen, replies]);
+	const browser = browserPanel(inst, threadId, () => only(browser));
+	const screen = screenPanel(inst, threadId, () => only(screen));
+	const replies = threadPanel(inst, (entry, into, where) => show(entry, into, false, where), () => only(replies), () => void refreshSummaries());
+	mount(main, h("div.chat-split", conversation, browser.el, screen.el, replies.el, agent.el, artifact.el));
 	markRead(inst, threadId);
 	// Tools belong to the fixed context bar, after the conversation has loaded successfully.
 	mount(main.parentElement.querySelector(".conversation-tools"), screen.toggle, browser.toggle);
@@ -229,7 +280,7 @@ function conversationView(inst, main, thread, entries, model) {
 		show(event.entry);
 		// A new page or version opens by itself while the conversation is on screen, unless a thread,
 		// the browser or the screen is open there; on a phone it would cover the chat. The card opens it.
-		const busy = [browser.el, screen.el, replies.el].some((panel) => !panel.hidden);
+		const busy = [browser.el, screen.el, replies.el, agent.el].some((panel) => !panel.hidden);
 		if (event.entry.artifact && !busy && !matchMedia("(max-width: 860px)").matches) void artifact.openArtifact(inst.id, threadId, event.entry.artifact);
 		if (event.entry.from === "owni") void drawAsks();
 		browser.lively();
@@ -265,7 +316,7 @@ function conversationView(inst, main, thread, entries, model) {
 	}
 	// Opening a conversation to read it must not summon the phone's keyboard.
 	if (!matchMedia("(pointer: coarse)").matches) box.input.focus({ preventScroll: true });
-	return { openThread: replies.open };
+	return { openThread: replies.open, agent };
 }
 
 /** Under a message with a thread: who answered, how many replies, the last one. Nothing when none yet. */
@@ -752,14 +803,17 @@ function screenPanel(inst, threadId, onShow) {
  */
 function landing(inst, main, thread, model) {
 	const conversation = h("section.conversation.empty-chat");
-	mount(main, conversation);
+	const { agent, artifact } = agentSide(inst);
+	mount(main, h("div.chat-split", conversation, agent.el, artifact.el));
 	let picked = model;
 	const box = chatBox(inst, `new.${inst.id}`, conversation, async (text, images) => {
 		const made = thread ?? (await api(`/api/instances/${inst.id}/dm`, { method: "POST", body: picked ? { model: { provider: picked.provider, modelId: picked.modelId } } : {} })).thread;
 		store(`owni.draft.${made.id}`, text);
 		if (images.length) store(`owni.pending.${made.id}`, JSON.stringify(images));
 		store(`owni.autosend.${made.id}`, "1");
-		if (main.isConnected) conversationView(inst, main, made, [], picked);
+		if (!main.isConnected) return;
+		const view = conversationView(inst, main, made, [], picked);
+		if (agent.isOpen()) view.agent.show(true, agent.section());
 	}, modelPill(inst, model, async (choice) => {
 		picked = choice;
 		if (thread) await api(`/api/instances/${inst.id}/threads/${encodeURIComponent(thread.id)}/model`, { method: "PUT", body: choice ? { provider: choice.provider, modelId: choice.modelId } : {} });
@@ -800,6 +854,7 @@ function landing(inst, main, thread, model) {
 		),
 	);
 	box.input.focus();
+	return { agent };
 }
 
 /**
@@ -818,15 +873,15 @@ function modelPill(inst, current, save) {
 	const short = (name) => name.replace(/\s*\([^)]*\)\s*$/, "") || name;
 	const label = h("span.model-name", short(current?.name ?? "Modello"));
 	const mark = h("span.model-mark");
-	const pill = h("button.model-pill", { type: "button", "aria-haspopup": "listbox", "aria-expanded": "false", title: "Modello di questa chat" }, mark, label, icon("down"));
+	const pill = h("button.model-pill", { type: "button", "aria-haspopup": "listbox", "aria-expanded": "false", title: "Modello per questa conversazione" }, mark, label, icon("down"));
 	const draw = () => {
 		const shown = chosen ?? instanceModel;
 		label.textContent = short(shown?.name ?? "Modello");
 		mount(mark, shown?.provider ? providerLogo(shown.provider) : null);
 		mark.hidden = mark.childElementCount === 0;
-		pill.title = shown?.name ? `Modello di questa chat: ${shown.name}` : "Modello di questa chat";
+		pill.title = shown?.name ? `Modello per questa conversazione: ${shown.name}` : "Modello per questa conversazione";
 		pill.classList.toggle("own", chosen !== undefined);
-		pill.setAttribute("aria-label", `Modello di questa chat: ${shown?.name ?? "Modello"}${chosen ? "" : " (quello dell'agente)"}`);
+		pill.setAttribute("aria-label", `Modello per questa conversazione: ${shown?.name ?? "Modello"}${chosen ? "" : " (quello dell'agente)"}`);
 	};
 	const pick = (model) => {
 		closeModelMenu();
@@ -919,7 +974,7 @@ async function openModelMenu(inst, pill, chosen, pick) {
 					: h("small.model-error", "Elenco non disponibile ora"),
 			);
 		});
-		mount(list, words.length === 0 ? option("Modello dell'agente", "lo sceglie l'owner in Impostazioni", chosen === undefined, () => pick(undefined)) : null, groups);
+		mount(list, words.length === 0 ? option("Modello dell'agente", "lo sceglie l'owner nella configurazione", chosen === undefined, () => pick(undefined)) : null, groups);
 		status.textContent = words.length > 0 && groups.every((g) => g === null) ? "Nessun modello trovato" : "";
 		status.hidden = status.textContent === "";
 	};

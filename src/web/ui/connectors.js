@@ -1,6 +1,6 @@
-// Connettori page.
-import { agentLabel, api, confirmDialog, emptyNote, h, head, icon, monogram, mount, needInstance, state, store, toast } from "../common.js";
-import { render } from "../shell.js";
+// The services an agente is connected to (ADR 0114: a section of its configuration).
+import { api, confirmDialog, emptyNote, h, icon, monogram, mount, toast } from "./common.js";
+import { render } from "./shell.js";
 
 // ---------- connettori ----------
 /** Opens the service's sign-in page, or says the connector works already. */
@@ -87,9 +87,8 @@ function tokenDialog(inst, e, replace) {
 	token.focus();
 }
 
-export async function viewConnectors(main) {
-	if (needInstance(main)) return;
-	const inst = state.instance;
+/** The services `inst` is connected to, and the ones it can be: the «Servizi» section of its configuration. */
+export async function connectorsBody(inst) {
 	const [{ connectors }, { catalog, oauth, redirectUrl }] = await Promise.all([api(`/api/instances/${inst.id}/connectors`), api("/api/connector-catalog")]);
 	const cards = connectors.map((c) => {
 		const st = c.status;
@@ -146,11 +145,11 @@ export async function viewConnectors(main) {
 			),
 		);
 	});
-	mount(main, 
-		head(agentLabel(inst), h("h1", "Connettori"), `Collegano ${inst.name} agli strumenti che usate già. Ognuno raggiunge solo il suo servizio, e solo se consentito.`, h("button.btn.accent", { onclick: () => connectorForm(inst) }, icon("plus"), "Nuovo connettore")),
+	return [
+		h("div.card.pad", h("h2", "Servizi collegati"), h("p.muted", `Collegano ${inst.name} agli strumenti che usate già. Ognuno raggiunge solo il suo servizio, e solo se consentito.`), h("div.actions", h("button.btn.accent", { onclick: () => connectorForm(inst) }, icon("plus"), "Nuovo connettore"))),
 		connectors.length ? h("div.grid-2", cards) : emptyNote("div.card.empty", "Nessun connettore", "Scegline uno qui sotto, oppure aggiungi un altro server MCP (HTTP o locale) con «Nuovo connettore»."),
 		catalogGallery(inst, catalog, oauth, redirectUrl, new Set(connectors.map((c) => c.id))),
-	);
+	];
 }
 
 function connectorForm(inst, existing) {

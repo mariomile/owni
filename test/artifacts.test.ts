@@ -107,6 +107,16 @@ describe("artifacts (ADR 0112)", () => {
 		expect(await channel.transcript(thread.id)).toEqual([]);
 	});
 
+	it("lists the artifacts of a thread in the order they were made, and nothing for a thread without any", async () => {
+		const { channel, thread } = await setup();
+		const first = await channel.artifacts.create(thread.id, { title: "Prima", html: PAGE, key: "k1" });
+		const second = await channel.artifacts.create(thread.id, { title: "Seconda", html: PAGE, key: "k2" });
+		await channel.artifacts.update(thread.id, first.id, { title: "Prima, rivista", html: `${PAGE}2`, key: "k3" });
+		expect((await channel.artifacts.all(thread.id)).map((m) => [m.id, m.versions.length])).toEqual([[first.id, 2], [second.id, 1]]);
+		expect(await channel.artifacts.all("t_altro")).toEqual([]);
+		expect(await channel.artifacts.all("..")).toEqual([]);
+	});
+
 	it("reads nothing outside its folders", async () => {
 		const store = new ArtifactStore(tempDataDir());
 		expect(await store.meta("../..", "a_000000000000")).toBeUndefined();
