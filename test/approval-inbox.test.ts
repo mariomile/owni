@@ -195,7 +195,7 @@ describe("personal approval inbox", () => {
 		expect((await owner("/api/console-summary")).body.pendingApprovals).toBe(pendingKeys(inbox).length);
 		expect((await owner(`/api/instances/ops/threads/${thread.id}`)).status).toBe(404);
 		expect((await owner("/api/instances/ops/threads")).body.threads).toEqual([]);
-		expect((await owner("/api/instances/ops/threads", { method: "POST", body: "{}" })).status).toBe(403);
+		expect((await owner("/api/instances/ops/dm", { method: "POST", body: "{}" })).status).toBe(403);
 	});
 
 	it("keeps identical IDs separate across sources and agents", async () => {

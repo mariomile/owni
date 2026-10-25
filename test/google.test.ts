@@ -152,7 +152,7 @@ describe("Google per persona", () => {
 		const { owni, base, google } = await boot(tempDataDir());
 		const owner = await client(base, owni.ownerLink as string);
 		await (await consent(base, owner, "good")).finish();
-		const thread = (await owner("/api/instances/owni/threads", {})).thread;
+		const thread = (await owner("/api/instances/owni/dm", {})).thread;
 		// Not allowed on the instance yet.
 		expect(await reply(owner, thread.id, '/tool google_mail_search {"query":"is:unread"}')).toContain("non ha Google tra i servizi consentiti");
 		expect((await owner("/api/instances/owni/google", { allowed: true }, "PUT")).status).toBe(200);
@@ -170,7 +170,7 @@ describe("Google per persona", () => {
 		const settings = (await owner("/api/instances/owni/settings")).settings;
 		await owner("/api/instances/owni/settings", { name: settings.name, instructions: settings.instructions, webPeople: [...settings.allowedUsers.web, person.id], webApprovers: settings.approvers.web }, "PUT");
 		const luca = await client(base, link);
-		const lucaThread = (await luca("/api/instances/owni/threads", {})).thread;
+		const lucaThread = (await luca("/api/instances/owni/dm", {})).thread;
 		expect(await reply(luca, lucaThread.id, '/tool google_mail_search {"query":"is:unread"}')).toContain("non ha collegato Google");
 	});
 
@@ -181,7 +181,7 @@ describe("Google per persona", () => {
 		expect(flow.url.searchParams.get("scope")).toBe(`openid email ${GOOGLE_SCOPE.calendar}`);
 		expect((await flow.finish()).account.email).toBe("anna@example.com");
 		await owner("/api/instances/owni/google", { allowed: true }, "PUT");
-		const thread = (await owner("/api/instances/owni/threads", {})).thread;
+		const thread = (await owner("/api/instances/owni/dm", {})).thread;
 		expect(await reply(owner, thread.id, "/tool google_calendar_events {}")).toContain("Call con Rossi");
 		expect(await reply(owner, thread.id, '/tool google_mail_search {"query":"x"}')).not.toContain("Preventivo");
 		expect(google.calls.some((c) => c.url.includes("gmail.googleapis.com"))).toBe(false);
@@ -193,7 +193,7 @@ describe("Google per persona", () => {
 		const owner = await client(base, owni.ownerLink as string);
 		await (await consent(base, owner, "revoked")).finish();
 		await owner("/api/instances/owni/google", { allowed: true }, "PUT");
-		const thread = (await owner("/api/instances/owni/threads", {})).thread;
+		const thread = (await owner("/api/instances/owni/dm", {})).thread;
 		expect(await reply(owner, thread.id, "/tool google_calendar_events {}")).toContain("non vale più");
 	});
 

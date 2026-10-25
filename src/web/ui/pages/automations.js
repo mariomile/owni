@@ -66,11 +66,11 @@ export async function viewAutomations(main) {
 		if (!inst.canChat) return toast(`Per creare un'automazione devi poter scrivere a ${inst.name}`, true);
 		const name = h("input", { type: "text", maxlength: 80, placeholder: "Es. Ordini dal sito" });
 		const instruction = h("textarea", { rows: 3, maxlength: 2000, placeholder: "Es. Riassumi l'ordine e dimmi se c'è da spedire oggi" });
-		const chat = h("select", h("option", { value: "" }, "Una chat nuova, con il nome dell'automazione"), state.threads.filter((t) => !t.instanceId || t.instanceId === inst.id).map((t) => h("option", { value: t.id }, t.title)));
+		const chat = h("select", h("option", { value: "" }, `I messaggi diretti con ${inst.name}`), state.threads.filter((t) => t.instanceId === inst.id && !t.dm).map((t) => h("option", { value: t.id }, t.title)));
 		const save = async () => {
 			if (!name.value.trim() || !instruction.value.trim()) return toast("Servono un nome e cosa deve fare", true);
 			try {
-				const threadId = chat.value || (await api(`/api/instances/${inst.id}/threads`, { method: "POST", body: { title: `Automazione: ${name.value.trim()}` } })).thread.id;
+				const threadId = chat.value || (await api(`/api/instances/${inst.id}/dm`, { method: "POST", body: {} })).thread.id;
 				const { automation, token } = await api(`/api/instances/${inst.id}/automations`, { method: "POST", body: { name: name.value, instruction: instruction.value, threadId } });
 				showOnce(automation, token);
 				await refreshThreads();

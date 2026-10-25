@@ -438,7 +438,7 @@ describe("solleciti in the app", () => {
 		const workspace = workspaceDir(dataDir, tenantId(config.tenantId), instanceId(config.instanceId));
 		mkdirSync(join(workspace, "fatture"), { recursive: true });
 		writeFileSync(join(workspace, "fatture", "g1.xml"), G1);
-		const thread = (await api(`/api/instances/${config.instanceId}/threads`, {})).thread as { id: string };
+		const thread = (await api(`/api/instances/${config.instanceId}/dm`, {})).thread as { id: string };
 		const reply = async (text: string): Promise<string> => {
 			const answers = async () => ((await api(`/api/instances/${config.instanceId}/threads/${thread.id}`)).entries as { from: string; text?: string }[]).filter((e) => e.from === "owni");
 			const before = (await answers()).length;

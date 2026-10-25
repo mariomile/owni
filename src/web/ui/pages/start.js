@@ -62,7 +62,7 @@ export async function viewStart(main) {
 				{
 					onclick: async () => {
 						try {
-							const { thread } = await api(`/api/instances/${inst.id}/threads`, { method: "POST", body: {} });
+							const { thread } = await api(`/api/instances/${inst.id}/dm`, { method: "POST", body: {} });
 							store(`owni.draft.${thread.id}`, "Cosa sai fare per me?");
 							go("chat", thread.id);
 						} catch (error) {

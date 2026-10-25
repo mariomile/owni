@@ -23,6 +23,8 @@ export type Room = {
 	readonly chain: number;
 	readonly createdAt: string;
 	readonly updatedAt: string;
+	/** When the person last had it on screen (ADR 0112): anything later is unread. Missing: read. */
+	readonly readAt?: string;
 };
 
 export type RoomEntry = {
@@ -188,13 +190,23 @@ export class Rooms {
 		const clean = title.trim().replace(/\s+/g, " ").slice(0, ROOM_LIMITS.title) || names.join(", ");
 		const seats: RoomSeat[] = [];
 		for (const instanceId of ids) {
-			const thread = await (this.agents.channel(instanceId) as WebChannel).createThread(personId, `Stanza: ${clean}`, id);
+			const thread = await (this.agents.channel(instanceId) as WebChannel).createThread(personId, `Stanza: ${clean}`, { room: id });
 			seats.push({ instanceId, threadId: thread.id, seen: 0 });
 		}
 		const now = new Date().toISOString();
-		const room: Room = { id, personId, title: clean, seats, chain: 0, createdAt: now, updatedAt: now };
+		const room: Room = { id, personId, title: clean, seats, chain: 0, createdAt: now, updatedAt: now, readAt: now };
 		await this.store.save(room);
 		return room;
+	}
+
+	/** The person has the stanza on screen: everything in it so far is read. */
+	async markRead(personId: string, roomId: string): Promise<boolean> {
+		return this.serial(roomId, async () => {
+			const room = await this.store.get(roomId);
+			if (room === undefined || room.personId !== personId) return false;
+			await this.store.save({ ...room, readAt: new Date().toISOString() });
+			return true;
+		});
 	}
 
 	async remove(personId: string, roomId: string): Promise<boolean> {
@@ -220,7 +232,7 @@ export class Rooms {
 			const targets = called.length > 0 ? called : [last ?? (present[0] as { instanceId: string }).instanceId];
 			const entry: RoomEntry = { id: `m_${randomBytes(8).toString("hex")}`, at: new Date().toISOString(), from: "person", text: said };
 			await this.store.append(roomId, entry);
-			await this.store.save({ ...room, chain: 0, updatedAt: entry.at });
+			await this.store.save({ ...room, chain: 0, updatedAt: entry.at, readAt: entry.at });
 			this.emit(room, entry);
 			return { entry, calls: targets };
 		});

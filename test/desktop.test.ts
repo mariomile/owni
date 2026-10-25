@@ -598,7 +598,7 @@ describe("the desktop in an agente", () => {
 	it("the console shows the screen live, only to the person of the conversation, and forgets it when the screen is reset", async () => {
 		const fake = fakeDesktop();
 		const { api, base, cookie } = await owni(fake.desktop);
-		const thread = (await api("/api/instances/owni/threads", {})).thread;
+		const thread = (await api("/api/instances/owni/dm", {})).thread;
 		const screen = `/api/instances/owni/threads/${thread.id}/screen`;
 		// Without the screen the console stops asking.
 		expect(await api(screen)).toEqual({ status: 200, on: false, screen: null });
@@ -638,7 +638,7 @@ describe("the desktop in an agente", () => {
 		await api("/api/desktop");
 		expect(fake.checks()).toBe(1);
 		expect((await api("/api/desktop", undefined, "GET", "")).status).toBe(401);
-		const thread = (await api("/api/instances/owni/threads", {})).thread;
+		const thread = (await api("/api/instances/owni/dm", {})).thread;
 		const reply = async (text: string) => {
 			const answers = async () => ((await api(`/api/instances/owni/threads/${thread.id}`)).entries as { from: string; text?: string }[]).filter((e) => e.from === "owni");
 			const before = (await answers()).length;

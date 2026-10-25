@@ -81,7 +81,7 @@ async function boot() {
 		return { status: res.status, ...((await res.json()) as any) };
 	};
 	const chat = async () => {
-		const thread = (await api("/api/instances/owni/threads", {})).thread;
+		const thread = (await api("/api/instances/owni/dm", {})).thread;
 		return Object.assign(async (text: string): Promise<string> => {
 			const answers = async () => ((await api(`/api/instances/owni/threads/${thread.id}`)).entries as { from: string; text?: string }[]).filter((e) => e.from === "owni");
 			const before = (await answers()).length;

@@ -79,8 +79,8 @@ describe("pnpm start (startOwni)", () => {
 		expect(owni.ownerLink).toMatch(/^http:\/\/127\.0\.0\.1:0\/login#[\w-]{40,}$/);
 		const api = await client(base, owni.ownerLink as string);
 		const instances = (await api("/api/instances")).instances;
-		expect(instances).toEqual([{ id: "owni", name: "Owni", canChat: true, isApprover: true, hasSegreteria: false }]);
-		const thread = (await api("/api/instances/owni/threads", {})).thread;
+		expect(instances).toEqual([{ id: "owni", name: "Owni", canChat: true, isApprover: true, hasSegreteria: false, main: true }]);
+		const thread = (await api("/api/instances/owni/dm", {})).thread;
 		const proposal = { name: "double", description: "Raddoppia", parameters: { type: "object", properties: { x: { type: "number" } } }, code: "export default async (a) => String(a.x * 2)", hosts: [] };
 		await api(`/api/instances/owni/threads/${thread.id}/messages`, { text: `/tool tool_propose ${JSON.stringify(proposal)}` });
 		await waitFor(() => telegram.sent.some((m) => m.chat_id === "9" && m.text.startsWith("Nuovo tool da approvare")));
@@ -97,7 +97,7 @@ describe("pnpm start (startOwni)", () => {
 	it("a proposal whose code does not fit the Telegram card can only be approved from the console", async () => {
 		const { owni, base, telegram } = await boot(tempDataDir());
 		const api = await client(base, owni.ownerLink as string);
-		const thread = (await api("/api/instances/owni/threads", {})).thread;
+		const thread = (await api("/api/instances/owni/dm", {})).thread;
 		const code = `// ${"riempitivo innocuo ".repeat(120)}\nexport default async () => "payload"`;
 		const proposal = { name: "lungo", description: "Codice lungo", parameters: { type: "object" }, code, hosts: [] };
 		await api(`/api/instances/owni/threads/${thread.id}/messages`, { text: `/tool tool_propose ${JSON.stringify(proposal)}` });
@@ -116,7 +116,7 @@ describe("pnpm start (startOwni)", () => {
 		const dataDir = tempDataDir();
 		const first = await boot(dataDir);
 		const api = await client(first.base, first.owni.ownerLink as string);
-		const thread = (await api("/api/instances/owni/threads", {})).thread;
+		const thread = (await api("/api/instances/owni/dm", {})).thread;
 		const at = new Date(Date.now() + 60_000).toISOString();
 		const created = await api("/api/instances/owni/schedules", { instruction: "Promemoria riunione", at, threadId: thread.id });
 		expect(created.schedule.nextRunAt).toBe(at);
@@ -182,7 +182,7 @@ describe("pnpm start (startOwni)", () => {
 		const { owni, base } = await boot(tempDataDir());
 		const api = await client(base, owni.ownerLink as string);
 		await api("/api/instances", { id: "ricerca", name: "Ricercatore", persona: { emoji: "🔎", tagline: "Cerca fornitori" } });
-		const thread = (await api("/api/instances/owni/threads", {})).thread;
+		const thread = (await api("/api/instances/owni/dm", {})).thread;
 		const entries = async () => (await api(`/api/instances/owni/threads/${thread.id}`)).entries as { from: string; text?: string }[];
 		const say = (text: string) => api(`/api/instances/owni/threads/${thread.id}/messages`, { text });
 		await say("/tool agent_list {}");
@@ -223,7 +223,7 @@ describe("pnpm start (startOwni)", () => {
 		expect(settings.instructions.startsWith("Sei Owni")).toBe(true);
 		expect(settings.instructions.endsWith("Informazioni su chi ti usa:\nRispondi sulle offerte.")).toBe(true);
 		expect(settings.egress).toEqual({ modelProviders: ["faux"], channels: ["web"] });
-		const thread = (await api("/api/instances/vendite/threads", {})).thread;
+		const thread = (await api("/api/instances/vendite/dm", {})).thread;
 		await api(`/api/instances/vendite/threads/${thread.id}/messages`, { text: "ciao vendite" });
 		const replied = async (a: typeof api, id: string) => ((await a(`/api/instances/vendite/threads/${id}`)).entries as { from: string }[]).some((e) => e.from === "owni");
 		await until(() => replied(api, thread.id));
@@ -232,9 +232,10 @@ describe("pnpm start (startOwni)", () => {
 		const second = await boot(dataDir);
 		const again = await client(second.base, first.owni.ownerLink as string);
 		expect((await again("/api/instances")).instances.map((i: { id: string }) => i.id).sort()).toEqual(["owni", "vendite"]);
-		const t2 = (await again("/api/instances/vendite/threads", {})).thread;
+		const t2 = (await again("/api/instances/vendite/dm", {})).thread;
+		expect(t2.id).toBe(thread.id);
 		await again(`/api/instances/vendite/threads/${t2.id}/messages`, { text: "di nuovo" });
-		await until(() => replied(again, t2.id));
+		await until(async () => ((await again(`/api/instances/vendite/threads/${t2.id}`)).entries as { from: string; text?: string }[]).some((e) => e.from === "owni" && (e.text ?? "").includes("di nuovo")));
 	});
 
 	it("the owner deletes an agente (ADR 0046): name to confirm, bot stopped, keys and automations gone, colleagues forget it", async () => {
@@ -248,7 +249,7 @@ describe("pnpm start (startOwni)", () => {
 		expect((await send("PUT", "/api/instances/vendite/telegram", { token: "2:V", allowedUsers: ["8"] })).status).toBe(200);
 		// Owni accepts messages from Vendite: that permission must not outlive Vendite.
 		await send("PUT", "/api/instances/owni/agents", { from: ["vendite"] });
-		const thread = (await api("/api/instances/vendite/threads", {})).thread;
+		const thread = (await api("/api/instances/vendite/dm", {})).thread;
 		await api("/api/instances/vendite/schedules", { instruction: "Controlla le offerte", at: new Date(Date.now() + 60_000).toISOString(), threadId: thread.id });
 		const secrets = owni.runtime.secrets("default");
 		for (const name of ["mcp-oauth.vendite.github", "connector.github.vendite.authorization", "connector.github.owni.authorization", "mcp-oauth.vendite2.github"]) await secrets.set(name, "x");
@@ -329,7 +330,7 @@ describe("pnpm start (startOwni)", () => {
 		}
 		const memberApi = await client(base, link);
 		const chat = async (call: typeof api, instance: string) => {
-			const thread = (await call(`/api/instances/${instance}/threads`, {})).thread;
+			const thread = (await call(`/api/instances/${instance}/dm`, {})).thread;
 			return async (text: string): Promise<string> => {
 				const answers = async () => ((await call(`/api/instances/${instance}/threads/${thread.id}`)).entries as { from: string; text?: string }[]).filter((e) => e.from === "owni");
 				const before = (await answers()).length;
@@ -378,7 +379,7 @@ describe("pnpm start (startOwni)", () => {
 		owni.runtime.invoices("default", "vendite").setCompany({ vat: "IT00000010017", name: "Beta Studio Srl", cf: "00000010017", address: "Via Roma 1, 20121 Milano MI", regime: "ordinario", ibans: ["IT51X0000000000000000000001"], by: "test:u", at });
 		const year = String(new Date().getFullYear());
 		owni.runtime.salesInvoices("default", "vendite").update("seed", (state) => ({ ...state, settings: { by: "test:u", at, lastBefore: { [year]: 0 } } }));
-		const thread = (await api("/api/instances/vendite/threads", {})).thread;
+		const thread = (await api("/api/instances/vendite/dm", {})).thread;
 		const reply = async (text: string): Promise<string> => {
 			const answers = async () => ((await api(`/api/instances/vendite/threads/${thread.id}`)).entries as { from: string; text?: string }[]).filter((e) => e.from === "owni");
 			const before = (await answers()).length;
@@ -514,7 +515,7 @@ describe("pnpm start (startOwni)", () => {
 		expect((await send("PUT", `/api/board/${card.id}`, { status: "chiusa" })).status).toBe(400);
 
 		// From a chat with Owni: a scheda for Ricercatore, waiting for a person to start it.
-		const chat = (await api("/api/instances/owni/threads", {})).thread;
+		const chat = (await api("/api/instances/owni/dm", {})).thread;
 		await api(`/api/instances/owni/threads/${chat.id}/messages`, { text: '/tool board_create {"title":"Bozza newsletter","assignee":"Ricercatore"}' });
 		await until(async () => (await api("/api/board")).cards.length === 2);
 		const waiting = (await api("/api/board")).cards[1];
@@ -597,7 +598,7 @@ describe("pnpm start (startOwni)", () => {
 		const { owni, base } = await boot(tempDataDir());
 		const api = await client(base, owni.ownerLink as string);
 		await api("/api/instances", { id: "vendite", name: "Vendite" });
-		const thread = (await api("/api/instances/vendite/threads", {})).thread;
+		const thread = (await api("/api/instances/vendite/dm", {})).thread;
 		const at = new Date(Date.now() + 60_000).toISOString();
 		await api("/api/instances/vendite/schedules", { instruction: "Controlla le offerte", at, threadId: thread.id });
 		expect(await owni.scheduler.tick(new Date(Date.now() + 120_000))).toBe(1);
@@ -626,7 +627,7 @@ describe("pnpm start (startOwni)", () => {
 		})();
 		const api = await client(base, owni.ownerLink as string);
 		await api("/api/instances", { id: "vendite", name: "Vendite" });
-		const thread = (await api("/api/instances/vendite/threads", {})).thread;
+		const thread = (await api("/api/instances/vendite/dm", {})).thread;
 		await api(`/api/instances/vendite/threads/${thread.id}/messages`, { text: "ciao" });
 		await until(async () => received.includes(`"threadId":"${thread.id}"`));
 		abort.abort();
@@ -673,7 +674,7 @@ describe("pnpm start (startOwni)", () => {
 		expect((await state()).status).toBe(401);
 		expect((await state("wrong")).status).toBe(401);
 		expect(await (await state("cell-secret-xyz-0001")).json()).toEqual({ busy: false, nextWakeAt: null, usage: { day: romeDayKey(), todayUsd: 0, months: {} } });
-		const thread = (await api("/api/instances/owni/threads", {})).thread;
+		const thread = (await api("/api/instances/owni/dm", {})).thread;
 		const at = new Date(Date.now() + 3_600_000).toISOString();
 		await api("/api/instances/owni/schedules", { instruction: "Promemoria", at, threadId: thread.id });
 		expect(await (await state("cell-secret-xyz-0001")).json()).toEqual({ busy: false, nextWakeAt: at, usage: { day: romeDayKey(), todayUsd: 0, months: {} } });

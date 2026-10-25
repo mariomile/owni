@@ -743,7 +743,7 @@ async function boot(dataDir: string, env: Record<string, string>, vatCheckFetch:
 		// biome-ignore lint: test
 		return (await res.json()) as any;
 	};
-	const thread = (await api("/api/instances/owni/threads", {})).thread;
+	const thread = (await api("/api/instances/owni/dm", {})).thread;
 	const reply = async (text: string, threadId: string = thread.id): Promise<string> => {
 		const answers = async () => ((await api(`/api/instances/owni/threads/${threadId}`)).entries as { from: string; text?: string }[]).filter((e) => e.from === "owni");
 		const before = (await answers()).length;

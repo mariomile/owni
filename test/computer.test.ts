@@ -501,7 +501,7 @@ describe("the computer in an instance", () => {
 		};
 		expect((await api("/api/computer")).available).toBe(true);
 		expect((await api("/api/computer", undefined, "GET", "")).status).toBe(401);
-		const thread = (await api("/api/instances/owni/threads", {})).thread;
+		const thread = (await api("/api/instances/owni/dm", {})).thread;
 		const reply = async (text: string) => {
 			const count = async () => ((await api(`/api/instances/owni/threads/${thread.id}`)).entries as { from: string; text?: string }[]).filter((e) => e.from === "owni");
 			const before = (await count()).length;

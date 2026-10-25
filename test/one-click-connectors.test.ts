@@ -96,7 +96,7 @@ describe("one-click connectors with OAuth", () => {
 		const after = await api("/api/instances/owni/connectors");
 		expect(after.connectors[0].status).toEqual({ id: "demo", connected: true, tools: ["demo__add", "demo__whoami"] });
 		// The tool call carries the token got at sign-in.
-		const thread = (await api("/api/instances/owni/threads", "POST", {})).thread;
+		const thread = (await api("/api/instances/owni/dm", "POST", {})).thread;
 		await api(`/api/instances/owni/threads/${thread.id}/messages`, "POST", { text: "/tool demo__whoami {}" });
 		let said = "";
 		for (let i = 0; i < 300 && !said.includes("Fatto."); i++) {
@@ -239,7 +239,7 @@ describe("one-click connectors with OAuth", () => {
 		const started = await api("/api/instances/owni/connectors/catalog/demo", "POST", {});
 		expect(started.url).toBeDefined();
 		await owni.runtime.reopen("default", "owni");
-		const thread = (await api("/api/instances/owni/threads", "POST", {})).thread;
+		const thread = (await api("/api/instances/owni/dm", "POST", {})).thread;
 		await api(`/api/instances/owni/threads/${thread.id}/messages`, "POST", { text: "/tool demo__non_collegato {}" });
 		let said = "";
 		for (let i = 0; i < 300 && !said.includes("Fatto."); i++) {

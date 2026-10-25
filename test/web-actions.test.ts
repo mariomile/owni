@@ -186,7 +186,7 @@ async function boot(dataDir: string) {
 	};
 	const api = await loginWith((owni.ownerLink as string).split("#")[1] as string);
 	const chat = async (as: typeof api) => {
-		const thread = (await as("/api/instances/owni/threads", {})).thread;
+		const thread = (await as("/api/instances/owni/dm", {})).thread;
 		const entries = async () => (await as(`/api/instances/owni/threads/${thread.id}`)).entries as { from: string; text?: string }[];
 		const reply = async (text: string, count = 1): Promise<string> => {
 			const before = (await entries()).filter((e) => e.from === "owni").length;

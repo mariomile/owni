@@ -249,7 +249,7 @@ async function boot(dataDir: string, env: Record<string, string> = {}) {
 		// biome-ignore lint: test
 		return { status: res.status, ...((await res.json()) as any) };
 	};
-	const thread = (await api("/api/instances/owni/threads", {})).thread;
+	const thread = (await api("/api/instances/owni/dm", {})).thread;
 	const entries = async () => (await api(`/api/instances/owni/threads/${thread.id}`)).entries as { from: string; text?: string; file?: { path: string; caption?: string } }[];
 	const reply = async (text: string): Promise<string> => {
 		const answers = async () => (await entries()).filter((e) => e.from === "owni" && e.text !== undefined);

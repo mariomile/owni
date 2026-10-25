@@ -546,7 +546,7 @@ function landing(inst, conversation) {
 	// A model picked before the first message: the conversation it opens is created with it.
 	let picked;
 	const box = chatBox(inst, `new.${inst.id}`, conversation, async (text, images) => {
-		const { thread } = await api(`/api/instances/${inst.id}/threads`, { method: "POST", body: picked ? { model: { provider: picked.provider, modelId: picked.modelId } } : {} });
+		const { thread } = await api(`/api/instances/${inst.id}/dm`, { method: "POST", body: picked ? { model: { provider: picked.provider, modelId: picked.modelId } } : {} });
 		store(`owni.draft.${thread.id}`, text);
 		if (images.length) store(`owni.pending.${thread.id}`, JSON.stringify(images));
 		store(`owni.autosend.${thread.id}`, "1");

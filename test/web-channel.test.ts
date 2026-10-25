@@ -5,7 +5,7 @@ import { tempDataDir } from "./helpers.ts";
 describe("web channel", () => {
 	it("an answer ready before the question is written down still lands after it", async () => {
 		const channel = new WebChannel({ tenantId: "acme", instanceId: "ops" }, tempDataDir());
-		const thread = await channel.createThread("p_000000000001");
+		const thread = await channel.createThread("p_000000000001", "Chat");
 		let delivered: Promise<void> | undefined;
 		channel.onInbound(async (message) => {
 			// The fastest possible answer: sent while the question is still being admitted.
@@ -20,7 +20,7 @@ describe("web channel", () => {
 		]);
 	});
 
-	it("a chat started with a command is titled in words", () => {
+	it("a thread under a command is titled in words", () => {
 		expect(chatTitle("  ciao   owni ")).toBe("ciao owni");
 		expect(chatTitle("/chiusura-del-mese ottobre")).toBe("Chiusura del mese ottobre");
 		expect(chatTitle('/tool tool_propose {"name":"cambio_eur"}')).toBe("Tool tool_propose");

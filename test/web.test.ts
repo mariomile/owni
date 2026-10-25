@@ -159,7 +159,7 @@ describe("web console", () => {
 	it("a link revoked from another process ends its sessions at once; a person removed from the allowlist is refused", async () => {
 		const h = await setup();
 		const anna = await h.as(h.anna.token);
-		const thread = (await anna("/api/instances/ops/threads", { method: "POST", body: "{}" })).body.thread;
+		const thread = (await anna("/api/instances/ops/dm", { method: "POST", body: "{}" })).body.thread;
 		await h.runtime.registry.setAllowedUsers("acme", "ops", "web", [h.luca.person.id]);
 		const refused = await anna(`/api/instances/ops/threads/${thread.id}/messages`, { method: "POST", body: JSON.stringify({ text: "ciao" }) });
 		// No longer a member: the instance is invisible to her, and nothing reached the transcript.
@@ -182,7 +182,7 @@ describe("web console", () => {
 	it("a member chats with the instance; replies land in their thread, which others cannot see", async () => {
 		const h = await setup();
 		const anna = await h.as(h.anna.token);
-		const thread = (await anna("/api/instances/ops/threads", { method: "POST", body: "{}" })).body.thread;
+		const thread = (await anna("/api/instances/ops/dm", { method: "POST", body: "{}" })).body.thread;
 		expect((await anna(`/api/instances/ops/threads/${thread.id}/messages`, { method: "POST", body: JSON.stringify({ text: "ciao owni" }) })).status).toBe(200);
 		let entries: any[] = [];
 		await waitFor(() => entries.length === 2 || (void anna(`/api/instances/ops/threads/${thread.id}`).then((r) => (entries = r.body.entries ?? [])), false));
@@ -190,7 +190,6 @@ describe("web console", () => {
 			["person", "ciao owni"],
 			["owni", "Owni (modello locale di sviluppo): hai scritto «ciao owni»"],
 		]);
-		expect((await anna("/api/instances/ops/threads")).body.threads[0].title).toBe("ciao owni");
 		const luca = await h.as(h.luca.token);
 		expect((await luca(`/api/instances/ops/threads/${thread.id}`)).status).toBe(404);
 		expect((await luca(`/api/instances/ops/threads/${thread.id}/messages`, { method: "POST", body: JSON.stringify({ text: "intruso" }) })).status).toBe(400);
@@ -241,7 +240,7 @@ describe("web console", () => {
 		const raw = (name: string, body: Uint8Array | string) => anna(`/api/instances/ops/files/raw?name=${name}`, { method: "PUT", body, headers: { "content-type": "application/octet-stream" } });
 		const photo = (await raw("scontrino.png", PNG)).body.file.path;
 		const svg = (await raw("logo.svg", "<svg xmlns='http://www.w3.org/2000/svg'/>")).body.file.path;
-		const thread = (await anna("/api/instances/ops/threads", { method: "POST", body: "{}" })).body.thread;
+		const thread = (await anna("/api/instances/ops/dm", { method: "POST", body: "{}" })).body.thread;
 		const post = (body: unknown) => anna(`/api/instances/ops/threads/${thread.id}/messages`, { method: "POST", body: JSON.stringify(body) });
 		// Only uploads/, at most four, never an empty message without them.
 		expect((await post({ text: "", images: ["../people.json"] })).status).toBe(400);
@@ -253,7 +252,6 @@ describe("web console", () => {
 		await waitFor(() => entries.length === 2 || (void anna(`/api/instances/ops/threads/${thread.id}`).then((r) => (entries = r.body.entries ?? [])), false));
 		expect(entries[0]).toMatchObject({ from: "person", text: "", images: [photo] });
 		expect(entries[1].text).toBe(`Owni (modello locale di sviluppo): hai scritto «[Immagine nel workspace: ${photo}]» e mandato 1 immagine (image/png, 20 byte)`);
-		expect((await anna("/api/instances/ops/threads")).body.threads[0].title).toBe("Foto");
 		const inline = await anna(`/api/instances/ops/files/raw?path=${encodeURIComponent(photo)}&inline=1`);
 		expect(inline.headers.get("content-type")).toBe("image/png");
 		expect(inline.headers.get("content-disposition")).toBe("inline");
@@ -275,7 +273,7 @@ describe("web console", () => {
 		const h = await setup();
 		const anna = await h.as(h.anna.token);
 		const luca = await h.as(h.luca.token);
-		const thread = (await anna("/api/instances/ops/threads", { method: "POST", body: "{}" })).body.thread;
+		const thread = (await anna("/api/instances/ops/dm", { method: "POST", body: "{}" })).body.thread;
 		const at = new Date(Date.now() + 3_600_000).toISOString();
 		const task = (await anna("/api/instances/ops/schedules", { method: "POST", body: JSON.stringify({ instruction: "Privato di Anna", at, threadId: thread.id }) })).body.schedule;
 		expect((await luca("/api/instances/ops/schedules")).body.schedules).toEqual([]);
@@ -445,7 +443,7 @@ describe("web console: automazioni", () => {
 		const h = await setup();
 		const anna = await h.as(h.anna.token);
 		const luca = await h.as(h.luca.token);
-		const thread = await h.channel.createThread(h.anna.person.id);
+		const thread = await h.channel.createThread(h.anna.person.id, "Chat");
 		expect((await luca("/api/instances/ops/automations", { method: "POST", body: JSON.stringify({ name: "x", instruction: "y", threadId: thread.id }) })).status).toBe(400);
 		const made = await anna("/api/instances/ops/automations", { method: "POST", body: JSON.stringify({ name: "Moduli dal sito", instruction: "Rispondi al contatto", threadId: thread.id }) });
 		expect(made.status).toBe(200);

@@ -49,7 +49,7 @@ export async function viewTasks(main) {
 	const at = h("input", { type: "datetime-local" });
 	const cron = h("input", { type: "text", value: "0 9 * * 1-5", class: "mono" });
 	// A chat of its own by default: the results do not end up in whatever chat was last open.
-	const thread = h("select", h("option", { value: "" }, "Una chat nuova, con il nome del task"), threads.map((t) => h("option", { value: t.id }, t.title)));
+	const thread = h("select", threadOptions(inst, threads));
 	const whenBox = h("div");
 	// The usual schedules are one click; the cron is there for the rest.
 	const custom = h("label.field", { hidden: true }, h("span", "Ripetizione (cron, fuso Europe/Rome)"), cron, h("small", "minuto ora giorno mese giorno-settimana"));
@@ -108,7 +108,7 @@ export async function viewTasks(main) {
 			if (!instruction.value.trim()) throw new Error("Scrivi cosa deve fare");
 			if (mode === "cron" ? !cron.value.trim() : !at.value) throw new Error("Scegli quando");
 			const title = instruction.value.trim().replace(/\s+/g, " ");
-			const threadId = thread.value || (await api(`/api/instances/${inst.id}/threads`, { method: "POST", body: { title: `Task: ${title.length > 48 ? `${title.slice(0, 47)}…` : title}` } })).thread.id;
+			const threadId = thread.value || (await api(`/api/instances/${inst.id}/dm`, { method: "POST", body: {} })).thread.id;
 			const body = { instruction: instruction.value, threadId, ...(mode === "cron" ? { cron: cron.value } : { at: at.value ? new Date(at.value).toISOString() : "" }) };
 			await api(`/api/instances/${inst.id}/schedules`, { method: "POST", body });
 			if (!thread.value) await refreshThreads();
@@ -140,6 +140,11 @@ export async function viewTasks(main) {
 }
 
 /** Sentinelle: pages Owni checks by itself, writing to a chat when they change or a price crosses a threshold. */
+/** Where a result is written: the direct conversation, or one of the chats from before it. */
+function threadOptions(inst, threads) {
+	return [h("option", { value: "" }, `I messaggi diretti con ${inst.name}`), threads.filter((t) => !t.dm).map((t) => h("option", { value: t.id }, t.title))];
+}
+
 function watchSection(inst, watches, threads) {
 	const num = (n) => Number(n).toLocaleString("it-IT", { maximumFractionDigits: 2 });
 	const condition = (w) => {
@@ -209,13 +214,13 @@ function watchSection(inst, watches, threads) {
 			[1440, "Ogni giorno"],
 		].map(([value, label]) => h("option", { value, ...(value === 60 ? { selected: true } : {}) }, label)),
 	);
-	const thread = h("select", h("option", { value: "" }, "Una chat nuova, con il nome della pagina"), threads.map((t) => h("option", { value: t.id }, t.title)));
+	const thread = h("select", threadOptions(inst, threads));
 	const create = async () => {
 		try {
 			// Checked here, before a new chat is opened for it.
 			if (!/^https?:\/\/\S+\.\S+/.test(url.value.trim())) throw new Error("Scrivi l'indirizzo della pagina, con https://");
 			const page = url.value.trim().replace(/^https?:\/\/(www\.)?/, "").replace(/\/$/, "");
-			const threadId = thread.value || (await api(`/api/instances/${inst.id}/threads`, { method: "POST", body: { title: `Sentinella: ${page.length > 44 ? `${page.slice(0, 43)}…` : page}` } })).thread.id;
+			const threadId = thread.value || (await api(`/api/instances/${inst.id}/dm`, { method: "POST", body: {} })).thread.id;
 			const { watch } = await api(`/api/instances/${inst.id}/watches`, { method: "POST", body: { url: url.value, what: what.value, below: below.value, above: above.value, everyMinutes: Number(every.value), threadId } });
 			if (!thread.value) await refreshThreads();
 			const now = watch.last?.price != null ? ` Prezzo adesso: ${num(watch.last.price)}.` : "";

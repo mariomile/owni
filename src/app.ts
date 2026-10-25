@@ -1874,6 +1874,7 @@ export async function startOwni(config: OwniConfig, options: OwniOptions = {}): 
 			attachWebChannel(record);
 			await runtime.resume(tenant, record.id);
 		},
+		main: config.instanceId,
 		deleteInstance: { main: config.instanceId, run: deleteAgente },
 		board: { store: board, work: boardWork, routines, subjects: { ledger: subjects, agentName } },
 		log,
