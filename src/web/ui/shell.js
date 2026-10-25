@@ -1,6 +1,6 @@
 // Shell: sidebar, account menu, theme.
 import { accountDialog } from "./account.js";
-import { $app, api, ApiError, emptyNote, face, fmt, go, h, icon, initials, instanceHref, mount, route, selectInstance, state, store, toast } from "./common.js";
+import { $app, agentHome, api, ApiError, emptyNote, face, fmt, go, h, icon, initials, instanceHref, mount, route, selectInstance, state, store, toast } from "./common.js";
 import { renderLogin } from "./login.js";
 import { viewActivity } from "./pages/activity.js";
 import { agentForm, viewAgents } from "./pages/agents.js";
@@ -19,7 +19,6 @@ import { viewSkills } from "./pages/skills.js";
 import { viewStart } from "./pages/start.js";
 import { viewTasks } from "./pages/tasks.js";
 import { viewPrograms, viewWork } from "./pages/work.js";
-import { viewAgentProfile } from "./pages/agent-profile.js";
 import { openPalette } from "./palette.js";
 import { install, installed, installOffer } from "./pwa.js";
 import { applyTheme, refreshSetup } from "./session.js";
@@ -42,7 +41,6 @@ export const PAGES = [
 	{ id: "task", label: "Orari e pagine da controllare", group: "Lavoro", workspace: "work", view: viewTasks },
 	{ id: "automazioni", label: "Eventi esterni", group: "Lavoro", workspace: "work", view: viewAutomations },
 	{ id: "agenti", label: "Agenti", group: "Gestione", workspace: "agents", view: viewAgents },
-	{ id: "agente", label: "Il tuo assistente", group: "Gestione", workspace: "agents", palette: false, view: viewAgentProfile },
 	{ id: "file", label: "Documenti dell'agente", group: "Materiali", workspace: "agents", view: viewFiles },
 	{ id: "memoria", label: "Memoria personale e condivisa", group: "Materiali", workspace: "agents", view: viewMemory },
 	{ id: "skill", label: "Procedure", group: "Materiali", workspace: "agents", view: viewSkills },
@@ -54,6 +52,47 @@ export const PAGES = [
 	{ id: "attivita", label: "Attività e spesa", group: "Gestione", workspace: "management", view: viewActivity },
 ];
 
+/** The agent a new chat goes to: a button that opens a menu of the agents the person can talk to. */
+function agentPicker(inst, choices) {
+	const trigger = h("button.agent-picker", { type: "button", "aria-haspopup": "menu", "aria-expanded": "false", "aria-label": `Agente della nuova conversazione: ${inst.name}` }, face(inst, 20), h("span.agent-picker-name", inst.name), icon("chevron"));
+	const open = () => {
+		const items = choices.map((i) => h("button.model-option", { type: "button", role: "menuitemradio", "aria-checked": i.id === inst.id ? "true" : "false", onclick: () => { closeModelMenu(); location.hash = instanceHref("chat", [], i.id); } },
+			face(i, 24), h("span", h("span.model-option-name", i.name), i.tagline ? h("small", i.tagline) : null), i.id === inst.id ? icon("check") : null));
+		const menu = h("div.model-menu.agent-menu", { role: "menu", "aria-label": "Agente della nuova conversazione" }, items);
+		document.body.append(menu);
+		trigger.setAttribute("aria-expanded", "true");
+		const place = () => {
+			const r = trigger.getBoundingClientRect();
+			const width = Math.min(340, window.innerWidth - 16);
+			menu.style.width = `${width}px`;
+			menu.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - width - 8))}px`;
+			menu.style.top = `${r.bottom + 6}px`;
+			menu.style.maxHeight = `${Math.max(160, (window.visualViewport?.height ?? window.innerHeight) - r.bottom - 20)}px`;
+			menu.style.transformOrigin = "top left";
+		};
+		place();
+		menu.addEventListener("keydown", (e) => {
+			const i = items.indexOf(document.activeElement);
+			if (e.key === "Escape") { e.preventDefault(); closeModelMenu(); trigger.focus(); }
+			else if (e.key === "Tab") closeModelMenu();
+			else if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); items[(i + (e.key === "ArrowDown" ? 1 : -1) + items.length) % items.length].focus(); }
+			else if (e.key === "Home" || e.key === "End") { e.preventDefault(); items[e.key === "Home" ? 0 : items.length - 1].focus(); }
+		});
+		const away = (e) => { if (!menu.contains(e.target) && !trigger.contains(e.target)) closeModelMenu(); };
+		document.addEventListener("pointerdown", away);
+		window.addEventListener("resize", place);
+		menu.cleanup = () => {
+			document.removeEventListener("pointerdown", away);
+			window.removeEventListener("resize", place);
+			trigger.setAttribute("aria-expanded", "false");
+		};
+		(items.find((el) => el.getAttribute("aria-checked") === "true") ?? items[0]).focus();
+	};
+	trigger.addEventListener("click", () => { if (!closeModelMenu()) open(); });
+	trigger.addEventListener("keydown", (e) => { if (e.key === "ArrowDown" && !closeModelMenu() && (e.preventDefault(), true)) open(); });
+	return trigger;
+}
+
 function workspaceNav(item) {
 	const { view } = route();
 	const link = (label, href, active) => h("a", { href, "aria-current": active ? "page" : undefined }, label);
@@ -64,16 +103,14 @@ function workspaceNav(item) {
 		state.instances.some((i) => i.hasSegreteria) ? link("Pratiche", instanceHref("segreteria", [], state.instances.find((i) => i.hasSegreteria)?.id), view === "segreteria") : null,
 	);
 	if (item.workspace === "agents" && state.instance) return h("nav.workspace-nav", { "aria-label": `Materiali e configurazione di ${state.instance.name}` },
-		link(state.instance.name, `#/agente/${encodeURIComponent(state.instance.id)}`, view === "agente"),
 		link("Documenti", instanceHref("file"), view === "file"), link("Memoria", instanceHref("memoria"), view === "memoria"), link("Procedure", instanceHref("skill"), view === "skill"),
 		state.me.role === "owner" ? link("Configurazione", instanceHref("impostazioni"), ["impostazioni", "connettori", "inizia"].includes(view)) : null,
 	);
 	if (view === "chat") {
 		const inst = state.instance;
 		const choices = state.instances.filter((i) => i.canChat);
-		const who = route().rest[0]
-			? h("a.agent-context", { href: inst ? `#/agente/${encodeURIComponent(inst.id)}` : "#/agenti" }, inst ? face(inst, 20) : null, h("span.agent-context-label", `Conversazione con ${inst?.name ?? "l'agente"}`))
-			: h("label.chat-recipient", h("span", "Scrivi a"), choices.length > 1 ? h("select", { "aria-label": "Agente della nuova conversazione", value: inst?.id, onchange: (event) => { location.hash = instanceHref("chat", [], event.target.value); } }, choices.map((i) => h("option", { value: i.id, selected: i.id === inst?.id }, i.name))) : h("a", { href: inst ? `#/agente/${encodeURIComponent(inst.id)}` : "#/agenti" }, inst?.name ?? "Il tuo assistente"));
+		const who = !route().rest[0] && choices.length > 1 && inst ? agentPicker(inst, choices)
+			: h("a.agent-context", { href: agentHome(inst?.id) }, inst ? face(inst, 20) : null, h("span.agent-context-label", route().rest[0] ? `Conversazione con ${inst?.name ?? "l'agente"}` : inst?.name ?? "Il tuo assistente"));
 		return h("div.conversation-context", who, h("div.conversation-context-actions", h("div.conversation-tools", { role: "group", "aria-label": "Strumenti della conversazione" })));
 	}
 	return null;
@@ -94,7 +131,9 @@ export function render() {
 	if (!state.me) return renderLogin();
 	const current = route();
 	const { view } = current;
-	const requested = view === "agente" ? current.rest[0] : current.instanceId;
+	// The old agent profile address goes where that agent's page now lives.
+	if (view === "agente") return void (location.replace(agentHome(current.rest[0])));
+	const requested = current.instanceId;
 	const previous = state.instance;
 	const unavailable = requested && !selectInstance(requested);
 	if (view === "chat" && !current.rest[0] && !requested && !state.instance?.canChat) {
@@ -243,7 +282,7 @@ export function renderRail() {
 			nav,
 			h("a.rail-btn.attention-link", { href: "#/lavori/attenzione", onclick: closeRailOnPhone, title: "Richiede te" }, icon("approvazioni"), h("span.label", "Richiede te"), state.pendingApprovals + state.boardReview ? h("span.count", String(state.pendingApprovals + state.boardReview)) : null),
 			past.childElementCount ? past : null,
-			h("nav.sections.rail-management", { "aria-label": "Gestione" }, h("a", { href: state.instances.length === 1 ? `#/agente/${encodeURIComponent(state.instances[0].id)}` : "#/agenti", onclick: closeRailOnPhone, title: "Agenti" }, icon("agenti"), h("span.label", state.instances.length === 1 ? "Il tuo assistente" : "Agenti")), h("a", { href: "#/gestione", onclick: closeRailOnPhone, title: "Account e gestione" }, icon("gestione"), h("span.label", "Account e gestione"))),
+			h("nav.sections.rail-management", { "aria-label": "Gestione" }, h("a", { href: state.instances.length === 1 ? agentHome(state.instances[0].id) : "#/agenti", onclick: closeRailOnPhone, title: "Agenti" }, icon("agenti"), h("span.label", state.instances.length === 1 ? "Il tuo assistente" : "Agenti")), h("a", { href: "#/gestione", onclick: closeRailOnPhone, title: "Account e gestione" }, icon("gestione"), h("span.label", "Account e gestione"))),
 		),
 		h(
 			"div.rail-foot",

@@ -386,6 +386,12 @@ export function instanceHref(view, rest = [], instanceId = state.instance?.id) {
 	return instanceId ? `${path}?agent=${encodeURIComponent(instanceId)}` : path;
 }
 
+/** Where an agent's own page is: its configuration for the owner, its documents for everyone else. */
+export function agentHome(instanceId = state.instance?.id) {
+	if (!instanceId) return "#/agenti";
+	return instanceHref(state.me?.role === "owner" ? "impostazioni" : "file", [], instanceId);
+}
+
 /** Only an agent already returned for this person may become the current context. */
 export function selectInstance(id) {
 	const instance = state.instances.find((i) => i.id === id);
@@ -410,7 +416,7 @@ export function head(parent, title, text, ...actions) {
 	const here = (title instanceof Node ? title.textContent : title).trim();
 	return h(
 		"div.head",
-		parent ? h("nav.crumbs", { "aria-label": "Percorso" }, h("a", { href: state.instance ? `#/agente/${encodeURIComponent(state.instance.id)}` : "#/agenti" }, parent), here ? [icon("chevron"), h("span.here", { "aria-current": "page" }, here)] : null) : null,
+		parent ? h("nav.crumbs", { "aria-label": "Percorso" }, h("a", { href: agentHome() }, parent), here ? [icon("chevron"), h("span.here", { "aria-current": "page" }, here)] : null) : null,
 		h("div.head-title", title instanceof Node ? title : h("h1", title), text ? h("p", text) : null),
 		actions.length ? h("div.row-gap.head-actions", actions) : null,
 	);
