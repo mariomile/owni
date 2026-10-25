@@ -2,5 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    annie_desktop_lib::run();
+    owni_desktop_lib::run();
 }

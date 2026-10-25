@@ -1,7 +1,7 @@
 import { CHART_KINDS, CHART_LIMITS, ChartError, type ChartKind, type ChartSeries, type ChartSpec } from "../chart-spec.ts";
 import { makeChartFile } from "../document-reader.ts";
 import { DocumentError } from "../documents.ts";
-import type { AnnieTool } from "../engine.ts";
+import type { OwniTool } from "../engine.ts";
 import { cellNumber, parseCsv } from "../make-xlsx.ts";
 import { freePath, type Workspace, WorkspaceError } from "../workspace.ts";
 import { slugify } from "./research-tools.ts";
@@ -22,7 +22,7 @@ const MAX_COLUMNS = 64;
  * Charts from numbers (ADR 0030): bars, lines and a ring drawn as a PNG in `grafici/`, sent to
  * the conversation like a picture, and ready to go into a document with document_create.
  */
-export function createChartTools(options: ChartToolsOptions): AnnieTool[] {
+export function createChartTools(options: ChartToolsOptions): OwniTool[] {
 	const { workspace } = options;
 	return [
 		{

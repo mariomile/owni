@@ -1,5 +1,5 @@
 import { desktopConnector, DESKTOP_LIMITS, DesktopError, type DesktopProvider, fenced, fitWithin } from "../desktop.ts";
-import type { AnnieTool, EngineImage, ToolContext, ToolResult } from "../engine.ts";
+import type { OwniTool, EngineImage, ToolContext, ToolResult } from "../engine.ts";
 import type { EgressPolicy } from "../policy.ts";
 import { pngSize } from "../png-read.ts";
 
@@ -65,7 +65,7 @@ const UNSEEN = "Non riesco a vedere lo schermo adesso: guarda con desktop_look p
  * The agente's screen (ADR 0045): a Linux desktop of its own, through Cua. Owni looks at it,
  * clicks, types, presses keys, scrolls, drags, opens apps; after each action she gets the screen again.
  */
-export function createDesktopTools(options: DesktopToolsOptions): AnnieTool[] {
+export function createDesktopTools(options: DesktopToolsOptions): OwniTool[] {
 	const { desktop, key } = options;
 	if (desktop === undefined) return [];
 	let view: View | undefined;

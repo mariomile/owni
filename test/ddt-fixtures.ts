@@ -68,7 +68,7 @@ export function cleanup(): void {
 }
 
 export function setup(o: { askFirst?: boolean } = {}) {
-	const dir = mkdtempSync(join(tmpdir(), "annie-ddt-"));
+	const dir = mkdtempSync(join(tmpdir(), "owni-ddt-"));
 	dirs.push(dir);
 	const root = join(dir, "workspace");
 	mkdirSync(join(root, "fatture"), { recursive: true });

@@ -119,7 +119,7 @@ function context(controller = new AbortController(), progress: string[] = []): T
 }
 
 async function setup(limits: SearchLimits = SEARCH_LIMITS) {
-	const workspace = new Workspace(mkdtempSync(join(tmpdir(), "annie-search-")));
+	const workspace = new Workspace(mkdtempSync(join(tmpdir(), "owni-search-")));
 	await workspace.write("uploads/7_1-fattura.pdf", doc("fattura.pdf"));
 	await workspace.write("uploads/contratto.docx", doc("contratto.docx"));
 	await workspace.write("uploads/ordini.xlsx", doc("ordini.xlsx"));
@@ -193,7 +193,7 @@ describe("file_search", () => {
 		expect(answer).toContain("Un documento è una scansione, senza testo da cercare: se quello che cerchi può essere lì, guardalo con image_view");
 		expect(answer).toContain("Scansioni senza testo: uploads/9_1-documento.pdf.");
 		expect(await search({ query: "rossi", folder: "vuota" })).toBe("Nella cartella vuota non ci sono file: cerca senza folder, o guarda le cartelle con file_list.");
-		const empty = createWorkspaceTools({ workspace: new Workspace(mkdtempSync(join(tmpdir(), "annie-search-"))), sendFile: async () => {} }).find((t) => t.name === "file_search");
+		const empty = createWorkspaceTools({ workspace: new Workspace(mkdtempSync(join(tmpdir(), "owni-search-"))), sendFile: async () => {} }).find((t) => t.name === "file_search");
 		expect(await empty?.execute({ query: "fattura" }, context())).toBe("Il workspace è vuoto: non c'è ancora nessun file da cercare.");
 	});
 

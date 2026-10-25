@@ -2,14 +2,14 @@ import { readFileSync } from "node:fs";
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { type RunningAnnie, startAnnie } from "../src/app.ts";
+import { type RunningOwni, startOwni } from "../src/app.ts";
 import type { ToolContext } from "../src/core/engine.ts";
 import { italianDay, italianNumber } from "../src/core/italian-format.ts";
 import { createWeatherTools } from "../src/core/tools/weather-tools.ts";
 import { openMeteo, WEATHER_CODES, type WeatherConfig, WeatherError, weatherWords } from "../src/core/weather.ts";
 import { dailyCounter, dailyLimit } from "../src/core/web-search.ts";
 import { runChecks } from "../src/main/check.ts";
-import { loadAnnieConfig } from "../src/main/config.ts";
+import { loadOwniConfig } from "../src/main/config.ts";
 import { tempDataDir } from "./helpers.ts";
 
 const closers: (() => Promise<void>)[] = [];
@@ -247,7 +247,7 @@ describe("Open-Meteo", () => {
 		expect(await failing(Response.json({ error: true, reason: KEY }, { status: 429 }))).toBe("il servizio meteo ha raggiunto il limite di richieste, riprova più tardi");
 		// A refusal with a key is the key; without one, most likely the free tier's terms.
 		expect(await failing(Response.json({ reason: KEY }, { status: 401 }))).toBe("il servizio meteo rifiuta la chiave del server");
-		expect(await failing(Response.json({}, { status: 403 }), false)).toBe("il servizio meteo rifiuta la richiesta: per un uso commerciale serve un piano a pagamento e ANNIE_WEATHER_API_KEY");
+		expect(await failing(Response.json({}, { status: 403 }), false)).toBe("il servizio meteo rifiuta la richiesta: per un uso commerciale serve un piano a pagamento e OWNI_WEATHER_API_KEY");
 		expect(await failing(new Response("bad gateway", { status: 502 }))).toContain("risponde 502");
 		expect(await failing(new Response("<html>oops</html>"))).toContain("illeggibile");
 		expect(await failing(new Response("null"))).toContain("illeggibile");
@@ -447,53 +447,53 @@ describe("the weather tool", () => {
 });
 
 describe("weather configuration", () => {
-	const base = { ANNIE_DATA_DIR: "/tmp/annie-weather", ANNIE_MODEL_PROVIDER: "faux" };
+	const base = { OWNI_DATA_DIR: "/tmp/owni-weather", OWNI_MODEL_PROVIDER: "faux" };
 
-	it("is off unless the operator sets ANNIE_WEATHER=1; Open-Meteo and 200 calls a day by default", () => {
-		expect(loadAnnieConfig(base).weather).toBeUndefined();
-		expect(loadAnnieConfig({ ...base, ANNIE_WEATHER: "0" }).weather).toBeUndefined();
-		expect(loadAnnieConfig({ ...base, ANNIE_WEATHER: "1" }).weather).toEqual({ ...CONFIG, maxPerDay: 200 });
+	it("is off unless the operator sets OWNI_WEATHER=1; Open-Meteo and 200 calls a day by default", () => {
+		expect(loadOwniConfig(base).weather).toBeUndefined();
+		expect(loadOwniConfig({ ...base, OWNI_WEATHER: "0" }).weather).toBeUndefined();
+		expect(loadOwniConfig({ ...base, OWNI_WEATHER: "1" }).weather).toEqual({ ...CONFIG, maxPerDay: 200 });
 		expect(
-			loadAnnieConfig({ ...base, ANNIE_WEATHER: "1", ANNIE_WEATHER_URL: "https://customer-api.open-meteo.com/v1/forecast", ANNIE_WEATHER_GEOCODING_URL: "http://localhost:8080/v1/search", ANNIE_WEATHER_API_KEY: KEY, ANNIE_WEATHER_MAX_PER_DAY: "50" }).weather,
+			loadOwniConfig({ ...base, OWNI_WEATHER: "1", OWNI_WEATHER_URL: "https://customer-api.open-meteo.com/v1/forecast", OWNI_WEATHER_GEOCODING_URL: "http://localhost:8080/v1/search", OWNI_WEATHER_API_KEY: KEY, OWNI_WEATHER_MAX_PER_DAY: "50" }).weather,
 		).toEqual({ forecastUrl: "https://customer-api.open-meteo.com/v1/forecast", geocodingUrl: "http://localhost:8080/v1/search", apiKey: KEY, maxPerDay: 50 });
 	});
 
 	it("with a paid plan's key: the customer forecast host by default, and the plan's geocoding address required", () => {
-		expect(() => loadAnnieConfig({ ...base, ANNIE_WEATHER: "1", ANNIE_WEATHER_API_KEY: KEY })).toThrow("ANNIE_WEATHER_API_KEY needs ANNIE_WEATHER_GEOCODING_URL: the geocoding address Open-Meteo gives with the plan");
-		expect(loadAnnieConfig({ ...base, ANNIE_WEATHER: "1", ANNIE_WEATHER_API_KEY: KEY, ANNIE_WEATHER_GEOCODING_URL: "https://geo.example/v1/search" }).weather).toEqual({ forecastUrl: "https://customer-api.open-meteo.com/v1/forecast", geocodingUrl: "https://geo.example/v1/search", apiKey: KEY, maxPerDay: 200 });
+		expect(() => loadOwniConfig({ ...base, OWNI_WEATHER: "1", OWNI_WEATHER_API_KEY: KEY })).toThrow("OWNI_WEATHER_API_KEY needs OWNI_WEATHER_GEOCODING_URL: the geocoding address Open-Meteo gives with the plan");
+		expect(loadOwniConfig({ ...base, OWNI_WEATHER: "1", OWNI_WEATHER_API_KEY: KEY, OWNI_WEATHER_GEOCODING_URL: "https://geo.example/v1/search" }).weather).toEqual({ forecastUrl: "https://customer-api.open-meteo.com/v1/forecast", geocodingUrl: "https://geo.example/v1/search", apiKey: KEY, maxPerDay: 200 });
 	});
 
 	it("refuses bad values, naming the variable and never the key", () => {
-		expect(() => loadAnnieConfig({ ...base, ANNIE_WEATHER: "yes" })).toThrow("ANNIE_WEATHER:");
-		expect(() => loadAnnieConfig({ ...base, ANNIE_WEATHER: "1", ANNIE_WEATHER_URL: "http://evil.example/v1/forecast" })).toThrow("ANNIE_WEATHER_URL");
-		expect(() => loadAnnieConfig({ ...base, ANNIE_WEATHER: "1", ANNIE_WEATHER_GEOCODING_URL: "ftp://x.example" })).toThrow("ANNIE_WEATHER_GEOCODING_URL");
-		expect(() => loadAnnieConfig({ ...base, ANNIE_WEATHER: "1", ANNIE_WEATHER_MAX_PER_DAY: "0" })).toThrow("ANNIE_WEATHER_MAX_PER_DAY");
-		expect(() => loadAnnieConfig({ ...base, ANNIE_WEATHER: "1", ANNIE_WEATHER_MAX_PER_DAY: "tanti" })).toThrow("ANNIE_WEATHER_MAX_PER_DAY");
+		expect(() => loadOwniConfig({ ...base, OWNI_WEATHER: "yes" })).toThrow("OWNI_WEATHER:");
+		expect(() => loadOwniConfig({ ...base, OWNI_WEATHER: "1", OWNI_WEATHER_URL: "http://evil.example/v1/forecast" })).toThrow("OWNI_WEATHER_URL");
+		expect(() => loadOwniConfig({ ...base, OWNI_WEATHER: "1", OWNI_WEATHER_GEOCODING_URL: "ftp://x.example" })).toThrow("OWNI_WEATHER_GEOCODING_URL");
+		expect(() => loadOwniConfig({ ...base, OWNI_WEATHER: "1", OWNI_WEATHER_MAX_PER_DAY: "0" })).toThrow("OWNI_WEATHER_MAX_PER_DAY");
+		expect(() => loadOwniConfig({ ...base, OWNI_WEATHER: "1", OWNI_WEATHER_MAX_PER_DAY: "tanti" })).toThrow("OWNI_WEATHER_MAX_PER_DAY");
 		const error = (() => {
 			try {
-				loadAnnieConfig({ ...base, ANNIE_WEATHER_API_KEY: KEY });
+				loadOwniConfig({ ...base, OWNI_WEATHER_API_KEY: KEY });
 			} catch (e) {
 				return String(e);
 			}
 		})();
-		expect(error).toContain("ANNIE_WEATHER_API_KEY set without ANNIE_WEATHER=1");
+		expect(error).toContain("OWNI_WEATHER_API_KEY set without OWNI_WEATHER=1");
 		expect(error).not.toContain(KEY);
 	});
 
 	it("service addresses: https or local http, no credentials, query, fragment or bad port (search, images, weather)", () => {
-		const weather = (url: string) => () => loadAnnieConfig({ ...base, ANNIE_WEATHER: "1", ANNIE_WEATHER_URL: url });
+		const weather = (url: string) => () => loadOwniConfig({ ...base, OWNI_WEATHER: "1", OWNI_WEATHER_URL: url });
 		expect(weather("https://customer-api.open-meteo.com:8443/v1/forecast")).not.toThrow();
 		expect(weather("http://127.0.0.1:9000/v1/forecast")).not.toThrow();
-		expect(weather("https://api.open-meteo.com:99999/v1/forecast")).toThrow("ANNIE_WEATHER_URL: an https address with a valid host and port");
-		expect(weather("https://api.open-meteo.com:0/v1/forecast")).toThrow("ANNIE_WEATHER_URL");
-		expect(weather("https://api.open-meteo.com:port/v1/forecast")).toThrow("ANNIE_WEATHER_URL");
-		expect(weather("https://user:secret@api.open-meteo.com/v1/forecast")).toThrow("ANNIE_WEATHER_URL: no user name or password");
+		expect(weather("https://api.open-meteo.com:99999/v1/forecast")).toThrow("OWNI_WEATHER_URL: an https address with a valid host and port");
+		expect(weather("https://api.open-meteo.com:0/v1/forecast")).toThrow("OWNI_WEATHER_URL");
+		expect(weather("https://api.open-meteo.com:port/v1/forecast")).toThrow("OWNI_WEATHER_URL");
+		expect(weather("https://user:secret@api.open-meteo.com/v1/forecast")).toThrow("OWNI_WEATHER_URL: no user name or password");
 		expect(weather("https://user@api.open-meteo.com/v1/forecast")).toThrow("no user name or password");
-		expect(weather(`https://api.open-meteo.com/v1/forecast?apikey=${KEY}`)).toThrow("ANNIE_WEATHER_URL: an address without a query or a fragment");
+		expect(weather(`https://api.open-meteo.com/v1/forecast?apikey=${KEY}`)).toThrow("OWNI_WEATHER_URL: an address without a query or a fragment");
 		expect(weather("https://api.open-meteo.com/v1/forecast#x")).toThrow("without a query or a fragment");
 		expect(weather("http://localhost.evil.example/v1/forecast")).toThrow("http only on localhost");
-		expect(() => loadAnnieConfig({ ...base, ANNIE_SEARCH_API_KEY: "k", ANNIE_SEARCH_URL: "https://u:p@search.example/s" })).toThrow("ANNIE_SEARCH_URL: no user name or password");
-		expect(() => loadAnnieConfig({ ...base, ANNIE_IMAGE_API_KEY: "k", ANNIE_IMAGE_URL: "https://img.example:70000/v1" })).toThrow("ANNIE_IMAGE_URL");
+		expect(() => loadOwniConfig({ ...base, OWNI_SEARCH_API_KEY: "k", OWNI_SEARCH_URL: "https://u:p@search.example/s" })).toThrow("OWNI_SEARCH_URL: no user name or password");
+		expect(() => loadOwniConfig({ ...base, OWNI_IMAGE_API_KEY: "k", OWNI_IMAGE_URL: "https://img.example:70000/v1" })).toThrow("OWNI_IMAGE_URL");
 		try {
 			weather(`https://api.open-meteo.com/v1/forecast?apikey=${KEY}`)();
 		} catch (e) {
@@ -503,21 +503,21 @@ describe("weather configuration", () => {
 
 	it("reaches the cells of Owni Cloud", () => {
 		const passed = /const passed = \[([^\]]*)\]/.exec(readFileSync("src/main/cloud.ts", "utf8"))?.[1] ?? "";
-		for (const name of ["ANNIE_WEATHER", "ANNIE_WEATHER_URL", "ANNIE_WEATHER_GEOCODING_URL", "ANNIE_WEATHER_API_KEY", "ANNIE_WEATHER_MAX_PER_DAY"]) expect(passed).toContain(`"${name}"`);
+		for (const name of ["OWNI_WEATHER", "OWNI_WEATHER_URL", "OWNI_WEATHER_GEOCODING_URL", "OWNI_WEATHER_API_KEY", "OWNI_WEATHER_MAX_PER_DAY"]) expect(passed).toContain(`"${name}"`);
 	});
 
-	it("pnpm annie check finds a place and a one-day forecast, with no key needed; a refused key is named, never printed", async () => {
+	it("pnpm owni check finds a place and a one-day forecast, with no key needed; a refused key is named, never printed", async () => {
 		const fake = fakeOpenMeteo();
 		const meteo = (results: Awaited<ReturnType<typeof runChecks>>) => results.find((r) => r.name === "Meteo");
-		const passing = meteo(await runChecks(loadAnnieConfig({ ...base, ANNIE_WEATHER: "1" }), fake.fetch));
+		const passing = meteo(await runChecks(loadOwniConfig({ ...base, OWNI_WEATHER: "1" }), fake.fetch));
 		expect(passing).toMatchObject({ ok: true, detail: "geocoding-api.open-meteo.com e api.open-meteo.com rispondono" });
 		expect(fake.asked[0]?.params).toEqual({ name: "Roma", count: "1", format: "json" });
 		expect(fake.asked[1]).toMatchObject({ path: "/v1/forecast", params: { forecast_days: "1", latitude: "41.89", longitude: "12.51" } });
 		const broken = fakeOpenMeteo({ forecast: new Response("down", { status: 502 }) });
-		expect(meteo(await runChecks(loadAnnieConfig({ ...base, ANNIE_WEATHER: "1" }), broken.fetch))).toMatchObject({ ok: false, detail: "il servizio risponde 502: controlla ANNIE_WEATHER_URL" });
+		expect(meteo(await runChecks(loadOwniConfig({ ...base, OWNI_WEATHER: "1" }), broken.fetch))).toMatchObject({ ok: false, detail: "il servizio risponde 502: controlla OWNI_WEATHER_URL" });
 		const refused = fakeOpenMeteo({ geocoding: Response.json({ reason: KEY }, { status: 403 }) });
-		const failing = meteo(await runChecks(loadAnnieConfig({ ...base, ANNIE_WEATHER: "1", ANNIE_WEATHER_API_KEY: KEY, ANNIE_WEATHER_GEOCODING_URL: "https://geo.example/v1/search" }), refused.fetch));
-		expect(failing).toMatchObject({ ok: false, detail: expect.stringContaining("ANNIE_WEATHER_API_KEY") });
+		const failing = meteo(await runChecks(loadOwniConfig({ ...base, OWNI_WEATHER: "1", OWNI_WEATHER_API_KEY: KEY, OWNI_WEATHER_GEOCODING_URL: "https://geo.example/v1/search" }), refused.fetch));
+		expect(failing).toMatchObject({ ok: false, detail: expect.stringContaining("OWNI_WEATHER_API_KEY") });
 		expect(JSON.stringify(failing)).not.toContain(KEY);
 	});
 });
@@ -525,7 +525,7 @@ describe("weather configuration", () => {
 describe("weather in an instance", () => {
 	it("is offered when the operator turned it on, with no key; the audit counts days, never the place", async () => {
 		const fake = fakeOpenMeteo();
-		const { reply, dataDir } = await boot(tempDataDir(), { ANNIE_WEATHER: "1" }, fake.fetch);
+		const { reply, dataDir } = await boot(tempDataDir(), { OWNI_WEATHER: "1" }, fake.fetch);
 		const answer = await reply('/tool weather {"place":"Roma","days":2}');
 		expect(fenced(answer).inside).toBe("Luogo: Roma, Lazio, Italia");
 		expect(answer).toContain("Adesso: parzialmente nuvoloso, 18,4 °C");
@@ -548,22 +548,22 @@ describe("weather in an instance", () => {
 
 
 async function boot(dataDir: string, env: Record<string, string>, weatherFetch: typeof fetch) {
-	const config = loadAnnieConfig({ ANNIE_DATA_DIR: dataDir, ANNIE_MODEL_PROVIDER: "faux", ANNIE_WEB_PORT: "1", ...env });
-	const annie: RunningAnnie = await startAnnie({ ...config, web: { ...config.web, port: 0 } }, { weatherFetch, schedulerIntervalMs: 60_000, log: () => {} });
-	closers.push(() => annie.stop());
-	const base = `http://127.0.0.1:${(annie.server.address() as AddressInfo).port}`;
-	const login = await fetch(`${base}/api/login`, { method: "POST", headers: { "x-annie": "1" }, body: JSON.stringify({ token: (annie.ownerLink as string).split("#")[1] }) });
+	const config = loadOwniConfig({ OWNI_DATA_DIR: dataDir, OWNI_MODEL_PROVIDER: "faux", OWNI_WEB_PORT: "1", ...env });
+	const owni: RunningOwni = await startOwni({ ...config, web: { ...config.web, port: 0 } }, { weatherFetch, schedulerIntervalMs: 60_000, log: () => {} });
+	closers.push(() => owni.stop());
+	const base = `http://127.0.0.1:${(owni.server.address() as AddressInfo).port}`;
+	const login = await fetch(`${base}/api/login`, { method: "POST", headers: { "x-owni": "1" }, body: JSON.stringify({ token: (owni.ownerLink as string).split("#")[1] }) });
 	const cookie = (login.headers.get("set-cookie") ?? "").split(";")[0] as string;
 	const api = async (path: string, body?: unknown) => {
-		const res = await fetch(`${base}${path}`, { method: body === undefined ? "GET" : "POST", headers: { cookie, "x-annie": "1" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+		const res = await fetch(`${base}${path}`, { method: body === undefined ? "GET" : "POST", headers: { cookie, "x-owni": "1" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
 		// biome-ignore lint: test
 		return (await res.json()) as any;
 	};
-	const thread = (await api("/api/instances/annie/threads", {})).thread;
+	const thread = (await api("/api/instances/owni/threads", {})).thread;
 	const reply = async (text: string): Promise<string> => {
-		const answers = async () => ((await api(`/api/instances/annie/threads/${thread.id}`)).entries as { from: string; text?: string }[]).filter((e) => e.from === "annie");
+		const answers = async () => ((await api(`/api/instances/owni/threads/${thread.id}`)).entries as { from: string; text?: string }[]).filter((e) => e.from === "owni");
 		const before = (await answers()).length;
-		await api(`/api/instances/annie/threads/${thread.id}/messages`, { text });
+		await api(`/api/instances/owni/threads/${thread.id}/messages`, { text });
 		for (const start = Date.now(); Date.now() - start < 20_000; ) {
 			const now = await answers();
 			if (now.length > before) return now.at(-1)?.text ?? "";
@@ -571,5 +571,5 @@ async function boot(dataDir: string, env: Record<string, string>, weatherFetch: 
 		}
 		throw new Error("no reply");
 	};
-	return { annie, reply, dataDir };
+	return { owni, reply, dataDir };
 }

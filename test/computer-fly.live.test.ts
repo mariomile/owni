@@ -5,15 +5,15 @@ import { type Backend, fakeFly, runProcess } from "./fake-fly.ts";
 /**
  * The computer of a micro-VM with the real image (ADR 0015).
  *
- * In CI (ANNIE_TEST_FLY_IMAGE, the `fly` target built by the Image workflow): each machine is a
+ * In CI (OWNI_TEST_FLY_IMAGE, the `fly` target built by the Image workflow): each machine is a
  * container of that image on Docker's default network, which reaches the internet, so the seal
- * of annie-fly-init is what keeps commands off it. Fly's API is the stand-in of fake-fly.ts.
+ * of owni-fly-init is what keeps commands off it. Fly's API is the stand-in of fake-fly.ts.
  *
- * Against Fly itself (FLY_API_TOKEN, ANNIE_TEST_FLY_ORG and ANNIE_TEST_FLY_IMAGE pushed to a
+ * Against Fly itself (FLY_API_TOKEN, OWNI_TEST_FLY_ORG and OWNI_TEST_FLY_IMAGE pushed to a
  * registry Fly can pull from): the same checks on a real machine, then the app is deleted.
  */
-const image = process.env.ANNIE_TEST_FLY_IMAGE;
-const realFly = process.env.FLY_API_TOKEN !== undefined && process.env.ANNIE_TEST_FLY_ORG !== undefined;
+const image = process.env.OWNI_TEST_FLY_IMAGE;
+const realFly = process.env.FLY_API_TOKEN !== undefined && process.env.OWNI_TEST_FLY_ORG !== undefined;
 const key = `live${process.pid}`;
 
 function checks(computer: () => FlyComputerProvider) {
@@ -56,7 +56,7 @@ const docker = (args: string[], stdin = "") => runProcess("docker", args, stdin)
 
 /** Machines as containers of the image; `caps` false leaves out what the first process needs to seal it. */
 function containers(caps = true): Backend {
-	const name = (app: string) => `annie-fly-${app}`;
+	const name = (app: string) => `owni-fly-${app}`;
 	return {
 		async boot(app, config) {
 			const env = (config.env ?? {}) as Record<string, string>;
@@ -79,7 +79,7 @@ describe.skipIf(image === undefined || realFly)("the computer of a micro-VM, as 
 	let provider: FlyComputerProvider;
 	beforeAll(async () => {
 		fly = await fakeFly(containers());
-		provider = new FlyComputerProvider({ token: "fly-test-token", org: "annie", region: "fra", image: image as string, apiUrl: fly.url, salt: "sale-di-prova-0123456789" });
+		provider = new FlyComputerProvider({ token: "fly-test-token", org: "owni", region: "fra", image: image as string, apiUrl: fly.url, salt: "sale-di-prova-0123456789" });
 	});
 	afterAll(async () => {
 		await provider.reset(key);
@@ -95,7 +95,7 @@ describe.skipIf(image === undefined || realFly)("the computer of a micro-VM, as 
 
 	it("runs nothing on a machine that could not be sealed", async () => {
 		const unsealed = await fakeFly(containers(false));
-		const c = new FlyComputerProvider({ token: "fly-test-token", org: "annie", region: "fra", image: image as string, apiUrl: unsealed.url, salt: "sale-di-prova-0123456789" });
+		const c = new FlyComputerProvider({ token: "fly-test-token", org: "owni", region: "fra", image: image as string, apiUrl: unsealed.url, salt: "sale-di-prova-0123456789" });
 		try {
 			await expect(c.run(`${key}x`, "echo fuori", { timeoutS: 30 })).rejects.toThrow(/start failed|not cut off/);
 		} finally {
@@ -106,7 +106,7 @@ describe.skipIf(image === undefined || realFly)("the computer of a micro-VM, as 
 });
 
 describe.skipIf(image === undefined || !realFly)("the computer on a real Fly machine", () => {
-	const provider = new FlyComputerProvider({ token: process.env.FLY_API_TOKEN as string, org: process.env.ANNIE_TEST_FLY_ORG as string, region: process.env.ANNIE_TEST_FLY_REGION ?? "fra", image: image as string, memoryMb: 1024, salt: `live-${process.pid}-0123456789abcdef` });
+	const provider = new FlyComputerProvider({ token: process.env.FLY_API_TOKEN as string, org: process.env.OWNI_TEST_FLY_ORG as string, region: process.env.OWNI_TEST_FLY_REGION ?? "fra", image: image as string, memoryMb: 1024, salt: `live-${process.pid}-0123456789abcdef` });
 	afterAll(() => provider.reset(key));
 	checks(() => provider);
 });

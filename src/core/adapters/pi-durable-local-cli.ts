@@ -13,7 +13,7 @@ import { validateToolArguments } from "@earendil-works/pi-ai/utils/validation";
 import { LocalProviderError, type LocalProviders } from "../local-providers.ts";
 import { subscriptionProvider } from "../model-providers.ts";
 
-const API = "annie-local-cli";
+const API = "owni-local-cli";
 const ZERO_USAGE = () => ({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } });
 const MODELS: Readonly<Record<string, readonly { id: string; name: string }[]>> = {
 	"claude-code": [{ id: "sonnet", name: "Claude Sonnet · abbonamento" }, { id: "opus", name: "Claude Opus · abbonamento" }, { id: "haiku", name: "Claude Haiku · abbonamento" }],
@@ -35,7 +35,7 @@ export function localCliProvider(id: string, local?: LocalProviders): Provider {
 				if (!models.some((m) => m.id === model.id)) throw new LocalProviderError("Modello locale non disponibile");
 				if (options?.signal?.aborted) throw new LocalProviderError("Operazione annullata");
 				events.push({ type: "start", partial: message });
-				dir = await mkdtemp(join(tmpdir(), "annie-model-"));
+				dir = await mkdtemp(join(tmpdir(), "owni-model-"));
 				const request = await cliRequest(id, model.id, context, dir);
 				const result = await local.inference({ provider: id, ...request, cwd: dir, signal: options?.signal }).catch((error: unknown) => {
 					throw inferenceFailure(failureDetails(error));
@@ -78,7 +78,7 @@ export function localCliProvider(id: string, local?: LocalProviders): Provider {
 		return events;
 	};
 	return { id, name: offered.label,
-		auth: { apiKey: { name: "Abbonamento locale", async resolve({ credential }) { return credential?.key === "annie-local-subscription" && local?.connected(id) ? { auth: { apiKey: "annie-local-subscription" }, source: "Abbonamento locale" } : undefined; } } },
+		auth: { apiKey: { name: "Abbonamento locale", async resolve({ credential }) { return credential?.key === "owni-local-subscription" && local?.connected(id) ? { auth: { apiKey: "owni-local-subscription" }, source: "Abbonamento locale" } : undefined; } } },
 		getModels: () => models, stream, streamSimple: stream,
 	};
 }

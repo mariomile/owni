@@ -3,7 +3,7 @@ import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { DEFAULT_INSTRUCTIONS, type RunningAnnie, startAnnie } from "../src/app.ts";
+import { DEFAULT_INSTRUCTIONS, type RunningOwni, startOwni } from "../src/app.ts";
 import { readOnlyInBriefs } from "../src/core/brief.ts";
 import { DocumentError, documentFattura } from "../src/core/documents.ts";
 import type { ToolContext } from "../src/core/engine.ts";
@@ -14,7 +14,7 @@ import { INVOICE_LIMITS, invoiceCallReads, invoiceKey, matchesParty } from "../s
 import { auditFile, workspaceDir } from "../src/core/paths.ts";
 import { createInvoiceTools, type InvoiceEvent } from "../src/core/tools/invoice-tools.ts";
 import { Workspace } from "../src/core/workspace.ts";
-import { loadAnnieConfig } from "../src/main/config.ts";
+import { loadOwniConfig } from "../src/main/config.ts";
 import { loadTools } from "./helpers.ts";
 
 const NS = "http://ivaservizi.agenziaentrate.gov.it/docs/xsd/fatture/v1.2";
@@ -78,7 +78,7 @@ const SENZA = fattura({ from: ALFA, to: BETA, number: "2026/0160", date: "2026-1
 const NOW = new Date("2026-10-18T08:00:00Z"); // Sunday
 const ctx: ToolContext = { step: (_key, work) => work(), progress: () => {}, signal: new AbortController().signal, callId: "inv", thread: { channel: "test", threadId: "t1" } };
 
-const temp = () => mkdtempSync(join(tmpdir(), "annie-invoices-"));
+const temp = () => mkdtempSync(join(tmpdir(), "owni-invoices-"));
 
 function writeFiles(root: string, files: Record<string, string | Uint8Array>): void {
 	for (const [path, content] of Object.entries(files)) {
@@ -814,7 +814,7 @@ describe("the scadenzario in the app", () => {
 		expect(setup().tool.description).toContain("use it, not file_search, for invoices to pay or collect, their due dates");
 		expect(setup().tool.description).toContain("the collections and payments it shows are confirmed through bank_statement");
 		const dataDir = temp();
-		const config = loadAnnieConfig({ ANNIE_DATA_DIR: dataDir, ANNIE_MODEL_PROVIDER: "faux", ANNIE_WEB_PORT: "1" });
+		const config = loadOwniConfig({ OWNI_DATA_DIR: dataDir, OWNI_MODEL_PROVIDER: "faux", OWNI_WEB_PORT: "1" });
 		const reply = await boot(config);
 		// Sent earlier, as a file in the instance's workspace.
 		const workspace = workspaceDir(dataDir, tenantId(config.tenantId), instanceId(config.instanceId));
@@ -852,20 +852,20 @@ function setupReal(files: Record<string, string | Uint8Array>) {
 }
 
 /** An Owni with the faux model, and a way to send a message and read the reply. */
-async function boot(config: ReturnType<typeof loadAnnieConfig>) {
-	const annie: RunningAnnie = await startAnnie({ ...config, web: { ...config.web, port: 0 } }, { schedulerIntervalMs: 60_000, log: () => {} });
-	closers.push(() => annie.stop());
-	const base = `http://127.0.0.1:${(annie.server.address() as AddressInfo).port}`;
-	const login = await fetch(`${base}/api/login`, { method: "POST", headers: { "x-annie": "1" }, body: JSON.stringify({ token: (annie.ownerLink as string).split("#")[1] }) });
+async function boot(config: ReturnType<typeof loadOwniConfig>) {
+	const owni: RunningOwni = await startOwni({ ...config, web: { ...config.web, port: 0 } }, { schedulerIntervalMs: 60_000, log: () => {} });
+	closers.push(() => owni.stop());
+	const base = `http://127.0.0.1:${(owni.server.address() as AddressInfo).port}`;
+	const login = await fetch(`${base}/api/login`, { method: "POST", headers: { "x-owni": "1" }, body: JSON.stringify({ token: (owni.ownerLink as string).split("#")[1] }) });
 	const cookie = (login.headers.get("set-cookie") ?? "").split(";")[0] as string;
 	const api = async (path: string, body?: unknown) => {
-		const res = await fetch(`${base}${path}`, { method: body === undefined ? "GET" : "POST", headers: { cookie, "x-annie": "1" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+		const res = await fetch(`${base}${path}`, { method: body === undefined ? "GET" : "POST", headers: { cookie, "x-owni": "1" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
 		// biome-ignore lint: test
 		return (await res.json()) as any;
 	};
 	const thread = (await api(`/api/instances/${config.instanceId}/threads`, {})).thread;
 	return async (text: string): Promise<string> => {
-		const answers = async () => ((await api(`/api/instances/${config.instanceId}/threads/${thread.id}`)).entries as { from: string; text?: string }[]).filter((e) => e.from === "annie");
+		const answers = async () => ((await api(`/api/instances/${config.instanceId}/threads/${thread.id}`)).entries as { from: string; text?: string }[]).filter((e) => e.from === "owni");
 		const before = (await answers()).length;
 		await api(`/api/instances/${config.instanceId}/threads/${thread.id}/messages`, { text });
 		for (const start = Date.now(); Date.now() - start < 30_000; ) {

@@ -32,5 +32,5 @@ Il piano era di metterlo sul computer della settimana 18. Abbiamo cambiato idea:
 ## Conseguenze
 
 - Una pagina con istruzioni nascoste può spingere Owni a cliccare o a scrivere in una ricerca: il testo scritto può arrivare al sito in una GET, come un indirizzo in `web_read`. Per questo i siti consentiti conviene elencarli uno per uno, e il testo della pagina arriva sempre recintato come dati.
-- Il JavaScript delle pagine gira nel renderer di Chromium, nel suo sandbox; dove il sandbox non parte vale la scelta esplicita dell'operatore dell'ADR 0009 (`ANNIE_SCREENSHOTS_WITHOUT_SANDBOX=1`).
+- Il JavaScript delle pagine gira nel renderer di Chromium, nel suo sandbox; dove il sandbox non parte vale la scelta esplicita dell'operatore dell'ADR 0009 (`OWNI_SCREENSHOTS_WITHOUT_SANDBOX=1`).
 - Dopo un riavvio le sessioni sono perse: Owni riapre la pagina.

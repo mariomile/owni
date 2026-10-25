@@ -1,6 +1,6 @@
 # Settimana 26: Owni scrive mail ed eventi, con approvazione
 
-Branch `week-26`. Decisione: [ADR 0021](adr/0021-google-scrivere-con-approvazione.md). Dalla console Owni prepara mail, risposte, bozze in Gmail ed eventi da creare, spostare o cancellare sul Google di chi le scrive. Ognuno compare come card in chat, sopra la casella del messaggio, e in Approvazioni; succede solo quando quella persona tocca il pulsante. Serve `ANNIE_GOOGLE_WRITE=1` ([chiavi](chiavi.md) §4); i test usano un Google finto.
+Branch `week-26`. Decisione: [ADR 0021](adr/0021-google-scrivere-con-approvazione.md). Dalla console Owni prepara mail, risposte, bozze in Gmail ed eventi da creare, spostare o cancellare sul Google di chi le scrive. Ognuno compare come card in chat, sopra la casella del messaggio, e in Approvazioni; succede solo quando quella persona tocca il pulsante. Serve `OWNI_GOOGLE_WRITE=1` ([chiavi](chiavi.md) §4); i test usano un Google finto.
 
 ## Cosa funziona (verificato dai test)
 

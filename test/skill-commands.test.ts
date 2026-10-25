@@ -32,7 +32,7 @@ describe("skill commands in the Telegram menu", () => {
 		const { runtime } = await runtimeWithInstance({ egress: { modelProviders: ["faux"], channels: ["telegram"] } });
 		runtime.skills("acme", "ops").save({ name: "Chiusura del mese", description: "Quando chiedono di chiudere il mese", body: "1. Fatture scadute\n2. Spese del mese", by: "web:1" }, () => true);
 		const sentTexts: string[] = [];
-		const updates = [{ update_id: 1, message: { message_id: 1, chat: { id: 42, type: "private" }, from: { id: 7 }, text: "/chiusura_del_mese@AnnieBot ottobre" } }];
+		const updates = [{ update_id: 1, message: { message_id: 1, chat: { id: 42, type: "private" }, from: { id: 7 }, text: "/chiusura_del_mese@OwniBot ottobre" } }];
 		const api = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
 			const method = String(url).slice(String(url).lastIndexOf("/") + 1);
 			const body = JSON.parse(String(init?.body)) as { text?: string };
@@ -46,7 +46,7 @@ describe("skill commands in the Telegram menu", () => {
 		connectChannel(runtime, adapter, { tenantId: "acme", instanceId: "ops" });
 		await adapter.pollOnce();
 		await waitFor(() => sentTexts.length > 0);
-		expect(sentTexts[0]).toContain("/chiusura_del_mese@AnnieBot ottobre");
+		expect(sentTexts[0]).toContain("/chiusura_del_mese@OwniBot ottobre");
 		expect(sentTexts[0]).toContain("[Skill «chiusura-del-mese»]");
 		expect(sentTexts[0]).toContain("2. Spese del mese");
 		await runtime.close();

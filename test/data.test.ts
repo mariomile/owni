@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { deflateRawSync } from "node:zlib";
 import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
-import { type RunningAnnie, startAnnie } from "../src/app.ts";
+import { type RunningOwni, startOwni } from "../src/app.ts";
 import { CalcError, calculate } from "../src/core/calc.ts";
 import { formatResult } from "../src/core/italian-format.ts";
 import { queryTableFile } from "../src/core/document-reader.ts";
@@ -11,7 +11,7 @@ import { dayOf, periodLabel, queryTable, readable, TableError, tableNumber } fro
 import { createChartTools } from "../src/core/tools/chart-tools.ts";
 import { createDataTools } from "../src/core/tools/data-tools.ts";
 import { Workspace } from "../src/core/workspace.ts";
-import { loadAnnieConfig } from "../src/main/config.ts";
+import { loadOwniConfig } from "../src/main/config.ts";
 import { tempDataDir } from "./helpers.ts";
 
 const closers: (() => Promise<void>)[] = [];
@@ -456,19 +456,19 @@ describe("table_query and calculate as tools", () => {
 
 describe("tables and sums in an instance", () => {
 	it("are answered from the chat", async () => {
-		const loaded = loadAnnieConfig({ ANNIE_DATA_DIR: tempDataDir(), ANNIE_MODEL_PROVIDER: "faux", ANNIE_WEB_PORT: "1" });
-		const annie: RunningAnnie = await startAnnie({ ...loaded, web: { ...loaded.web, port: 0 } }, { schedulerIntervalMs: 60_000, log: () => {} });
-		closers.push(() => annie.stop());
-		const base = `http://127.0.0.1:${(annie.server.address() as AddressInfo).port}`;
-		const login = await fetch(`${base}/api/login`, { method: "POST", headers: { "x-annie": "1" }, body: JSON.stringify({ token: (annie.ownerLink as string).split("#")[1] }) });
+		const loaded = loadOwniConfig({ OWNI_DATA_DIR: tempDataDir(), OWNI_MODEL_PROVIDER: "faux", OWNI_WEB_PORT: "1" });
+		const owni: RunningOwni = await startOwni({ ...loaded, web: { ...loaded.web, port: 0 } }, { schedulerIntervalMs: 60_000, log: () => {} });
+		closers.push(() => owni.stop());
+		const base = `http://127.0.0.1:${(owni.server.address() as AddressInfo).port}`;
+		const login = await fetch(`${base}/api/login`, { method: "POST", headers: { "x-owni": "1" }, body: JSON.stringify({ token: (owni.ownerLink as string).split("#")[1] }) });
 		const cookie = (login.headers.get("set-cookie") ?? "").split(";")[0] as string;
 		// biome-ignore lint: test
-		const api = async (path: string, body?: unknown): Promise<any> => (await fetch(`${base}${path}`, { method: body === undefined ? "GET" : "POST", headers: { cookie, "x-annie": "1" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) })).json();
-		const thread = (await api("/api/instances/annie/threads", {})).thread;
+		const api = async (path: string, body?: unknown): Promise<any> => (await fetch(`${base}${path}`, { method: body === undefined ? "GET" : "POST", headers: { cookie, "x-owni": "1" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) })).json();
+		const thread = (await api("/api/instances/owni/threads", {})).thread;
 		const reply = async (text: string): Promise<string> => {
-			const answers = async () => ((await api(`/api/instances/annie/threads/${thread.id}`)).entries as { from: string; text?: string }[]).filter((e) => e.from === "annie" && e.text !== undefined);
+			const answers = async () => ((await api(`/api/instances/owni/threads/${thread.id}`)).entries as { from: string; text?: string }[]).filter((e) => e.from === "owni" && e.text !== undefined);
 			const before = (await answers()).length;
-			await api(`/api/instances/annie/threads/${thread.id}/messages`, { text });
+			await api(`/api/instances/owni/threads/${thread.id}/messages`, { text });
 			for (const start = Date.now(); Date.now() - start < 20_000; ) {
 				const now = await answers();
 				if (now.length > before) return now.at(-1)?.text ?? "";

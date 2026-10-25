@@ -15,7 +15,7 @@ import { FAUX_MODEL_ROLES } from "../src/core/model-routing.ts";
 import { instanceDir } from "../src/core/paths.ts";
 import { type Pratica, PracticeStore } from "../src/core/practice.ts";
 import { ProposalStore } from "../src/core/proposals.ts";
-import { AnnieRuntime } from "../src/core/runtime.ts";
+import { OwniRuntime } from "../src/core/runtime.ts";
 import { UsageLedger } from "../src/core/usage.ts";
 import { WebActionStore } from "../src/core/web-actions.ts";
 import { SegreteriaService } from "../src/segreteria/service.ts";
@@ -32,7 +32,7 @@ afterEach(async () => {
 
 async function setup() {
 	const dataDir = tempDataDir();
-	const runtime = new AnnieRuntime({ dataDir, engine: piDurableEngine });
+	const runtime = new OwniRuntime({ dataDir, engine: piDurableEngine });
 	await runtime.registry.createTenant({ id: "acme", name: "Acme" });
 	const tenantDir = join(dataDir, "tenants", "acme");
 	const people = new PeopleStore(tenantDir);
@@ -74,11 +74,11 @@ async function setup() {
 		await rm(dataDir, { recursive: true, force: true });
 	});
 	const as = async (token: string) => {
-		const login = await fetch(`${base}/api/login`, { method: "POST", headers: { "x-annie": "1" }, body: JSON.stringify({ token }) });
+		const login = await fetch(`${base}/api/login`, { method: "POST", headers: { "x-owni": "1" }, body: JSON.stringify({ token }) });
 		expect(login.status).toBe(200);
 		const cookie = (login.headers.get("set-cookie") ?? "").split(";")[0] as string;
 		return async (path: string, init: RequestInit = {}) => {
-			const response = await fetch(`${base}${path}`, { ...init, headers: { cookie, "x-annie": "1", ...(init.headers ?? {}) } });
+			const response = await fetch(`${base}${path}`, { ...init, headers: { cookie, "x-owni": "1", ...(init.headers ?? {}) } });
 			return { status: response.status, body: await response.json() as any };
 		};
 	};

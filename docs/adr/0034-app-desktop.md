@@ -18,10 +18,10 @@ Owni si usa dal browser, dal telefono come app installata, da Telegram e WhatsAp
 
 ## Alternative scartate
 
-- **Il server dentro l'app** (Node come sidecar, come il sidecar di Reflect). Owni è multi-persona, con canali, task programmati e chiavi che devono restare accesi quando il portatile dorme: il posto è un server. Si può aggiungere per chi vuole provare in locale. Aggiunto sul Mac: [ADR 0096](0096-annie-dentro-l-app-per-mac.md).
+- **Il server dentro l'app** (Node come sidecar, come il sidecar di Reflect). Owni è multi-persona, con canali, task programmati e chiavi che devono restare accesi quando il portatile dorme: il posto è un server. Si può aggiungere per chi vuole provare in locale. Aggiunto sul Mac: [ADR 0096](0096-owni-dentro-l-app-per-mac.md).
 - **Una console scritta per il desktop.** Raddoppia il lavoro a ogni funzione.
 
 ## Conseguenze
 
 - Gli installer escono dal workflow «Desktop app» come bozza di release, per ora non firmati: macOS avvisa al primo avvio e Windows mostra SmartScreen. Per firmarli servono il certificato Apple Developer (con notarizzazione) e uno per Windows, nei segreti del repository; poi si accendono gli aggiornamenti automatici (plugin updater con chiave minisign, come Reflect).
-- Prossimi passi: notifiche native quando Owni risponde con la finestra nascosta, link `annie://` per aprire un link personale, avvio al login.
+- Prossimi passi: notifiche native quando Owni risponde con la finestra nascosta, link `owni://` per aprire un link personale, avvio al login.

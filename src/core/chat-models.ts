@@ -1,6 +1,6 @@
 import { DEV_MODEL_ID, DEV_PROVIDER, MODEL_PROVIDERS, SUBSCRIPTION_PROVIDERS, subscriptionProvider, type ModelInfo } from "./model-providers.ts";
 import type { InstanceRecord, ModelSelection } from "./registry.ts";
-import type { AnnieRuntime } from "./runtime.ts";
+import type { OwniRuntime } from "./runtime.ts";
 import { modelApiKeySecret } from "./secrets.ts";
 
 /** A provider a person may give one of their chats; `allowed`: the instance already uses it. */
@@ -24,7 +24,7 @@ export class ChatModelRefused extends Error {
  */
 export class ChatModels {
 	constructor(
-		private readonly runtime: AnnieRuntime,
+		private readonly runtime: OwniRuntime,
 		private readonly tenant: string,
 		private readonly catalog: {
 			/** The models of a provider Owni offers. */

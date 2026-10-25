@@ -47,7 +47,7 @@ Un agente A scrive a un agente B con `agent_message` ([ADR 0042](0042-agenti-che
 ## Conseguenze
 
 - `requirePersonFor` accetta un `needsPerson` facoltativo nel contesto dello strumento e, da chi ha un'anteprima, la chiamata confermata; il rifiuto resta identico per il turno di B.
-- Il modello locale di prova esegue un `/tool` anche quando è tutta la richiesta di un altro agente, così un test guida tutti e due i lati: solo con `NODE_ENV=test`, mai con `ANNIE_LOCAL_PROVIDERS=1`.
+- Il modello locale di prova esegue un `/tool` anche quando è tutta la richiesta di un altro agente, così un test guida tutti e due i lati: solo con `NODE_ENV=test`, mai con `OWNI_LOCAL_PROVIDERS=1`.
 - Nuovi file per agente: `agent-requests/` (la coda) e `agent-asks.json` (la richiesta di ogni messaggio di un altro agente, per id del messaggio, al più 200). Il turno sa a quali messaggi risponde dagli id delle sue entrate, così la scheda mostra il messaggio giusto anche quando A ne ha mandati più d'uno.
 - Console: nuove rotte `GET /api/instances/:id/agent-requests` (solo per chi approva) e `POST .../agent-requests/:rid/decision`; il contatore delle cose da approvare le conta. Chat: pulsanti `agent:<id>:approved|rejected`.
 - All'avvio le richieste rimaste a metà diventano incerte e A lo sa, gli esiti non ancora detti ad A sono rimandati, quelle in attesa sono riproposte nelle chat che non hanno ancora la scheda.

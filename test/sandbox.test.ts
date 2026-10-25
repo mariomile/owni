@@ -42,7 +42,7 @@ describe("sandbox for tools proposti", () => {
 	});
 
 	it("cannot open sockets, spawn processes, read outside its folder or see the environment", async () => {
-		process.env.ANNIE_SECRET_PROBE = "leak";
+		process.env.OWNI_SECRET_PROBE = "leak";
 		await expect(run('import net from "node:net"; export default async () => "x"')).rejects.toThrow("Module not allowed in the sandbox: node:net");
 		await expect(run('export default async () => (await import("node:https")).request')).rejects.toThrow("not allowed");
 		await expect(run('export default async () => process.getBuiltinModule("net").connect')).rejects.toThrow("not allowed");

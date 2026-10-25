@@ -3,7 +3,7 @@ import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import type { AnnieTool } from "../src/core/engine.ts";
+import type { OwniTool } from "../src/core/engine.ts";
 import { createResearchTools } from "../src/core/tools/research-tools.ts";
 import { createWebTools } from "../src/core/tools/web-tools.ts";
 import { dispositionName, documentLimit, documentLinks, urlFileName } from "../src/core/web-documents.ts";
@@ -41,7 +41,7 @@ function tools(web: readonly string[] = ["127.0.0.1"]) {
 	const workspace = new Workspace(join(tempDataDir(), "ws"));
 	const downloads: { path: string; bytes: number }[] = [];
 	const list = createWebTools({ policy: async () => ({ modelProviders: [], channels: [], web }), workspace, addressAllowed: localOnly, recordDownload: async (file) => void downloads.push(file) });
-	const call = async (name: string, args: Record<string, unknown>) => String(await (list.find((t) => t.name === name) as AnnieTool).execute(args, ctx));
+	const call = async (name: string, args: Record<string, unknown>) => String(await (list.find((t) => t.name === name) as OwniTool).execute(args, ctx));
 	return { workspace, call, downloads };
 }
 
@@ -162,7 +162,7 @@ describe("documents on the web", () => {
 				today: () => "17 ottobre 2026",
 			},
 		} as never);
-		const gather = list.find((t) => t.name === "research_gather") as AnnieTool;
+		const gather = list.find((t) => t.name === "research_gather") as OwniTool;
 		const found = String(await gather.execute({ question: "totale fattura 42", queries: ["fattura 42 totale", "fattura 42 IVA"] }, ctx));
 		expect(found).toContain("(1 pagina letta)");
 		expect(found).toContain("[PDF, 2 pagine]\n");

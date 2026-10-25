@@ -209,7 +209,7 @@ pub fn run() {
             tray(&handle)?;
             // Another app may hold the shortcut: Owni still works from the tray.
             if let Err(error) = handle.global_shortcut().register(summon()) {
-                eprintln!("annie: shortcut not registered: {error}");
+                eprintln!("owni: shortcut not registered: {error}");
             }
             Ok(())
         })
@@ -223,7 +223,7 @@ pub fn run() {
             }
         })
         .build(tauri::generate_context!())
-        .expect("annie: the app could not start")
+        .expect("owni: the app could not start")
         .run(|app, event| {
             // The Mac's Dock icon brings the hidden window back.
             #[cfg(target_os = "macos")]
@@ -345,7 +345,7 @@ fn unused(dir: &Path, name: &str) -> PathBuf {
             })
         })
         .find(|p| !p.exists())
-        .expect("annie: an unused name")
+        .expect("owni: an unused name")
 }
 
 fn allowed(app: &AppHandle, target: &Url) -> bool {
@@ -398,12 +398,12 @@ fn tray(app: &AppHandle) -> tauri::Result<()> {
             &quit,
         ],
     )?;
-    TrayIconBuilder::with_id("annie")
+    TrayIconBuilder::with_id("owni")
         .tooltip("Owni")
         .icon(
             app.default_window_icon()
                 .cloned()
-                .expect("annie: the bundle has an icon"),
+                .expect("owni: the bundle has an icon"),
         )
         .menu(&menu)
         .show_menu_on_left_click(false)
@@ -444,7 +444,7 @@ mod tests {
 
     #[test]
     fn a_download_never_replaces_a_file() {
-        let dir = std::env::temp_dir().join(format!("annie-unused-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("owni-unused-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         assert_eq!(unused(&dir, "nota.pdf"), dir.join("nota.pdf"));
         std::fs::write(dir.join("nota.pdf"), "").unwrap();

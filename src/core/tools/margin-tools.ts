@@ -1,6 +1,6 @@
 import { findNamed, FORM_NOTE } from "../client-find.ts";
 import { type CsvCell, csvFile } from "../csv.ts";
-import type { AnnieTool, ToolContext } from "../engine.ts";
+import type { OwniTool, ToolContext } from "../engine.ts";
 import type { ExpenseStore } from "../expense-store.ts";
 import { euros, n1 } from "../format-words.ts";
 import { InvoiceScanner } from "../invoice-scan.ts";
@@ -111,7 +111,7 @@ const signedEuros = (cents: bigint) => (cents > 0n ? `+${euros(cents)}` : euros(
  * shows prices and costs. Only the export writes (a file) and the brief's line (which marks its
  * voci as said).
  */
-export function createMarginTools(options: MarginToolsOptions): AnnieTool[] {
+export function createMarginTools(options: MarginToolsOptions): OwniTool[] {
 	const { store, workspace, timeZone } = options;
 	const now = options.now ?? (() => new Date());
 	const scanner = options.invoices === undefined ? undefined : (options.scanner ?? new InvoiceScanner(workspace));

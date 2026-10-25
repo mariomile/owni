@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import { CALC_LIMITS, CalcError, calculate } from "../calc.ts";
 import { queryTableFile } from "../document-reader.ts";
 import { DocumentError } from "../documents.ts";
-import type { AnnieTool } from "../engine.ts";
+import type { OwniTool } from "../engine.ts";
 import { formatResult } from "../italian-format.ts";
 import { AGGREGATE_OPS, FILTER_OPS, PERIODS, type Period, TABLE_LIMITS, type TableAggregate, TableError, type TableFilter, type TableQuery, type TableResult, type TableSort } from "../tables.ts";
 import { inertMarkers } from "../untrusted.ts";
@@ -15,7 +15,7 @@ export type DataToolsOptions = { readonly workspace: Workspace };
  * (filters, groups by column or period, sums, averages, rankings), calculate does the arithmetic
  * of a quote or a split exactly.
  */
-export function createDataTools(options: DataToolsOptions): AnnieTool[] {
+export function createDataTools(options: DataToolsOptions): OwniTool[] {
 	const { workspace } = options;
 	return [
 		{

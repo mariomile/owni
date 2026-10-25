@@ -7,7 +7,7 @@ Branch `week-20`. Decisione: [ADR 0015](adr/0015-computer-su-micro-vm.md). È l'
 - **Il provider Fly** (`test/fly-computer.test.ts`, contro una copia dell'API delle macchine che esegue il runner vero): una app per computer su una rete sua, un volume cifrato, una macchina senza servizi e senza riavvio; comandi lunghi aspettati a fette oltre i 60 secondi dell'exec di Fly; tempo massimo, annullamento e processi lasciati in background chiusi; file dentro e fuori a pezzi, con cartelle, collegamenti e file mancanti rifiutati; quota del disco; una macchina ferma da sola riparte con i suoi file; una nuova immagine aggiorna la macchina sullo stesso volume, e una quota più grande fa crescere il volume; un volume rimasto libero viene riusato; un exec chiuso dal kernel non passa per un successo; azzerare cancella la app; nessun comando su una macchina non sigillata.
 - **Il sigillo** (`test/computer-fly.live.test.ts` nel job `computer` della CI, sull'immagine vera in un container che raggiunge internet): il container senza sigillo esce in rete, quello sigillato no, né in IPv4 né in IPv6; uid 1000 non toglie le regole; socket packet e vsock rifiutati; senza le capability per sigillarla la macchina non esegue niente.
 - **Owni Cloud** (`test/cloud-computer.test.ts`): le celle chiedono al control plane, con un token derivato dal loro segreto; la stessa chiave da due tenant dà due computer; nessuna risposta senza token giusto o dal dominio di un tenant; errori interni nascosti alla cella; comandi annullati dalla cella chiusi con quello che hanno scritto; 2 comandi alla volta e 10 computer per tenant; niente per un tenant con la prova finita; `pnpm cloud computers` e `pnpm cloud computers delete <tenant>`.
-- **Impostazioni** (`test/cloud-computer.test.ts`, `test/computer.test.ts`): `ANNIE_COMPUTER=fly` e i limiti che Fly accetta; le celle ricevono solo `ANNIE_COMPUTER=cloud` e l'indirizzo, mai il token di Fly né Docker, e un control plane senza computer li spegne anche alle celle esistenti al primo `pnpm cloud upgrade`.
+- **Impostazioni** (`test/cloud-computer.test.ts`, `test/computer.test.ts`): `OWNI_COMPUTER=fly` e i limiti che Fly accetta; le celle ricevono solo `OWNI_COMPUTER=cloud` e l'indirizzo, mai il token di Fly né Docker, e un control plane senza computer li spegne anche alle celle esistenti al primo `pnpm cloud upgrade`.
 
 ## Rispetto al computer Docker
 
@@ -34,10 +34,10 @@ Due revisori separati (standard e sicurezza, spec). Corretti:
 
 ## Prova dal vivo su Fly
 
-Con `FLY_API_TOKEN` e `ANNIE_TEST_FLY_ORG` nell'ambiente (mai in chat, [chiavi](chiavi.md) §12) e l'immagine pubblicata su un registry che Fly raggiunge:
+Con `FLY_API_TOKEN` e `OWNI_TEST_FLY_ORG` nell'ambiente (mai in chat, [chiavi](chiavi.md) §12) e l'immagine pubblicata su un registry che Fly raggiunge:
 
 ```sh
-ANNIE_TEST_FLY_IMAGE=ghcr.io/mariomile/annie-computer:fly pnpm vitest run test/computer-fly.live.test.ts
+OWNI_TEST_FLY_IMAGE=ghcr.io/mariomile/owni-computer:fly pnpm vitest run test/computer-fly.live.test.ts
 ```
 
 Crea una app nell'organizzazione, prova sigillo, file, comandi lunghi e processi in background su una macchina vera, poi la cancella. Costo stimato: qualche centesimo.

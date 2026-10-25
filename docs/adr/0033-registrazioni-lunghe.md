@@ -4,9 +4,9 @@ Le persone registrano le riunioni, le chiamate con i clienti, le lezioni, i sopr
 
 ## Decisione
 
-Un tool, `audio_transcribe`, che trascrive una registrazione del workspace di qualunque durata (fino a `ANNIE_TRANSCRIBE_MAX_MINUTES`, 180 di default) tagliandola in pezzi di dieci minuti al più, mandati tre alla volta allo stesso servizio dei vocali. Ogni passaggio della trascrizione porta l'ora in cui comincia nella registrazione intera ([00:12:40]) e, se il servizio lo sa fare e la persona lo chiede, chi parla (Voce 1, Voce 2). La trascrizione è salvata in `trascrizioni/<nome>.md`; il modello ne vede l'inizio e legge il resto con `file_read` quando deve fare un verbale.
+Un tool, `audio_transcribe`, che trascrive una registrazione del workspace di qualunque durata (fino a `OWNI_TRANSCRIBE_MAX_MINUTES`, 180 di default) tagliandola in pezzi di dieci minuti al più, mandati tre alla volta allo stesso servizio dei vocali. Ogni passaggio della trascrizione porta l'ora in cui comincia nella registrazione intera ([00:12:40]) e, se il servizio lo sa fare e la persona lo chiede, chi parla (Voce 1, Voce 2). La trascrizione è salvata in `trascrizioni/<nome>.md`; il modello ne vede l'inizio e legge il resto con `file_read` quando deve fare un verbale.
 
-I vocali più lunghi di `ANNIE_TRANSCRIBE_MAX_SECONDS` e i file audio lunghi arrivati su Telegram e WhatsApp non sono più rifiutati: finiscono nel workspace come registrazioni, e il messaggio dice a Owni formato, durata e percorso («[Registrazione MP3, 52:10 nel workspace: uploads/…]»). Lo stesso per i file caricati dalla console o mandati come documento, video compresi.
+I vocali più lunghi di `OWNI_TRANSCRIBE_MAX_SECONDS` e i file audio lunghi arrivati su Telegram e WhatsApp non sono più rifiutati: finiscono nel workspace come registrazioni, e il messaggio dice a Owni formato, durata e percorso («[Registrazione MP3, 52:10 nel workspace: uploads/…]»). Lo stesso per i file caricati dalla console o mandati come documento, video compresi.
 
 ## Come taglia, senza decodificare
 
@@ -22,7 +22,7 @@ I pezzi hanno durate simili (25 minuti diventano tre pezzi da otto e qualcosa, n
 
 ## I tempi e le voci
 
-Il servizio è quello dei vocali (OpenAI-compatibile). Il modo di chiedere i tempi dipende dal servizio ed è in `ANNIE_TRANSCRIBE_TIMESTAMPS`:
+Il servizio è quello dei vocali (OpenAI-compatibile). Il modo di chiedere i tempi dipende dal servizio ed è in `OWNI_TRANSCRIBE_TIMESTAMPS`:
 
 - `mistral` (default su api.mistral.ai): `timestamp_granularities=segment`, e `diarize=true` per le voci.
 - `openai` (default per `whisper-1`): `response_format=verbose_json` e `timestamp_granularities[]=segment`; niente voci.
@@ -34,7 +34,7 @@ I segmenti brevi della stessa voce si uniscono in passaggi di un minuto o 600 ca
 
 - Ogni pezzo è uno step durevole: se il processo si ferma a metà di un'ora di registrazione, al riavvio i pezzi già trascritti non si rimandano e non si contano di nuovo.
 - Un errore del servizio si riprova una volta dopo due secondi; se fallisce ancora, Owni lo dice e non si consuma niente di quel pezzo.
-- Minuti al giorno per account (`ANNIE_TRANSCRIBE_MINUTES_PER_DAY`, 600 di default), contati in secondi esatti al momento in cui un pezzo è trascritto; prima di cominciare Owni controlla che bastino per l'intera registrazione.
+- Minuti al giorno per account (`OWNI_TRANSCRIBE_MINUTES_PER_DAY`, 600 di default), contati in secondi esatti al momento in cui un pezzo è trascritto; prima di cominciare Owni controlla che bastino per l'intera registrazione.
 - Il consenso è quello dei vocali: il connettore `voice` dell'istanza (Impostazioni → Messaggi vocali). Senza, il tool risponde che la trascrizione non è attiva e l'audio non esce.
 
 ## Sicurezza

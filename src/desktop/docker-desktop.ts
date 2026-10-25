@@ -32,9 +32,9 @@ export type DockerDesktopOptions = {
 
 /** Docker Engine API 1.41: Docker 20.10 and later. */
 const API = "/v1.41";
-const LABEL = "annie.desktop";
+const LABEL = "owni.desktop";
 /** A hash of how the container was created, without its secrets: a change of image or limits recreates it. */
-const SPEC_LABEL = "annie.desktop.spec";
+const SPEC_LABEL = "owni.desktop.spec";
 const API_TIMEOUT_MS = 30_000;
 const SPACES_PORT = 3211;
 /** The screen's size: screenshots reach the model at this size, so its coordinates are the screen's. */
@@ -226,7 +226,7 @@ export class DockerDesktopProvider implements DesktopProvider {
 			const internal = this.network === "none";
 			const found = (await this.api("GET", `/networks/${network}`, undefined, [200, 404])) as { Internal?: boolean; Options?: Record<string, string> } | undefined;
 			if (found !== undefined) {
-				if ((found.Internal === true) !== internal) throw new Error(`desktop: the Docker network ${network} ${internal ? "reaches the internet" : "is internal"}, and ANNIE_DESKTOP_NETWORK says ${internal ? "no internet" : "internet"}: remove it or fix it`);
+				if ((found.Internal === true) !== internal) throw new Error(`desktop: the Docker network ${network} ${internal ? "reaches the internet" : "is internal"}, and OWNI_DESKTOP_NETWORK says ${internal ? "no internet" : "internet"}: remove it or fix it`);
 				// Made by someone else (Docker Compose, so that Owni can join it): desktops may then reach each other.
 				if (found.Options?.["com.docker.network.bridge.enable_icc"] !== "false") this.options.log?.(`desktop: warning: the Docker network ${network} lets containers talk to each other (com.docker.network.bridge.enable_icc is not "false"): one agente's screen can reach another's, kept apart only by their tokens and VNC passwords`);
 				return;
@@ -241,7 +241,7 @@ export class DockerDesktopProvider implements DesktopProvider {
 	}
 
 	private networkName(): string {
-		return this.network === "none" ? "annie-desktop" : "annie-desktop-internet";
+		return this.network === "none" ? "owni-desktop" : "owni-desktop-internet";
 	}
 
 	private image(): string {
@@ -313,7 +313,7 @@ const KEY = /^[a-z0-9][a-z0-9_-]{0,100}$/;
 
 function name(key: string): string {
 	if (!KEY.test(key)) throw new Error("Invalid desktop key");
-	return `annie-desktop-${key}`;
+	return `owni-desktop-${key}`;
 }
 
 /** The connection to the daemon was lost (refused, reset, cut): its container may not be running. */

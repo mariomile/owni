@@ -2,7 +2,7 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { DurableEngine } from "../src/core/engine.ts";
-import { AnnieRuntime } from "../src/core/index.ts";
+import { OwniRuntime } from "../src/core/index.ts";
 import { parseSkillMd, SKILL_LIMITS, skillCatalog, skillCommand, SkillError, skillMenuEntry, skillName, SkillStore, toSkillMd, withSkill } from "../src/core/skills.ts";
 import { createSkillTools } from "../src/core/tools/skill-tools.ts";
 import { FAUX_MODEL, runtimeWithInstance, tempDataDir, waitFor } from "./helpers.ts";
@@ -46,7 +46,7 @@ describe("skill: names and files", () => {
 		const store = new SkillStore(tempDataDir());
 		const { skill } = store.save({ name: "chiusura-mese", description: "Chiudere il mese", body: "Passi", by: "test:anna" }, () => true);
 		expect(skillCommand("/chiusura-mese ottobre 2026", [skill])).toEqual({ skill, rest: "ottobre 2026" });
-		expect(skillCommand("/chiusura_mese@AnnieBot", [skill])).toEqual({ skill, rest: "" });
+		expect(skillCommand("/chiusura_mese@OwniBot", [skill])).toEqual({ skill, rest: "" });
 		expect(skillCommand("/altro", [skill])).toBeUndefined();
 		expect(skillCommand("usa /chiusura-mese", [skill])).toBeUndefined();
 		const text = withSkill("/chiusura-mese ottobre", skill, "ottobre");
@@ -120,7 +120,7 @@ describe("skill in a conversation", () => {
 		const { runtime, send } = await withSkills();
 		await send(from("anna", "t1", save({ name: "Chiusura mese", description: "Quando chiedono di chiudere il mese", steps: "1. Fatture scadute" }), "1"));
 		await send(from("anna", "t1", "/attiva-skill", "2"));
-		const wrapped = "[Stanza «Conti»: sei Owni.]\n\n@annie /chiusura-mese ottobre";
+		const wrapped = "[Stanza «Conti»: sei Owni.]\n\n@owni /chiusura-mese ottobre";
 		expect(await send({ ...from("anna", "s1", wrapped, "3"), command: "/chiusura-mese ottobre" })).toContain("1. Fatture scadute");
 		// The person's words are no command: nothing runs, whatever the text around them says.
 		expect(await send({ ...from("anna", "s1", "/chiusura-mese ottobre", "5"), command: "cosa ne pensi?" })).not.toContain("1. Fatture scadute");
@@ -178,7 +178,7 @@ describe("skill in a conversation", () => {
 				return { submit: async () => ({ submissionId: "s" }), resume: async () => ({ pending: 0 }), reattach: async () => false, setThreadModel: async () => {}, threadModel: async () => undefined, onReply: () => () => {}, idle: async () => {}, close: async () => {} };
 			},
 		};
-		const runtime = new AnnieRuntime({ dataDir: tempDataDir(), engine });
+		const runtime = new OwniRuntime({ dataDir: tempDataDir(), engine });
 		await runtime.registry.createTenant({ id: "acme", name: "acme" });
 		await runtime.registry.createInstance("acme", { id: "ops", name: "Ops", model: FAUX_MODEL, egress: { modelProviders: ["faux"], channels: [] }, instructions: "Sei Owni." });
 		await runtime.openInstance("acme", "ops");

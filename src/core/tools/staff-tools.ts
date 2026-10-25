@@ -19,7 +19,7 @@ import { localNow, type Span } from "../appointment-slots.ts";
 import type { AppointmentStore } from "../appointment-store.ts";
 import { makeDocumentFile } from "../document-reader.ts";
 import { DocumentError } from "../documents.ts";
-import type { AnnieTool, ToolContext } from "../engine.ts";
+import type { OwniTool, ToolContext } from "../engine.ts";
 import { n1 } from "../format-words.ts";
 import { addDays, daysBetween, MONTH_NAMES, weekdayOf } from "../italian-calendar.ts";
 import { italianDate } from "../italian-format.ts";
@@ -93,11 +93,11 @@ const capital = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
 const mondayOf = (day: string) => addDays(day, -((weekdayOf(day) + 6) % 7));
 const absentCount = (n: number) => (n === 0 ? "nessuno assente" : n1(n, "un assente", "# assenti"));
 
-export function createStaffTools(options: StaffToolsOptions): AnnieTool[] {
+export function createStaffTools(options: StaffToolsOptions): OwniTool[] {
 	const { store, workspace, timeZone } = options;
 	const now = options.now ?? (() => new Date());
 	const make = options.make ?? ((input: MakeInput) => makeDocumentFile(input));
-	const who = (ctx: ToolContext) => (ctx.thread === undefined ? "annie" : (options.whoIs(ctx.thread) ?? `${ctx.thread.channel}:${ctx.thread.threadId}`));
+	const who = (ctx: ToolContext) => (ctx.thread === undefined ? "owni" : (options.whoIs(ctx.thread) ?? `${ctx.thread.channel}:${ctx.thread.threadId}`));
 	const marker = (ctx: ToolContext): Marker => ({ by: who(ctx), at: now().toISOString() });
 	const audit = async (ctx: ToolContext, op: StaffEvent["op"], count: number) => {
 		await ctx.step(`audit-${op}`, async () => {

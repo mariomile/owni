@@ -1,4 +1,4 @@
-import type { AnnieTool } from "../engine.ts";
+import type { OwniTool } from "../engine.ts";
 import { addDays } from "../italian-calendar.ts";
 import { capitalized, italianDay, italianNumber } from "../italian-format.ts";
 import { untrusted } from "../untrusted.ts";
@@ -28,7 +28,7 @@ const HOW_TO_PICK = "ripeti con country, o con la provincia o la regione dopo un
  * The weather of a place, now, in the next hours and day by day (Open-Meteo), when the operator
  * set it up. Place names come from the service and are fenced as data; the numbers are ours.
  */
-export function createWeatherTools(options: WeatherToolsOptions): AnnieTool[] {
+export function createWeatherTools(options: WeatherToolsOptions): OwniTool[] {
 	return [
 		{
 			name: "weather",

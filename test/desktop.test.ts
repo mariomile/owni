@@ -4,7 +4,7 @@ import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { startAnnie } from "../src/app.ts";
+import { startOwni } from "../src/app.ts";
 import { readOnlyInBriefs } from "../src/core/brief.ts";
 import { DesktopError, type DesktopProvider, type DesktopResult } from "../src/core/desktop.ts";
 import { createDesktopTools } from "../src/core/tools/desktop-tools.ts";
@@ -14,7 +14,7 @@ import { Workspace } from "../src/core/workspace.ts";
 import { DESKTOP_IMAGE, DockerDesktopProvider, type DockerDesktopOptions } from "../src/desktop/docker-desktop.ts";
 import { RemoteDesktopProvider } from "../src/desktop/remote-desktop.ts";
 import { runChecks } from "../src/main/check.ts";
-import { loadAnnieConfig, loadDesktopConfig } from "../src/main/config.ts";
+import { loadOwniConfig, loadDesktopConfig } from "../src/main/config.ts";
 import { blackPng, fakeSpaces } from "./fake-cua.ts";
 import { tempDataDir } from "./helpers.ts";
 
@@ -370,7 +370,7 @@ async function fakeDocker(options: { arch?: string; image?: string } = {}) {
 
 async function dockerDesktop(network: "none" | "internet" = "none", spacesOptions: Parameters<typeof fakeSpaces>[0] = {}, extra: Partial<DockerDesktopOptions> = {}) {
 	const docker = await fakeDocker();
-	const spaces = await fakeSpaces({ token: () => docker.tokenOf("annie-desktop-k"), ...spacesOptions });
+	const spaces = await fakeSpaces({ token: () => docker.tokenOf("owni-desktop-k"), ...spacesOptions });
 	closers.push(spaces.close);
 	const make = () => {
 		const desktop = new DockerDesktopProvider({ socketPath: docker.socketPath, network, spacesPort: spaces.port, healthIntervalMs: 10, ...extra });
@@ -386,14 +386,14 @@ describe("the Docker desktop (Cua's image)", () => {
 		expect(desktop.network).toBe("none");
 		const state = await desktop.call("k", "get_desktop_state", { max_image_dimension: 1280 });
 		expect(state.images).toHaveLength(1);
-		expect(docker.networks.get("annie-desktop")).toEqual({ Name: "annie-desktop", Driver: "bridge", Internal: true, Labels: { "annie.desktop": "network" }, Options: { "com.docker.network.bridge.enable_icc": "false" } });
+		expect(docker.networks.get("owni-desktop")).toEqual({ Name: "owni-desktop", Driver: "bridge", Internal: true, Labels: { "owni.desktop": "network" }, Options: { "com.docker.network.bridge.enable_icc": "false" } });
 		const create = docker.calls.find((c) => c.path.startsWith("/containers/create"));
-		expect(create?.path).toBe("/containers/create?name=annie-desktop-k");
+		expect(create?.path).toBe("/containers/create?name=owni-desktop-k");
 		expect(create?.body).toMatchObject({
 			Image: "trycua/cua-xfce:0.3.0",
-			Labels: { "annie.desktop": "k", "annie.desktop.spec": expect.stringMatching(/^[0-9a-f]{16}$/) },
+			Labels: { "owni.desktop": "k", "owni.desktop.spec": expect.stringMatching(/^[0-9a-f]{16}$/) },
 			HostConfig: {
-				NetworkMode: "annie-desktop",
+				NetworkMode: "owni-desktop",
 				ShmSize: 1024 * 1024 * 1024,
 				Memory: 3072 * 1024 * 1024,
 				MemorySwap: 3072 * 1024 * 1024,
@@ -410,7 +410,7 @@ describe("the Docker desktop (Cua's image)", () => {
 		expect(env.find((e) => e.startsWith("CUA_ENV_TOKEN="))).toMatch(/^CUA_ENV_TOKEN=[0-9a-f]{64}$/);
 		expect(env.find((e) => e.startsWith("VNC_PW="))).toMatch(/^VNC_PW=[0-9a-f]{24}$/);
 		expect(JSON.stringify(create?.body)).not.toMatch(/PortBindings|Privileged|docker\.sock|Binds/);
-		expect(spaces.calls.every((c) => c.auth === `Bearer ${docker.tokenOf("annie-desktop-k")}`)).toBe(true);
+		expect(spaces.calls.every((c) => c.auth === `Bearer ${docker.tokenOf("owni-desktop-k")}`)).toBe(true);
 		// The second call reuses the running desktop and its MCP session.
 		await desktop.call("k", "click", { x: 1, y: 1, scope: "desktop" });
 		expect(docker.calls.filter((c) => c.path.startsWith("/containers/create"))).toHaveLength(1);
@@ -418,18 +418,18 @@ describe("the Docker desktop (Cua's image)", () => {
 		expect(spaces.toolCalls().map((c) => c.name)).toEqual(["get_desktop_state", "click"]);
 	});
 
-	it("with ANNIE_DESKTOP_NETWORK=internet the desktop is on a network that reaches the internet", async () => {
+	it("with OWNI_DESKTOP_NETWORK=internet the desktop is on a network that reaches the internet", async () => {
 		const { docker, desktop } = await dockerDesktop("internet");
 		expect(desktop.network).toBe("internet");
 		await desktop.call("k", "click", { x: 1, y: 1 });
-		expect(docker.networks.get("annie-desktop-internet")).toMatchObject({ Internal: false });
-		expect(docker.calls.find((c) => c.path.startsWith("/containers/create"))?.body.HostConfig.NetworkMode).toBe("annie-desktop-internet");
+		expect(docker.networks.get("owni-desktop-internet")).toMatchObject({ Internal: false });
+		expect(docker.calls.find((c) => c.path.startsWith("/containers/create"))?.body.HostConfig.NetworkMode).toBe("owni-desktop-internet");
 	});
 
 	it("a network of that name that reaches the internet, where it should not, is refused", async () => {
 		const { docker, desktop, spaces } = await dockerDesktop("none");
-		docker.networks.set("annie-desktop", { Name: "annie-desktop", Internal: false });
-		await expect(desktop.call("k", "click", { x: 1, y: 1 })).rejects.toThrow(/annie-desktop.*internet/);
+		docker.networks.set("owni-desktop", { Name: "owni-desktop", Internal: false });
+		await expect(desktop.call("k", "click", { x: 1, y: 1 })).rejects.toThrow(/owni-desktop.*internet/);
 		expect(spaces.calls).toEqual([]);
 	});
 
@@ -444,11 +444,11 @@ describe("the Docker desktop (Cua's image)", () => {
 	it("reset removes the desktop; the next call starts a new one with a new token", async () => {
 		const { docker, desktop } = await dockerDesktop();
 		await desktop.call("k", "click", { x: 1, y: 1 });
-		const before = docker.tokenOf("annie-desktop-k");
+		const before = docker.tokenOf("owni-desktop-k");
 		await desktop.reset("k");
 		expect(docker.containers.size).toBe(0);
 		await desktop.call("k", "click", { x: 1, y: 1 });
-		expect(docker.tokenOf("annie-desktop-k")).not.toBe(before);
+		expect(docker.tokenOf("owni-desktop-k")).not.toBe(before);
 	});
 
 	it("check: Docker answers, the image is there, the host is amd64", async () => {
@@ -465,12 +465,12 @@ describe("the Docker desktop (Cua's image)", () => {
 		const { docker, desktop, make } = await dockerDesktop();
 		await desktop.call("k", "click", { x: 1, y: 1 });
 		await desktop.close();
-		expect(docker.containers.get("annie-desktop-k")?.running).toBe(false);
-		(docker.containers.get("annie-desktop-k") as { running: boolean }).running = true;
-		docker.containers.set("annie-desktop-vecchio", { running: false, create: { Labels: { "annie.desktop": "vecchio" } } });
+		expect(docker.containers.get("owni-desktop-k")?.running).toBe(false);
+		(docker.containers.get("owni-desktop-k") as { running: boolean }).running = true;
+		docker.containers.set("owni-desktop-vecchio", { running: false, create: { Labels: { "owni.desktop": "vecchio" } } });
 		expect(await make().stopLeftovers()).toBe(2);
-		expect(docker.containers.get("annie-desktop-k")?.running).toBe(false);
-		expect(docker.containers.has("annie-desktop-vecchio")).toBe(false);
+		expect(docker.containers.get("owni-desktop-k")?.running).toBe(false);
+		expect(docker.containers.has("owni-desktop-vecchio")).toBe(false);
 	});
 
 	it("an action is repeated after a lost connection only if it never reached the desktop; a look always is", async () => {
@@ -497,35 +497,35 @@ describe("the Docker desktop (Cua's image)", () => {
 		const { docker, desktop } = await dockerDesktop("none", { token: () => undefined, slowMs: 300 }, { maxRunning: 1 });
 		await desktop.call("uno", "click", { x: 1, y: 1 });
 		await desktop.call("due", "click", { x: 1, y: 1 });
-		for (let i = 0; i < 50 && docker.containers.get("annie-desktop-uno")?.running; i++) await new Promise((r) => setTimeout(r, 10));
-		expect(docker.containers.get("annie-desktop-uno")?.running).toBe(false);
-		expect(docker.containers.get("annie-desktop-due")?.running).toBe(true);
+		for (let i = 0; i < 50 && docker.containers.get("owni-desktop-uno")?.running; i++) await new Promise((r) => setTimeout(r, 10));
+		expect(docker.containers.get("owni-desktop-uno")?.running).toBe(false);
+		expect(docker.containers.get("owni-desktop-due")?.running).toBe(true);
 		const busy = desktop.call("due", "click", { x: 2, y: 2 });
 		await new Promise((r) => setTimeout(r, 50));
 		const refused = await desktop.call("tre", "click", { x: 1, y: 1 }).catch((e: unknown) => e);
 		expect(refused).toBeInstanceOf(DesktopError);
 		expect((refused as Error).message).toContain("troppi schermi accesi");
 		await busy;
-		expect(docker.containers.has("annie-desktop-tre")).toBe(false);
+		expect(docker.containers.has("owni-desktop-tre")).toBe(false);
 	});
 
 	it("a desktop with no actions for a while is stopped", async () => {
 		const { docker, desktop } = await dockerDesktop("none", {}, { idleMs: 50 });
 		await desktop.call("k", "click", { x: 1, y: 1 });
-		for (let i = 0; i < 100 && docker.containers.get("annie-desktop-k")?.running; i++) await new Promise((r) => setTimeout(r, 10));
-		expect(docker.containers.get("annie-desktop-k")?.running).toBe(false);
+		for (let i = 0; i < 100 && docker.containers.get("owni-desktop-k")?.running; i++) await new Promise((r) => setTimeout(r, 10));
+		expect(docker.containers.get("owni-desktop-k")?.running).toBe(false);
 	});
 
 	it("an existing desktop network with traffic between containers on works, with a warning in the log", async () => {
 		const logs: string[] = [];
 		const { docker, desktop } = await dockerDesktop("none", {}, { log: (m) => void logs.push(m) });
-		docker.networks.set("annie-desktop", { Name: "annie-desktop", Internal: true, Options: {} });
+		docker.networks.set("owni-desktop", { Name: "owni-desktop", Internal: true, Options: {} });
 		await desktop.call("k", "click", { x: 1, y: 1 });
-		expect(logs.join("\n")).toMatch(/annie-desktop.*enable_icc/);
+		expect(logs.join("\n")).toMatch(/owni-desktop.*enable_icc/);
 	});
 });
 
-describe("a desktop run elsewhere (ANNIE_DESKTOP=remote)", () => {
+describe("a desktop run elsewhere (OWNI_DESKTOP=remote)", () => {
 	it("one call at a time on the shared screen", async () => {
 		const spaces = await fakeSpaces({ slowMs: 100 });
 		closers.push(spaces.close);
@@ -546,50 +546,50 @@ describe("a desktop run elsewhere (ANNIE_DESKTOP=remote)", () => {
 		await desktop.call("due", "click", { x: 2, y: 2 });
 		expect(spaces.calls.filter((c) => c.method === "initialize")).toHaveLength(1);
 		await expect(desktop.reset("uno")).rejects.toBeInstanceOf(DesktopError);
-		expect(await new RemoteDesktopProvider({ url: spaces.url, token: "sbagliato" }).check()).toContain("ANNIE_DESKTOP_TOKEN");
+		expect(await new RemoteDesktopProvider({ url: spaces.url, token: "sbagliato" }).check()).toContain("OWNI_DESKTOP_TOKEN");
 		expect(await new RemoteDesktopProvider({ url: "http://127.0.0.1:1", token: "x" }).check()).toContain("non risponde");
 	});
 });
 
 describe("the desktop's settings", () => {
-	it("off unless the operator sets ANNIE_DESKTOP; docker or remote, each with what it needs", () => {
+	it("off unless the operator sets OWNI_DESKTOP; docker or remote, each with what it needs", () => {
 		expect(loadDesktopConfig({})).toBeUndefined();
-		expect(loadDesktopConfig({ ANNIE_DESKTOP: "docker" })).toEqual({ kind: "docker", socketPath: "/var/run/docker.sock", network: "none" });
-		expect(loadDesktopConfig({ ANNIE_DESKTOP: "docker", ANNIE_DESKTOP_NETWORK: "internet", ANNIE_DOCKER_SOCKET: "/run/d.sock" })).toEqual({ kind: "docker", socketPath: "/run/d.sock", network: "internet" });
-		expect(() => loadDesktopConfig({ ANNIE_DESKTOP: "docker", ANNIE_DESKTOP_NETWORK: "tutto" })).toThrow("ANNIE_DESKTOP_NETWORK");
-		expect(() => loadDesktopConfig({ ANNIE_DESKTOP: "kvm" })).toThrow("ANNIE_DESKTOP");
-		expect(() => loadDesktopConfig({ ANNIE_DESKTOP_NETWORK: "internet" })).toThrow("without ANNIE_DESKTOP=docker");
-		expect(() => loadDesktopConfig({ ANNIE_DESKTOP_URL: "https://schermo.example" })).toThrow("without ANNIE_DESKTOP=remote");
-		expect(loadDesktopConfig({ ANNIE_DESKTOP: "remote", ANNIE_DESKTOP_URL: "https://schermo.example:3211/", ANNIE_DESKTOP_TOKEN: "t" })).toEqual({ kind: "remote", url: "https://schermo.example:3211", token: "t" });
-		expect(() => loadDesktopConfig({ ANNIE_DESKTOP: "remote", ANNIE_DESKTOP_URL: "https://schermo.example" })).toThrow("ANNIE_DESKTOP_TOKEN");
-		expect(() => loadDesktopConfig({ ANNIE_DESKTOP: "remote", ANNIE_DESKTOP_URL: "http://schermo.example", ANNIE_DESKTOP_TOKEN: "t" })).toThrow("https");
-		expect(() => loadDesktopConfig({ ANNIE_DESKTOP: "docker", ANNIE_DESKTOP_TOKEN: "t" })).toThrow("without ANNIE_DESKTOP=remote");
-		expect(loadAnnieConfig({ ANNIE_DATA_DIR: tempDataDir(), ANNIE_MODEL_PROVIDER: "faux", ANNIE_DESKTOP: "docker" }).desktop).toMatchObject({ kind: "docker" });
+		expect(loadDesktopConfig({ OWNI_DESKTOP: "docker" })).toEqual({ kind: "docker", socketPath: "/var/run/docker.sock", network: "none" });
+		expect(loadDesktopConfig({ OWNI_DESKTOP: "docker", OWNI_DESKTOP_NETWORK: "internet", OWNI_DOCKER_SOCKET: "/run/d.sock" })).toEqual({ kind: "docker", socketPath: "/run/d.sock", network: "internet" });
+		expect(() => loadDesktopConfig({ OWNI_DESKTOP: "docker", OWNI_DESKTOP_NETWORK: "tutto" })).toThrow("OWNI_DESKTOP_NETWORK");
+		expect(() => loadDesktopConfig({ OWNI_DESKTOP: "kvm" })).toThrow("OWNI_DESKTOP");
+		expect(() => loadDesktopConfig({ OWNI_DESKTOP_NETWORK: "internet" })).toThrow("without OWNI_DESKTOP=docker");
+		expect(() => loadDesktopConfig({ OWNI_DESKTOP_URL: "https://schermo.example" })).toThrow("without OWNI_DESKTOP=remote");
+		expect(loadDesktopConfig({ OWNI_DESKTOP: "remote", OWNI_DESKTOP_URL: "https://schermo.example:3211/", OWNI_DESKTOP_TOKEN: "t" })).toEqual({ kind: "remote", url: "https://schermo.example:3211", token: "t" });
+		expect(() => loadDesktopConfig({ OWNI_DESKTOP: "remote", OWNI_DESKTOP_URL: "https://schermo.example" })).toThrow("OWNI_DESKTOP_TOKEN");
+		expect(() => loadDesktopConfig({ OWNI_DESKTOP: "remote", OWNI_DESKTOP_URL: "http://schermo.example", OWNI_DESKTOP_TOKEN: "t" })).toThrow("https");
+		expect(() => loadDesktopConfig({ OWNI_DESKTOP: "docker", OWNI_DESKTOP_TOKEN: "t" })).toThrow("without OWNI_DESKTOP=remote");
+		expect(loadOwniConfig({ OWNI_DATA_DIR: tempDataDir(), OWNI_MODEL_PROVIDER: "faux", OWNI_DESKTOP: "docker" }).desktop).toMatchObject({ kind: "docker" });
 		// Never in a cell of Owni Cloud: no Docker socket there, and a shared screen would mix tenants.
-		expect(() => loadDesktopConfig({ ANNIE_DESKTOP: "remote", ANNIE_DESKTOP_URL: "https://schermo.example", ANNIE_DESKTOP_TOKEN: "t", ANNIE_CELL_SECRET: "s" })).toThrow("Owni Cloud");
+		expect(() => loadDesktopConfig({ OWNI_DESKTOP: "remote", OWNI_DESKTOP_URL: "https://schermo.example", OWNI_DESKTOP_TOKEN: "t", OWNI_CELL_SECRET: "s" })).toThrow("Owni Cloud");
 	});
 
-	it("pnpm annie check asks the desktop", async () => {
+	it("pnpm owni check asks the desktop", async () => {
 		const spaces = await fakeSpaces({ token: () => "segreto" });
 		closers.push(spaces.close);
-		const results = await runChecks(loadAnnieConfig({ ANNIE_MODEL_PROVIDER: "faux", ANNIE_DESKTOP: "remote", ANNIE_DESKTOP_URL: spaces.url, ANNIE_DESKTOP_TOKEN: "segreto" }));
+		const results = await runChecks(loadOwniConfig({ OWNI_MODEL_PROVIDER: "faux", OWNI_DESKTOP: "remote", OWNI_DESKTOP_URL: spaces.url, OWNI_DESKTOP_TOKEN: "segreto" }));
 		expect(results.find((r) => r.name === "Schermo (remoto)")).toEqual({ name: "Schermo (remoto)", ok: true, detail: expect.stringContaining("risponde") });
-		const bad = await runChecks(loadAnnieConfig({ ANNIE_MODEL_PROVIDER: "faux", ANNIE_DESKTOP: "remote", ANNIE_DESKTOP_URL: spaces.url, ANNIE_DESKTOP_TOKEN: "no" }));
-		expect(bad.find((r) => r.name === "Schermo (remoto)")).toMatchObject({ ok: false, detail: expect.stringContaining("ANNIE_DESKTOP_TOKEN") });
+		const bad = await runChecks(loadOwniConfig({ OWNI_MODEL_PROVIDER: "faux", OWNI_DESKTOP: "remote", OWNI_DESKTOP_URL: spaces.url, OWNI_DESKTOP_TOKEN: "no" }));
+		expect(bad.find((r) => r.name === "Schermo (remoto)")).toMatchObject({ ok: false, detail: expect.stringContaining("OWNI_DESKTOP_TOKEN") });
 		expect(JSON.stringify(bad)).not.toContain("segreto");
 	});
 });
 
 describe("the desktop in an agente", () => {
-	async function annie(desktop?: DesktopProvider) {
-		const config = loadAnnieConfig({ ANNIE_DATA_DIR: tempDataDir(), ANNIE_MODEL_PROVIDER: "faux", ANNIE_WEB_PORT: "1" });
-		const running = await startAnnie({ ...config, web: { ...config.web, port: 0 } }, { ...(desktop === undefined ? {} : { desktop }), schedulerIntervalMs: 60_000, log: () => {} });
+	async function owni(desktop?: DesktopProvider) {
+		const config = loadOwniConfig({ OWNI_DATA_DIR: tempDataDir(), OWNI_MODEL_PROVIDER: "faux", OWNI_WEB_PORT: "1" });
+		const running = await startOwni({ ...config, web: { ...config.web, port: 0 } }, { ...(desktop === undefined ? {} : { desktop }), schedulerIntervalMs: 60_000, log: () => {} });
 		closers.push(() => running.stop());
 		const base = `http://127.0.0.1:${(running.server.address() as AddressInfo).port}`;
-		const login = await fetch(`${base}/api/login`, { method: "POST", headers: { "x-annie": "1" }, body: JSON.stringify({ token: (running.ownerLink as string).split("#")[1] }) });
+		const login = await fetch(`${base}/api/login`, { method: "POST", headers: { "x-owni": "1" }, body: JSON.stringify({ token: (running.ownerLink as string).split("#")[1] }) });
 		const cookie = (login.headers.get("set-cookie") ?? "").split(";")[0] as string;
 		const api = async (path: string, body?: unknown, method?: string, as = cookie) => {
-			const res = await fetch(`${base}${path}`, { method: method ?? (body === undefined ? "GET" : "POST"), headers: { cookie: as, "x-annie": "1" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+			const res = await fetch(`${base}${path}`, { method: method ?? (body === undefined ? "GET" : "POST"), headers: { cookie: as, "x-owni": "1" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
 			return { status: res.status, ...((await res.json()) as any) };
 		};
 		return { api, base, cookie };
@@ -597,15 +597,15 @@ describe("the desktop in an agente", () => {
 
 	it("the console shows the screen live, only to the person of the conversation, and forgets it when the screen is reset", async () => {
 		const fake = fakeDesktop();
-		const { api, base, cookie } = await annie(fake.desktop);
-		const thread = (await api("/api/instances/annie/threads", {})).thread;
-		const screen = `/api/instances/annie/threads/${thread.id}/screen`;
+		const { api, base, cookie } = await owni(fake.desktop);
+		const thread = (await api("/api/instances/owni/threads", {})).thread;
+		const screen = `/api/instances/owni/threads/${thread.id}/screen`;
 		// Without the screen the console stops asking.
 		expect(await api(screen)).toEqual({ status: 200, on: false, screen: null });
-		await api("/api/instances/annie/desktop-allowed", { allowed: true }, "PUT");
+		await api("/api/instances/owni/desktop-allowed", { allowed: true }, "PUT");
 		expect(await api(screen)).toEqual({ status: 200, on: true, screen: null });
-		expect((await fetch(`${base}${screen}.png`, { headers: { cookie, "x-annie": "1" } })).status).toBe(404);
-		await api(`/api/instances/annie/threads/${thread.id}/messages`, { text: "/tool desktop_click {\"x\":10,\"y\":20}" });
+		expect((await fetch(`${base}${screen}.png`, { headers: { cookie, "x-owni": "1" } })).status).toBe(404);
+		await api(`/api/instances/owni/threads/${thread.id}/messages`, { text: "/tool desktop_click {\"x\":10,\"y\":20}" });
 		for (const start = Date.now(); (await api(screen)).screen === null; ) {
 			if (Date.now() - start > 20_000) throw new Error("no screen");
 			await new Promise((r) => setTimeout(r, 30));
@@ -613,7 +613,7 @@ describe("the desktop in an agente", () => {
 		const live = (await api(screen)).screen;
 		expect(live).toMatchObject({ action: "Clic in 10, 20." });
 		expect(typeof live.version).toBe("number");
-		const png = await fetch(`${base}${screen}.png`, { headers: { cookie, "x-annie": "1" } });
+		const png = await fetch(`${base}${screen}.png`, { headers: { cookie, "x-owni": "1" } });
 		expect(png.status).toBe(200);
 		expect(png.headers.get("content-type")).toBe("image/png");
 		expect(png.headers.get("cache-control")).toBe("no-store");
@@ -621,28 +621,28 @@ describe("the desktop in an agente", () => {
 		// Nobody else sees it: not without a login, not another person, not in a conversation that is not there.
 		expect((await api(screen, undefined, "GET", "")).status).toBe(401);
 		const { link } = await api("/api/people", { name: "Anna", role: "member" });
-		const login = await fetch(`${base}/api/login`, { method: "POST", headers: { "x-annie": "1" }, body: JSON.stringify({ token: (link as string).split("#")[1] }) });
+		const login = await fetch(`${base}/api/login`, { method: "POST", headers: { "x-owni": "1" }, body: JSON.stringify({ token: (link as string).split("#")[1] }) });
 		const anna = (login.headers.get("set-cookie") ?? "").split(";")[0] as string;
 		expect([403, 404]).toContain((await api(screen, undefined, "GET", anna)).status);
-		expect([403, 404]).toContain((await fetch(`${base}${screen}.png`, { headers: { cookie: anna, "x-annie": "1" } })).status);
-		expect((await api("/api/instances/annie/threads/nessuna/screen")).status).toBe(404);
-		await api("/api/instances/annie/desktop", undefined, "DELETE");
+		expect([403, 404]).toContain((await fetch(`${base}${screen}.png`, { headers: { cookie: anna, "x-owni": "1" } })).status);
+		expect((await api("/api/instances/owni/threads/nessuna/screen")).status).toBe(404);
+		await api("/api/instances/owni/desktop", undefined, "DELETE");
 		expect((await api(screen)).screen).toBeNull();
 	}, 30_000);
 
 	it("the owner turns the screen on from the console; Owni looks at it from the chat and sees the picture", async () => {
 		const fake = fakeDesktop();
-		const { api } = await annie(fake.desktop);
+		const { api } = await owni(fake.desktop);
 		expect(await api("/api/desktop")).toEqual({ status: 200, available: true, network: "none", shared: false });
 		// The check is kept for a while: opening Impostazioni again does not ask Docker again.
 		await api("/api/desktop");
 		expect(fake.checks()).toBe(1);
 		expect((await api("/api/desktop", undefined, "GET", "")).status).toBe(401);
-		const thread = (await api("/api/instances/annie/threads", {})).thread;
+		const thread = (await api("/api/instances/owni/threads", {})).thread;
 		const reply = async (text: string) => {
-			const answers = async () => ((await api(`/api/instances/annie/threads/${thread.id}`)).entries as { from: string; text?: string }[]).filter((e) => e.from === "annie");
+			const answers = async () => ((await api(`/api/instances/owni/threads/${thread.id}`)).entries as { from: string; text?: string }[]).filter((e) => e.from === "owni");
 			const before = (await answers()).length;
-			await api(`/api/instances/annie/threads/${thread.id}/messages`, { text });
+			await api(`/api/instances/owni/threads/${thread.id}/messages`, { text });
 			for (const start = Date.now(); Date.now() - start < 20_000; ) {
 				const now = await answers();
 				if (now.length > before) return now.at(-1)?.text ?? "";
@@ -653,17 +653,17 @@ describe("the desktop in an agente", () => {
 		// Not offered at all until the owner turns it on: the model never sees tools it cannot use.
 		expect(await reply("/tool desktop_look {}")).not.toContain("[1 immagine]");
 		expect(fake.calls).toEqual([]);
-		expect((await api("/api/instances/annie/desktop-allowed", { allowed: true }, "PUT")).allowed).toBe(true);
+		expect((await api("/api/instances/owni/desktop-allowed", { allowed: true }, "PUT")).allowed).toBe(true);
 		expect(await reply("/tool desktop_look {}")).toContain("[1 immagine]");
 		expect(fake.calls.at(-1)?.tool).toBe("get_desktop_state");
-		expect((await api("/api/instances/annie/desktop", undefined, "DELETE")).status).toBe(200);
+		expect((await api("/api/instances/owni/desktop", undefined, "DELETE")).status).toBe(200);
 		expect(fake.resets).toHaveLength(1);
 		expect((await api("/api/instances/nessuna/desktop", undefined, "DELETE")).status).toBe(404);
 	}, 30_000);
 
 	it("without a desktop the console says it is not available", async () => {
-		const { api } = await annie();
+		const { api } = await owni();
 		expect(await api("/api/desktop")).toEqual({ status: 200, available: false });
-		expect((await api("/api/instances/annie/desktop-allowed", { allowed: true }, "PUT")).status).toBe(501);
+		expect((await api("/api/instances/owni/desktop-allowed", { allowed: true }, "PUT")).status).toBe(501);
 	});
 });

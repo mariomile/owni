@@ -1,5 +1,5 @@
 import { COMPUTER_CONNECTOR, COMPUTER_LIMITS, ComputerError, type ComputerProvider, type ComputerRun, workPath } from "../computer.ts";
-import type { AnnieTool } from "../engine.ts";
+import type { OwniTool } from "../engine.ts";
 import type { EgressPolicy } from "../policy.ts";
 import { fence } from "../untrusted.ts";
 import { type Workspace, WorkspaceError } from "../workspace.ts";
@@ -19,7 +19,7 @@ export type ComputerToolsOptions = {
 };
 
 /** The terminal of the instance's computer (ADR 0013): no network, so commands need no approval. */
-export function createComputerTools(options: ComputerToolsOptions): AnnieTool[] {
+export function createComputerTools(options: ComputerToolsOptions): OwniTool[] {
 	const { computer } = options;
 	if (computer === undefined) return [];
 	return [

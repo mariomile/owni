@@ -1,4 +1,4 @@
-import type { AnnieTool } from "../engine.ts";
+import type { OwniTool } from "../engine.ts";
 import { LIST_LIMITS, type List, ListError, type ListItem, type ListStore, listKey, listName, ordered, resolveItems, untrustedLists, type Which } from "../lists.ts";
 import { SHARED } from "../memory.ts";
 
@@ -30,7 +30,7 @@ export function createListTools(options: {
 	readonly whoIs: (thread: Thread) => string | undefined;
 	/** What changed, for the audit: which list, what kind of change, how many items, never names or items. */
 	readonly record?: (event: { type: "list.changed"; listId: string; action: ListAction; count: number }) => Promise<void>;
-}): AnnieTool[] {
+}): OwniTool[] {
 	const { store } = options;
 	const subject = (thread: Thread | undefined) => (thread === undefined ? undefined : options.whoIs(thread));
 	const record = async (list: List, action: ListAction, count: number) => {

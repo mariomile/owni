@@ -8,7 +8,7 @@ import type { QuoteMailRef } from "./mail-requests.ts";
 import { oneLine } from "./plain-text.ts";
 import { quoteMailProblem, recordQuoteMail } from "./quote-mail.ts";
 import type { ReminderItem } from "./reminder-book.ts";
-import type { AnnieRuntime } from "./runtime.ts";
+import type { OwniRuntime } from "./runtime.ts";
 
 export type { MailDraft };
 export { validAddress };
@@ -204,7 +204,7 @@ export function googleActionTitle(action: Pick<GoogleAction, "kind" | "mail" | "
  * it once with `run`; the outcome, or the refusal, goes back to the conversation for Owni.
  */
 export async function decideGoogleAction(
-	runtime: AnnieRuntime,
+	runtime: OwniRuntime,
 	tenant: string,
 	instance: string,
 	id: string,
@@ -239,7 +239,7 @@ export async function decideGoogleAction(
  * approved it, with the request's id (so it is never counted twice). The mail is sent either way:
  * a record that fails is logged, and the audit says how many, never which.
  */
-async function recordReminders(runtime: AnnieRuntime, tenant: string, instance: string, action: GoogleAction, personId: string, log: (message: string) => void): Promise<Reminded> {
+async function recordReminders(runtime: OwniRuntime, tenant: string, instance: string, action: GoogleAction, personId: string, log: (message: string) => void): Promise<Reminded> {
 	let count = 0;
 	try {
 		count = runtime.invoices(tenant, instance).remind(action.reminders ?? [], { by: personId, at: action.decidedAt ?? new Date().toISOString(), via: "mail", action: action.id });

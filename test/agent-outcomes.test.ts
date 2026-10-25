@@ -4,7 +4,7 @@ import { scoreRouting } from "../evals/agente/report.ts";
 
 // A passing routing score is deliberately weaker than these observable outcome contracts.
 function routingAccepts(name: string) {
-	return scoreRouting({ id: "same-name", expect: [name] }, { tools: [name], provider: "faux", model: "annie-dev", costUsd: 0, modelCalls: 2 }).status === "passed";
+	return scoreRouting({ id: "same-name", expect: [name] }, { tools: [name], provider: "faux", model: "owni-dev", costUsd: 0, modelCalls: 2 }).status === "passed";
 }
 
 describe("deterministic integration/outcome contracts (faux; no natural-language or Grok claims)", () => {

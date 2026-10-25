@@ -265,10 +265,10 @@ La revisione indipendente ha richiesto e questa versione include: Stati di lavor
 
 Fonti canoniche del vault, consultate in sola lettura:
 
-- [Piano iniziale, 15 ottobre](</Users/mariomiletta/Vaults/marioverse.ai/Active/Projects/Annie/Piattaforma agenti Buildrs - piano.md:18>): Posizionamento, conversazione come unità di lavoro e perimetro iniziale.
-- [Specifica della segreteria](</Users/mariomiletta/Vaults/marioverse.ai/Active/Projects/Annie/Spec segreteria commerciale Telegram.md:24>): Primo pubblico, flusso operativo e controllo umano.
+- [Piano iniziale, 15 ottobre](</Users/mariomiletta/Vaults/marioverse.ai/Active/Projects/Owni/Piattaforma agenti Buildrs - piano.md:18>): Posizionamento, conversazione come unità di lavoro e perimetro iniziale.
+- [Specifica della segreteria](</Users/mariomiletta/Vaults/marioverse.ai/Active/Projects/Owni/Spec segreteria commerciale Telegram.md:24>): Primo pubblico, flusso operativo e controllo umano.
 - [Nota del 24 ottobre](</Users/mariomiletta/Vaults/marioverse.ai/Journal/Daily/24-10-2026.md:9>): Capacità per agente; non un'architettura approvata.
-- [Annie](</Users/mariomiletta/Vaults/marioverse.ai/Active/Projects/Annie/Annie.md:23>): Espansione del perimetro, senza priorità sufficienti a decidere un nuovo pubblico.
+- [Owni](</Users/mariomiletta/Vaults/marioverse.ai/Active/Projects/Owni/Owni.md:23>): Espansione del perimetro, senza priorità sufficienti a decidere un nuovo pubblico.
 
 Riferimenti esterni limitati a due pattern, non prova di adozione o di preferenze dei nostri utenti:
 

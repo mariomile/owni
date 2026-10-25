@@ -6,7 +6,7 @@ Branch `week-9`. Mario ha chiesto se Railway va bene per le celle. Questa settim
 
 - **Provider Railway** (`src/cloud/railway-provider.ts`, `test/railway-provider.test.ts` con un Railway finto). Per ogni tenant un progetto Railway (rete privata e volume suoi), un servizio dall'immagine di Owni, un volume su `/data`, le variabili della cella senza far partire deploy a metà, la regione EU West (Amsterdam), la modalità serverless e un dominio `*.up.railway.app`. Il primo avvio fa il deploy; i risvegli successivi sono una richiesta che aspetta i 502 dell'avvio a freddo. «Spento» per il control plane vuol dire che smette di parlarle e lascia che Railway la metta a dormire. Una creazione fallita a metà cancella il progetto; gli errori nominano l'operazione, mai il token. `pnpm cloud upgrade` aggiorna variabili e rifà il deploy, tenendo il volume.
 - **Control plane anche verso https**: il proxy verso una cella usa https se il suo indirizzo lo è, e manda come `Host` l'indirizzo della cella (Railway smista per quello), con quello pubblico in `X-Forwarded-Host`.
-- **Immagine dalla CI** (`.github/workflows/image.yml`): a ogni PR costruisce il `Dockerfile` e controlla che il container, in sola lettura e senza capability, risponda su `/healthz`; su `main` la pubblica su `ghcr.io/<owner>/annie` (`latest` e lo SHA). È anche la verifica del `Dockerfile` vero che qui non si poteva fare.
+- **Immagine dalla CI** (`.github/workflows/image.yml`): a ogni PR costruisce il `Dockerfile` e controlla che il container, in sola lettura e senza capability, risponda su `/healthz`; su `main` la pubblica su `ghcr.io/<owner>/owni` (`latest` e lo SHA). È anche la verifica del `Dockerfile` vero che qui non si poteva fare.
 
 ## Da dove vengono le API
 
@@ -24,7 +24,7 @@ Due revisori separati. Corretti:
 
 | Domanda | Come |
 |---|---|
-| Le mutation sono giuste | `pnpm cloud` con `ANNIE_CLOUD_PROVIDER=railway`, una registrazione |
+| Le mutation sono giuste | `pnpm cloud` con `OWNI_CLOUD_PROVIDER=railway`, una registrazione |
 | Tempo di risveglio da sonno | prima risposta dopo 15 minuti di silenzio |
 | Costo di una cella che dorme | fattura dopo qualche giorno: il volume si paga anche da spenta? |
 | Limiti di progetti per workspace | quanti tenant regge un account |

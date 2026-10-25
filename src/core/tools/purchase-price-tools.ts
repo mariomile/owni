@@ -1,6 +1,6 @@
 import { isAgentTurn } from "../turn-origin.ts";
 import { type CsvCell, csvFile } from "../csv.ts";
-import type { AnnieTool, ToolContext } from "../engine.ts";
+import type { OwniTool, ToolContext } from "../engine.ts";
 import type { ExpenseStore } from "../expense-store.ts";
 import { fromUnits } from "../fattura-pa.ts";
 import { n1 } from "../format-words.ts";
@@ -79,7 +79,7 @@ export const BRIEF_NOTHING = "Prezzi d'acquisto: niente da segnalare.";
  * I prezzi d'acquisto (purchase-prices.ts): the invoices received read through the scadenzario,
  * never written. Only the export writes (a file) and the brief's increases (which marks them said).
  */
-export function createPurchasePriceTools(options: PurchaseToolsOptions): AnnieTool[] {
+export function createPurchasePriceTools(options: PurchaseToolsOptions): OwniTool[] {
 	const { store, workspace, timeZone } = options;
 	const now = options.now ?? (() => new Date());
 	const scanner = options.scanner ?? new InvoiceScanner(workspace);

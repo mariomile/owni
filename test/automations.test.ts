@@ -124,7 +124,7 @@ describe("automazioni from the chat", () => {
 				createAutomationTools({
 					store: rt.automations("acme", "ops"),
 					instance: "ops",
-					baseUrl: "https://annie.example.it",
+					baseUrl: "https://owni.example.it",
 					whoIs: (thread) => rt.participant("acme", "ops", thread),
 					tell: async (_thread, text, key) => {
 						told.push({ text, key });
@@ -142,7 +142,7 @@ describe("automazioni from the chat", () => {
 		expect(made).toContain("Creata l'automazione «Ordini»");
 		const [automation] = runtime.automations("acme", "ops").list();
 		expect(told).toHaveLength(1);
-		expect(told[0]?.text).toContain(`https://annie.example.it/hooks/automazione/ops/${automation?.id}`);
+		expect(told[0]?.text).toContain(`https://owni.example.it/hooks/automazione/ops/${automation?.id}`);
 		const token = /Bearer (\S+)/.exec(told[0]?.text ?? "")?.[1] as string;
 		expect(made).not.toContain(token);
 		expect(told[0]?.text).toContain("A ogni chiamata farò: Riassumi l'ordine");

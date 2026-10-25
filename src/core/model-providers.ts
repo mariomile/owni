@@ -7,7 +7,7 @@ export type ModelProvider = {
 	readonly label: string;
 	/** The environment variable through which the operator gives the server this provider's key. */
 	readonly keyEnv: string;
-	/** Used when the operator names the provider and no model (ANNIE_MODEL_ID). */
+	/** Used when the operator names the provider and no model (OWNI_MODEL_ID). */
 	readonly defaultModel: string;
 };
 
@@ -26,7 +26,7 @@ export type ModelInfo = {
 
 /** The local, deterministic development model: no key, no network. */
 export const DEV_PROVIDER = "faux";
-export const DEV_MODEL_ID = "annie-dev";
+export const DEV_MODEL_ID = "owni-dev";
 
 export type SubscriptionProvider = {
 	readonly id: "claude-code" | "codex";
@@ -72,7 +72,7 @@ export function modelProvider(id: string): ModelProvider | SubscriptionProvider 
 	return MODEL_PROVIDERS.find((p) => p.id === id) ?? subscriptionProvider(id);
 }
 
-/** Every value ANNIE_MODEL_PROVIDER takes: the offered providers, then the local model. */
+/** Every value OWNI_MODEL_PROVIDER takes: the offered providers, then the local model. */
 export function providerIds(): string[] {
 	return [...MODEL_PROVIDERS.map((p) => p.id), ...SUBSCRIPTION_PROVIDERS.map((p) => p.id), DEV_PROVIDER];
 }

@@ -19,7 +19,7 @@ fetch("/api/info")
 	})
 	.catch(() => {});
 async function post(path, body) {
-	const res = await fetch(path, { method: "POST", headers: { "x-annie": "1", "content-type": "application/json" }, body: JSON.stringify(body) });
+	const res = await fetch(path, { method: "POST", headers: { "x-owni": "1", "content-type": "application/json" }, body: JSON.stringify(body) });
 	const data = await res.json().catch(() => ({}));
 	if (!res.ok) throw new Error(data.error ?? `Errore ${res.status}`);
 	return data;

@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { deflateSync, inflateSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
 import { readPdfPage } from "../src/core/document-reader.ts";
-import type { AnnieTool } from "../src/core/engine.ts";
+import type { OwniTool } from "../src/core/engine.ts";
 import { ccittDecode, lzwDecode, pngOf, runLengthDecode } from "../src/core/pdf-images.ts";
 import { PdfError, pdfPageImage } from "../src/core/pdf-text.ts";
 import { createWorkspaceTools } from "../src/core/tools/workspace-tools.ts";
@@ -193,7 +193,7 @@ describe("scanned pages", () => {
 		await workspace.write("uploads/ricevuta.pdf", fixture("scansione-jpeg.pdf"));
 		await workspace.write("uploads/fattura.pdf", fixture("fattura.pdf"));
 		const tools = createWorkspaceTools({ workspace, sendFile: async () => undefined } as never);
-		const view = tools.find((t) => t.name === "image_view") as AnnieTool;
+		const view = tools.find((t) => t.name === "image_view") as OwniTool;
 		const ctx = { step: <T>(_n: string, run: () => Promise<T>) => run() } as never;
 		const seen = (await view.execute({ path: "uploads/ricevuta.pdf", page: 1 }, ctx)) as { text: string; images: { mimeType: string; data: Buffer }[] };
 		expect(seen.text).toBe(

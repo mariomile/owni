@@ -61,8 +61,8 @@ describe("who is doing what (ADR 0109)", () => {
 		expect((await reader({ cards })("ricerca", { person: "p_anna" }, now)).doing).toBe("");
 		expect((await reader({ cards })("ricerca", { person: "p_owner" }, now)).doing).toBe("#12 Preventivo Rossi");
 		// An agente with no person sees only its own schede (assigned to it, or made by it).
-		expect((await reader({ cards })("ricerca", { agent: "annie" }, now)).doing).toBe("");
-		expect((await reader({ cards: [card({ createdBy: { kind: "agent", id: "annie" } })] })("ricerca", { agent: "annie" }, now)).doing).toBe("#12 Preventivo Rossi");
+		expect((await reader({ cards })("ricerca", { agent: "owni" }, now)).doing).toBe("");
+		expect((await reader({ cards: [card({ createdBy: { kind: "agent", id: "owni" } })] })("ricerca", { agent: "owni" }, now)).doing).toBe("#12 Preventivo Rossi");
 		// Two schede In corso, the newest one not visible to this person: the older one is told.
 		const mixed = [card({ id: "new", n: 20, title: "Nuova riservata", updatedAt: ago(5) }), card({ id: "old", n: 19, title: "Vecchia", updatedAt: ago(500) })];
 		const only = activityReader({ active: async () => [], cards: () => mixed, cardVisibleTo: async (c) => c.id === "old", thread: async () => undefined });
@@ -77,11 +77,11 @@ describe("who is doing what (ADR 0109)", () => {
 describe("the viewer of a conversation (ADR 0109)", () => {
 	const personOf = (id: string) => (id.includes(".") ? id.split(".")[0] : undefined);
 	it("a console chat is its person's, any other conversation has none", () => {
-		expect(viewerOf("annie", { channel: "web", threadId: "p_anna.t1" }, personOf)).toEqual({ agent: "annie", person: "p_anna" });
-		expect(viewerOf("annie", { channel: "telegram", threadId: "p_anna.t1" }, personOf)).toEqual({ agent: "annie" });
-		expect(viewerOf("annie", { channel: "agente", threadId: "ricerca~web~p_anna.t1" }, personOf)).toEqual({ agent: "annie" });
-		expect(viewerOf("annie", { channel: "web", threadId: "nodot" }, personOf)).toEqual({ agent: "annie" });
-		expect(viewerOf("annie", undefined, personOf)).toEqual({ agent: "annie" });
+		expect(viewerOf("owni", { channel: "web", threadId: "p_anna.t1" }, personOf)).toEqual({ agent: "owni", person: "p_anna" });
+		expect(viewerOf("owni", { channel: "telegram", threadId: "p_anna.t1" }, personOf)).toEqual({ agent: "owni" });
+		expect(viewerOf("owni", { channel: "agente", threadId: "ricerca~web~p_anna.t1" }, personOf)).toEqual({ agent: "owni" });
+		expect(viewerOf("owni", { channel: "web", threadId: "nodot" }, personOf)).toEqual({ agent: "owni" });
+		expect(viewerOf("owni", undefined, personOf)).toEqual({ agent: "owni" });
 	});
 });
 
@@ -91,7 +91,7 @@ const context = (): ToolContext => ({ callId: "c1", signal: new AbortController(
 describe("agent_list and agent_message with activity (ADR 0109)", () => {
 	const make = (activity?: (agent: string) => Promise<{ busy: boolean; busyFor?: number; doing: string }>) =>
 		createAgentTools({
-			self: "annie",
+			self: "owni",
 			colleagues: async () => [
 				{ id: "ricerca", name: "Ricercatore", tagline: "Cerca" },
 				{ id: "vendite", name: "Vendite" },
@@ -125,7 +125,7 @@ describe("agent_list and agent_message with activity (ADR 0109)", () => {
 	it("one colleague whose state cannot be read does not break the list", async () => {
 		const runtime = { listRuns: async (_t: string, instance: string) => (instance === "ricerca" ? Promise.reject(new Error("runs.json corrotto")) : []) };
 		const activity = runtimeActivity({ runtime, tenant: "default", channel: () => undefined });
-		const text = (await list(make((id) => activity(id, { agent: "annie" })))) as string;
+		const text = (await list(make((id) => activity(id, { agent: "owni" })))) as string;
 		expect(text).toContain("- Ricercatore (ricerca): Cerca [libero]");
 		expect(text).toContain("- Vendite (vendite) [libero]");
 	});
@@ -136,9 +136,9 @@ describe("agent_list and agent_message with activity (ADR 0109)", () => {
 		const store = new RunStore(dir);
 		const activity = runtimeActivity({ runtime: { listRuns: (_t, _i, filter) => store.list(filter) }, tenant: "default", channel: () => undefined });
 		const tools = createAgentTools({
-			self: "annie",
+			self: "owni",
 			colleagues: async () => [{ id: "ricerca", name: "Ricercatore" }],
-			activity: (id) => activity(id, { agent: "annie" }),
+			activity: (id) => activity(id, { agent: "owni" }),
 			// Delivering the message opens the run it asks for, as the real submit does.
 			post: async () => {
 				await store.change("r-msg", () => run({ id: "r-msg", status: "queued", startedAt: undefined, createdAt: new Date().toISOString() }));

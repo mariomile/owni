@@ -1,7 +1,7 @@
 import { BOARD_LIMITS, BoardError, type BoardStore, CARD_PRIORITIES, CARD_STATUSES, type CardChange, type CardPriority, type CardStatus, type CheckChange } from "../core/board.ts";
 import { describeWhen, nextTime, type Routine, routineWhen, type RoutineStore } from "../core/board-routines.ts";
 import type { BoardWork } from "../core/board-work.ts";
-import type { AnnieRuntime } from "../core/runtime.ts";
+import type { OwniRuntime } from "../core/runtime.ts";
 import type { SubjectLedger } from "../core/subjects.ts";
 import type { Person, PeopleStore } from "./auth.ts";
 import { type AddRoute, HttpError, readJson } from "./http.ts";
@@ -10,7 +10,7 @@ import { type AddRoute, HttpError, readJson } from "./http.ts";
 export type BoardSubjects = { readonly ledger: SubjectLedger; readonly agentName: (id: string) => Promise<string> };
 
 export type BoardRoutesDeps = {
-	readonly runtime: AnnieRuntime;
+	readonly runtime: OwniRuntime;
 	readonly tenantId: string;
 	readonly people: PeopleStore;
 	readonly board: { readonly store: BoardStore; readonly work: BoardWork; readonly routines?: RoutineStore; readonly subjects: BoardSubjects } | undefined;

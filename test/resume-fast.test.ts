@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { piDurableEngine } from "../src/core/adapters/pi-durable.ts";
-import { AnnieRuntime, type DurableEngine, type Reply } from "../src/core/index.ts";
+import { OwniRuntime, type DurableEngine, type Reply } from "../src/core/index.ts";
 import { runtimeWithInstance, waitFor } from "./helpers.ts";
 
 /** Pi Durable whose session stops right after admitting a submission: admitted, never run. */
@@ -30,7 +30,7 @@ describe("resume with a fast model", () => {
 	it("replies to work a previous process admitted but never ran, even when it finishes instantly", async () => {
 		const first = await runtimeWithInstance({});
 		await first.runtime.close();
-		const stopping = new AnnieRuntime({ dataDir: first.dataDir, engine: stopAfterAdmission });
+		const stopping = new OwniRuntime({ dataDir: first.dataDir, engine: stopAfterAdmission });
 		const stoppedReplies: Reply[] = [];
 		stopping.onReply((reply) => stoppedReplies.push(reply));
 		const instance = await stopping.openInstance("acme", "ops");
@@ -38,7 +38,7 @@ describe("resume with a fast model", () => {
 		await stopping.close();
 		expect(stoppedReplies).toEqual([]);
 
-		const second = new AnnieRuntime({ dataDir: first.dataDir, engine: piDurableEngine });
+		const second = new OwniRuntime({ dataDir: first.dataDir, engine: piDurableEngine });
 		const replies: Reply[] = [];
 		second.onReply((reply) => replies.push(reply));
 		expect(await second.resume("acme", "ops")).toEqual({ pending: 1, undelivered: 0, reattached: 1 });

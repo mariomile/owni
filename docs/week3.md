@@ -19,4 +19,4 @@ Branch: `week-3` (based on `ci-setup` so PR CI runs). Spec: [`spec-segreteria-co
 
 ## Out of scope / blocked on secrets
 
-Live Telegram bot token, model API keys, Gmail OAuth, HubSpot token, `ANNIE_TELEGRAM_ALLOWED_USERS` — tests use fakes only.
+Live Telegram bot token, model API keys, Gmail OAuth, HubSpot token, `OWNI_TELEGRAM_ALLOWED_USERS` — tests use fakes only.

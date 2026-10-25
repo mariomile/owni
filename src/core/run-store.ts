@@ -55,7 +55,7 @@ export function runId(channel: string, threadId: string, messageId?: string): st
 
 /** Keep the engine's existing message deduplication namespace. */
 export function runRequestId(run: Pick<RunRecord, "channel" | "messageId" | "id">): string {
-	return run.messageId === undefined ? `annie-run:${run.id}` : `${run.channel}:${run.messageId}`;
+	return run.messageId === undefined ? `owni-run:${run.id}` : `${run.channel}:${run.messageId}`;
 }
 
 /** One bounded, atomic snapshot per instance. Only the process holding its instance lock writes. */
@@ -114,7 +114,7 @@ export class RunStore {
 			const settled = all.filter((run) => !isActiveRun(run)).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, RUN_HISTORY_LIMIT);
 			await writeFileAtomic(this.file, `${JSON.stringify([...active, ...settled])}\n`);
 			try { this.emit({ type: "run.updated", run: next }); }
-			catch (error) { console.error(`annie: run event listener failed: ${String(error)}`); }
+			catch (error) { console.error(`owni: run event listener failed: ${String(error)}`); }
 			return next;
 		});
 	}

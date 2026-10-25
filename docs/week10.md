@@ -25,7 +25,7 @@ Due revisori separati. Corretti:
 | Cosa | Limite |
 |---|---|
 | Azioni | niente moduli, clic o invii: arrivano con le micro-VM e l'approvazione |
-| Sandbox | in un container senza user namespace il sandbox di Chromium non parte: gli screenshot restano spenti finché l'operatore non accetta `ANNIE_SCREENSHOTS_WITHOUT_SANDBOX=1` |
+| Sandbox | in un container senza user namespace il sandbox di Chromium non parte: gli screenshot restano spenti finché l'operatore non accetta `OWNI_SCREENSHOTS_WITHOUT_SANDBOX=1` |
 | Chromium di Debian | l'immagine usa il Chromium della distribuzione con Playwright 1.56: la compatibilità va provata sull'immagine pubblicata |
 | Pagine viste dagli screenshot | le risorse arrivano senza cookie e senza compressione: alcune pagine possono apparire diverse da un browser normale |
 | Pagine dinamiche | `web_read` legge l'HTML che arriva, non quello che JavaScript costruisce dopo: per quelle c'è lo screenshot |

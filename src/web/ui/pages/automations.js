@@ -57,7 +57,7 @@ export async function viewAutomations(main) {
 			h("h2", `«${a.name}» è pronta`),
 			h("p", h("b", "Copia ora il token: non si vedrà più."), " Chi lo ha fa lavorare ", inst.name, " per te, con i tuoi strumenti. Per cambiarlo cancella l'automazione e creane un'altra."),
 			h("label.field", h("span", "Indirizzo (POST)"), copyBox(url, "Indirizzo")),
-			h("label.field", h("span", "Token"), copyBox(token, "Token"), h("small", "Nell'intestazione Authorization: Bearer, o X-Annie-Token. Se il servizio non permette intestazioni, in fondo all'indirizzo: ?token=…")),
+			h("label.field", h("span", "Token"), copyBox(token, "Token"), h("small", "Nell'intestazione Authorization: Bearer, o X-Owni-Token. Se il servizio non permette intestazioni, in fondo all'indirizzo: ?token=…")),
 			h("details", h("summary", "Prova dal terminale"), copyBox(`curl -X POST ${url} -H "Authorization: Bearer ${token}" -H "Content-Type: application/json" -d '{"prova": true}'`, "Comando")),
 			h("div.actions", h("button.btn", { onclick: () => (panel.hidden = true) }, "Fatto, l'ho copiato")),
 		);

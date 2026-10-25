@@ -1,9 +1,9 @@
 import { randomBytes } from "node:crypto";
 import { type AgentRequest, agentRequestReport, runAgentRequest, undoAgentRequest } from "./agent-requests.ts";
-import type { AnnieTool } from "./engine.ts";
+import type { OwniTool } from "./engine.ts";
 import { type ConnectorAction, type ConnectorActionResult, connectorActionReport } from "./connector-actions.ts";
 import { customToolName, type ToolProposal, toolEgressName } from "./proposals.ts";
-import type { AnnieRuntime } from "./runtime.ts";
+import type { OwniRuntime } from "./runtime.ts";
 import type { WebAction, WebActionResult } from "./web-actions.ts";
 
 export type Approver = { readonly channel: string; readonly userId: string };
@@ -16,7 +16,7 @@ export class NotAnApprover extends Error {
 }
 
 /** May `who` approve actions of this instance? The owner always may. */
-export async function isApprover(runtime: AnnieRuntime, tenant: string, instance: string, who: Approver): Promise<boolean> {
+export async function isApprover(runtime: OwniRuntime, tenant: string, instance: string, who: Approver): Promise<boolean> {
 	if (who.channel === OWNER.channel && who.userId === OWNER.userId) return true;
 	const record = await runtime.registry.getInstance(tenant, instance);
 	return (record.approvers?.[who.channel] ?? []).includes(who.userId);
@@ -28,7 +28,7 @@ export async function isApprover(runtime: AnnieRuntime, tenant: string, instance
  * The conversation it was proposed in is told. Deciding twice keeps the first decision.
  */
 export async function decideToolProposal(
-	runtime: AnnieRuntime,
+	runtime: OwniRuntime,
 	tenant: string,
 	instance: string,
 	id: string,
@@ -67,7 +67,7 @@ export async function decideToolProposal(
  * with `send`; the outcome goes back to the conversation for the instance to report.
  */
 export async function decideWebAction(
-	runtime: AnnieRuntime,
+	runtime: OwniRuntime,
 	tenant: string,
 	instance: string,
 	id: string,
@@ -126,7 +126,7 @@ export function webActionReport(action: WebAction): string {
  * `run`; the outcome goes back to the conversation for the instance to report.
  */
 export async function decideConnectorAction(
-	runtime: AnnieRuntime,
+	runtime: OwniRuntime,
 	tenant: string,
 	instance: string,
 	id: string,
@@ -165,13 +165,13 @@ export async function decideConnectorAction(
  * call once with its bound arguments; the outcome goes to the asker's conversation.
  */
 export async function decideAgentRequest(
-	runtime: AnnieRuntime,
+	runtime: OwniRuntime,
 	tenant: string,
 	instance: string,
 	id: string,
 	decision: "approved" | "rejected",
 	by: Approver,
-	tools: () => Promise<readonly AnnieTool[] | undefined>,
+	tools: () => Promise<readonly OwniTool[] | undefined>,
 	log: (message: string) => void = console.error,
 ): Promise<AgentRequest> {
 	const audit = runtime.audit(tenant);
@@ -199,7 +199,7 @@ export async function decideAgentRequest(
 }
 
 /** The outcome, as a notice in the asking agente's conversation: another agente's turn, never a person's. Told, a decision is marked so. */
-export async function tellAgentRequestOutcome(runtime: Pick<AnnieRuntime, "registry" | "submitNotice" | "agentRequests">, tenant: string, instance: string, request: AgentRequest): Promise<void> {
+export async function tellAgentRequestOutcome(runtime: Pick<OwniRuntime, "registry" | "submitNotice" | "agentRequests">, tenant: string, instance: string, request: AgentRequest): Promise<void> {
 	const self = await runtime.registry.getInstance(tenant, instance);
 	// An asker deleted meanwhile: NotFound, nothing to tell.
 	await runtime.registry.getInstance(tenant, request.askedBy.id);

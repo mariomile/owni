@@ -106,7 +106,7 @@ export class McpHttpClient {
 
 	private initialized(signal?: AbortSignal): Promise<void> {
 		this.ready ??= (async () => {
-			const result = (await this.rpc("initialize", { protocolVersion: PROTOCOL_VERSION, capabilities: {}, clientInfo: { name: "annie", version: "1" } }, signal)) as { protocolVersion?: unknown } | undefined;
+			const result = (await this.rpc("initialize", { protocolVersion: PROTOCOL_VERSION, capabilities: {}, clientInfo: { name: "owni", version: "1" } }, signal)) as { protocolVersion?: unknown } | undefined;
 			this.protocol = typeof result?.protocolVersion === "string" ? result.protocolVersion : PROTOCOL_VERSION;
 			const response = await this.post({ jsonrpc: "2.0", method: "notifications/initialized" }, signal);
 			await response.body?.cancel();

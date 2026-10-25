@@ -1,8 +1,8 @@
 /**
  * Owni as one process for one tenant: the general instance with its tools (workspace,
  * tasks programmati, MCP connectors, tools proposti), Telegram and the web console as
- * channels, the scheduler, and the segreteria when configured. `src/main/annie.ts` reads the
- * environment and calls startAnnie; tests call it directly.
+ * channels, the scheduler, and the segreteria when configured. `src/main/owni.ts` reads the
+ * environment and calls startOwni; tests call it directly.
  */
 import { randomBytes } from "node:crypto";
 import { renameSync, rmSync } from "node:fs";
@@ -64,14 +64,14 @@ import { checkedUrl, publicAddress, WebFetchRefused } from "./core/web-fetch.ts"
 import { readPage } from "./core/watches.ts";
 import { skillMenuEntry } from "./core/skills.ts";
 import { webHostAllowed } from "./core/policy.ts";
-import type { AnnieTool, DurableEngine } from "./core/engine.ts";
+import type { OwniTool, DurableEngine } from "./core/engine.ts";
 import { EgressDenied, NotFound, UserNotAllowed } from "./core/errors.ts";
 import { instanceId as toInstanceId, tenantId as toTenantId } from "./core/ids.ts";
 import { readJsonFile, updateJsonFile } from "./core/locked-json.ts";
 import { instanceDir, tenantDir } from "./core/paths.ts";
 import { customToolName, type ToolProposal } from "./core/proposals.ts";
 import type { InstanceRecord } from "./core/registry.ts";
-import { AnnieRuntime, type ToolSet } from "./core/runtime.ts";
+import { OwniRuntime, type ToolSet } from "./core/runtime.ts";
 import { Scheduler } from "./core/scheduler.ts";
 import { syncServerModelKeys, TenantSecrets } from "./core/secrets.ts";
 import { createCustomTools } from "./core/tools/custom-tools.ts";
@@ -124,7 +124,7 @@ import { createWatchTools } from "./core/tools/watch-tools.ts";
 import { createWorkspaceTools } from "./core/tools/workspace-tools.ts";
 import { romeDayKey, UsageLedger } from "./core/usage.ts";
 import { connectChannel } from "./gateway.ts";
-import type { AnnieConfig } from "./main/config.ts";
+import type { OwniConfig } from "./main/config.ts";
 import { type RunningSegreteria, startSegreteria } from "./segreteria/boot.ts";
 import { BoardStore } from "./core/board.ts";
 import { RoutineStore, runRoutines } from "./core/board-routines.ts";
@@ -145,7 +145,7 @@ Se qualcuno ti chiede di rispondergli a voce, o di smettere, usa voice_replies q
 Se agent_list ti dà qualcuno, chiedi agli altri agenti dell'azienda (agent_list) quello che sanno o possono fare meglio di te, con strumenti o dati che tu non hai; la risposta arriva dopo, in questa conversazione.
 Non inventare dati: se non sai, dillo o usa un tool. Non compiere azioni irreversibili verso l'esterno senza che una persona lo chieda esplicitamente.`;
 
-export type AnnieOptions = {
+export type OwniOptions = {
 	/** Tests: official CLI process runner. Only used with config.localProviders explicitly on. */
 	readonly localProviderRunner?: CliRunner;
 	readonly engine?: DurableEngine;
@@ -193,8 +193,8 @@ export type AnnieOptions = {
 const EXPIRY_TTL_MS = 24 * 3600_000;
 const EXPIRY_GRACE_MS = 6 * 3600_000;
 
-export type RunningAnnie = {
-	readonly runtime: AnnieRuntime;
+export type RunningOwni = {
+	readonly runtime: OwniRuntime;
 	readonly server: Server;
 	readonly scheduler: Scheduler;
 	readonly segreteria: RunningSegreteria | undefined;
@@ -203,7 +203,7 @@ export type RunningAnnie = {
 	stop(): Promise<void>;
 };
 
-export async function startAnnie(config: AnnieConfig, options: AnnieOptions = {}): Promise<RunningAnnie> {
+export async function startOwni(config: OwniConfig, options: OwniOptions = {}): Promise<RunningOwni> {
 	const log = options.log ?? ((message: string) => console.error(message));
 	const tenant = config.tenantId;
 	if (config.localProviders && (!["127.0.0.1", "localhost", "::1"].includes(config.web.host) || config.web.publicUrl !== undefined || config.cell.secret !== undefined)) throw new Error("Local subscriptions require a loopback, single-tenant app");
@@ -211,7 +211,7 @@ export async function startAnnie(config: AnnieConfig, options: AnnieOptions = {}
 	await localProviders?.detect();
 	const connections = new Map<string, McpConnections>();
 	// Each instance's own tools, as built: what an approved request of another agente runs (ADR 0108).
-	const instanceTools = new Map<string, readonly AnnieTool[]>();
+	const instanceTools = new Map<string, readonly OwniTool[]>();
 	// One scanner of each instance's invoices, shared by its tools and the recurring invoices' sweep: one cache.
 	const scanners = new Map<string, InvoiceScanner>();
 	const scannerOf = (tenantId: string, instanceId: string): InvoiceScanner => {
@@ -228,7 +228,7 @@ export async function startAnnie(config: AnnieConfig, options: AnnieOptions = {}
 	 */
 	const recurringEnv = (tenantId: string, instanceId: string, notify?: RecurringEnv["notify"]): RecurringEnv => {
 		const record = async (event: Record<string, unknown> & { type: string }) => {
-			await runtime.audit(tenantId).append({ ...event, instanceId, source: "annie" });
+			await runtime.audit(tenantId).append({ ...event, instanceId, source: "owni" });
 		};
 		return {
 			store: runtime.recurringInvoices(tenantId, instanceId),
@@ -312,16 +312,16 @@ export async function startAnnie(config: AnnieConfig, options: AnnieOptions = {}
 	// One search service for the whole server; each instance's owner turns it on (connector "web_search").
 	const search = config.webSearch === undefined ? undefined : braveSearch(config.webSearch, options.searchFetch);
 	const searchesLeft = dailyLimit(config.webSearch?.maxPerDay ?? 0);
-	// The weather: one service for the whole server, on when the operator set ANNIE_WEATHER=1.
+	// The weather: one service for the whole server, on when the operator set OWNI_WEATHER=1.
 	const weather = config.weather === undefined ? undefined : openMeteo(config.weather, options.weatherFetch);
 	const weatherLeft = dailyCounter(config.weather?.maxPerDay ?? 0);
 	// Tries, failed ones included: three times the day's calls, so a loop cannot hammer the service.
 	const weatherTries = dailyLimit((config.weather?.maxPerDay ?? 0) * 3);
-	// The ECB's exchange rates: one cache for the whole server, on when the operator set ANNIE_EXCHANGE_RATES=1.
+	// The ECB's exchange rates: one cache for the whole server, on when the operator set OWNI_EXCHANGE_RATES=1.
 	const exchangeRates = config.exchangeRates === undefined ? undefined : ecbRates(config.exchangeRates, options.exchangeRatesFetch);
-	// The news feeds: one cache for the whole server, on when the operator set ANNIE_NEWS=1.
+	// The news feeds: one cache for the whole server, on when the operator set OWNI_NEWS=1.
 	const news = config.news === undefined ? undefined : feedNews(config.news, options.newsFetch);
-	// The VIES: one cache for the whole server, on when the operator set ANNIE_VAT_CHECK=1; a daily count per account.
+	// The VIES: one cache for the whole server, on when the operator set OWNI_VAT_CHECK=1; a daily count per account.
 	const vies = config.vatCheck === undefined ? undefined : viesClient(config.vatCheck, options.vatCheckFetch);
 	const vatChecksLeft = dailyLimit(config.vatCheck?.maxPerDay ?? 0);
 	// Pictures on request (ADR 0023): one service for the whole server, a daily count per account.
@@ -388,7 +388,7 @@ export async function startAnnie(config: AnnieConfig, options: AnnieOptions = {}
 				return launched;
 			})
 			.catch((error: unknown) => {
-				log(`web: screenshots off: Chromium did not start${config.screenshotsWithoutSandbox ? "" : " with its sandbox (ANNIE_SCREENSHOTS_WITHOUT_SANDBOX=1 to accept running it without, ADR 0009)"}: ${error instanceof Error ? error.message.split("\n")[0] : String(error)}`);
+				log(`web: screenshots off: Chromium did not start${config.screenshotsWithoutSandbox ? "" : " with its sandbox (OWNI_SCREENSHOTS_WITHOUT_SANDBOX=1 to accept running it without, ADR 0009)"}: ${error instanceof Error ? error.message.split("\n")[0] : String(error)}`);
 				browser = undefined;
 				chromiumFailed = true;
 				return undefined;
@@ -607,7 +607,7 @@ export async function startAnnie(config: AnnieConfig, options: AnnieOptions = {}
 			...(options.mcpOAuthAddressAllowed === undefined ? {} : { fetch: { addressAllowed: options.mcpOAuthAddressAllowed, allowHttp: true } }),
 		}));
 
-	const runtime: AnnieRuntime = new AnnieRuntime({
+	const runtime: OwniRuntime = new OwniRuntime({
 		dataDir: config.dataDir,
 		engine: options.engine ?? piDurableEngine,
 		localProviders,
@@ -638,7 +638,7 @@ export async function startAnnie(config: AnnieConfig, options: AnnieOptions = {}
 				timeZone: config.timeZone,
 				whoIs: (thread) => runtime.participant(record.tenantId, record.id, thread),
 				record: async (event) => {
-					await runtime.audit(record.tenantId).append({ ...event, instanceId: record.id, source: "annie" });
+					await runtime.audit(record.tenantId).append({ ...event, instanceId: record.id, source: "owni" });
 				},
 			});
 			// The renewals record a payment through the expenses' own add: the same rules, numbers and audit.
@@ -650,7 +650,7 @@ export async function startAnnie(config: AnnieConfig, options: AnnieOptions = {}
 				timeZone: config.timeZone,
 				whoIs: (thread) => runtime.participant(record.tenantId, record.id, thread),
 				record: async (event) => {
-					await runtime.audit(record.tenantId).append({ ...event, instanceId: record.id, source: "annie" });
+					await runtime.audit(record.tenantId).append({ ...event, instanceId: record.id, source: "owni" });
 				},
 			});
 			// The clients' ricontatti remind the person through the tasks programmati: one store, one scheduler.
@@ -685,7 +685,7 @@ export async function startAnnie(config: AnnieConfig, options: AnnieOptions = {}
 					...(config.web.publicUrl === undefined ? {} : { baseUrl: config.web.publicUrl }),
 					tell: (thread, text, key) => runtime.sendMessage(record.tenantId, record.id, { ...thread, text, key, secret: true }),
 					record: async (event) => {
-						await runtime.audit(record.tenantId).append({ ...event, instanceId: record.id, source: "annie" });
+						await runtime.audit(record.tenantId).append({ ...event, instanceId: record.id, source: "owni" });
 					},
 				}),
 				...createWatchTools({
@@ -707,7 +707,7 @@ export async function startAnnie(config: AnnieConfig, options: AnnieOptions = {}
 					store: runtime.lists(record.tenantId, record.id),
 					whoIs: (thread) => runtime.participant(record.tenantId, record.id, thread),
 					record: async (event) => {
-						await runtime.audit(record.tenantId).append({ ...event, instanceId: record.id, source: "annie" });
+						await runtime.audit(record.tenantId).append({ ...event, instanceId: record.id, source: "owni" });
 					},
 				}),
 				...createBoardTools({
@@ -748,7 +748,7 @@ export async function startAnnie(config: AnnieConfig, options: AnnieOptions = {}
 					store: runtime.memory(record.tenantId, record.id),
 					whoIs: (thread) => runtime.participant(record.tenantId, record.id, thread),
 					record: async (event) => {
-						await runtime.audit(record.tenantId).append({ ...event, instanceId: record.id, source: "annie" });
+						await runtime.audit(record.tenantId).append({ ...event, instanceId: record.id, source: "owni" });
 					},
 				}),
 				...createSkillTools({
@@ -756,7 +756,7 @@ export async function startAnnie(config: AnnieConfig, options: AnnieOptions = {}
 					workspace: runtime.workspace(record.tenantId, record.id),
 					whoIs: (thread) => runtime.participant(record.tenantId, record.id, thread),
 					record: async (event) => {
-						await runtime.audit(record.tenantId).append({ ...event, instanceId: record.id, source: "annie" });
+						await runtime.audit(record.tenantId).append({ ...event, instanceId: record.id, source: "owni" });
 					},
 				}),
 				...googleTools(record),
@@ -880,11 +880,11 @@ export async function startAnnie(config: AnnieConfig, options: AnnieOptions = {}
 		await runtime.registry.createTenant({ id: tenant, name: tenant });
 	}
 	// Files of agenti deleted while a removal failed half-way (ADR 0046).
-	await runtime.registry.purgeRemoved(tenant).catch((error: unknown) => log(`annie: files of deleted agenti not removed: ${error instanceof Error ? error.message : String(error)}`));
+	await runtime.registry.purgeRemoved(tenant).catch((error: unknown) => log(`owni: files of deleted agenti not removed: ${error instanceof Error ? error.message : String(error)}`));
 	try {
 		const existing = await runtime.registry.getInstance(tenant, config.instanceId);
 		if (existing.model.provider !== config.modelProvider || existing.model.modelId !== config.modelId) {
-			log(`annie: instance ${config.instanceId} keeps its model ${existing.model.provider}/${existing.model.modelId}; ANNIE_MODEL_* apply to new instances only.`);
+			log(`owni: instance ${config.instanceId} keeps its model ${existing.model.provider}/${existing.model.modelId}; OWNI_MODEL_* apply to new instances only.`);
 		}
 	} catch (error) {
 		if (!(error instanceof NotFound)) throw error;
@@ -909,7 +909,7 @@ export async function startAnnie(config: AnnieConfig, options: AnnieOptions = {}
 	});
 	if (config.telegram !== undefined) {
 		const record = await runtime.registry.getInstance(tenant, config.instanceId);
-		if (!record.egress.channels.includes("telegram")) log(`annie: instance ${config.instanceId} does not allow the telegram channel; add it to its egress policy to use the bot.`);
+		if (!record.egress.channels.includes("telegram")) log(`owni: instance ${config.instanceId} does not allow the telegram channel; add it to its egress policy to use the bot.`);
 		if (config.telegram.allowedUsers !== undefined) await runtime.registry.setAllowedUsers(tenant, config.instanceId, "telegram", config.telegram.allowedUsers);
 		if (config.telegram.approvers !== undefined) await runtime.registry.updateInstance(tenant, config.instanceId, { approvers: { ...(record.approvers ?? {}), telegram: [...config.telegram.approvers] } });
 	}
@@ -1051,7 +1051,7 @@ export async function startAnnie(config: AnnieConfig, options: AnnieOptions = {}
 					});
 					await runtime.proposals(tenant, instance).markNotified(proposal.id, `${adapter.name}:${chat}`);
 				} catch (error) {
-					log(`annie: approval card for ${proposal.id} to ${adapter.name} ${chat} not sent: ${error instanceof Error ? error.message : String(error)}`);
+					log(`owni: approval card for ${proposal.id} to ${adapter.name} ${chat} not sent: ${error instanceof Error ? error.message : String(error)}`);
 				}
 			}
 		}
@@ -1080,7 +1080,7 @@ export async function startAnnie(config: AnnieConfig, options: AnnieOptions = {}
 					await adapter.send({ tenantId: tenant, instanceId: instance, channel: adapter.name, threadId: chat, idempotencyKey: `web-action:${action.id}:${chat}`, text, buttons });
 					await runtime.webActions(tenant, instance).markNotified(action.id, `${adapter.name}:${chat}`);
 				} catch (error) {
-					log(`annie: web action card for ${action.id} to ${adapter.name} ${chat} not sent: ${error instanceof Error ? error.message : String(error)}`);
+					log(`owni: web action card for ${action.id} to ${adapter.name} ${chat} not sent: ${error instanceof Error ? error.message : String(error)}`);
 				}
 			}
 		}
@@ -1145,7 +1145,7 @@ export async function startAnnie(config: AnnieConfig, options: AnnieOptions = {}
 					await adapter.send({ tenantId: tenant, instanceId: instance, channel: adapter.name, threadId: chat, idempotencyKey: `connector-action:${action.id}:${chat}`, text, buttons });
 					await runtime.connectorActions(tenant, instance).markNotified(action.id, `${adapter.name}:${chat}`);
 				} catch (error) {
-					log(`annie: connector action card for ${action.id} to ${adapter.name} ${chat} not sent: ${error instanceof Error ? error.message : String(error)}`);
+					log(`owni: connector action card for ${action.id} to ${adapter.name} ${chat} not sent: ${error instanceof Error ? error.message : String(error)}`);
 				}
 			}
 		}
@@ -1227,7 +1227,7 @@ export async function startAnnie(config: AnnieConfig, options: AnnieOptions = {}
 					await adapter.send({ tenantId: tenant, instanceId: instance, channel: adapter.name, threadId: chat, idempotencyKey: `agent-request:${request.id}:${chat}`, text, buttons });
 					await runtime.agentRequests(tenant, instance).markNotified(request.id, `${adapter.name}:${chat}`);
 				} catch (error) {
-					log(`annie: agent request card for ${request.id} to ${adapter.name} ${chat} not sent: ${error instanceof Error ? error.message : String(error)}`);
+					log(`owni: agent request card for ${request.id} to ${adapter.name} ${chat} not sent: ${error instanceof Error ? error.message : String(error)}`);
 				}
 			}
 		}
@@ -1406,7 +1406,7 @@ export async function startAnnie(config: AnnieConfig, options: AnnieOptions = {}
 		}
 		// Decisions whose outcome did not reach the asking agente (the notice failed, or Owni stopped first): told now.
 		for (const request of await runtime.agentRequests(tenant, record.id).outcomeUntold()) {
-			await tellAgentRequestOutcome(runtime, tenant, record.id, request).catch((error: unknown) => log(`annie: outcome of ${request.id} not passed on: ${error instanceof Error ? error.message : String(error)}`));
+			await tellAgentRequestOutcome(runtime, tenant, record.id, request).catch((error: unknown) => log(`owni: outcome of ${request.id} not passed on: ${error instanceof Error ? error.message : String(error)}`));
 		}
 	}
 	for (const record of conversational) {
@@ -1436,7 +1436,7 @@ export async function startAnnie(config: AnnieConfig, options: AnnieOptions = {}
 				// What an expired request left (its draft) goes away with it, told or not.
 				claimExpired: async (id: string, at: Date) => {
 					const request = await requests.claimExpired(id, at);
-					if (request?.undo !== undefined) await undoAgentRequest(await agentRequestToolsFor(record.id)(), request).catch((error: unknown) => log(`annie: what ${request.id} left was not taken back: ${error instanceof Error ? error.message : String(error)}`));
+					if (request?.undo !== undefined) await undoAgentRequest(await agentRequestToolsFor(record.id)(), request).catch((error: unknown) => log(`owni: what ${request.id} left was not taken back: ${error instanceof Error ? error.message : String(error)}`));
 					return request;
 				},
 			};
@@ -1457,7 +1457,7 @@ export async function startAnnie(config: AnnieConfig, options: AnnieOptions = {}
 			expired = await store.expiredUntold(now);
 		} catch (error) {
 			// One unreadable file must not stop the other queues.
-			log(`annie: ${type} queue of ${instance} not read: ${error instanceof Error ? error.message : String(error)}`);
+			log(`owni: ${type} queue of ${instance} not read: ${error instanceof Error ? error.message : String(error)}`);
 			return;
 		}
 		for (const candidate of expired) {
@@ -1472,7 +1472,7 @@ export async function startAnnie(config: AnnieConfig, options: AnnieOptions = {}
 					told = true;
 				} catch (error) {
 					reason = error instanceof Error ? error.name : "error";
-					log(`annie: expiry of ${action.id} not passed on: ${error instanceof Error ? error.message : String(error)}`);
+					log(`owni: expiry of ${action.id} not passed on: ${error instanceof Error ? error.message : String(error)}`);
 				}
 			}
 			await runtime.audit(tenant).append({ type: `${type}.expired`, instanceId: instance, actionId: action.id, told, ...(reason === undefined ? {} : { reason }) }).catch(() => {});
@@ -1499,7 +1499,7 @@ export async function startAnnie(config: AnnieConfig, options: AnnieOptions = {}
 			try {
 				syncAgent(subjectSeam(record), ["sales"], now);
 			} catch (error) {
-				log(`annie: subjects of ${record.id} not recorded: ${error instanceof Error ? error.message : String(error)}`);
+				log(`owni: subjects of ${record.id} not recorded: ${error instanceof Error ? error.message : String(error)}`);
 			}
 		}
 	}
@@ -1517,7 +1517,7 @@ export async function startAnnie(config: AnnieConfig, options: AnnieOptions = {}
 		log,
 		async (now) => {
 			// One failing does not keep the other from running.
-			await tellExpired(now).catch((error: unknown) => log(`annie: expired actions not told: ${error instanceof Error ? error.message : String(error)}`));
+			await tellExpired(now).catch((error: unknown) => log(`owni: expired actions not told: ${error instanceof Error ? error.message : String(error)}`));
 			// Le fatture ricorrenti: the drafts due today (ADR 0087).
 			await sweepRecurringAll(now).catch((error: unknown) => log(`recurring invoices: not swept: ${error instanceof Error ? error.message : String(error)}`));
 			// Schede that come back (ADR 0069).
@@ -1630,10 +1630,10 @@ export async function startAnnie(config: AnnieConfig, options: AnnieOptions = {}
 		try {
 			subjects.forgetAgent(id);
 		} catch (error) {
-			log(`annie: deleting ${id}: subjects not removed: ${error instanceof Error ? error.message : String(error)}`);
+			log(`owni: deleting ${id}: subjects not removed: ${error instanceof Error ? error.message : String(error)}`);
 		}
 		routines.pauseAgent(id);
-		const warn = (what: string) => (error: unknown) => log(`annie: deleting ${id}: ${what} not removed: ${error instanceof Error ? error.message : String(error)}`);
+		const warn = (what: string) => (error: unknown) => log(`owni: deleting ${id}: ${what} not removed: ${error instanceof Error ? error.message : String(error)}`);
 		await browseSessions.closeScope(`${record.tenantId}/${record.id}`).catch(warn("browsers"));
 		await computer?.reset(computerKey(tenant, id)).catch(warn("computer"));
 		screens.forget(id);

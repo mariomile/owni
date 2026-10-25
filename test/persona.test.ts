@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { AnnieRuntime, type DurableEngine } from "../src/core/index.ts";
+import { OwniRuntime, type DurableEngine } from "../src/core/index.ts";
 import { checkPersona, cleanName, PersonaError, withPersona } from "../src/core/persona.ts";
 import { FAUX_MODEL, tempDataDir } from "./helpers.ts";
 
@@ -59,7 +59,7 @@ describe("an agente opens with its persona", () => {
 				return { submit: async () => ({ submissionId: "s" }), resume: async () => ({ pending: 0 }), reattach: async () => false, setThreadModel: async () => {}, threadModel: async () => undefined, onReply: () => () => {}, idle: async () => {}, close: async () => {} };
 			},
 		};
-		const runtime = new AnnieRuntime({ dataDir: tempDataDir(), engine });
+		const runtime = new OwniRuntime({ dataDir: tempDataDir(), engine });
 		await runtime.registry.createTenant({ id: "acme", name: "acme" });
 		await runtime.registry.createInstance("acme", { id: "ricerca", name: "Ricercatore", model: FAUX_MODEL, egress: { modelProviders: ["faux"], channels: [] }, instructions: "Sei Owni.", persona: { emoji: "🔎", tone: "formale", named: true } });
 		await runtime.openInstance("acme", "ricerca");

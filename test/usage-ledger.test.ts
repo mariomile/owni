@@ -8,7 +8,7 @@ import { UsageLedger, type UsageRecord } from "../src/core/usage.ts";
 const turn = (submissionId: string, estimatedUsd = 0.5): UsageRecord => ({ at: new Date().toISOString(), provider: "p", model: "m", role: "agent", inputTokens: 10, outputTokens: 1, estimatedUsd, instanceId: "ops", threadId: "t1", submissionId });
 
 function ledgerIn() {
-	const dir = mkdtempSync(join(tmpdir(), "annie-usage-"));
+	const dir = mkdtempSync(join(tmpdir(), "owni-usage-"));
 	return { dir, ledger: new UsageLedger(dir, { softUsdPerDay: 5, hardUsdPerDay: 20 }) };
 }
 

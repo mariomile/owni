@@ -2,11 +2,11 @@ import { readFileSync } from "node:fs";
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { type RunningAnnie, startAnnie } from "../src/app.ts";
+import { type RunningOwni, startOwni } from "../src/app.ts";
 import { isOggOpus, MAX_AUDIO_BYTES, REST_WRITTEN, SpeechRefused, speakable, speaker, spokenPart, VoicePreferences } from "../src/channels/speech.ts";
 import { TelegramAdapter } from "../src/channels/telegram.ts";
 import { WhatsAppAdapter } from "../src/channels/whatsapp.ts";
-import { ConfigError, loadAnnieConfig } from "../src/main/config.ts";
+import { ConfigError, loadOwniConfig } from "../src/main/config.ts";
 import { runChecks } from "../src/main/check.ts";
 import { tempDataDir } from "./helpers.ts";
 
@@ -107,8 +107,8 @@ describe("replies as voice notes", () => {
 			} else calls.push({ method, text: JSON.parse(String(init?.body)).text });
 			return Response.json({ ok: true, result: { message_id: 1 } });
 		}) as typeof fetch;
-		const adapter = new TelegramAdapter({ token: "1:T", tenantId: "default", instanceId: "annie", fetch: telegramFetch });
-		const base = { tenantId: "default", instanceId: "annie", channel: "telegram", threadId: "7", idempotencyKey: "k", audio: OGG };
+		const adapter = new TelegramAdapter({ token: "1:T", tenantId: "default", instanceId: "owni", fetch: telegramFetch });
+		const base = { tenantId: "default", instanceId: "owni", channel: "telegram", threadId: "7", idempotencyKey: "k", audio: OGG };
 		await adapter.sendVoice({ ...base, text: "Ciao" });
 		await adapter.sendVoice({ ...base, text: "a".repeat(1100) });
 		expect(calls).toEqual([
@@ -120,7 +120,7 @@ describe("replies as voice notes", () => {
 		const refusing = new TelegramAdapter({
 			token: "1:T",
 			tenantId: "default",
-			instanceId: "annie",
+			instanceId: "owni",
 			fetch: (async (url: string | URL | Request, init?: RequestInit) => {
 				if (String(url).endsWith("/sendVoice")) return Response.json({ ok: false, error_code: 400, description: "Bad Request: VOICE_MESSAGES_FORBIDDEN" }, { status: 400 });
 				calls.push({ method: "after refusal", text: JSON.parse(String(init?.body)).text });
@@ -153,12 +153,12 @@ describe("replies as voice notes", () => {
 			appSecret: "a".repeat(32),
 			verifyToken: "v",
 			tenantId: "default",
-			instanceId: "annie",
+			instanceId: "owni",
 			fetch: whatsappFetch,
 			apiBase: "https://graph.example",
 			window: { lastInbound: async () => last, seen: async () => {}, park: async (_n, m) => (parked.push(m.text), { notify: false, dropped: 0 }), waiting: async () => [], delivered: async () => {}, failed: async () => {} },
 		});
-		const base = { tenantId: "default", instanceId: "annie", channel: "whatsapp", threadId: "393331234567", idempotencyKey: "k", audio: OGG };
+		const base = { tenantId: "default", instanceId: "owni", channel: "whatsapp", threadId: "393331234567", idempotencyKey: "k", audio: OGG };
 		await adapter.sendVoice({ ...base, text: "Ciao" });
 		expect(calls).toEqual(["upload audio/ogg", "/1110001/messages audio media-1", "/1110001/messages text Ciao"]);
 		calls.length = 0;
@@ -173,17 +173,17 @@ describe("replies as voice notes", () => {
 		expect(calls).toEqual(["/1110001/messages text Solo testo"]);
 	});
 
-	it("configuration: both or neither; OpenAI's model and voice by default; pnpm annie check asks the service", async () => {
-		const base = { ANNIE_DATA_DIR: "/tmp/x", ANNIE_MODEL_PROVIDER: "faux" };
-		expect(loadAnnieConfig(base).speech).toBeUndefined();
-		expect(() => loadAnnieConfig({ ...base, ANNIE_SPEECH_URL: "https://api.openai.com/v1" })).toThrow(ConfigError);
-		expect(() => loadAnnieConfig({ ...base, ANNIE_SPEECH_URL: "http://example.com/v1", ANNIE_SPEECH_API_KEY: KEY })).toThrow(/https/);
-		expect(() => loadAnnieConfig({ ...base, ANNIE_SPEECH_URL: "https://tts.example.com/v1", ANNIE_SPEECH_API_KEY: KEY })).toThrow(/ANNIE_SPEECH_MODEL/);
-		expect(() => loadAnnieConfig({ ...base, ANNIE_SPEECH_URL: "https://tts.example.com/v1", ANNIE_SPEECH_API_KEY: KEY, ANNIE_SPEECH_MODEL: "kokoro" })).toThrow(/ANNIE_SPEECH_VOICE/);
-		expect(() => loadAnnieConfig({ ...base, ANNIE_SPEECH_URL: "https://api.openai.com/v1", ANNIE_SPEECH_API_KEY: KEY, ANNIE_SPEECH_MAX_CHARS: "5" })).toThrow(/MAX_CHARS/);
-		const loaded = loadAnnieConfig({ ...base, ANNIE_SPEECH_URL: "https://api.openai.com/v1/", ANNIE_SPEECH_API_KEY: KEY });
+	it("configuration: both or neither; OpenAI's model and voice by default; pnpm owni check asks the service", async () => {
+		const base = { OWNI_DATA_DIR: "/tmp/x", OWNI_MODEL_PROVIDER: "faux" };
+		expect(loadOwniConfig(base).speech).toBeUndefined();
+		expect(() => loadOwniConfig({ ...base, OWNI_SPEECH_URL: "https://api.openai.com/v1" })).toThrow(ConfigError);
+		expect(() => loadOwniConfig({ ...base, OWNI_SPEECH_URL: "http://example.com/v1", OWNI_SPEECH_API_KEY: KEY })).toThrow(/https/);
+		expect(() => loadOwniConfig({ ...base, OWNI_SPEECH_URL: "https://tts.example.com/v1", OWNI_SPEECH_API_KEY: KEY })).toThrow(/OWNI_SPEECH_MODEL/);
+		expect(() => loadOwniConfig({ ...base, OWNI_SPEECH_URL: "https://tts.example.com/v1", OWNI_SPEECH_API_KEY: KEY, OWNI_SPEECH_MODEL: "kokoro" })).toThrow(/OWNI_SPEECH_VOICE/);
+		expect(() => loadOwniConfig({ ...base, OWNI_SPEECH_URL: "https://api.openai.com/v1", OWNI_SPEECH_API_KEY: KEY, OWNI_SPEECH_MAX_CHARS: "5" })).toThrow(/MAX_CHARS/);
+		const loaded = loadOwniConfig({ ...base, OWNI_SPEECH_URL: "https://api.openai.com/v1/", OWNI_SPEECH_API_KEY: KEY });
 		expect(loaded.speech).toEqual({ url: "https://api.openai.com/v1", apiKey: KEY, model: "gpt-4o-mini-tts", voice: "nova", maxChars: 1500, maxPerDay: 300 });
-		expect(() => loadAnnieConfig({ ...base, ANNIE_SPEECH_URL: "https://api.openai.com/v1", ANNIE_SPEECH_API_KEY: KEY, ANNIE_SPEECH_MAX_PER_DAY: "0" })).toThrow(/MAX_PER_DAY/);
+		expect(() => loadOwniConfig({ ...base, OWNI_SPEECH_URL: "https://api.openai.com/v1", OWNI_SPEECH_API_KEY: KEY, OWNI_SPEECH_MAX_PER_DAY: "0" })).toThrow(/MAX_PER_DAY/);
 		const asked: string[] = [];
 		const results = await runChecks(loaded, (async (url: string | URL | Request) => {
 			asked.push(String(url));
@@ -195,7 +195,7 @@ describe("replies as voice notes", () => {
 });
 
 describe("in an instance", () => {
-	const running: RunningAnnie[] = [];
+	const running: RunningOwni[] = [];
 	afterEach(async () => {
 		for (const a of running.splice(0)) await a.stop();
 	});
@@ -207,7 +207,7 @@ describe("in an instance", () => {
 			const href = String(url);
 			if (href.includes("/file/bot")) return new Response(new Uint8Array([9, 9]));
 			const method = href.slice(href.lastIndexOf("/") + 1);
-			if (method === "getMe") return Response.json({ ok: true, result: { username: "annie_bot" } });
+			if (method === "getMe") return Response.json({ ok: true, result: { username: "owni_bot" } });
 			if (method === "getUpdates") {
 				const batch = updates.shift();
 				if (batch === undefined) await new Promise((r) => setTimeout(r, 20));
@@ -227,26 +227,26 @@ describe("in an instance", () => {
 		const speech = fakeSpeech(() => (failing ? Response.json({ error: "busy" }, { status: 503 }) : new Response(OGG)));
 		const transcribeFetch = (async () => Response.json({ text: "che ore sono" })) as typeof fetch;
 		const dataDir = tempDataDir();
-		const loaded = loadAnnieConfig({
-			ANNIE_DATA_DIR: dataDir,
-			ANNIE_MODEL_PROVIDER: "faux",
-			ANNIE_WEB_PORT: "1",
+		const loaded = loadOwniConfig({
+			OWNI_DATA_DIR: dataDir,
+			OWNI_MODEL_PROVIDER: "faux",
+			OWNI_WEB_PORT: "1",
 			TELEGRAM_BOT_TOKEN: "1:T",
-			ANNIE_TELEGRAM_ALLOWED_USERS: "7",
-			ANNIE_TRANSCRIBE_URL: "https://api.mistral.ai/v1",
-			ANNIE_TRANSCRIBE_API_KEY: "transcribe-key-0123456789",
-			ANNIE_SPEECH_URL: "https://api.openai.com/v1",
-			ANNIE_SPEECH_API_KEY: KEY,
+			OWNI_TELEGRAM_ALLOWED_USERS: "7",
+			OWNI_TRANSCRIBE_URL: "https://api.mistral.ai/v1",
+			OWNI_TRANSCRIBE_API_KEY: "transcribe-key-0123456789",
+			OWNI_SPEECH_URL: "https://api.openai.com/v1",
+			OWNI_SPEECH_API_KEY: KEY,
 		});
-		const annie = await startAnnie({ ...loaded, web: { ...loaded.web, port: 0 } }, { telegramFetch, transcribeFetch, speechFetch: speech.fetch, schedulerIntervalMs: 60_000, log: () => {} });
-		running.push(annie);
-		const base = `http://127.0.0.1:${(annie.server.address() as AddressInfo).port}`;
-		const login = await fetch(`${base}/api/login`, { method: "POST", headers: { "x-annie": "1" }, body: JSON.stringify({ token: (annie.ownerLink as string).split("#")[1] }) });
+		const owni = await startOwni({ ...loaded, web: { ...loaded.web, port: 0 } }, { telegramFetch, transcribeFetch, speechFetch: speech.fetch, schedulerIntervalMs: 60_000, log: () => {} });
+		running.push(owni);
+		const base = `http://127.0.0.1:${(owni.server.address() as AddressInfo).port}`;
+		const login = await fetch(`${base}/api/login`, { method: "POST", headers: { "x-owni": "1" }, body: JSON.stringify({ token: (owni.ownerLink as string).split("#")[1] }) });
 		const cookie = (login.headers.get("set-cookie") ?? "").split(";")[0] as string;
 		// biome-ignore lint: test
-		const api = async (path: string, body?: unknown): Promise<any> => (await fetch(`${base}${path}`, { method: body === undefined ? "GET" : "PUT", headers: { cookie, "x-annie": "1" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) })).json();
+		const api = async (path: string, body?: unknown): Promise<any> => (await fetch(`${base}${path}`, { method: body === undefined ? "GET" : "PUT", headers: { cookie, "x-owni": "1" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) })).json();
 		expect(await api("/api/speech")).toEqual({ available: true, host: "api.openai.com", voice: "nova" });
-		expect(await api("/api/instances/annie/voice", { allowed: true })).toEqual({ allowed: true });
+		expect(await api("/api/instances/owni/voice", { allowed: true })).toEqual({ allowed: true });
 		let id = 0;
 		const voiceNote = () => updates.push([{ update_id: ++id, message: { message_id: id, chat: { id: 7, type: "private" }, from: { id: 7 }, voice: { file_id: `v${id}`, duration: 3, mime_type: "audio/ogg" } } }]);
 		const written = (text: string) => updates.push([{ update_id: ++id, message: { message_id: id, chat: { id: 7, type: "private" }, from: { id: 7 }, text } }]);
@@ -258,7 +258,7 @@ describe("in an instance", () => {
 		voiceNote();
 		expect((await replies(1)).map((s) => s.method)).toEqual(["sendMessage"]);
 		expect(speech.asked).toHaveLength(0);
-		expect(await api("/api/instances/annie/speech", { allowed: true })).toEqual({ allowed: true });
+		expect(await api("/api/instances/owni/speech", { allowed: true })).toEqual({ allowed: true });
 		voiceNote();
 		const spoken = await replies(1);
 		expect(spoken).toEqual([{ method: "sendVoice", caption: expect.stringContaining("che ore sono") }]);
@@ -271,7 +271,7 @@ describe("in an instance", () => {
 		// What Owni sends by herself in that chat is not read aloud.
 		voiceNote();
 		await replies(1);
-		await annie.runtime.sendMessage("default", "annie", { channel: "telegram", threadId: "7", text: "Promemoria: chiama Rossi", key: "r1" });
+		await owni.runtime.sendMessage("default", "owni", { channel: "telegram", threadId: "7", text: "Promemoria: chiama Rossi", key: "r1" });
 		expect(await replies(1)).toEqual([{ method: "sendMessage", text: "Promemoria: chiama Rossi" }]);
 		// The person asks for voice always, then never.
 		written('/tool voice_replies {"mode":"always"}');
@@ -296,7 +296,7 @@ describe("in an instance", () => {
 		expect(await replies(1)).toEqual([{ method: "sendMessage", text: expect.stringContaining("che ore sono") }]);
 		expect(speech.asked.length).toBe(before + 1);
 		// In a group, a voice note is answered in writing.
-		await annie.runtime.registry.setAllowedUsers("default", "annie", "telegram", ["7"]);
+		await owni.runtime.registry.setAllowedUsers("default", "owni", "telegram", ["7"]);
 		updates.push([{ update_id: ++id, message: { message_id: id, chat: { id: -100, type: "group" }, from: { id: 7 }, voice: { file_id: "g", duration: 3, mime_type: "audio/ogg" } } }]);
 		expect((await replies(1)).map((s) => s.method)).toEqual(["sendMessage"]);
 		expect(readFileSync(join(dataDir, "tenants", "default", "audit.jsonl"), "utf8")).toContain('"type":"speech.allowed"');

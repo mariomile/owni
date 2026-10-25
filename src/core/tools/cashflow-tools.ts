@@ -5,7 +5,7 @@ import { applyChanges, averageSpend, canoneFlows, type Change, dedupe, type Hypo
 import { statementOf } from "../bank.ts";
 import type { BankStore } from "../bank-store.ts";
 import { CASHFLOW_BROKEN, type CashflowStore, latestBalance } from "../cashflow-store.ts";
-import type { AnnieTool, ToolContext } from "../engine.ts";
+import type { OwniTool, ToolContext } from "../engine.ts";
 import type { ExpenseStore } from "../expense-store.ts";
 import { euros, n1 } from "../format-words.ts";
 import { InvoiceScanner } from "../invoice-scan.ts";
@@ -92,12 +92,12 @@ type Flags = { readonly includeOverdue: boolean; readonly includeAverage: boolea
  * tool's; names of clients, suppliers, renewals, quotes and voci, and notes, are fenced. Today is
  * read once per call.
  */
-export function createCashflowTools(options: CashflowToolsOptions): AnnieTool[] {
+export function createCashflowTools(options: CashflowToolsOptions): OwniTool[] {
 	const { store, workspace, timeZone } = options;
 	const now = options.now ?? (() => new Date());
 	const scanner = options.scanner ?? new InvoiceScanner(workspace);
 	const dayOf = dayOfIn(timeZone);
-	const who = (ctx: ToolContext) => (ctx.thread === undefined ? "annie" : (options.whoIs(ctx.thread) ?? `${ctx.thread.channel}:${ctx.thread.threadId}`));
+	const who = (ctx: ToolContext) => (ctx.thread === undefined ? "owni" : (options.whoIs(ctx.thread) ?? `${ctx.thread.channel}:${ctx.thread.threadId}`));
 	const audit = async (ctx: ToolContext, op: CashflowEvent["op"], count: number) => {
 		// Its own step: an audit that failed is written on the rerun, after the change it records.
 		await ctx.step("audit", async () => {

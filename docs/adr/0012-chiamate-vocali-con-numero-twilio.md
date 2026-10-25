@@ -21,7 +21,7 @@ Perché a turni e non in streaming: con la voce in tempo reale servirebbero un r
 - Niente file: un file pronto viene solo nominato, e si trova nella console.
 - Owni non chiama per prima. Per questo al telefono non crea task programmati: un promemoria si sentirebbe solo alla chiamata dopo.
 - Il codice è uno per istanza: una persona in elenco che conosce il codice e falsifica il numero di un'altra persona in elenco entra nella sua conversazione. Per istanze con più persone che non si fidano tra loro il telefono va lasciato spento.
-- Tutto quello che Owni dice al telefono è in italiano (voce `ANNIE_PHONE_VOICE`, Polly.Bianca di default).
+- Tutto quello che Owni dice al telefono è in italiano (voce `OWNI_PHONE_VOICE`, Polly.Bianca di default).
 - Scollegare il numero lascia l'indirizzo delle chiamate su Twilio: la cella rifiuta quelle chiamate senza rispondere.
 - Link e formattazione non si leggono ad alta voce: Owni dice «un link» e salta i simboli. Le risposte molto lunghe vengono tagliate.
 
@@ -33,6 +33,6 @@ Perché a turni e non in streaming: con la voce in tempo reale servirebbero un r
 
 ## Conseguenze
 
-- La voce va a Twilio, che fa riconoscimento e sintesi: per i dati in UE Twilio offre la regione Irlanda (`ANNIE_TWILIO_API`), da scegliere prima di aprire il servizio.
+- La voce va a Twilio, che fa riconoscimento e sintesi: per i dati in UE Twilio offre la regione Irlanda (`OWNI_TWILIO_API`), da scegliere prima di aprire il servizio.
 - Il costo delle chiamate lo fattura Twilio all'owner; non passa dal contatore di spesa di Owni, che conta solo il modello.
 - Auth token e Account SID vivono nel registro dei segreti del tenant, mai nei log.

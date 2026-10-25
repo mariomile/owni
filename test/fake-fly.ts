@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { createServer, type IncomingMessage, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 
-/** What runs an exec on a machine: annie-run with these arguments and this input. */
+/** What runs an exec on a machine: owni-run with these arguments and this input. */
 export type Backend = {
 	boot(app: string, config: Record<string, unknown>): Promise<void>;
 	exec(app: string, command: readonly string[], stdin: string): Promise<{ exit_code: number; stdout: string; stderr: string; exit_signal?: number }>;
@@ -15,7 +15,7 @@ type FakeApp = { name: string; network: string; org: string; machines: FakeMachi
 
 /**
  * A stand-in for the part of Fly's Machines API the computer uses (src/computer/fly-computer.ts),
- * with the same paths and payloads as api.machines.dev. Execs go to a backend: annie-run on this
+ * with the same paths and payloads as api.machines.dev. Execs go to a backend: owni-run on this
  * machine, or a container of the real image (computer-fly.live.test.ts).
  */
 export async function fakeFly(backend: Backend, token = "fly-test-token"): Promise<{ url: string; apps: Map<string, FakeApp>; calls: string[]; server: Server; stopMachine(app: string): void; close(): Promise<void> }> {

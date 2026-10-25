@@ -3,7 +3,7 @@ import type { AddressInfo } from "node:net";
 import { afterEach, expect, it } from "vitest";
 import { ConnectorStore } from "../src/connectors/mcp.ts";
 import { piDurableEngine } from "../src/core/adapters/pi-durable.ts";
-import { AnnieRuntime } from "../src/core/runtime.ts";
+import { OwniRuntime } from "../src/core/runtime.ts";
 import { createSlowCounter } from "../src/core/tools/slow-counter.ts";
 import { UsageLedger } from "../src/core/usage.ts";
 import { connectChannel, REPLY_CANCELLED } from "../src/gateway.ts";
@@ -19,7 +19,7 @@ async function setup() {
 	const dataDir = tempDataDir();
 	const dir = join(dataDir, "tenants", "acme");
 	const steps: number[] = [];
-	const runtime = new AnnieRuntime({ dataDir, engine: piDurableEngine, tools: [createSlowCounter({ stepMs: 100, onStep: (step) => { steps.push(step); } })] });
+	const runtime = new OwniRuntime({ dataDir, engine: piDurableEngine, tools: [createSlowCounter({ stepMs: 100, onStep: (step) => { steps.push(step); } })] });
 	await runtime.registry.createTenant({ id: "acme", name: "Acme" });
 	const people = new PeopleStore(dir);
 	const sessions = new SessionStore(dir);
@@ -36,7 +36,7 @@ async function setup() {
 	closers.push(async () => { server.closeAllConnections(); await new Promise((resolve) => server.close(resolve)); await runtime.close(); });
 	const client = async (personId: string) => {
 		const session = await sessions.create(personId);
-		const headers = { cookie: `annie_session=${session}`, "x-annie": "1" };
+		const headers = { cookie: `owni_session=${session}`, "x-owni": "1" };
 		const api = async (path: string, body?: unknown): Promise<{ status: number; [key: string]: any }> => {
 			const result = await fetch(`${base}${path}`, { headers, method: body === undefined ? "GET" : "POST", ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
 			return { status: result.status, ...await result.json() as Record<string, any> };
@@ -103,7 +103,7 @@ it("reports tool progress before completion and stops only the selected conversa
 	const steps = s.steps.length;
 	await (await s.runtime.openInstance("acme", "ops")).idle();
 	expect(s.steps).toHaveLength(steps);
-	await expect.poll(async () => (await s.channel.transcript(first.id)).find((entry) => entry.from === "annie")?.text).toBe("Lavoro interrotto su tua richiesta. Le azioni già completate restano.");
+	await expect.poll(async () => (await s.channel.transcript(first.id)).find((entry) => entry.from === "owni")?.text).toBe("Lavoro interrotto su tua richiesta. Le azioni già completate restano.");
 	expect((await a.api(`/api/instances/ops/threads/${first.id}/runs`)).runs[0].status).toBe("cancelled");
 	expect((await l.api(`/api/instances/ops/threads/${other.id}/runs`)).runs[0].status).toBe("succeeded");
 	await s.runtime.reopen("acme", "ops");

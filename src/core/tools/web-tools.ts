@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { AnnieTool } from "../engine.ts";
+import type { OwniTool } from "../engine.ts";
 import { type EgressPolicy, webHostAllowed } from "../policy.ts";
 import type { AskedBy } from "../agent-requests.ts";
 import { readForm, type WebAction, WebActionError, WEB_ACTIONS_CONNECTOR, type WebActionStore } from "../web-actions.ts";
@@ -69,7 +69,7 @@ let screenshotsRunning = 0;
  * no network: every request it makes is answered by the same guarded fetch as web_read, one
  * redirect at a time, so every hop is checked.
  */
-export function createWebTools(options: WebToolsOptions): AnnieTool[] {
+export function createWebTools(options: WebToolsOptions): OwniTool[] {
 	const addressAllowed = options.addressAllowed ?? publicAddress;
 	const guard = (policy: EgressPolicy) => webGuard(policy, addressAllowed);
 	const recentDocuments = new Map<string, { url: string; doc: DocumentText; at: number }>();
@@ -230,7 +230,7 @@ export function createWebTools(options: WebToolsOptions): AnnieTool[] {
 }
 
 /** A browser that stays open for the conversation: open, click, type (ADR 0014). It reads and never sends. */
-function browseTools(options: WebToolsOptions, sessions: BrowseSessions, guard: (policy: EgressPolicy) => Guard): AnnieTool[] {
+function browseTools(options: WebToolsOptions, sessions: BrowseSessions, guard: (policy: EgressPolicy) => Guard): OwniTool[] {
 	const scope = options.scope ?? "default";
 	/** The view for Owni, with the screenshot saved when asked; the browser's own refusals said plainly. */
 	const respond = async (view: () => Promise<View>): Promise<string> => {
@@ -331,7 +331,7 @@ function browseTools(options: WebToolsOptions, sessions: BrowseSessions, guard: 
 	];
 }
 
-function submitTool(actions: NonNullable<WebToolsOptions["actions"]>, policyOf: () => Promise<EgressPolicy>, guard: (policy: EgressPolicy) => Guard): AnnieTool {
+function submitTool(actions: NonNullable<WebToolsOptions["actions"]>, policyOf: () => Promise<EgressPolicy>, guard: (policy: EgressPolicy) => Guard): OwniTool {
 	return {
 		name: "web_submit",
 		description:
@@ -387,7 +387,7 @@ function submitTool(actions: NonNullable<WebToolsOptions["actions"]>, policyOf: 
  * results are fenced as data; which of them web_read may open is said outside the fence, so a
  * result cannot claim otherwise. The sites the owner allows still decide that.
  */
-function searchTool(search: NonNullable<WebToolsOptions["search"]>, policyOf: () => Promise<EgressPolicy>): AnnieTool {
+function searchTool(search: NonNullable<WebToolsOptions["search"]>, policyOf: () => Promise<EgressPolicy>): OwniTool {
 	return {
 		name: "web_search",
 		description:

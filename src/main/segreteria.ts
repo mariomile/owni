@@ -8,7 +8,7 @@
 import { existsSync } from "node:fs";
 import { piDurableEngine } from "../core/adapters/pi-durable.ts";
 import { InstanceLocked } from "../core/errors.ts";
-import { AnnieRuntime } from "../core/runtime.ts";
+import { OwniRuntime } from "../core/runtime.ts";
 import { SegreteriaConfigError, startSegreteria } from "../segreteria/boot.ts";
 import { ConfigError, loadSegreteriaConfig, type SegreteriaConfig } from "./config.ts";
 
@@ -19,17 +19,17 @@ try {
 	config = loadSegreteriaConfig(process.env);
 } catch (error) {
 	if (error instanceof ConfigError) {
-		console.error(`annie: ${error.message}`);
+		console.error(`owni: ${error.message}`);
 		process.exit(1);
 	}
 	throw error;
 }
 
-const runtime = new AnnieRuntime({ dataDir: config.dataDir, engine: piDurableEngine });
+const runtime = new OwniRuntime({ dataDir: config.dataDir, engine: piDurableEngine });
 try {
 	const running = await startSegreteria(runtime, config, (message) => console.error(message));
 	console.error(
-		`annie: segreteria tenant=${config.tenantId} instance=${config.instanceId} model=${config.modelProvider} ` +
+		`owni: segreteria tenant=${config.tenantId} instance=${config.instanceId} model=${config.modelProvider} ` +
 			`sales=${config.salesUserIds.length}, mailbox every ${config.pollSeconds}s (Ctrl+C to stop)`,
 	);
 	for (const signal of ["SIGINT", "SIGTERM"] as const) {
@@ -39,7 +39,7 @@ try {
 	}
 } catch (error) {
 	if (error instanceof SegreteriaConfigError || error instanceof InstanceLocked) {
-		console.error(`annie: ${error.message}`);
+		console.error(`owni: ${error.message}`);
 		process.exit(1);
 	}
 	throw error;

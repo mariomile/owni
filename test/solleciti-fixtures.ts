@@ -88,7 +88,7 @@ const made: string[] = [];
 
 /** A new directory under the system's temp; cleanTemp removes it. */
 export function temp(): string {
-	const dir = mkdtempSync(join(tmpdir(), "annie-solleciti-"));
+	const dir = mkdtempSync(join(tmpdir(), "owni-solleciti-"));
 	made.push(dir);
 	return dir;
 }

@@ -1,5 +1,5 @@
 import { DateError } from "../dates.ts";
-import type { AnnieTool, ToolContext } from "../engine.ts";
+import type { OwniTool, ToolContext } from "../engine.ts";
 import { InvoiceScanner, type ReadFattura, type ScanLimits } from "../invoice-scan.ts";
 import { MAX_DAYS, RANGES, type Range } from "../invoice-windows.ts";
 import {
@@ -96,7 +96,7 @@ const DESCRIPTION = [
  * owed to or by each party, the list, marking paid, and the owner's company. What comes from the
  * files (names, numbers, IBAN) is fenced as data; the counts and how to go on are said outside.
  */
-export function createInvoiceTools(options: InvoiceToolsOptions): AnnieTool[] {
+export function createInvoiceTools(options: InvoiceToolsOptions): OwniTool[] {
 	const { store, timeZone } = options;
 	const now = options.now ?? (() => new Date());
 	const scanner =
@@ -106,7 +106,7 @@ export function createInvoiceTools(options: InvoiceToolsOptions): AnnieTool[] {
 			...(options.read === undefined ? {} : { read: options.read }),
 		});
 	// The person of a private thread; in a group, which group (the engine does not say who wrote).
-	const who = (ctx: ToolContext) => (ctx.thread === undefined ? "annie" : (options.whoIs(ctx.thread) ?? `${ctx.thread.channel}:${ctx.thread.threadId}`));
+	const who = (ctx: ToolContext) => (ctx.thread === undefined ? "owni" : (options.whoIs(ctx.thread) ?? `${ctx.thread.channel}:${ctx.thread.threadId}`));
 	const load = async (ctx: ToolContext): Promise<Loaded> => {
 		const scan = await scanner.scan(ctx.signal, (t) => ctx.progress(t));
 		const book = store.read();

@@ -22,7 +22,7 @@ describe("TOTP (RFC 6238)", () => {
 	});
 
 	it("base32 round-trips and ignores spaces and case", () => {
-		const bytes = Buffer.from("annie-2fa-secret!!xx");
+		const bytes = Buffer.from("owni-2fa-secret!!xx");
 		const encoded = base32Encode(bytes);
 		expect(encoded).toMatch(/^[A-Z2-7]+$/);
 		expect(base32Decode(encoded)).toEqual(bytes);

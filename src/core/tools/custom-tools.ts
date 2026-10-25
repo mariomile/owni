@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { egressFetch } from "../../connectors/http.ts";
-import type { AnnieTool } from "../engine.ts";
+import type { OwniTool } from "../engine.ts";
 import type { EgressPolicy } from "../policy.ts";
 import { customToolName, ProposalError, type ProposalStore, type ToolProposal, toolEgressName } from "../proposals.ts";
 import { runSandboxed } from "../sandbox.ts";
@@ -20,8 +20,8 @@ export type CustomToolsOptions = {
  * approved tool runs in the sandbox, reaching only its declared hosts, and only while the
  * egress policy lists tool:<name>.
  */
-export async function createCustomTools(options: CustomToolsOptions): Promise<AnnieTool[]> {
-	const propose: AnnieTool = {
+export async function createCustomTools(options: CustomToolsOptions): Promise<OwniTool[]> {
+	const propose: OwniTool = {
 		name: "tool_propose",
 		description:
 			"Write a new tool for yourself when no existing tool can do the job (e.g. call a public API, transform data). " +
@@ -61,7 +61,7 @@ export async function createCustomTools(options: CustomToolsOptions): Promise<An
 			});
 		},
 	};
-	const approved = (await options.store.approved()).map((proposal): AnnieTool => ({
+	const approved = (await options.store.approved()).map((proposal): OwniTool => ({
 		name: customToolName(proposal.name),
 		description: `${proposal.description} (tool proposto ${proposal.id}, approvato)`.slice(0, 1024),
 		parameters: proposal.parameters,

@@ -40,4 +40,4 @@ Seconda revisione, corretta:
 
 ## Da fare
 
-- Provare gli indirizzi dei feed con `pnpm annie check` su un server con rete: da qui il proxy blocca i siti dei giornali.
+- Provare gli indirizzi dei feed con `pnpm owni check` su un server con rete: da qui il proxy blocca i siti dei giornali.

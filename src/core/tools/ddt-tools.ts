@@ -14,7 +14,7 @@ import { type Ddt, DDT_LIMITS, DDT_OPS, DdtError, ddtId, type DdtLine, type DdtO
 import { DDT_BROKEN, type DdtStore, nextDdtSeq } from "../ddt-store.ts";
 import { makeDocumentFile } from "../document-reader.ts";
 import { DocumentError } from "../documents.ts";
-import type { AnnieTool, ToolContext } from "../engine.ts";
+import type { OwniTool, ToolContext } from "../engine.ts";
 import { n1 } from "../format-words.ts";
 import type { InvoiceStore } from "../invoice-store.ts";
 import type { Company } from "../invoices.ts";
@@ -76,11 +76,11 @@ type Answer = { text: string; count: number };
 const OMAGGIO_NOTE = "È un omaggio: niente fattura al cliente, ma per l'IVA di solito serve un'autofattura. Chiedi al commercialista come la vuole.";
 const PRINT_NOTE = "Il DDT deve viaggiare con la merce: vuoi il PDF da stampare (due copie, una resta a te firmata)? Non lo mando a nessuno da sola.";
 
-export function createDdtTools(options: DdtToolsOptions): AnnieTool[] {
+export function createDdtTools(options: DdtToolsOptions): OwniTool[] {
 	const { store, workspace, timeZone } = options;
 	const now = options.now ?? (() => new Date());
 	const make = options.make ?? ((input: MakeInput) => makeDocumentFile(input));
-	const who = (ctx: ToolContext) => (ctx.thread === undefined ? "annie" : (options.whoIs(ctx.thread) ?? `${ctx.thread.channel}:${ctx.thread.threadId}`));
+	const who = (ctx: ToolContext) => (ctx.thread === undefined ? "owni" : (options.whoIs(ctx.thread) ?? `${ctx.thread.channel}:${ctx.thread.threadId}`));
 	const marker = (ctx: ToolContext): Marker => ({ by: who(ctx), at: now().toISOString() });
 	const audit = async (ctx: ToolContext, op: DdtEvent["op"], count: number) => {
 		await ctx.step(`audit-${op}`, async () => {

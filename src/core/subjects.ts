@@ -6,7 +6,7 @@ import type { ClientStore } from "./client-store.ts";
 import { clientCallReads } from "./clients.ts";
 import type { DdtStore } from "./ddt-store.ts";
 import { ddtCallReads } from "./ddt.ts";
-import type { AnnieTool, ToolContext, ToolResult } from "./engine.ts";
+import type { OwniTool, ToolContext, ToolResult } from "./engine.ts";
 import { readJsonFile, updateJsonFile } from "./locked-json.ts";
 import { businessKey, legalForm } from "./name-keys.ts";
 import type { OrderStore } from "./order-store.ts";
@@ -346,14 +346,14 @@ const why = (error: unknown) => (error instanceof Error ? error.message : String
  * are read into the ledger, and the result says when another agente already has the same client or
  * supplier. A ledger that fails never fails the call: the register wrote already.
  */
-export function withSubjects(tools: readonly AnnieTool[], seam: SubjectSeam, log: (message: string) => void = () => {}): AnnieTool[] {
+export function withSubjects(tools: readonly OwniTool[], seam: SubjectSeam, log: (message: string) => void = () => {}): OwniTool[] {
 	// What the registers have already goes in now, without warning: from here on every write is news.
 	try {
 		syncAgent(seam);
 	} catch (error) {
-		log(`annie: subjects of ${seam.agent} not read: ${why(error)}`);
+		log(`owni: subjects of ${seam.agent} not read: ${why(error)}`);
 	}
-	return tools.map((tool): AnnieTool => {
+	return tools.map((tool): OwniTool => {
 		const hook = SUBJECT_TOOLS[tool.name];
 		if (hook === undefined) return tool;
 		return {
@@ -364,7 +364,7 @@ export function withSubjects(tools: readonly AnnieTool[], seam: SubjectSeam, log
 				try {
 					return append(result, await warningFor(seam, syncAgent(seam, hook.registers), ctx.thread));
 				} catch (error) {
-					log(`annie: subjects of ${seam.agent} not recorded: ${why(error)}`);
+					log(`owni: subjects of ${seam.agent} not recorded: ${why(error)}`);
 					return result;
 				}
 			},
@@ -391,7 +391,7 @@ export function cardSubjects(seam: SubjectSeam, log: (message: string) => void =
 				const have = new Set(seam.ledger.list().filter((e) => e.agent === seam.agent).map((e) => e.id));
 				return ids.map((id) => id.trim()).filter((id) => id !== "" && !have.has(id));
 			} catch (error) {
-				log(`annie: subjects of ${seam.agent} not read: ${why(error)}`);
+				log(`owni: subjects of ${seam.agent} not read: ${why(error)}`);
 				return [];
 			}
 		},
@@ -400,7 +400,7 @@ export function cardSubjects(seam: SubjectSeam, log: (message: string) => void =
 				syncAgent(seam);
 				return await warningFor(seam, seam.ledger.link(seam.agent, card, ids).linked, thread);
 			} catch (error) {
-				log(`annie: scheda #${card.n} not linked to the records of ${seam.agent}: ${why(error)}`);
+				log(`owni: scheda #${card.n} not linked to the records of ${seam.agent}: ${why(error)}`);
 				return undefined;
 			}
 		},

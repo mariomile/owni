@@ -1,4 +1,4 @@
-import type { AnnieTool } from "../engine.ts";
+import type { OwniTool } from "../engine.ts";
 
 type VoiceMode = "auto" | "always" | "never";
 
@@ -14,7 +14,7 @@ export function createVoiceTools(options: {
 	readonly whoIs: (thread: { channel: string; threadId: string }) => string | undefined;
 	/** The owner turned spoken replies on for this instance. */
 	readonly on: () => Promise<boolean>;
-}): AnnieTool[] {
+}): OwniTool[] {
 	const said: Record<VoiceMode, string> = {
 		auto: "rispondo a voce quando mi manda un vocale, per iscritto quando scrive",
 		always: "rispondo sempre anche con un vocale, oltre al testo",

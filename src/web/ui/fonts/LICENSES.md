@@ -1,6 +1,6 @@
 # Font
 
-Distribuiti con Annie per non dipendere da CDN esterne (la console ha `default-src 'self'`).
+Distribuiti con Owni per non dipendere da CDN esterne (la console ha `default-src 'self'`).
 Presi dai pacchetti npm `@fontsource-variable/archivo@5.3.0` (sottoinsiemi latin e latin-ext, peso 100-900 e larghezza 62-125% variabili) e `@fontsource/monaspace-neon@5.3.0` (latin, pesi 400 e 500).
 
 | File | Font | Licenza |

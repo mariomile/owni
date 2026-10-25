@@ -1,4 +1,4 @@
-import type { AnnieTool } from "../engine.ts";
+import type { OwniTool } from "../engine.ts";
 import { IMAGE_CONNECTOR, IMAGE_QUALITIES, IMAGE_SHAPES, type GenerateImage, ImageGenerationError, type ImageQuality, type ImageShape } from "../image-generation.ts";
 import { imageProblem, imageType } from "../images.ts";
 import type { EgressPolicy } from "../policy.ts";
@@ -25,7 +25,7 @@ const EXTENSION: Record<string, string> = { "image/png": "png", "image/jpeg": "j
  * changed (a photo someone sent). They are saved in `immagini/` and sent to the conversation;
  * the model is told where they are, not shown them.
  */
-export function createImageTools(options: ImageToolsOptions): AnnieTool[] {
+export function createImageTools(options: ImageToolsOptions): OwniTool[] {
 	return [
 		{
 			name: "image_generate",

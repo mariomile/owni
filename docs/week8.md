@@ -8,8 +8,8 @@ Alla Fase 1 mancavano due pezzi per avere clienti veri: le email di accesso (fin
 
 ## Cosa funziona (verificato)
 
-- **Link di accesso via SMTP** (`test/smtp.test.ts`, server SMTP finto con TLS vero). `ANNIE_CLOUD_SMTP_URL` con `smtps://` (TLS dal primo byte) o `smtp://` con STARTTLS obbligatorio; AUTH PLAIN o LOGIN; testo UTF-8. SMTP in chiaro solo verso questa macchina; un a capo in un indirizzo o nell'oggetto viene rifiutato (niente header iniettati); un login rifiutato si segnala senza ripetere cosa è stato mandato.
-- **Celle come container** (`test/docker-provider.test.ts`). `ANNIE_CLOUD_PROVIDER=docker`: per ogni tenant un container e un volume, tutti su una rete dove i container non si parlano; uid 1000 (mai root, qualunque immagine), root in sola lettura, nessuna capability, `no-new-privileges`, limiti di memoria (un valore sbagliato blocca l'avvio invece di togliere il limite), CPU e processi; porta solo su 127.0.0.1; timeout su ogni chiamata a Docker e sul controllo di salute. Sul daemon Docker di questa macchina: registrazione, link, cella creata, prima risposta in circa 4 secondi; cella fermata per inattività e risvegliata in circa 4 secondi con la conversazione intatta; aggiornata con `upgrade` senza perdere niente; tutto rimosso alla fine. Misure: circa 100 MB di memoria da accesa, 0,1 MB di disco da spenta. A mano: una cella non raggiunge l'altra (timeout), gira come uid 1000, il codice non è scrivibile, `/data` sì.
+- **Link di accesso via SMTP** (`test/smtp.test.ts`, server SMTP finto con TLS vero). `OWNI_CLOUD_SMTP_URL` con `smtps://` (TLS dal primo byte) o `smtp://` con STARTTLS obbligatorio; AUTH PLAIN o LOGIN; testo UTF-8. SMTP in chiaro solo verso questa macchina; un a capo in un indirizzo o nell'oggetto viene rifiutato (niente header iniettati); un login rifiutato si segnala senza ripetere cosa è stato mandato.
+- **Celle come container** (`test/docker-provider.test.ts`). `OWNI_CLOUD_PROVIDER=docker`: per ogni tenant un container e un volume, tutti su una rete dove i container non si parlano; uid 1000 (mai root, qualunque immagine), root in sola lettura, nessuna capability, `no-new-privileges`, limiti di memoria (un valore sbagliato blocca l'avvio invece di togliere il limite), CPU e processi; porta solo su 127.0.0.1; timeout su ogni chiamata a Docker e sul controllo di salute. Sul daemon Docker di questa macchina: registrazione, link, cella creata, prima risposta in circa 4 secondi; cella fermata per inattività e risvegliata in circa 4 secondi con la conversazione intatta; aggiornata con `upgrade` senza perdere niente; tutto rimosso alla fine. Misure: circa 100 MB di memoria da accesa, 0,1 MB di disco da spenta. A mano: una cella non raggiunge l'altra (timeout), gira come uid 1000, il codice non è scrivibile, `/data` sì.
 - **Aggiornare le celle**: `pnpm cloud upgrade`, a control plane fermo, ricrea ogni container dall'immagine attuale e con le impostazioni del modello attuali; volumi e dati restano.
 
 ## Review indipendente
@@ -23,7 +23,7 @@ Due revisori separati. Corretti:
 
 ## Verifica
 
-- `pnpm typecheck`: ok. `pnpm test`: tutti verdi; il test sul daemon vero (`ANNIE_TEST_DOCKER_IMAGE=annie:local`) passa qui.
+- `pnpm typecheck`: ok. `pnpm test`: tutti verdi; il test sul daemon vero (`OWNI_TEST_DOCKER_IMAGE=owni:local`) passa qui.
 
 ## Limiti
 

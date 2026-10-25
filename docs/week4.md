@@ -85,6 +85,6 @@ Eseguita su questo branch, Node 22.22.0, Linux:
 pnpm typecheck
 pnpm test
 pnpm eval:segreteria                                 # controlli deterministici, nessuna chiave
-ANNIE_JUDGE_MODEL_KEY=... pnpm eval:segreteria:judge  # modelli veri + giudice; filtra: ... judge 001 017
+OWNI_JUDGE_MODEL_KEY=... pnpm eval:segreteria:judge  # modelli veri + giudice; filtra: ... judge 001 017
 pnpm dev:segreteria                                  # vedi .env.example, sezione dev:segreteria
 ```

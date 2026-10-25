@@ -36,7 +36,7 @@ const PRICE: Record<string, { in: number; out: number }> = {
 	"claude-sonnet-5-5": { in: 2, out: 10 },
 	"gpt-5-mini": { in: 0.25, out: 2 },
 	"gpt-5": { in: 1.25, out: 10 },
-	"annie-dev": { in: 0, out: 0 },
+	"owni-dev": { in: 0, out: 0 },
 };
 
 export function estimateUsd(modelId: string, inputTokens: number, outputTokens: number): number {

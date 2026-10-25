@@ -265,11 +265,11 @@ export async function startControlPlane(options: ControlPlaneOptions): Promise<C
 			const secret = randomBytes(32).toString("base64url");
 			await options.provider.create(tenant, {
 				...options.cellEnv,
-				ANNIE_TENANT_ID: tenant,
-				ANNIE_PUBLIC_URL: publicUrl(`${tenant}.${options.domain}`),
-				ANNIE_CELL_SECRET: secret,
+				OWNI_TENANT_ID: tenant,
+				OWNI_PUBLIC_URL: publicUrl(`${tenant}.${options.domain}`),
+				OWNI_CELL_SECRET: secret,
 				// Google sends everyone back to one address, the control plane's, which passes the person on to their cell.
-				...(options.cellEnv.ANNIE_GOOGLE_CLIENT_ID === undefined ? {} : { ANNIE_GOOGLE_REDIRECT_URL: `${publicUrl(options.domain)}/oauth/google/callback` }),
+				...(options.cellEnv.OWNI_GOOGLE_CLIENT_ID === undefined ? {} : { OWNI_GOOGLE_REDIRECT_URL: `${publicUrl(options.domain)}/oauth/google/callback` }),
 			});
 			const account: Account = { email, tenant, createdAt: new Date().toISOString() };
 			update((s) => ({ ...s, accounts: [...s.accounts, account], cells: [...s.cells, { tenant, secret, nextWakeAt: null }] }));
@@ -500,7 +500,7 @@ export async function startControlPlane(options: ControlPlaneOptions): Promise<C
 		if (req.method === "GET" && url.pathname === "/oauth/google/callback") return googleCallback(res, url);
 		// Stripe signs its deliveries; that signature, not our header, is the check here.
 		if (req.method === "POST" && url.pathname === "/stripe/webhook") return stripeWebhook(req, res);
-		if (req.method !== "POST" || req.headers["x-annie"] !== "1") return send(res, 404, { error: "Not found" });
+		if (req.method !== "POST" || req.headers["x-owni"] !== "1") return send(res, 404, { error: "Not found" });
 		try {
 			if (url.pathname === "/api/signup") {
 				await signup(await readJson(req), req.socket.remoteAddress ?? "");
@@ -541,7 +541,7 @@ export async function startControlPlane(options: ControlPlaneOptions): Promise<C
 	 */
 	async function computerApi(req: IncomingMessage, res: ServerResponse, url: URL): Promise<void> {
 		const computer = options.computer;
-		const tenant = String(req.headers["x-annie-tenant"] ?? "");
+		const tenant = String(req.headers["x-owni-tenant"] ?? "");
 		const cell = cellOf(tenant);
 		const given = String(req.headers.authorization ?? "").replace(/^Bearer /, "");
 		if (cell === undefined || !sameSecret(given, computerToken(cell.secret))) return send(res, 404, { error: "Not found" });
@@ -744,7 +744,7 @@ export async function startControlPlane(options: ControlPlaneOptions): Promise<C
 		// Host is the cell's own address (a platform routes by it); the public one goes in X-Forwarded-Host.
 		// The cell answers only requests that came through here: proof that the gate (sleep, subscription) was passed.
 		const secret = cellOf(tenant)?.secret ?? "";
-		return { ...headers, host: cellHost, "x-forwarded-host": `${tenant}.${options.domain}`, "x-forwarded-proto": options.publicScheme, "x-forwarded-for": req.socket.remoteAddress ?? "", "x-annie-proxy": proxyToken(secret) };
+		return { ...headers, host: cellHost, "x-forwarded-host": `${tenant}.${options.domain}`, "x-forwarded-proto": options.publicScheme, "x-forwarded-for": req.socket.remoteAddress ?? "", "x-owni-proxy": proxyToken(secret) };
 	}
 
 	const server = createServer((req, res) => {
@@ -899,7 +899,7 @@ function cellPath(target: string): { pathname: string; search: string } | undefi
 function mayWake(req: IncomingMessage, pathname: string): boolean {
 	if (pathname.startsWith("/hooks/")) return true;
 	// The sign-in link needs no wake: the control plane starts the cell before handing it out.
-	return /(?:^|;\s*)annie_session=[\w-]{20,}/.test(String(req.headers.cookie ?? ""));
+	return /(?:^|;\s*)owni_session=[\w-]{20,}/.test(String(req.headers.cookie ?? ""));
 }
 
 const HOP_BY_HOP = new Set(["connection", "keep-alive", "proxy-authenticate", "proxy-authorization", "te", "trailer", "transfer-encoding", "upgrade"]);

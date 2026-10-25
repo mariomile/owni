@@ -90,7 +90,7 @@ const agent = () => fresh(undefined, { channel: AGENT_CHANNEL, threadId: "a1" })
 type Setup = { files?: Record<string, string>; paid?: Record<string, string>; expenses?: Expense[]; renewals?: Renewal[]; bank?: { movements: BankMovement[]; matches: BankMatch[] } };
 
 async function setup(o: Setup = {}) {
-	const dir = mkdtempSync(join(tmpdir(), "annie-suppliers-"));
+	const dir = mkdtempSync(join(tmpdir(), "owni-suppliers-"));
 	dirs.push(dir);
 	const root = join(dir, "workspace");
 	mkdirSync(root, { recursive: true });

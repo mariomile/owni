@@ -10,7 +10,7 @@ import { LocalCellProvider } from "../src/cloud/local-provider.ts";
 import { MemoryMailer } from "../src/cloud/mailer.ts";
 import { tempDataDir } from "./helpers.ts";
 
-const DOMAIN = "annie.test";
+const DOMAIN = "owni.test";
 const running: ControlPlane[] = [];
 afterEach(async () => {
 	for (const cp of running.splice(0)) await cp.stop();
@@ -29,7 +29,7 @@ async function cloudAt(dataDir: string, options: { idleMs?: number; cellEnv?: Re
 		publicScheme: "http",
 		provider,
 		mailer,
-		cellEnv: { ANNIE_MODEL_PROVIDER: "faux", ...options.cellEnv },
+		cellEnv: { OWNI_MODEL_PROVIDER: "faux", ...options.cellEnv },
 		idleMs: options.idleMs ?? 60_000,
 		web: { host: "127.0.0.1", port: 0 },
 		tickMs: 0,
@@ -43,7 +43,7 @@ async function cloudAt(dataDir: string, options: { idleMs?: number; cellEnv?: Re
 		new Promise<{ status: number; headers: Headers; body: any }>((resolve, reject) => {
 			// fetch() cannot set Host; the control plane routes by it, as behind a real domain.
 			const req = request(
-				{ host: "127.0.0.1", port, path, method: init.method ?? "GET", headers: { host, "x-annie": "1", "content-type": "application/json", ...(init.cookie === undefined ? {} : { cookie: init.cookie }), ...init.headers } },
+				{ host: "127.0.0.1", port, path, method: init.method ?? "GET", headers: { host, "x-owni": "1", "content-type": "application/json", ...(init.cookie === undefined ? {} : { cookie: init.cookie }), ...init.headers } },
 				(res) => {
 					const chunks: Buffer[] = [];
 					res.on("data", (c: Buffer) => chunks.push(c));
@@ -94,9 +94,9 @@ describe("Owni Cloud control plane (cells as local processes)", () => {
 		expect(anna.url.host).toMatch(new RegExp(`^[a-z0-9-]+\\.${DOMAIN.replace(".", "\\.")}$`));
 		// The address does not show the person's name.
 		expect(anna.url.host).not.toContain("anna");
-		const thread = (await anna.api("/api/instances/annie/threads", {})).body.thread;
-		await anna.api(`/api/instances/annie/threads/${thread.id}/messages`, { text: "ciao dal cloud" });
-		await until(async () => ((await anna.api(`/api/instances/annie/threads/${thread.id}`)).body.entries as { from: string }[]).some((e) => e.from === "annie"));
+		const thread = (await anna.api("/api/instances/owni/threads", {})).body.thread;
+		await anna.api(`/api/instances/owni/threads/${thread.id}/messages`, { text: "ciao dal cloud" });
+		await until(async () => ((await anna.api(`/api/instances/owni/threads/${thread.id}`)).body.entries as { from: string }[]).some((e) => e.from === "owni"));
 		// The measure of Fase 1: from signup to first answer.
 		expect(Date.now() - started).toBeLessThan(120_000);
 	}, 180_000);
@@ -110,7 +110,7 @@ describe("Owni Cloud control plane (cells as local processes)", () => {
 		expect(again.host).toBe(anna.host);
 		expect(await c.provider.list()).toHaveLength(2);
 		// Anna's session does not open Luca's cell.
-		expect((await luca.cell("/api/me", { cookie: "annie_session=nothing" })).status).toBe(401);
+		expect((await luca.cell("/api/me", { cookie: "owni_session=nothing" })).status).toBe(401);
 	}, 180_000);
 
 	it("a login link from the email works once, and not after it expires", async () => {
@@ -172,9 +172,9 @@ describe("Owni Cloud control plane (cells as local processes)", () => {
 		const dataDir = tempDataDir();
 		const first = await cloudAt(dataDir);
 		const anna = await signUp(first, "anna@studio.example");
-		const thread = (await anna.api("/api/instances/annie/threads", {})).body.thread;
+		const thread = (await anna.api("/api/instances/owni/threads", {})).body.thread;
 		const at = new Date(Date.now() + 3_600_000).toISOString();
-		await anna.api("/api/instances/annie/schedules", { instruction: "Promemoria", at, threadId: thread.id });
+		await anna.api("/api/instances/owni/schedules", { instruction: "Promemoria", at, threadId: thread.id });
 		await first.cp.stop();
 		running.splice(running.indexOf(first.cp), 1);
 		const second = await cloudAt(dataDir);
@@ -187,12 +187,12 @@ describe("Owni Cloud control plane (cells as local processes)", () => {
 	it("an idle cell is stopped, and the next request wakes it with everything still there", async () => {
 		const c = await cloud({ idleMs: 0 });
 		const anna = await signUp(c, "anna@studio.example");
-		const thread = (await anna.api("/api/instances/annie/threads", {})).body.thread;
-		await anna.api(`/api/instances/annie/threads/${thread.id}/messages`, { text: "ricordati di me" });
-		await until(async () => ((await anna.api(`/api/instances/annie/threads/${thread.id}`)).body.entries as { from: string }[]).some((e) => e.from === "annie"));
+		const thread = (await anna.api("/api/instances/owni/threads", {})).body.thread;
+		await anna.api(`/api/instances/owni/threads/${thread.id}/messages`, { text: "ricordati di me" });
+		await until(async () => ((await anna.api(`/api/instances/owni/threads/${thread.id}`)).body.entries as { from: string }[]).some((e) => e.from === "owni"));
 		await c.cp.tick(new Date());
 		expect(await c.provider.status((await c.provider.list())[0] as string)).toBe("stopped");
-		const entries = (await anna.api(`/api/instances/annie/threads/${thread.id}`)).body.entries as { from: string }[];
+		const entries = (await anna.api(`/api/instances/owni/threads/${thread.id}`)).body.entries as { from: string }[];
 		expect(entries.length).toBeGreaterThanOrEqual(2);
 		expect(await c.provider.status((await c.provider.list())[0] as string)).toBe("running");
 	}, 180_000);
@@ -221,7 +221,7 @@ describe("Owni Cloud control plane (cells as local processes)", () => {
 	}, 180_000);
 
 	it("Google sends everyone back to the control plane, which passes the person on to their own cell", async () => {
-		const c = await cloudAt(tempDataDir(), { cellEnv: { ANNIE_GOOGLE_CLIENT_ID: "client-1", ANNIE_GOOGLE_CLIENT_SECRET: "secret-1" } });
+		const c = await cloudAt(tempDataDir(), { cellEnv: { OWNI_GOOGLE_CLIENT_ID: "client-1", OWNI_GOOGLE_CLIENT_SECRET: "secret-1" } });
 		const anna = await signUp(c, "anna@example.com");
 		const tenant = anna.host.split(".")[0] as string;
 		const consent = new URL((await anna.api("/api/google/start", {})).body.url as string);
@@ -241,9 +241,9 @@ describe("Owni Cloud control plane (cells as local processes)", () => {
 	it("a sleeping cell is woken for its next task programmato", async () => {
 		const c = await cloud({ idleMs: 0 });
 		const anna = await signUp(c, "anna@studio.example");
-		const thread = (await anna.api("/api/instances/annie/threads", {})).body.thread;
+		const thread = (await anna.api("/api/instances/owni/threads", {})).body.thread;
 		const at = new Date(Date.now() + 3_600_000).toISOString();
-		await anna.api("/api/instances/annie/schedules", { instruction: "Promemoria", at, threadId: thread.id });
+		await anna.api("/api/instances/owni/schedules", { instruction: "Promemoria", at, threadId: thread.id });
 		const cell = (await c.provider.list())[0] as string;
 		await c.cp.tick(new Date());
 		expect(await c.provider.status(cell)).toBe("stopped");
@@ -287,7 +287,7 @@ afterEach(async () => {
 	for (const s of stripes.splice(0)) await new Promise((r) => s.close(() => r(undefined)));
 });
 
-const WEBHOOK_SECRET = "whsec_test_annie";
+const WEBHOOK_SECRET = "whsec_test_owni";
 /** A delivery signed as Stripe signs it. */
 function signed(event: { type: string; created: number; object: Record<string, unknown> }) {
 	const body = JSON.stringify({ id: `evt_${event.created}`, type: event.type, created: event.created, data: { object: event.object } });
@@ -308,7 +308,7 @@ async function verifyFor(c: Awaited<ReturnType<typeof cloudAt>>, email: string, 
 describe("Owni Cloud subscriptions (Stripe, faked)", () => {
 	it("after the trial the cell stays asleep and the person is sent to subscribe; what Stripe says, asked again, opens it", async () => {
 		const stripe = await fakeStripe();
-		const billing = new StripeBilling({ secretKey: "sk_test_annie", webhookSecret: WEBHOOK_SECRET, price: "price_flat", trialDays: 0, apiBase: stripe.base });
+		const billing = new StripeBilling({ secretKey: "sk_test_owni", webhookSecret: WEBHOOK_SECRET, price: "price_flat", trialDays: 0, apiBase: stripe.base });
 		const c = await cloud({ billing });
 		const home = c.at(DOMAIN);
 		expect((await home("/api/info")).body).toEqual({ billing: true, trialDays: 0 });
@@ -318,7 +318,7 @@ describe("Owni Cloud subscriptions (Stripe, faked)", () => {
 		expect(answer.body.billing).toMatchObject({ state: "ended", checkoutUrl: expect.stringMatching(/^https:\/\/checkout\.stripe\.test\//) });
 		const checkout = stripe.calls.find((call) => call.path === "/v1/checkout/sessions") as (typeof stripe.calls)[number];
 		const tenant = checkout.form.client_reference_id as string;
-		expect(checkout.auth).toBe("Bearer sk_test_annie");
+		expect(checkout.auth).toBe("Bearer sk_test_owni");
 		expect(checkout.form).toMatchObject({ mode: "subscription", "line_items[0][price]": "price_flat", customer_email: "anna@studio.example", "subscription_data[metadata][tenant]": tenant });
 		// The trial is over: Stripe is not asked to give days that are not there.
 		expect(checkout.form["subscription_data[trial_end]"]).toBeUndefined();
@@ -371,7 +371,7 @@ describe("Owni Cloud subscriptions (Stripe, faked)", () => {
 
 	it("sends Stripe the model cost after the trial only, once, whatever order Stripe's events come in", async () => {
 		const stripe = await fakeStripe();
-		const billing = new StripeBilling({ secretKey: "sk_test_annie", webhookSecret: WEBHOOK_SECRET, price: "price_flat", usage: { price: "price_cost", meterEvent: "annie_model_cost" }, trialDays: 14, apiBase: stripe.base });
+		const billing = new StripeBilling({ secretKey: "sk_test_owni", webhookSecret: WEBHOOK_SECRET, price: "price_flat", usage: { price: "price_cost", meterEvent: "owni_model_cost" }, trialDays: 14, apiBase: stripe.base });
 		const c = await cloud({ idleMs: 0, billing });
 		const anna = await signUp(c, "anna@studio.example");
 		const tenant = anna.host.split(".")[0] as string;
@@ -403,7 +403,7 @@ describe("Owni Cloud subscriptions (Stripe, faked)", () => {
 		await until(async () => stripe.calls.some((call) => call.path === "/v1/billing/meter_events"));
 		const meters = () => stripe.calls.filter((call) => call.path === "/v1/billing/meter_events");
 		expect(meters()).toHaveLength(1);
-		expect(meters()[0]?.form).toEqual({ event_name: "annie_model_cost", "payload[stripe_customer_id]": "cus_9", "payload[value]": "75", identifier: `${tenant}-${today.slice(0, 7)}-200` });
+		expect(meters()[0]?.form).toEqual({ event_name: "owni_model_cost", "payload[stripe_customer_id]": "cus_9", "payload[value]": "75", identifier: `${tenant}-${today.slice(0, 7)}-200` });
 		// Nothing new: nothing more sent.
 		await signUp(c, "anna@studio.example");
 		await c.cp.tick(new Date());
@@ -414,7 +414,7 @@ describe("Owni Cloud subscriptions (Stripe, faked)", () => {
 	it("a cell still running when the trial ends is stopped at the next round, not after the idle time", async () => {
 		const stripe = await fakeStripe();
 		const dataDir = tempDataDir();
-		const first = await cloudAt(dataDir, { billing: new StripeBilling({ secretKey: "sk_test_annie", webhookSecret: WEBHOOK_SECRET, price: "price_flat", trialDays: 1, apiBase: stripe.base }) });
+		const first = await cloudAt(dataDir, { billing: new StripeBilling({ secretKey: "sk_test_owni", webhookSecret: WEBHOOK_SECRET, price: "price_flat", trialDays: 1, apiBase: stripe.base }) });
 		const anna = await signUp(first, "anna@studio.example");
 		const tenant = anna.host.split(".")[0] as string;
 		await first.cp.stop();
@@ -424,7 +424,7 @@ describe("Owni Cloud subscriptions (Stripe, faked)", () => {
 		await off.cp.stop();
 		running.splice(running.indexOf(off.cp), 1);
 		expect(JSON.parse(readFileSync(join(dataDir, "control-plane.json"), "utf8")).billingSince).toBeUndefined();
-		const again = await cloudAt(dataDir, { idleMs: 3_600_000, billing: new StripeBilling({ secretKey: "sk_test_annie", webhookSecret: WEBHOOK_SECRET, price: "price_flat", trialDays: 0, apiBase: stripe.base }) });
+		const again = await cloudAt(dataDir, { idleMs: 3_600_000, billing: new StripeBilling({ secretKey: "sk_test_owni", webhookSecret: WEBHOOK_SECRET, price: "price_flat", trialDays: 0, apiBase: stripe.base }) });
 		await again.provider.start(tenant);
 		await again.cp.tick(new Date());
 		expect(await again.provider.status(tenant)).toBe("stopped");

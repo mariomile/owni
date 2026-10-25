@@ -4,14 +4,14 @@ import type { AddressInfo } from "node:net";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createModels } from "@earendil-works/pi-ai/models";
-import { type RunningAnnie, startAnnie } from "../src/app.ts";
+import { type RunningOwni, startOwni } from "../src/app.ts";
 import { codexInferenceCatalog, localCliProvider } from "../src/core/adapters/pi-durable-local-cli.ts";
 import { piDurableEngine } from "../src/core/adapters/pi-durable.ts";
 import { createPiCompletionClient } from "../src/core/adapters/pi-durable-completion.ts";
 import type { EngineReply } from "../src/core/engine.ts";
-import { AnnieRuntime, type Reply } from "../src/core/runtime.ts";
+import { OwniRuntime, type Reply } from "../src/core/runtime.ts";
 import { type CliResult, type CliRunner, LocalProviderError, LocalProviders, localCliExecutable, runLocalCli } from "../src/core/local-providers.ts";
-import { ConfigError, loadAnnieConfig } from "../src/main/config.ts";
+import { ConfigError, loadOwniConfig } from "../src/main/config.ts";
 import { FAUX_MODEL, tempDataDir, waitFor } from "./helpers.ts";
 
 const ok = (stdout: string, stderr = ""): CliResult => ({ code: 0, stdout, stderr });
@@ -29,10 +29,10 @@ async function local(runner: CliRunner = async ({ provider }) => auth(provider),
 
 describe("subscription capability", () => {
 	it("requires explicit local opt-in, loopback, and no public or cloud endpoint", () => {
-		expect(loadAnnieConfig({ ANNIE_LOCAL_PROVIDERS: "1" })).toMatchObject({ modelProvider: "faux", localProviders: true });
-		expect(() => loadAnnieConfig({ ANNIE_MODEL_PROVIDER: "codex" })).toThrow(ConfigError);
-		for (const env of [{ ANNIE_WEB_HOST: "0.0.0.0" }, { ANNIE_PUBLIC_URL: "https://example.invalid" }, { ANNIE_CELL_SECRET: "1234567890123456" }]) expect(() => loadAnnieConfig({ ANNIE_LOCAL_PROVIDERS: "1", ...env })).toThrow(/loopback/);
-		expect(loadAnnieConfig({ ANNIE_LOCAL_PROVIDERS: "1", ANNIE_MODEL_PROVIDER: "claude-code" }).modelId).toBe("sonnet");
+		expect(loadOwniConfig({ OWNI_LOCAL_PROVIDERS: "1" })).toMatchObject({ modelProvider: "faux", localProviders: true });
+		expect(() => loadOwniConfig({ OWNI_MODEL_PROVIDER: "codex" })).toThrow(ConfigError);
+		for (const env of [{ OWNI_WEB_HOST: "0.0.0.0" }, { OWNI_PUBLIC_URL: "https://example.invalid" }, { OWNI_CELL_SECRET: "1234567890123456" }]) expect(() => loadOwniConfig({ OWNI_LOCAL_PROVIDERS: "1", ...env })).toThrow(/loopback/);
+		expect(loadOwniConfig({ OWNI_LOCAL_PROVIDERS: "1", OWNI_MODEL_PROVIDER: "claude-code" }).modelId).toBe("sonnet");
 	});
 	it("finds standard local CLI installs when Finder has only system binaries on PATH", () => {
 		const home = tempDataDir();
@@ -131,7 +131,7 @@ describe("subscription capability", () => {
 			inferenceCalls++;
 			return completed(provider, "must not infer through a disconnected subscription");
 		}, dir);
-		const runtime = new AnnieRuntime({ dataDir: tempDataDir(), engine: piDurableEngine, localProviders: providers });
+		const runtime = new OwniRuntime({ dataDir: tempDataDir(), engine: piDurableEngine, localProviders: providers });
 		closers.push(() => runtime.close());
 		await runtime.registry.createTenant({ id: "default", name: "Default" });
 		await runtime.registry.createInstance("default", { id: "agent", name: "Agent", model: FAUX_MODEL, egress: { modelProviders: [FAUX_MODEL.provider, "codex"], channels: ["test"] }, allowedUsers: { test: ["u"] } });
@@ -159,21 +159,21 @@ describe("subscription capability", () => {
 
 	it("scopes host access to the configured tenant", async () => {
 		const providers = await local();
-		const runtime = new AnnieRuntime({ dataDir: tempDataDir(), engine: piDurableEngine, localProviders: providers });
+		const runtime = new OwniRuntime({ dataDir: tempDataDir(), engine: piDurableEngine, localProviders: providers });
 		expect(runtime.localProviders("default")).toBe(providers);
 		expect(runtime.localProviders("another-tenant")).toBeUndefined();
 	});
 });
 
 describe("official CLI inference bridge", () => {
-	it("rechecks instance egress before tool continuation through AnnieRuntime", async () => {
+	it("rechecks instance egress before tool continuation through OwniRuntime", async () => {
 		let calls = 0;
 		const providers = await local(async ({ provider, args }) => {
 			if (isStatus(args)) return auth(provider);
 			calls++;
 			return completed(provider, calls === 1 ? "" : "This must not execute", calls === 1 ? [{ name: "revoke", arguments: "{}" }] : []);
 		});
-		const runtime: AnnieRuntime = new AnnieRuntime({ dataDir: tempDataDir(), engine: piDurableEngine, localProviders: providers, tools: [{ name: "revoke", description: "Revoke this provider", parameters: { type: "object", properties: {}, additionalProperties: false }, replaySafe: true, execute: async () => { await runtime.registry.setEgress("default", "agent", { modelProviders: [], channels: ["test"] }); return "Revoked"; } }] });
+		const runtime: OwniRuntime = new OwniRuntime({ dataDir: tempDataDir(), engine: piDurableEngine, localProviders: providers, tools: [{ name: "revoke", description: "Revoke this provider", parameters: { type: "object", properties: {}, additionalProperties: false }, replaySafe: true, execute: async () => { await runtime.registry.setEgress("default", "agent", { modelProviders: [], channels: ["test"] }); return "Revoked"; } }] });
 		closers.push(() => runtime.close());
 		await runtime.registry.createTenant({ id: "default", name: "Default" });
 		await runtime.registry.createInstance("default", { id: "agent", name: "Agent", model: { provider: "claude-code", modelId: "sonnet" }, egress: { modelProviders: ["claude-code"], channels: ["test"] }, allowedUsers: { test: ["u"] } });
@@ -188,7 +188,7 @@ describe("official CLI inference bridge", () => {
 			prompts.push(request.input ?? ""); calls++;
 			return completed(provider, calls === 1 ? "" : "Il risultato è 7", calls === 1 ? [{ name: "add", arguments: '{"n":7}' }] : []);
 		});
-		const session = await piDurableEngine.open({ storageDir: tempDataDir(), model: { provider, modelId: provider === "codex" ? "default" : "sonnet" }, apiKey: async () => "annie-local-subscription", localProviders: providers, instructions: "Rispondi in italiano", tools: [{ name: "add", description: "Return a number", parameters: { type: "object", properties: { n: { type: "number" } }, required: ["n"], additionalProperties: false }, replaySafe: true, execute: async ({ n }) => { executed++; return `risultato ${n}`; } }] });
+		const session = await piDurableEngine.open({ storageDir: tempDataDir(), model: { provider, modelId: provider === "codex" ? "default" : "sonnet" }, apiKey: async () => "owni-local-subscription", localProviders: providers, instructions: "Rispondi in italiano", tools: [{ name: "add", description: "Return a number", parameters: { type: "object", properties: { n: { type: "number" } }, required: ["n"], additionalProperties: false }, replaySafe: true, execute: async ({ n }) => { executed++; return `risultato ${n}`; } }] });
 		closers.push(() => session.close());
 		const reply = new Promise<EngineReply>((resolve) => session.onReply(resolve));
 		await session.submit("web:test", "somma sette", "idempotent-1");
@@ -220,7 +220,7 @@ describe("official CLI inference bridge", () => {
 			return completed(request.provider, "Vedo un'immagine");
 		});
 		for (const id of ["claude-code", "codex"]) {
-			const models = createModels({ credentials: { read: async () => ({ type: "api_key", key: "annie-local-subscription" }), list: async () => [], modify: async () => undefined, delete: async () => {} }, authContext: { env: async () => undefined, fileExists: async () => false } }); models.setProvider(localCliProvider(id, providers));
+			const models = createModels({ credentials: { read: async () => ({ type: "api_key", key: "owni-local-subscription" }), list: async () => [], modify: async () => undefined, delete: async () => {} }, authContext: { env: async () => undefined, fileExists: async () => false } }); models.setProvider(localCliProvider(id, providers));
 			const result = await models.complete(models.getModels(id)[0]!, { messages: [{ role: "user", timestamp: Date.now(), content: [{ type: "text", text: "Cosa vedi?" }, { type: "image", mimeType: "image/png", data: Buffer.from("image").toString("base64") }] }] });
 			expect(result.stopReason).toBe("stop");
 		}
@@ -237,7 +237,7 @@ describe("official CLI inference bridge", () => {
 		await expect(client.complete({ model: { provider: "claude-code", modelId: "sonnet" }, system: "", user: "Ciao", maxTokens: 10 })).rejects.toThrow(/non valida/);
 	});
 	it("has no ambient auth when constructed without the local capability", async () => {
-		const client = createPiCompletionClient({ apiKey: async () => "annie-local-subscription", assertAllowed: async () => {} });
+		const client = createPiCompletionClient({ apiKey: async () => "owni-local-subscription", assertAllowed: async () => {} });
 		await expect(client.complete({ model: { provider: "claude-code", modelId: "sonnet" }, system: "", user: "Ciao", maxTokens: 10 })).rejects.toThrow();
 	});
 	it("cancels inference and terminates it on local provider shutdown", async () => {
@@ -254,42 +254,42 @@ describe("official CLI inference bridge", () => {
 });
 
 async function boot(localEnabled: boolean, dataDir = tempDataDir(), runner?: CliRunner) {
-	const config = loadAnnieConfig({ ANNIE_DATA_DIR: dataDir, ANNIE_MODEL_PROVIDER: "faux", ...(localEnabled ? { ANNIE_LOCAL_PROVIDERS: "1" } : {}) });
+	const config = loadOwniConfig({ OWNI_DATA_DIR: dataDir, OWNI_MODEL_PROVIDER: "faux", ...(localEnabled ? { OWNI_LOCAL_PROVIDERS: "1" } : {}) });
 	let probes = 0;
-	const annie: RunningAnnie = await startAnnie({ ...config, web: { ...config.web, port: 0 } }, { localProviderRunner: async (request) => { probes++; return runner === undefined ? isStatus(request.args) ? auth(request.provider) : completed(request.provider, "Ciao") : runner(request); }, schedulerIntervalMs: 3_600_000, log: () => {} });
-	closers.push(() => annie.stop());
-	const base = `http://127.0.0.1:${(annie.server.address() as AddressInfo).port}`;
-	const login = await fetch(`${base}/api/login`, { method: "POST", headers: { "x-annie": "1" }, body: JSON.stringify({ token: annie.ownerLink?.split("#")[1] }) });
+	const owni: RunningOwni = await startOwni({ ...config, web: { ...config.web, port: 0 } }, { localProviderRunner: async (request) => { probes++; return runner === undefined ? isStatus(request.args) ? auth(request.provider) : completed(request.provider, "Ciao") : runner(request); }, schedulerIntervalMs: 3_600_000, log: () => {} });
+	closers.push(() => owni.stop());
+	const base = `http://127.0.0.1:${(owni.server.address() as AddressInfo).port}`;
+	const login = await fetch(`${base}/api/login`, { method: "POST", headers: { "x-owni": "1" }, body: JSON.stringify({ token: owni.ownerLink?.split("#")[1] }) });
 	const cookie = (login.headers.get("set-cookie") ?? "").split(";")[0] ?? "";
 	const api = async (path: string, method = "GET", body?: unknown): Promise<{ status: number; body: Record<string, unknown> }> => {
-		const res = await fetch(`${base}${path}`, { method, headers: { cookie, "x-annie": "1" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) }); return { status: res.status, body: await res.json() as Record<string, unknown> };
+		const res = await fetch(`${base}${path}`, { method, headers: { cookie, "x-owni": "1" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) }); return { status: res.status, body: await res.json() as Record<string, unknown> };
 	};
-	return { annie, api, dataDir, probes: () => probes };
+	return { owni, api, dataDir, probes: () => probes };
 }
 
 describe("subscription settings", () => {
 	it.each(["detect", "connect", "browser-login"])("activates the pending first model after same-session %s without replacing later manual choices", async (method) => {
 		const authenticated = new Set<string>();
 		let finishLogin: (() => void) | undefined;
-		const { annie, api } = await boot(true, tempDataDir(), async ({ provider, args }) => {
+		const { owni, api } = await boot(true, tempDataDir(), async ({ provider, args }) => {
 			if (isStatus(args)) return authenticated.has(provider) ? auth(provider) : ok(provider === "claude-code" ? '{"loggedIn":false}' : "Not logged in");
 			if (args.includes("login")) return new Promise((resolve) => { finishLogin = () => { authenticated.add(provider); resolve(ok("")); }; });
 			return completed(provider, "Ciao");
 		});
-		expect((await annie.runtime.registry.getInstance("default", "annie")).model.provider).toBe("faux");
+		expect((await owni.runtime.registry.getInstance("default", "owni")).model.provider).toBe("faux");
 		if (method !== "browser-login") authenticated.add("claude-code");
 		expect((await api(method === "detect" ? "/api/providers/detect" : "/api/providers/claude-code/connect", "POST")).status).toBe(200);
 		if (method === "browser-login") {
-			expect(annie.runtime.localProviders("default")?.list().find((p) => p.id === "claude-code")?.status).toBe("connecting");
+			expect(owni.runtime.localProviders("default")?.list().find((p) => p.id === "claude-code")?.status).toBe("connecting");
 			finishLogin?.();
-			await waitFor(() => annie.runtime.localProviders("default")?.list().find((p) => p.id === "claude-code")?.status === "connected");
+			await waitFor(() => owni.runtime.localProviders("default")?.list().find((p) => p.id === "claude-code")?.status === "connected");
 		}
-		expect((await annie.runtime.registry.getInstance("default", "annie")).model).toEqual({ provider: "claude-code", modelId: "sonnet" });
-		expect((await api("/api/instances/annie/model", "PUT", { provider: "openai", modelId: "gpt-5.5", apiKey: "saved-api-key" })).status).toBe(200);
+		expect((await owni.runtime.registry.getInstance("default", "owni")).model).toEqual({ provider: "claude-code", modelId: "sonnet" });
+		expect((await api("/api/instances/owni/model", "PUT", { provider: "openai", modelId: "gpt-5.5", apiKey: "saved-api-key" })).status).toBe(200);
 		authenticated.add("codex");
 		expect((await api("/api/providers/codex/connect", "POST")).status).toBe(200);
 		await api("/api/providers/detect", "POST");
-		expect((await annie.runtime.registry.getInstance("default", "annie")).model).toEqual({ provider: "openai", modelId: "gpt-5.5" });
+		expect((await owni.runtime.registry.getInstance("default", "owni")).model).toEqual({ provider: "openai", modelId: "gpt-5.5" });
 	});
 	it("remote/default deployments never inspect or expose the machine owner's accounts", async () => {
 		const { api, probes } = await boot(false);
@@ -298,15 +298,15 @@ describe("subscription settings", () => {
 		expect((await api("/api/models/codex")).status).toBe(404);
 	});
 	it("detects immediately, selects once, changes the default, and persists disconnect", async () => {
-		const { annie, api } = await boot(true);
-		expect((await annie.runtime.registry.getInstance("default", "annie")).model).toEqual({ provider: "claude-code", modelId: "sonnet" });
+		const { owni, api } = await boot(true);
+		expect((await owni.runtime.registry.getInstance("default", "owni")).model).toEqual({ provider: "claude-code", modelId: "sonnet" });
 		const listed = await api("/api/providers"); expect(listed.body.localEnabled).toBe(true); expect(JSON.stringify(listed.body)).not.toMatch(/private@example|never-show-this/);
-		expect((await api("/api/instances/annie/model", "PUT", { provider: "codex", modelId: "default" })).status).toBe(200);
+		expect((await api("/api/instances/owni/model", "PUT", { provider: "codex", modelId: "default" })).status).toBe(200);
 		expect((await api("/api/providers/claude-code", "DELETE")).status).toBe(200);
-		await api("/api/providers/detect", "POST"); expect(annie.runtime.localProviders("default")?.connected("claude-code")).toBe(false);
+		await api("/api/providers/detect", "POST"); expect(owni.runtime.localProviders("default")?.connected("claude-code")).toBe(false);
 		expect((await api("/api/providers/codex", "DELETE")).status).toBe(409);
-		expect((await api("/api/instances/annie/model", "PUT", { provider: "claude-code", modelId: "sonnet" })).status).toBe(409);
+		expect((await api("/api/instances/owni/model", "PUT", { provider: "claude-code", modelId: "sonnet" })).status).toBe(409);
 		expect((await api("/api/providers/claude-code/connect", "POST")).status).toBe(200);
-		expect((await api("/api/instances/annie/model", "PUT", { provider: "claude-code", modelId: "opus", apiKey: "never-save-this" })).status).toBe(400);
+		expect((await api("/api/instances/owni/model", "PUT", { provider: "claude-code", modelId: "opus", apiKey: "never-save-this" })).status).toBe(400);
 	});
 });

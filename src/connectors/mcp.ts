@@ -9,7 +9,7 @@ import { writeFileAtomic } from "../core/atomic-file.ts";
 import type { AuditLog } from "../core/audit.ts";
 import { EgressDenied } from "../core/errors.ts";
 import { CONNECTOR_ACTION_LIMITS, ConnectorActionError, ConnectorActionUncertain } from "../core/connector-actions.ts";
-import type { AnnieTool } from "../core/engine.ts";
+import type { OwniTool } from "../core/engine.ts";
 import type { EgressPolicy } from "../core/policy.ts";
 import type { TenantSecrets } from "../core/secrets.ts";
 import { egressFetch } from "./http.ts";
@@ -109,7 +109,7 @@ type ListedTool = {
 };
 
 /** The parameter the model fills, for a call that waits for approval, with one sentence for the approver. */
-const REASON = "annie_reason";
+const REASON = "owni_reason";
 
 /** Where a connector points: an approved call runs only if it still points there. */
 export function connectorServer(connector: Pick<McpConnector, "transport">): string {
@@ -158,10 +158,10 @@ export class McpConnections {
 		return this.statuses;
 	}
 
-	async connect(connectors: readonly McpConnector[]): Promise<AnnieTool[]> {
+	async connect(connectors: readonly McpConnector[]): Promise<OwniTool[]> {
 		await this.close();
 		const policy = await this.options.policy();
-		const tools: AnnieTool[] = [];
+		const tools: OwniTool[] = [];
 		const statuses: ConnectorStatus[] = [];
 		for (const connector of connectors) {
 			if (!connector.enabled) continue;
@@ -171,7 +171,7 @@ export class McpConnections {
 				continue;
 			}
 			try {
-				const client = new Client({ name: "annie", version: "0.0.0" });
+				const client = new Client({ name: "owni", version: "0.0.0" });
 				await client.connect(await this.transport(connector), { timeout: 20_000 });
 				this.clients.push({ id: connector.id, server: connectorServer(connector), client });
 				const listed = await client.listTools(undefined, { timeout: 20_000 });
@@ -278,12 +278,12 @@ export class McpConnections {
 		return { text, isError: result.isError === true };
 	}
 
-	private wrap(connector: McpConnector, client: Client, name: string, tool: ListedTool): AnnieTool {
+	private wrap(connector: McpConnector, client: Client, name: string, tool: ListedTool): OwniTool {
 		const title = tool.annotations?.title ?? tool.title ?? tool.name;
 		if (needsApproval(connector, tool)) {
 			const schema = tool.inputSchema as { properties?: Record<string, unknown>; required?: string[] };
 			// A tool with its own argument of that name keeps it: Owni's goes under another.
-			const reasonKey = schema.properties?.[REASON] === undefined ? REASON : `${REASON}_annie`;
+			const reasonKey = schema.properties?.[REASON] === undefined ? REASON : `${REASON}_owni`;
 			return {
 				name,
 				description:
@@ -342,7 +342,7 @@ function resultText(result: Record<string, unknown>): string {
 }
 
 /** In place of a connector's tools while it cannot connect: tells the model what the person can do. */
-function missing(connector: McpConnector, signIn: boolean): AnnieTool {
+function missing(connector: McpConnector, signIn: boolean): OwniTool {
 	const what = signIn ? "the owner has to sign in again: in the console, Connettori, «Collega»" : "the owner has to give it a valid token: in the console, Connettori";
 	return {
 		name: toolName(connector.id, "non_collegato"),

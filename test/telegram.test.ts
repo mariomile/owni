@@ -3,7 +3,7 @@ import { DUPLICATE_NOTICE, splitText, TELEGRAM_MAX_TEXT, TelegramAdapter } from 
 import { ChannelRefused } from "../src/channels/types.ts";
 import type { InboundAction, InboundMessage } from "../src/channels/types.ts";
 import { connectChannel } from "../src/gateway.ts";
-import { ConfigError, loadAnnieConfig, loadSegreteriaConfig, loadTelegramConfig } from "../src/main/config.ts";
+import { ConfigError, loadOwniConfig, loadSegreteriaConfig, loadTelegramConfig } from "../src/main/config.ts";
 import { runtimeWithInstance, waitFor } from "./helpers.ts";
 
 const TOKEN = "123456:TEST-TOKEN";
@@ -90,13 +90,13 @@ describe("Telegram adapter (mocked fetch)", () => {
 		const api = fakeTelegram([]);
 		const adapter = new TelegramAdapter({ token: TOKEN, tenantId: "acme", instanceId: "ops", fetch: api.fetch });
 		const buttons = [
-			{ label: "Approva", data: "annie:abcd:1:approve" },
-			{ label: "Scarta", data: "annie:abcd:1:discard" },
+			{ label: "Approva", data: "owni:abcd:1:approve" },
+			{ label: "Scarta", data: "owni:abcd:1:discard" },
 		];
 		await adapter.send({ tenantId: "acme", instanceId: "ops", channel: "telegram", threadId: "42", text: "x".repeat(TELEGRAM_MAX_TEXT + 1), idempotencyKey: "k", buttons });
 		expect(api.calls[0]?.body.reply_markup).toBeUndefined();
 		expect(api.calls[1]?.body.reply_markup).toEqual({
-			inline_keyboard: [[{ text: "Approva", callback_data: "annie:abcd:1:approve" }, { text: "Scarta", callback_data: "annie:abcd:1:discard" }]],
+			inline_keyboard: [[{ text: "Approva", callback_data: "owni:abcd:1:approve" }, { text: "Scarta", callback_data: "owni:abcd:1:discard" }]],
 		});
 		// Telegram rejects callback_data over 64 bytes: fail before sending anything.
 		const before = api.calls.length;
@@ -105,7 +105,7 @@ describe("Telegram adapter (mocked fetch)", () => {
 	});
 
 	it("turns button taps into actions, answers each tap, and asks for taps only when someone handles them", async () => {
-		const tap = { update_id: 20, callback_query: { id: "cq1", from: { id: 7 }, message: { message_id: 9, chat: { id: 42 } }, data: "annie:abcd:1:approve" } };
+		const tap = { update_id: 20, callback_query: { id: "cq1", from: { id: 7 }, message: { message_id: 9, chat: { id: 42 } }, data: "owni:abcd:1:approve" } };
 		const plain = fakeTelegram([[tap], []]);
 		const textOnly = new TelegramAdapter({ token: TOKEN, tenantId: "acme", instanceId: "ops", fetch: plain.fetch });
 		textOnly.onInbound(async () => {});
@@ -120,14 +120,14 @@ describe("Telegram adapter (mocked fetch)", () => {
 		});
 		expect(await adapter.pollOnce()).toBe(1);
 		expect(api.calls[0]?.body.allowed_updates).toEqual(["message", "callback_query"]);
-		expect(actions).toEqual([{ tenantId: "acme", instanceId: "ops", channel: "telegram", threadId: "42", userId: "7", data: "annie:abcd:1:approve", actionId: "cq1" }]);
+		expect(actions).toEqual([{ tenantId: "acme", instanceId: "ops", channel: "telegram", threadId: "42", userId: "7", data: "owni:abcd:1:approve", actionId: "cq1" }]);
 		// Answered before the handler runs, so the spinner stops even if the handler is slow.
 		expect(api.calls.map((c) => c.method)).toEqual(["getUpdates", "answerCallbackQuery"]);
 		expect(api.calls[1]?.body).toEqual({ callback_query_id: "cq1" });
 	});
 
 	it("a failed answer to a tap (e.g. a redelivered, expired query) does not drop the action", async () => {
-		const tap = { update_id: 21, callback_query: { id: "old", from: { id: 7 }, message: { message_id: 9, chat: { id: 42 } }, data: "annie:abcd:1:edit" } };
+		const tap = { update_id: 21, callback_query: { id: "old", from: { id: 7 }, message: { message_id: 9, chat: { id: 42 } }, data: "owni:abcd:1:edit" } };
 		const fetchMock = vi.fn(async (url: string | URL | Request) => {
 			const method = String(url).slice(String(url).lastIndexOf("/") + 1);
 			if (method === "getUpdates") return Response.json({ ok: true, result: [tap] });
@@ -145,7 +145,7 @@ describe("Telegram adapter (mocked fetch)", () => {
 	});
 
 	it("an update whose handler fails is delivered again, up to three times", async () => {
-		const tap = { update_id: 30, callback_query: { id: "cq", from: { id: 7 }, message: { message_id: 9, chat: { id: 42 } }, data: "annie:ab:1:approve" } };
+		const tap = { update_id: 30, callback_query: { id: "cq", from: { id: 7 }, message: { message_id: 9, chat: { id: 42 } }, data: "owni:ab:1:approve" } };
 		const api = fakeTelegram([[tap], [tap], [tap], []]);
 		const logs: string[] = [];
 		const adapter = new TelegramAdapter({ token: TOKEN, tenantId: "acme", instanceId: "ops", fetch: api.fetch, log: (l) => logs.push(l) });
@@ -208,7 +208,7 @@ describe("Telegram adapter (mocked fetch)", () => {
 	it("end to end: a Telegram message reaches the core and the reply goes back to the same chat, once", async () => {
 		const { runtime } = await runtimeWithInstance({ egress: { modelProviders: ["faux"], channels: ["telegram"] } });
 		// The same message delivered twice (as Telegram does after a crash before the offset is confirmed).
-		const api = fakeTelegram([[textUpdate(1, 42, 5, "ciao annie")], [textUpdate(1, 42, 5, "ciao annie")]]);
+		const api = fakeTelegram([[textUpdate(1, 42, 5, "ciao owni")], [textUpdate(1, 42, 5, "ciao owni")]]);
 		const adapter = new TelegramAdapter({ token: TOKEN, tenantId: "acme", instanceId: "ops", fetch: api.fetch });
 		connectChannel(runtime, adapter, { tenantId: "acme", instanceId: "ops" });
 
@@ -219,7 +219,7 @@ describe("Telegram adapter (mocked fetch)", () => {
 		await new Promise((resolve) => setTimeout(resolve, 50));
 
 		const sent = api.calls.filter((c) => c.method === "sendMessage");
-		expect(sent).toEqual([{ method: "sendMessage", body: { chat_id: "42", text: "Owni (modello locale di sviluppo): hai scritto «ciao annie»" } }]);
+		expect(sent).toEqual([{ method: "sendMessage", body: { chat_id: "42", text: "Owni (modello locale di sviluppo): hai scritto «ciao owni»" } }]);
 		await runtime.close();
 	});
 });
@@ -228,7 +228,7 @@ describe("gateway with several tenants", () => {
 	it("sends each reply only through the bot of the tenant and instance that answered", async () => {
 		const { runtime, dataDir } = await runtimeWithInstance({ tenant: "acme", egress: { modelProviders: ["faux"], channels: ["telegram"] } });
 		await runtime.registry.createTenant({ id: "globex", name: "globex" });
-		await runtime.registry.createInstance("globex", { id: "ops", name: "ops", model: { provider: "faux", modelId: "annie-dev" }, egress: { modelProviders: ["faux"], channels: ["telegram"] }, allowedUsers: { telegram: ["7"] } });
+		await runtime.registry.createInstance("globex", { id: "ops", name: "ops", model: { provider: "faux", modelId: "owni-dev" }, egress: { modelProviders: ["faux"], channels: ["telegram"] }, allowedUsers: { telegram: ["7"] } });
 		expect(dataDir).toBeTruthy();
 
 		// The same user (private chat 42) talks to both bots.
@@ -257,21 +257,21 @@ describe("dev:segreteria configuration", () => {
 		GMAIL_CLIENT_SECRET: "s",
 		GMAIL_REFRESH_TOKEN: "r",
 		HUBSPOT_ACCESS_TOKEN: "h",
-		ANNIE_TELEGRAM_ALLOWED_USERS: "12, 34",
+		OWNI_TELEGRAM_ALLOWED_USERS: "12, 34",
 	};
 
 	it("needs the mailbox, the CRM and at least one sales person; names what is missing", () => {
 		expect(() => loadSegreteriaConfig({ TELEGRAM_BOT_TOKEN: "t", ANTHROPIC_API_KEY: "k" })).toThrow(
-			"Missing environment variables: GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN, HUBSPOT_ACCESS_TOKEN, ANNIE_TELEGRAM_ALLOWED_USERS.",
+			"Missing environment variables: GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN, HUBSPOT_ACCESS_TOKEN, OWNI_TELEGRAM_ALLOWED_USERS.",
 		);
-		expect(() => loadSegreteriaConfig({ ...full, ANNIE_TELEGRAM_ALLOWED_USERS: "@mario" })).toThrow("invalid: @mario");
-		expect(() => loadSegreteriaConfig({ ...full, ANNIE_MAIL_POLL_SECONDS: "2" })).toThrow("at least 10");
+		expect(() => loadSegreteriaConfig({ ...full, OWNI_TELEGRAM_ALLOWED_USERS: "@mario" })).toThrow("invalid: @mario");
+		expect(() => loadSegreteriaConfig({ ...full, OWNI_MAIL_POLL_SECONDS: "2" })).toThrow("at least 10");
 	});
 
 	it("defaults to Anthropic, the segreteria instance and a one-minute poll; faux needs no key", () => {
 		expect(loadSegreteriaConfig(full)).toMatchObject({ modelProvider: "anthropic", anthropicApiKey: "k", instanceId: "segreteria", pollSeconds: 60, salesUserIds: ["12", "34"], requireVatNumber: false });
 		const { ANTHROPIC_API_KEY: _, ...noKey } = full;
-		expect(loadSegreteriaConfig({ ...noKey, ANNIE_SEGRETERIA_MODEL: "faux", ANNIE_REQUIRE_VAT_NUMBER: "sì" })).toMatchObject({ modelProvider: "faux", anthropicApiKey: undefined, requireVatNumber: true });
+		expect(loadSegreteriaConfig({ ...noKey, OWNI_SEGRETERIA_MODEL: "faux", OWNI_REQUIRE_VAT_NUMBER: "sì" })).toMatchObject({ modelProvider: "faux", anthropicApiKey: undefined, requireVatNumber: true });
 	});
 });
 
@@ -279,7 +279,7 @@ describe("dev:telegram configuration", () => {
 	it("names every missing variable exactly", () => {
 		expect(() => loadTelegramConfig({})).toThrow(new ConfigError("Missing environment variables: TELEGRAM_BOT_TOKEN, ANTHROPIC_API_KEY. Set them in .env (see .env.example)."));
 		expect(() => loadTelegramConfig({ TELEGRAM_BOT_TOKEN: "t" })).toThrow("Missing environment variable: ANTHROPIC_API_KEY.");
-		expect(() => loadTelegramConfig({ TELEGRAM_BOT_TOKEN: "t", ANNIE_MODEL_PROVIDER: "openai" })).toThrow("Missing environment variable: OPENAI_API_KEY.");
+		expect(() => loadTelegramConfig({ TELEGRAM_BOT_TOKEN: "t", OWNI_MODEL_PROVIDER: "openai" })).toThrow("Missing environment variable: OPENAI_API_KEY.");
 		expect(() => loadTelegramConfig({ TELEGRAM_BOT_TOKEN: " ", ANTHROPIC_API_KEY: "k" })).toThrow("Missing environment variable: TELEGRAM_BOT_TOKEN.");
 	});
 
@@ -292,14 +292,14 @@ describe("dev:telegram configuration", () => {
 			tenantId: "default",
 			instanceId: "telegram",
 		});
-		expect(loadTelegramConfig({ TELEGRAM_BOT_TOKEN: "t", ANNIE_MODEL_PROVIDER: "faux" })).toMatchObject({ modelProvider: "faux", modelId: "annie-dev", modelApiKey: undefined });
+		expect(loadTelegramConfig({ TELEGRAM_BOT_TOKEN: "t", OWNI_MODEL_PROVIDER: "faux" })).toMatchObject({ modelProvider: "faux", modelId: "owni-dev", modelApiKey: undefined });
 	});
 
 	it("reads the Telegram allowlist as numeric user IDs", () => {
-		const base = { TELEGRAM_BOT_TOKEN: "t", ANNIE_MODEL_PROVIDER: "faux" };
+		const base = { TELEGRAM_BOT_TOKEN: "t", OWNI_MODEL_PROVIDER: "faux" };
 		expect(loadTelegramConfig(base).telegramAllowedUsers).toBeUndefined();
-		expect(loadTelegramConfig({ ...base, ANNIE_TELEGRAM_ALLOWED_USERS: " 12, 34 ,," }).telegramAllowedUsers).toEqual(["12", "34"]);
-		expect(() => loadTelegramConfig({ ...base, ANNIE_TELEGRAM_ALLOWED_USERS: "12,@mario" })).toThrow("invalid: @mario");
+		expect(loadTelegramConfig({ ...base, OWNI_TELEGRAM_ALLOWED_USERS: " 12, 34 ,," }).telegramAllowedUsers).toEqual(["12", "34"]);
+		expect(() => loadTelegramConfig({ ...base, OWNI_TELEGRAM_ALLOWED_USERS: "12,@mario" })).toThrow("invalid: @mario");
 	});
 });
 
@@ -328,18 +328,18 @@ describe("Telegram errors", () => {
 describe("Telegram adapter, webhook mode", () => {
 	it("start registers the webhook with its secret and never polls", async () => {
 		const api = fakeTelegram([]);
-		const adapter = new TelegramAdapter({ token: TOKEN, tenantId: "acme", instanceId: "ops", fetch: api.fetch, webhook: { url: "https://annie.example/hooks/telegram/ops", secretToken: "s3cret_token-1" } });
+		const adapter = new TelegramAdapter({ token: TOKEN, tenantId: "acme", instanceId: "ops", fetch: api.fetch, webhook: { url: "https://owni.example/hooks/telegram/ops", secretToken: "s3cret_token-1" } });
 		adapter.onInbound(async () => {});
 		await adapter.start();
 		await new Promise((resolve) => setTimeout(resolve, 30));
 		await adapter.stop();
 		expect(api.calls.map((c) => c.method)).toEqual(["setWebhook"]);
-		expect(api.calls[0]?.body).toEqual({ url: "https://annie.example/hooks/telegram/ops", secret_token: "s3cret_token-1", allowed_updates: ["message"] });
+		expect(api.calls[0]?.body).toEqual({ url: "https://owni.example/hooks/telegram/ops", secret_token: "s3cret_token-1", allowed_updates: ["message"] });
 	});
 
 	it("an update pushed by Telegram takes the same path as a polled one; a failing one is refused until the third try", async () => {
 		const api = fakeTelegram([]);
-		const adapter = new TelegramAdapter({ token: TOKEN, tenantId: "acme", instanceId: "ops", fetch: api.fetch, webhook: { url: "https://annie.example/hooks/telegram/ops", secretToken: "s3cret" } });
+		const adapter = new TelegramAdapter({ token: TOKEN, tenantId: "acme", instanceId: "ops", fetch: api.fetch, webhook: { url: "https://owni.example/hooks/telegram/ops", secretToken: "s3cret" } });
 		const inbound: InboundMessage[] = [];
 		let fail = 0;
 		adapter.onInbound(async (message) => {
@@ -357,12 +357,12 @@ describe("Telegram adapter, webhook mode", () => {
 });
 
 describe("webhook configuration", () => {
-	const base = { ANNIE_MODEL_PROVIDER: "faux", TELEGRAM_BOT_TOKEN: "1:T" };
+	const base = { OWNI_MODEL_PROVIDER: "faux", TELEGRAM_BOT_TOKEN: "1:T" };
 	it("needs a public URL and a secret Telegram accepts", () => {
-		expect(() => loadAnnieConfig({ ...base, ANNIE_TELEGRAM_WEBHOOK_SECRET: "abc" })).toThrow(/ANNIE_PUBLIC_URL/);
-		expect(() => loadAnnieConfig({ ...base, ANNIE_PUBLIC_URL: "https://a.example", ANNIE_TELEGRAM_WEBHOOK_SECRET: "has space" })).toThrow(ConfigError);
-		expect(loadAnnieConfig({ ...base, ANNIE_PUBLIC_URL: "https://a.example", ANNIE_TELEGRAM_WEBHOOK_SECRET: "ok_Secret-1" }).telegram?.webhookSecret).toBe("ok_Secret-1");
-		expect(loadAnnieConfig(base).telegram?.webhookSecret).toBeUndefined();
+		expect(() => loadOwniConfig({ ...base, OWNI_TELEGRAM_WEBHOOK_SECRET: "abc" })).toThrow(/OWNI_PUBLIC_URL/);
+		expect(() => loadOwniConfig({ ...base, OWNI_PUBLIC_URL: "https://a.example", OWNI_TELEGRAM_WEBHOOK_SECRET: "has space" })).toThrow(ConfigError);
+		expect(loadOwniConfig({ ...base, OWNI_PUBLIC_URL: "https://a.example", OWNI_TELEGRAM_WEBHOOK_SECRET: "ok_Secret-1" }).telegram?.webhookSecret).toBe("ok_Secret-1");
+		expect(loadOwniConfig(base).telegram?.webhookSecret).toBeUndefined();
 	});
 });
 

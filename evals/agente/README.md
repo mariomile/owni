@@ -5,7 +5,7 @@ pnpm eval:agente                          # catalogo + 4 contratti di esito dete
 pnpm eval:agente:catalog                  # ogni strumento atteso esiste nel catalogo
 pnpm eval:agente:outcomes                 # runtime, tool e store reali; modello faux
 pnpm eval:agente:outcomes artifact-roundtrip
-pnpm eval:agente:real                     # nightly: Anthropic, serve ANNIE_JUDGE_MODEL_KEY
+pnpm eval:agente:real                     # nightly: Anthropic, serve OWNI_JUDGE_MODEL_KEY
 pnpm eval:agente:real saluto              # solo i casi con questi id
 ```
 
@@ -13,7 +13,7 @@ pnpm eval:agente:real saluto              # solo i casi con questi id
 
 Il routing reale scrive sempre, salvo interruzioni forzate o errori di scrittura, `last-report/agente.json` e `agente.md`: stato `passed|failed|skipped|error`, casi selezionati e misurati, motivi, modello selezionato e provider/modello effettivi dal ledger per ogni turno. Senza chiave: `skipped`, zero misure, accuratezza `null`, nessun modello dichiarato come eseguito. Errori di avvio, turno o chiusura: `error`. `failed` indica accuratezza sotto l'80%; `failed` ed `error` escono con codice 1. `skipped` esce con 0 ma compare separatamente nel riepilogo e negli artifact nightly; un report mancante fa fallire il controllo.
 
-`ANNIE_MODEL_ID` sceglie il modello Anthropic da misurare. `tool_search` non conta come primo tool se segue un tool operativo; un turno che chiama solo `tool_search` non equivale a nessun tool. L'accuratezza riguarda solo i turni misurati; un errore impedisce comunque `passed`. **Primo tool corretto non significa compito riuscito**: il routing non misura l'esito (`outcomeSuccess: null`).
+`OWNI_MODEL_ID` sceglie il modello Anthropic da misurare. `tool_search` non conta come primo tool se segue un tool operativo; un turno che chiama solo `tool_search` non equivale a nessun tool. L'accuratezza riguarda solo i turni misurati; un errore impedisce comunque `passed`. **Primo tool corretto non significa compito riuscito**: il routing non misura l'esito (`outcomeSuccess: null`).
 
 Gli **integration/outcome-contract checks** in `outcomes.ts` usano il runtime durevole e il modello `faux` esistenti, comandati con `/tool`, directory temporanee rimosse a fine scenario e il client Google con trasporto stub senza rete:
 

@@ -1,5 +1,5 @@
 import { isAgentTurn } from "../turn-origin.ts";
-import type { AnnieTool, ToolContext } from "../engine.ts";
+import type { OwniTool, ToolContext } from "../engine.ts";
 import { type AgendaItem, AGENDA_LIMITS, agendaAgentReads, agendaIn, briefItems, FISCAL_AGENDA_OPS, FiscalAgendaError, type FiscalAgendaOp } from "../fiscal-agenda.ts";
 import type { Applies } from "../fiscal-agenda-rules.ts";
 import { bolloItems, cuItems, invoiceItems, renewalItems, ruleItems, taxItems, vatItems } from "../fiscal-agenda-sources.ts";
@@ -52,7 +52,7 @@ const DESCRIPTION = [
  * shared scanner; nothing written but the .ics of the export, a new file each time. Today is read
  * once per call.
  */
-export function createFiscalAgendaTools(options: FiscalAgendaToolsOptions): AnnieTool[] {
+export function createFiscalAgendaTools(options: FiscalAgendaToolsOptions): OwniTool[] {
 	const { workspace, timeZone } = options;
 	const now = options.now ?? (() => new Date());
 	const scanner = options.scanner ?? new InvoiceScanner(workspace);

@@ -69,7 +69,7 @@ export function foldLine(line: string): string {
 }
 
 /** A UID from what identifies an event (its source, its key, its day): the same parts, the same UID. */
-export function icsUid(parts: readonly string[], domain = "annie"): string {
+export function icsUid(parts: readonly string[], domain = "owni"): string {
 	return `${createHash("sha256").update(parts.join("\u0000")).digest("hex").slice(0, 32)}@${domain}`;
 }
 

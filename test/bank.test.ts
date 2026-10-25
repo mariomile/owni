@@ -67,7 +67,7 @@ afterEach(() => {
 	for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 function temp(): string {
-	const dir = mkdtempSync(join(tmpdir(), "annie-bank-"));
+	const dir = mkdtempSync(join(tmpdir(), "owni-bank-"));
 	dirs.push(dir);
 	return dir;
 }

@@ -3,11 +3,11 @@
  * unique id and a text, and every tool it expects is one the agent really gets. A tool renamed
  * or removed turns this red before the nightly run measures the wrong thing.
  */
-import { bootAnnie, loadCases } from "./annie.ts";
+import { bootOwni, loadCases } from "./owni.ts";
 import { selectCases } from "./report.ts";
 
 const cases = selectCases(await loadCases(), process.argv.slice(2));
-const { close, tools } = await bootAnnie({ ANNIE_MODEL_PROVIDER: "faux" });
+const { close, tools } = await bootOwni({ OWNI_MODEL_PROVIDER: "faux" });
 await close();
 
 const known = new Set(tools);

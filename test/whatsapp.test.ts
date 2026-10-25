@@ -4,11 +4,11 @@ import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { type RunningAnnie, startAnnie } from "../src/app.ts";
+import { type RunningOwni, startOwni } from "../src/app.ts";
 import { WhatsAppAdapter, type WhatsAppWebhook, type WindowState, windowStore } from "../src/channels/whatsapp.ts";
 import { splitText } from "../src/channels/text.ts";
 import { ChannelRefused, type InboundAction, type InboundMessage } from "../src/channels/types.ts";
-import { loadAnnieConfig } from "../src/main/config.ts";
+import { loadOwniConfig } from "../src/main/config.ts";
 import { tempDataDir } from "./helpers.ts";
 
 const closers: (() => Promise<void>)[] = [];
@@ -69,7 +69,7 @@ function delivery(messages: unknown[], phoneNumberId = PHONE_ID): WhatsAppWebhoo
 const sign = (raw: string, secret = APP_SECRET) => `sha256=${createHmac("sha256", secret).update(raw).digest("hex")}`;
 
 describe("WhatsApp adapter", () => {
-	const adapterFor = (apiBase: string) => new WhatsAppAdapter({ accessToken: TOKEN, phoneNumberId: PHONE_ID, appSecret: APP_SECRET, verifyToken: "verify-me-123", tenantId: "default", instanceId: "annie", apiBase });
+	const adapterFor = (apiBase: string) => new WhatsAppAdapter({ accessToken: TOKEN, phoneNumberId: PHONE_ID, appSecret: APP_SECRET, verifyToken: "verify-me-123", tenantId: "default", instanceId: "owni", apiBase });
 
 	it("answers Meta's check only with our token, and takes only deliveries Meta signed", () => {
 		const wa = adapterFor("http://unused");
@@ -119,7 +119,7 @@ describe("WhatsApp adapter", () => {
 	it("sends long text in pieces, buttons under the last 1024 characters, files as documents", async () => {
 		const graph = await fakeGraph();
 		const wa = adapterFor(graph.base);
-		const base = { tenantId: "default", instanceId: "annie", channel: "whatsapp", threadId: "393331234567", idempotencyKey: "k" };
+		const base = { tenantId: "default", instanceId: "owni", channel: "whatsapp", threadId: "393331234567", idempotencyKey: "k" };
 		await wa.send({ ...base, text: "x".repeat(5000) });
 		expect(graph.sent().map((b) => [b.type, b.text.body.length, b.to])).toEqual([
 			["text", 4096, "393331234567"],
@@ -138,7 +138,7 @@ describe("WhatsApp adapter", () => {
 	it("a file it cannot have still lets the message through, saying so; a message that keeps failing is let go after three tries", async () => {
 		const graph = await fakeGraph();
 		const logs: string[] = [];
-		const wa = new WhatsAppAdapter({ accessToken: TOKEN, phoneNumberId: PHONE_ID, appSecret: APP_SECRET, verifyToken: "v", tenantId: "default", instanceId: "annie", apiBase: graph.base, log: (m) => void logs.push(m) });
+		const wa = new WhatsAppAdapter({ accessToken: TOKEN, phoneNumberId: PHONE_ID, appSecret: APP_SECRET, verifyToken: "v", tenantId: "default", instanceId: "owni", apiBase: graph.base, log: (m) => void logs.push(m) });
 		const inbound: InboundMessage[] = [];
 		wa.onInbound(async (m) => void inbound.push(m));
 		await wa.handleWebhook(
@@ -160,7 +160,7 @@ describe("WhatsApp adapter", () => {
 		await wa.handleWebhook(null as never);
 		await wa.handleWebhook({ entry: "x" } as never);
 		// A handler that fails every time: twice an error (Meta delivers again), the third time dropped and logged.
-		const failing = new WhatsAppAdapter({ accessToken: TOKEN, phoneNumberId: PHONE_ID, appSecret: APP_SECRET, verifyToken: "v", tenantId: "default", instanceId: "annie", apiBase: graph.base, log: (m) => void logs.push(m) });
+		const failing = new WhatsAppAdapter({ accessToken: TOKEN, phoneNumberId: PHONE_ID, appSecret: APP_SECRET, verifyToken: "v", tenantId: "default", instanceId: "owni", apiBase: graph.base, log: (m) => void logs.push(m) });
 		failing.onInbound(async () => {
 			throw new Error("disk full");
 		});
@@ -174,12 +174,12 @@ describe("WhatsApp adapter", () => {
 	it("a message Meta could not deliver later (outside the 24 hours) is logged; files go with their type, unknown kinds are refused; emoji are never cut", async () => {
 		const graph = await fakeGraph();
 		const logs: string[] = [];
-		const wa = new WhatsAppAdapter({ accessToken: TOKEN, phoneNumberId: PHONE_ID, appSecret: APP_SECRET, verifyToken: "v", tenantId: "default", instanceId: "annie", apiBase: graph.base, log: (m) => void logs.push(m) });
+		const wa = new WhatsAppAdapter({ accessToken: TOKEN, phoneNumberId: PHONE_ID, appSecret: APP_SECRET, verifyToken: "v", tenantId: "default", instanceId: "owni", apiBase: graph.base, log: (m) => void logs.push(m) });
 		const statuses = delivery([]);
 		(statuses.entry?.[0]?.changes?.[0]?.value as { statuses?: unknown[] }).statuses = [{ id: "wamid.out1", status: "failed", recipient_id: "393331234567", errors: [{ code: 131047, title: "Re-engagement message" }] }];
 		await wa.handleWebhook(statuses);
 		expect(logs).toEqual(["whatsapp: message wamid.out1 to 393331234567 not delivered: outside the 24-hour window, the person must write to Owni first"]);
-		const base = { tenantId: "default", instanceId: "annie", channel: "whatsapp", threadId: "393331234567", idempotencyKey: "k" };
+		const base = { tenantId: "default", instanceId: "owni", channel: "whatsapp", threadId: "393331234567", idempotencyKey: "k" };
 		await wa.sendFile({ ...base, name: "Preventivo.PDF", data: new Uint8Array([1]) });
 		expect(graph.calls.find((c) => c.path === `/${PHONE_ID}/media`)?.body).toContain("application/pdf");
 		await expect(wa.sendFile({ ...base, name: "script.exe", data: new Uint8Array([1]) })).rejects.toThrow(ChannelRefused);
@@ -190,11 +190,11 @@ describe("WhatsApp adapter", () => {
 	it("outside the 24-hour window Meta's refusal says so, final; errors never carry the token", async () => {
 		const graph = await fakeGraph({ refuse: { code: 131047, message: "Re-engagement message" } });
 		const wa = adapterFor(graph.base);
-		const error = await wa.send({ tenantId: "default", instanceId: "annie", channel: "whatsapp", threadId: "393331234567", idempotencyKey: "k", text: "Promemoria" }).catch((e: unknown) => e);
+		const error = await wa.send({ tenantId: "default", instanceId: "owni", channel: "whatsapp", threadId: "393331234567", idempotencyKey: "k", text: "Promemoria" }).catch((e: unknown) => e);
 		expect(error).toBeInstanceOf(ChannelRefused);
 		expect((error as ChannelRefused).retryable).toBe(false);
 		expect((error as Error).message).toContain("24-hour window");
-		const wrong = new WhatsAppAdapter({ accessToken: "EAAGwrongtoken0123456789", phoneNumberId: PHONE_ID, appSecret: APP_SECRET, verifyToken: "v", tenantId: "default", instanceId: "annie", apiBase: graph.base });
+		const wrong = new WhatsAppAdapter({ accessToken: "EAAGwrongtoken0123456789", phoneNumberId: PHONE_ID, appSecret: APP_SECRET, verifyToken: "v", tenantId: "default", instanceId: "owni", apiBase: graph.base });
 		const refused = await wrong.me().catch((e: Error) => e);
 		expect((refused as Error).message).not.toContain("EAAG");
 	});
@@ -207,9 +207,9 @@ describe("WhatsApp beyond the 24-hour window", () => {
 		const window = windowStore({ read: () => state, update: (change) => void (state = change(state)) });
 		return { window, state: () => state, setLast: (n: string, at: number) => void (state = { ...state, [n]: { ...state[n], last: at } }) };
 	}
-	const base = { tenantId: "default", instanceId: "annie", channel: "whatsapp", threadId: "393331234567", idempotencyKey: "k" };
+	const base = { tenantId: "default", instanceId: "owni", channel: "whatsapp", threadId: "393331234567", idempotencyKey: "k" };
 	const adapter = (apiBase: string, store: ReturnType<typeof memoryWindow>, extra: { template?: { name: string; language: string }; log?: (m: string) => void } = {}) => {
-		const wa = new WhatsAppAdapter({ accessToken: TOKEN, phoneNumberId: PHONE_ID, appSecret: APP_SECRET, verifyToken: "v", tenantId: "default", instanceId: "annie", apiBase, window: store.window, mayDownload: async (n) => n === "393331234567", ...extra });
+		const wa = new WhatsAppAdapter({ accessToken: TOKEN, phoneNumberId: PHONE_ID, appSecret: APP_SECRET, verifyToken: "v", tenantId: "default", instanceId: "owni", apiBase, window: store.window, mayDownload: async (n) => n === "393331234567", ...extra });
 		wa.onInbound(async () => {});
 		return wa;
 	};
@@ -218,7 +218,7 @@ describe("WhatsApp beyond the 24-hour window", () => {
 	it("inside the window it writes; outside it keeps the message, tells once with the approved template, and delivers when the person writes", async () => {
 		const graph = await fakeGraph();
 		const store = memoryWindow();
-		const wa = adapter(graph.base, store, { template: { name: "annie_aggiornamento", language: "it" } });
+		const wa = adapter(graph.base, store, { template: { name: "owni_aggiornamento", language: "it" } });
 		// Never heard from: sent as is (the window is not known).
 		await wa.send({ ...base, text: "Prima volta" });
 		expect(graph.sent().at(-1)).toMatchObject({ type: "text", text: { body: "Prima volta" } });
@@ -234,7 +234,7 @@ describe("WhatsApp beyond the 24-hour window", () => {
 				recipient_type: "individual",
 				to: "393331234567",
 				type: "template",
-				template: { name: "annie_aggiornamento", language: { code: "it" }, components: [{ type: "body", parameters: [{ type: "text", text: "Promemoria: scadenza F24 domani" }] }] },
+				template: { name: "owni_aggiornamento", language: { code: "it" }, components: [{ type: "body", parameters: [{ type: "text", text: "Promemoria: scadenza F24 domani" }] }] },
 			},
 		]);
 		// The same message again (an outbox retry) is kept once; a second message waits without a second paid notice.
@@ -299,39 +299,39 @@ describe("WhatsApp beyond the 24-hour window", () => {
 describe("WhatsApp in an instance", () => {
 	async function boot(apiBase: string) {
 		const dataDir = tempDataDir();
-		const config = loadAnnieConfig({ ANNIE_DATA_DIR: dataDir, ANNIE_MODEL_PROVIDER: "faux", ANNIE_WEB_PORT: "1", ANNIE_PUBLIC_URL: "https://annie.example.it" });
-		const annie: RunningAnnie = await startAnnie({ ...config, web: { ...config.web, port: 0 } }, { whatsappApiBase: apiBase, schedulerIntervalMs: 60_000, log: () => {} });
-		closers.push(() => annie.stop());
-		const base = `http://127.0.0.1:${(annie.server.address() as AddressInfo).port}`;
-		const login = await fetch(`${base}/api/login`, { method: "POST", headers: { "x-annie": "1" }, body: JSON.stringify({ token: (annie.ownerLink as string).split("#")[1] }) });
+		const config = loadOwniConfig({ OWNI_DATA_DIR: dataDir, OWNI_MODEL_PROVIDER: "faux", OWNI_WEB_PORT: "1", OWNI_PUBLIC_URL: "https://owni.example.it" });
+		const owni: RunningOwni = await startOwni({ ...config, web: { ...config.web, port: 0 } }, { whatsappApiBase: apiBase, schedulerIntervalMs: 60_000, log: () => {} });
+		closers.push(() => owni.stop());
+		const base = `http://127.0.0.1:${(owni.server.address() as AddressInfo).port}`;
+		const login = await fetch(`${base}/api/login`, { method: "POST", headers: { "x-owni": "1" }, body: JSON.stringify({ token: (owni.ownerLink as string).split("#")[1] }) });
 		const cookie = (login.headers.get("set-cookie") ?? "").split(";")[0] as string;
 		const api = async (path: string, body?: unknown, method?: string) => {
-			const res = await fetch(`${base}${path}`, { method: method ?? (body === undefined ? "GET" : "POST"), headers: { cookie, "x-annie": "1" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+			const res = await fetch(`${base}${path}`, { method: method ?? (body === undefined ? "GET" : "POST"), headers: { cookie, "x-owni": "1" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
 			return { status: res.status, ...((await res.json()) as any) };
 		};
 		const hook = (body: unknown, signature?: string) => {
 			const raw = JSON.stringify(body);
-			return fetch(`${base}/hooks/whatsapp/annie`, { method: "POST", headers: { "content-type": "application/json", "x-hub-signature-256": signature ?? sign(raw) }, body: raw });
+			return fetch(`${base}/hooks/whatsapp/owni`, { method: "POST", headers: { "content-type": "application/json", "x-hub-signature-256": signature ?? sign(raw) }, body: raw });
 		};
-		return { annie, api, hook, base, dataDir };
+		return { owni, api, hook, base, dataDir };
 	}
 
 	it("the owner connects a number from the console; allowed people get answers, strangers silence, forged deliveries nothing", async () => {
 		const graph = await fakeGraph();
 		const { api, hook, base, dataDir } = await boot(graph.base);
-		expect((await api("/api/instances/annie/whatsapp")).whatsapp).toMatchObject({ connected: false, webhookUrl: "https://annie.example.it/hooks/whatsapp/annie" });
+		expect((await api("/api/instances/owni/whatsapp")).whatsapp).toMatchObject({ connected: false, webhookUrl: "https://owni.example.it/hooks/whatsapp/owni" });
 		// The first time needs all three values; Meta checks token and number id.
-		expect((await api("/api/instances/annie/whatsapp", { accessToken: TOKEN }, "PUT")).status).toBe(400);
-		expect((await api("/api/instances/annie/whatsapp", { accessToken: "EAAGwrongtoken0123456789", phoneNumberId: PHONE_ID, appSecret: APP_SECRET }, "PUT")).status).toBe(400);
-		const connected = await api("/api/instances/annie/whatsapp", { accessToken: TOKEN, phoneNumberId: PHONE_ID, appSecret: APP_SECRET, allowedUsers: ["393331234567"] }, "PUT");
+		expect((await api("/api/instances/owni/whatsapp", { accessToken: TOKEN }, "PUT")).status).toBe(400);
+		expect((await api("/api/instances/owni/whatsapp", { accessToken: "EAAGwrongtoken0123456789", phoneNumberId: PHONE_ID, appSecret: APP_SECRET }, "PUT")).status).toBe(400);
+		const connected = await api("/api/instances/owni/whatsapp", { accessToken: TOKEN, phoneNumberId: PHONE_ID, appSecret: APP_SECRET, allowedUsers: ["393331234567"] }, "PUT");
 		expect(connected.whatsapp).toMatchObject({ connected: true, number: "+39 06 1234 5678", allowedUsers: ["393331234567"], verifyToken: expect.stringMatching(/^[\w-]{20,}$/) });
 		// Token and app secret never come back.
 		expect(JSON.stringify(connected)).not.toContain(TOKEN);
 		expect(JSON.stringify(connected)).not.toContain(APP_SECRET);
 		// Meta's check of the address.
-		const challenge = await fetch(`${base}/hooks/whatsapp/annie?hub.mode=subscribe&hub.verify_token=${connected.whatsapp.verifyToken}&hub.challenge=42`);
+		const challenge = await fetch(`${base}/hooks/whatsapp/owni?hub.mode=subscribe&hub.verify_token=${connected.whatsapp.verifyToken}&hub.challenge=42`);
 		expect([challenge.status, await challenge.text()]).toEqual([200, "42"]);
-		expect((await fetch(`${base}/hooks/whatsapp/annie?hub.mode=subscribe&hub.verify_token=x&hub.challenge=42`)).status).toBe(403);
+		expect((await fetch(`${base}/hooks/whatsapp/owni?hub.mode=subscribe&hub.verify_token=x&hub.challenge=42`)).status).toBe(403);
 		// A forged delivery is refused; a stranger gets no answer; an allowed person does.
 		expect((await hook(delivery([{ from: "393331234567", id: "wamid.f", type: "text", text: { body: "falso" } }]), sign("{}"))).status).toBe(401);
 		expect((await hook(delivery([{ from: "390000000000", id: "wamid.s", type: "text", text: { body: "sono un estraneo" } }]))).status).toBe(200);
@@ -345,13 +345,13 @@ describe("WhatsApp in an instance", () => {
 		await new Promise((r) => setTimeout(r, 300));
 		expect(graph.sent()).toHaveLength(answers);
 		// The template is set from the console, checked, and comes back; empty removes it.
-		expect((await api("/api/instances/annie/whatsapp", { templateName: "Owni Aggiornamento", templateLanguage: "it" }, "PUT")).status).toBe(400);
-		expect((await api("/api/instances/annie/whatsapp", { templateName: "annie_aggiornamento", templateLanguage: "it" }, "PUT")).whatsapp.template).toEqual({ name: "annie_aggiornamento", language: "it" });
-		expect((await api("/api/instances/annie/whatsapp", { templateName: "", templateLanguage: "" }, "PUT")).whatsapp.template).toBeNull();
+		expect((await api("/api/instances/owni/whatsapp", { templateName: "Owni Aggiornamento", templateLanguage: "it" }, "PUT")).status).toBe(400);
+		expect((await api("/api/instances/owni/whatsapp", { templateName: "owni_aggiornamento", templateLanguage: "it" }, "PUT")).whatsapp.template).toEqual({ name: "owni_aggiornamento", language: "it" });
+		expect((await api("/api/instances/owni/whatsapp", { templateName: "", templateLanguage: "" }, "PUT")).whatsapp.template).toBeNull();
 		// When the person last wrote is kept on disk, for after a restart.
-		expect(Object.keys(JSON.parse(readFileSync(join(dataDir, "tenants", "default", "instances", "annie", "whatsapp-window.json"), "utf8")))).toContain("393331234567");
+		expect(Object.keys(JSON.parse(readFileSync(join(dataDir, "tenants", "default", "instances", "owni", "whatsapp-window.json"), "utf8")))).toContain("393331234567");
 		// Disconnected: the address answers nothing.
-		expect((await api("/api/instances/annie/whatsapp", undefined, "DELETE")).status).toBe(200);
+		expect((await api("/api/instances/owni/whatsapp", undefined, "DELETE")).status).toBe(200);
 		expect((await hook(delivery([]))).status).toBe(404);
 	}, 30_000);
 });

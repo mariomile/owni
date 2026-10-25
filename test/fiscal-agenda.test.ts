@@ -48,7 +48,7 @@ afterEach(() => {
 	for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 function temp(): string {
-	const dir = mkdtempSync(join(tmpdir(), "annie-agenda-"));
+	const dir = mkdtempSync(join(tmpdir(), "owni-agenda-"));
 	dirs.push(dir);
 	return dir;
 }
@@ -745,18 +745,18 @@ describe("agenda: the .ics", () => {
 	it("a UID stable per deadline; the reminder N days before at 9; the stamp in UTC", () => {
 		expect(icsUid(["iva", "iva:2026-T3", "2026-11-16"])).toBe(icsUid(["iva", "iva:2026-T3", "2026-11-16"]));
 		expect(icsUid(["iva", "iva:2026-T3", "2026-11-16"])).not.toBe(icsUid(["iva", "iva:2026-T3", "2026-11-17"]));
-		expect(icsUid(["a", "b"])).toMatch(/^[0-9a-f]{32}@annie$/);
+		expect(icsUid(["a", "b"])).toMatch(/^[0-9a-f]{32}@owni$/);
 		expect(remindTrigger(3)).toBe("-PT63H");
 		expect(remindTrigger(7)).toBe("-PT159H");
 		expect(remindTrigger(0)).toBe("PT9H");
 		expect(icsStamp(NOW)).toBe("20261019T080000Z");
-		const text = icsFile({ prodId: "-//Owni//Prova//IT", stamp: "20261019T080000Z", events: [{ uid: "u1@annie", date: "2026-12-31", summary: "Fine, anno; prova", description: "riga 1\nriga 2" }] });
+		const text = icsFile({ prodId: "-//Owni//Prova//IT", stamp: "20261019T080000Z", events: [{ uid: "u1@owni", date: "2026-12-31", summary: "Fine, anno; prova", description: "riga 1\nriga 2" }] });
 		expect(text.endsWith("\r\n")).toBe(true);
 		expect(text.split("\r\n").every((l) => !l.includes("\n"))).toBe(true);
 		const back = parseIcs(text);
 		// SEQUENCE: the seconds from 2020-01-01T00:00:00Z to the stamp, so a later export wins over an earlier one.
 		const sequence = String((Date.UTC(2026, 9, 19, 8) - Date.UTC(2020, 0, 1)) / 1000);
-		expect(back.events).toEqual([{ UID: "u1@annie", DTSTAMP: "20261019T080000Z", "LAST-MODIFIED": "20261019T080000Z", SEQUENCE: sequence, "DTSTART;VALUE=DATE": "20261231", "DTEND;VALUE=DATE": "20270101", SUMMARY: "Fine, anno; prova", DESCRIPTION: "riga 1\nriga 2", TRANSP: "TRANSPARENT" }]);
+		expect(back.events).toEqual([{ UID: "u1@owni", DTSTAMP: "20261019T080000Z", "LAST-MODIFIED": "20261019T080000Z", SEQUENCE: sequence, "DTSTART;VALUE=DATE": "20261231", "DTEND;VALUE=DATE": "20270101", SUMMARY: "Fine, anno; prova", DESCRIPTION: "riga 1\nriga 2", TRANSP: "TRANSPARENT" }]);
 		expect(back.lines.slice(0, 2)).toEqual(["BEGIN:VCALENDAR", "VERSION:2.0"]);
 		expect(back.lines.at(-1)).toBe("END:VCALENDAR");
 		expect(icsSequence("20261019T080001Z")).toBe(Number(sequence) + 1);

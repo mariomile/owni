@@ -3,11 +3,11 @@ import { createServer, type IncomingMessage, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { type RunningAnnie, startAnnie } from "../src/app.ts";
+import { type RunningOwni, startOwni } from "../src/app.ts";
 import { readForm, WEB_ACTION_LIMITS, type WebAction, WebActionStore, sendWebAction } from "../src/core/web-actions.ts";
 import { CookieJar, publicAddress, webFetch } from "../src/core/web-fetch.ts";
 import { describeForms, formBody, formFingerprint, pageForms } from "../src/core/web-forms.ts";
-import { loadAnnieConfig } from "../src/main/config.ts";
+import { loadOwniConfig } from "../src/main/config.ts";
 import { tempDataDir } from "./helpers.ts";
 
 const closers: (() => Promise<void>)[] = [];
@@ -171,28 +171,28 @@ describe("web action store", () => {
 });
 
 async function boot(dataDir: string) {
-	const config = loadAnnieConfig({ ANNIE_DATA_DIR: dataDir, ANNIE_MODEL_PROVIDER: "faux", ANNIE_WEB_PORT: "1" });
-	const annie: RunningAnnie = await startAnnie({ ...config, web: { ...config.web, port: 0 } }, { webAddressAllowed: localOnly, schedulerIntervalMs: 60_000, log: () => {} });
-	closers.push(() => annie.stop());
-	const base = `http://127.0.0.1:${(annie.server.address() as AddressInfo).port}`;
+	const config = loadOwniConfig({ OWNI_DATA_DIR: dataDir, OWNI_MODEL_PROVIDER: "faux", OWNI_WEB_PORT: "1" });
+	const owni: RunningOwni = await startOwni({ ...config, web: { ...config.web, port: 0 } }, { webAddressAllowed: localOnly, schedulerIntervalMs: 60_000, log: () => {} });
+	closers.push(() => owni.stop());
+	const base = `http://127.0.0.1:${(owni.server.address() as AddressInfo).port}`;
 	const loginWith = async (token: string) => {
-		const login = await fetch(`${base}/api/login`, { method: "POST", headers: { "x-annie": "1" }, body: JSON.stringify({ token }) });
+		const login = await fetch(`${base}/api/login`, { method: "POST", headers: { "x-owni": "1" }, body: JSON.stringify({ token }) });
 		const cookie = (login.headers.get("set-cookie") ?? "").split(";")[0] as string;
 		return async (path: string, body?: unknown, method?: string) => {
-			const res = await fetch(`${base}${path}`, { method: method ?? (body === undefined ? "GET" : "POST"), headers: { cookie, "x-annie": "1" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+			const res = await fetch(`${base}${path}`, { method: method ?? (body === undefined ? "GET" : "POST"), headers: { cookie, "x-owni": "1" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
 			// biome-ignore lint: test
 			return { status: res.status, ...((await res.json()) as any) };
 		};
 	};
-	const api = await loginWith((annie.ownerLink as string).split("#")[1] as string);
+	const api = await loginWith((owni.ownerLink as string).split("#")[1] as string);
 	const chat = async (as: typeof api) => {
-		const thread = (await as("/api/instances/annie/threads", {})).thread;
-		const entries = async () => (await as(`/api/instances/annie/threads/${thread.id}`)).entries as { from: string; text?: string }[];
+		const thread = (await as("/api/instances/owni/threads", {})).thread;
+		const entries = async () => (await as(`/api/instances/owni/threads/${thread.id}`)).entries as { from: string; text?: string }[];
 		const reply = async (text: string, count = 1): Promise<string> => {
-			const before = (await entries()).filter((e) => e.from === "annie").length;
-			if (text !== "") await as(`/api/instances/annie/threads/${thread.id}/messages`, { text });
+			const before = (await entries()).filter((e) => e.from === "owni").length;
+			if (text !== "") await as(`/api/instances/owni/threads/${thread.id}/messages`, { text });
 			for (const start = Date.now(); Date.now() - start < 20_000; ) {
-				const now = (await entries()).filter((e) => e.from === "annie");
+				const now = (await entries()).filter((e) => e.from === "owni");
 				if (now.length >= before + count) return now.at(-1)?.text ?? "";
 				await new Promise((r) => setTimeout(r, 30));
 			}
@@ -200,33 +200,33 @@ async function boot(dataDir: string) {
 		};
 		return { thread, reply, entries };
 	};
-	return { annie, api, loginWith, chat, dataDir };
+	return { owni, api, loginWith, chat, dataDir };
 }
 
 describe("web_submit in an instance", () => {
 	it("off until the owner allows it; then nothing leaves until the person approves, once; the outcome comes back to the chat", async () => {
 		const s = await contactSite();
-		const { annie, api, chat, dataDir } = await boot(tempDataDir());
-		const policy = (await annie.runtime.registry.getInstance("default", "annie")).egress;
-		await annie.runtime.registry.setEgress("default", "annie", { ...policy, web: ["*"] });
+		const { owni, api, chat, dataDir } = await boot(tempDataDir());
+		const policy = (await owni.runtime.registry.getInstance("default", "owni")).egress;
+		await owni.runtime.registry.setEgress("default", "owni", { ...policy, web: ["*"] });
 		const { reply } = await chat(api);
 		const read = await reply(`/tool web_read {"url":"${s.base}/contact"}`);
 		expect(read).toContain(`Modulo 1: POST ${s.base}/send`);
 		expect(read).not.toContain("Modulo 0");
 		const ask = `/tool web_submit {"page_url":"${s.base}/contact","form":1,"values":{"name":"Mario","email":"m@example.com"},"reason":"Chiedo un preventivo"}`;
 		expect(await reply(ask)).toContain("l'owner non ha acceso le azioni sul web");
-		expect((await api("/api/instances/annie/web-actions-allowed", { allowed: true }, "PUT")).allowed).toBe(true);
+		expect((await api("/api/instances/owni/web-actions-allowed", { allowed: true }, "PUT")).allowed).toBe(true);
 		expect(await reply(`/tool web_submit {"page_url":"${s.base}/contact","form":1,"values":{"csrf":"x"},"reason":"prova"}`)).toContain("lo decide il sito");
 		expect(await reply(ask)).toMatch(/Richiesta [0-9a-f]{12} pronta/);
 		expect(s.posts).toHaveLength(0);
-		const { actions } = await api("/api/instances/annie/web-actions");
+		const { actions } = await api("/api/instances/owni/web-actions");
 		expect(actions).toHaveLength(1);
 		expect(actions[0]).toMatchObject({ status: "pending", values: { name: "Mario", email: "m@example.com" }, action: `${s.base}/send` });
 		// Approving sends it, once; the outcome is a new message for Owni in the same chat.
-		const decided = await api(`/api/instances/annie/web-actions/${actions[0].id}/decision`, { decision: "approved" });
+		const decided = await api(`/api/instances/owni/web-actions/${actions[0].id}/decision`, { decision: "approved" });
 		expect(decided.action).toMatchObject({ status: "done", result: { status: 200, title: "Grazie" } });
 		expect(await reply("", 1)).toMatch(/Esito della richiesta [0-9a-f]{12}[\s\S]*Messaggio ricevuto/);
-		expect((await api(`/api/instances/annie/web-actions/${actions[0].id}/decision`, { decision: "approved" })).action.status).toBe("done");
+		expect((await api(`/api/instances/owni/web-actions/${actions[0].id}/decision`, { decision: "approved" })).action.status).toBe("done");
 		expect(s.posts).toHaveLength(1);
 		expect(new URLSearchParams(s.posts[0]?.body).get("name")).toBe("Mario");
 		const audit = readFileSync(join(dataDir, "tenants", "default", "audit.jsonl"), "utf8");
@@ -236,27 +236,27 @@ describe("web_submit in an instance", () => {
 
 	it("another person can neither see nor decide someone's request; an approver can", async () => {
 		const s = await contactSite();
-		const { annie, api, loginWith, chat } = await boot(tempDataDir());
-		const policy = (await annie.runtime.registry.getInstance("default", "annie")).egress;
-		await annie.runtime.registry.setEgress("default", "annie", { ...policy, web: ["*"], connectors: [...(policy.connectors ?? []), "web-actions"] });
+		const { owni, api, loginWith, chat } = await boot(tempDataDir());
+		const policy = (await owni.runtime.registry.getInstance("default", "owni")).egress;
+		await owni.runtime.registry.setEgress("default", "owni", { ...policy, web: ["*"], connectors: [...(policy.connectors ?? []), "web-actions"] });
 		const people = [];
 		for (const name of ["Luca", "Sara"]) {
 			const { person, link } = await api("/api/people", { name });
 			people.push({ person, as: await loginWith(String(link).split("#")[1] as string) });
 		}
-		const record = await annie.runtime.registry.getInstance("default", "annie");
-		await annie.runtime.registry.setAllowedUsers("default", "annie", "web", [...(record.allowedUsers.web ?? []), ...people.map((p) => p.person.id)]);
+		const record = await owni.runtime.registry.getInstance("default", "owni");
+		await owni.runtime.registry.setAllowedUsers("default", "owni", "web", [...(record.allowedUsers.web ?? []), ...people.map((p) => p.person.id)]);
 		const [luca, sara] = people as [(typeof people)[0], (typeof people)[0]];
 		const { reply } = await chat(luca.as);
 		expect(await reply(`/tool web_submit {"page_url":"${s.base}/contact","form":1,"values":{"name":"Luca"},"reason":"Contatto"}`)).toMatch(/pronta/);
-		const [action] = (await luca.as("/api/instances/annie/web-actions")).actions;
+		const [action] = (await luca.as("/api/instances/owni/web-actions")).actions;
 		expect(action.requester).toBe(`web:${luca.person.id}`);
-		expect((await sara.as("/api/instances/annie/web-actions")).actions).toEqual([]);
-		expect((await sara.as(`/api/instances/annie/web-actions/${action.id}/decision`, { decision: "approved" })).status).toBe(403);
+		expect((await sara.as("/api/instances/owni/web-actions")).actions).toEqual([]);
+		expect((await sara.as(`/api/instances/owni/web-actions/${action.id}/decision`, { decision: "approved" })).status).toBe(403);
 		expect(s.posts).toHaveLength(0);
 		// The owner is an approver: sees it and may reject it.
-		expect((await api("/api/instances/annie/web-actions")).actions).toHaveLength(1);
-		expect((await api(`/api/instances/annie/web-actions/${action.id}/decision`, { decision: "rejected" })).action.status).toBe("rejected");
+		expect((await api("/api/instances/owni/web-actions")).actions).toHaveLength(1);
+		expect((await api(`/api/instances/owni/web-actions/${action.id}/decision`, { decision: "rejected" })).action.status).toBe("rejected");
 		expect(s.posts).toHaveLength(0);
 	});
 });
@@ -380,11 +380,11 @@ describe("web_submit on Telegram", () => {
 	it("the card goes to the person's private chat and to the approver; a stranger's tap does nothing; the person's tap sends it once", async () => {
 		const s = await contactSite();
 		const telegram = fakeTelegram();
-		const config = loadAnnieConfig({ ANNIE_DATA_DIR: tempDataDir(), ANNIE_MODEL_PROVIDER: "faux", ANNIE_WEB_PORT: "1", TELEGRAM_BOT_TOKEN: "1:T", ANNIE_TELEGRAM_ALLOWED_USERS: "7,8", ANNIE_TELEGRAM_APPROVERS: "9" });
-		const annie = await startAnnie({ ...config, web: { ...config.web, port: 0 } }, { telegramFetch: telegram.fetch, webAddressAllowed: localOnly, schedulerIntervalMs: 60_000, log: () => {} });
-		closers.push(() => annie.stop());
-		const policy = (await annie.runtime.registry.getInstance("default", "annie")).egress;
-		await annie.runtime.registry.setEgress("default", "annie", { ...policy, web: ["*"], connectors: [...(policy.connectors ?? []), "web-actions"] });
+		const config = loadOwniConfig({ OWNI_DATA_DIR: tempDataDir(), OWNI_MODEL_PROVIDER: "faux", OWNI_WEB_PORT: "1", TELEGRAM_BOT_TOKEN: "1:T", OWNI_TELEGRAM_ALLOWED_USERS: "7,8", OWNI_TELEGRAM_APPROVERS: "9" });
+		const owni = await startOwni({ ...config, web: { ...config.web, port: 0 } }, { telegramFetch: telegram.fetch, webAddressAllowed: localOnly, schedulerIntervalMs: 60_000, log: () => {} });
+		closers.push(() => owni.stop());
+		const policy = (await owni.runtime.registry.getInstance("default", "owni")).egress;
+		await owni.runtime.registry.setEgress("default", "owni", { ...policy, web: ["*"], connectors: [...(policy.connectors ?? []), "web-actions"] });
 		const ask = `/tool web_submit {"page_url":"${s.base}/contact","form":1,"values":{"name":"Sette"},"reason":"Modulo di contatto"}`;
 		telegram.updates.push([{ update_id: 1, message: { message_id: 3, chat: { id: 7, type: "private" }, from: { id: 7 }, text: ask } }]);
 		await waitUntil(() => telegram.sent.filter((m) => m.text.startsWith("Azione sul web da approvare")).length === 2);
@@ -396,7 +396,7 @@ describe("web_submit on Telegram", () => {
 		const id = send.split(":")[1] as string;
 		telegram.updates.push([{ update_id: 2, callback_query: { id: "cq1", from: { id: 8 }, message: { message_id: 5, chat: { id: 8 } }, data: send } }]);
 		await new Promise((r) => setTimeout(r, 300));
-		expect((await annie.runtime.webActions("default", "annie").get(id))?.status).toBe("pending");
+		expect((await owni.runtime.webActions("default", "owni").get(id))?.status).toBe("pending");
 		telegram.updates.push([{ update_id: 3, callback_query: { id: "cq2", from: { id: 7 }, message: { message_id: 5, chat: { id: 7 } }, data: send } }]);
 		await waitUntil(() => telegram.sent.some((m) => m.text === `Richiesta ${id}: approvata e inviata.`));
 		await waitUntil(() => telegram.sent.some((m) => String(m.chat_id) === "7" && m.text.includes("Esito della richiesta")) || s.posts.length === 1);

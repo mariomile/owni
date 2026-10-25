@@ -83,7 +83,7 @@ async function viewRoom(main, roomId) {
 		const who = h("b.who", `${agent?.emoji ? `${agent.emoji} ` : ""}${agent?.name ?? entry.instanceId}`);
 		who.style.setProperty("--agent", faceColor(agent ?? { id: entry.instanceId }));
 		const actions = entry.text ? h("div.msg-actions", copyButton(entry.text), listenButton(entry.text)) : null;
-		transcript.append(h("div.msg.annie", h("div.meta", face(agent ?? { id: entry.instanceId }, 20), who, h("span", fmt.time(entry.at)), by), entry.file ? fileLink(entry.instanceId, entry.file) : h("div.body", renderMarkdown(entry.text ?? "")), actions));
+		transcript.append(h("div.msg.owni", h("div.meta", face(agent ?? { id: entry.instanceId }, 20), who, h("span", fmt.time(entry.at)), by), entry.file ? fileLink(entry.instanceId, entry.file) : h("div.body", renderMarkdown(entry.text ?? "")), actions));
 	};
 	for (const e of entries) show(e);
 	state.onRoom = (event) => {
@@ -97,7 +97,7 @@ async function viewRoom(main, roomId) {
 	};
 	const present = room.agents.filter((a) => a.present);
 	// What was being written stays, like in a chat, until it is sent.
-	const draftKey = `annie.draft.room.${roomId}`;
+	const draftKey = `owni.draft.room.${roomId}`;
 	const input = h("textarea", { rows: 1, placeholder: `Scrivi alla stanza, @${present[0]?.handle ?? "nome"} per chiamare un agente…`, "aria-label": "Messaggio", value: store(draftKey) ?? "" });
 	const send = h("button.send", { "aria-label": "Invia", disabled: true }, icon("send"));
 	const fit = () => {

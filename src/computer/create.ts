@@ -9,11 +9,11 @@ export function createComputerProvider(config: ComputerConfig, context: { readon
 	const log = context.log === undefined ? {} : { log: context.log };
 	if (config.kind === "docker") return new DockerComputerProvider({ ...config, ...log });
 	if (config.kind === "fly") return new FlyComputerProvider({ ...config, salt: computerSalt(context.dataDir), ...log });
-	if (context.cellSecret === undefined) throw new Error("ANNIE_COMPUTER=cloud needs ANNIE_CELL_SECRET");
+	if (context.cellSecret === undefined) throw new Error("OWNI_COMPUTER=cloud needs OWNI_CELL_SECRET");
 	return new RemoteComputerProvider({ url: config.url, tenant: context.tenant, cellSecret: context.cellSecret });
 }
 
-/** What the computers are, for the log and `pnpm annie check`. */
+/** What the computers are, for the log and `pnpm owni check`. */
 export function computerLabel(config: ComputerConfig): string {
 	return { docker: "Docker", fly: "Fly", cloud: "Owni Cloud" }[config.kind];
 }

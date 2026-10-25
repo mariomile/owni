@@ -4,7 +4,7 @@ L'agente generale riceveva 76 strumenti a ogni richiesta al modello. I 25 dei re
 
 ## Decisione
 
-- `AnnieTool` ha `deferred?: true`. Uno strumento così non è offerto al modello finché il modello non lo carica. In `src/app.ts` i 25 registri sono rimandati con `deferredAll`; gli altri (memoria, calendario, web, posta, file) restano offerti a ogni richiesta.
+- `OwniTool` ha `deferred?: true`. Uno strumento così non è offerto al modello finché il modello non lo carica. In `src/app.ts` i 25 registri sono rimandati con `deferredAll`; gli altri (memoria, calendario, web, posta, file) restano offerti a ogni richiesta.
 - Se almeno uno strumento è rimandato, l'adapter Pi Durable aggiunge `tool_search`: quello di Pi Durable 1.3, con due differenze.
   - La sua descrizione elenca gli strumenti rimandati, col nome e la prima frase della loro descrizione. Il modello li conosce così anche negli agenti creati prima, che hanno le istruzioni salvate e non le riscrivono.
   - Una ricerca fatta solo di nomi esatti carica quelli e basta. Con BM25 il nome giusto a volte non è il primo, e ogni ricerca caricava fino a otto strumenti. Una ricerca libera resta BM25, con tre risultati.

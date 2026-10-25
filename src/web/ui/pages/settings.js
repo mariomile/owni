@@ -603,7 +603,7 @@ function deleteCard(inst) {
 			try {
 				await api(`/api/instances/${inst.id}`, { method: "DELETE", body: { confirm: typed.value } });
 				dialog.close();
-				if (store("annie.instance") === inst.id) store("annie.instance", null);
+				if (store("owni.instance") === inst.id) store("owni.instance", null);
 				toast(`Agente «${inst.name}» eliminato`);
 				await refreshInstances();
 				go("agenti");
@@ -810,7 +810,7 @@ function whatsappCard(inst, w) {
 	const list = (numbers) => numbers.join(", ");
 	const allowed = h("input", { type: "text", class: "mono", value: list(w.allowedUsers), placeholder: "393331234567, 393479876543" });
 	const approvers = h("input", { type: "text", class: "mono", value: list(w.approvers), placeholder: "393331234567" });
-	const templateName = h("input", { type: "text", class: "mono", value: w.template?.name ?? "", placeholder: "annie_aggiornamento" });
+	const templateName = h("input", { type: "text", class: "mono", value: w.template?.name ?? "", placeholder: "owni_aggiornamento" });
 	const templateLanguage = h("input", { type: "text", class: "mono", value: w.template?.language ?? "", placeholder: "it" });
 	const numbers = (input) => input.value.split(/[\s,]+/).map((n) => n.replace(/^\+/, "")).filter(Boolean);
 	const save = async () => {

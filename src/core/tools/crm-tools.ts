@@ -1,4 +1,4 @@
-import type { AnnieTool } from "../engine.ts";
+import type { OwniTool } from "../engine.ts";
 import { hashIdempotency, type PracticeStore } from "../practice.ts";
 import type { CrmAdapter } from "../../connectors/types.ts";
 
@@ -7,10 +7,10 @@ export function createCrmTools(options: {
 	tenantId: string;
 	crm: CrmAdapter;
 	practices: PracticeStore;
-}): AnnieTool[] {
+}): OwniTool[] {
 	const { tenantId, crm, practices } = options;
 
-	const upsertLead: AnnieTool = {
+	const upsertLead: OwniTool = {
 		name: "crm_upsert_lead",
 		description: "Create or update a CRM lead for a pratica (idempotent on mailMessageId).",
 		parameters: {

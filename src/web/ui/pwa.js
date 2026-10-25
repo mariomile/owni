@@ -9,12 +9,12 @@ window.addEventListener("beforeinstallprompt", (event) => {
 	event.preventDefault();
 	installOffer = event;
 	// The browser offers it again: the app was removed, whatever this browser remembered.
-	if (store("annie.app") === "installed") store("annie.app", "removed");
+	if (store("owni.app") === "installed") store("owni.app", "removed");
 	if (state.me) renderRail();
 });
 window.addEventListener("appinstalled", () => {
 	installOffer = undefined;
-	store("annie.app", "installed");
+	store("owni.app", "installed");
 	if (state.me) render();
 });
 // Only on https or on this machine: elsewhere browsers refuse it, and the console works the same.
@@ -29,7 +29,7 @@ offlineBar();
 
 /** Running as the installed app, or installed from this browser (Safari never says so: there it is only known inside the app). */
 export function installed() {
-	return window.matchMedia?.("(display-mode: standalone)").matches || navigator.standalone === true || store("annie.app") === "installed";
+	return window.matchMedia?.("(display-mode: standalone)").matches || navigator.standalone === true || store("owni.app") === "installed";
 }
 
 /** iPhone and iPad, which install only from Safari's Share menu (iPadOS says it is a Mac, but has touch). */
@@ -42,7 +42,7 @@ export async function install() {
 	const { outcome } = await installOffer.userChoice;
 	installOffer = undefined;
 	if (outcome === "accepted") {
-		store("annie.app", "installed");
+		store("owni.app", "installed");
 		toast(phone ? "Owni è sulla schermata Home" : "Owni è installata come app");
 	}
 	render();

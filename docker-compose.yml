@@ -1,16 +1,16 @@
-# docker compose up -d   ·   first start: docker compose exec annie cat /data/owner-login-link.txt
+# docker compose up -d   ·   first start: docker compose exec owni cat /data/owner-login-link.txt
 services:
-  annie:
+  owni:
     build: .
-    image: annie:local
+    image: owni:local
     restart: unless-stopped
     env_file: .env
     environment:
-      ANNIE_DATA_DIR: /data
-      ANNIE_WEB_HOST: 0.0.0.0
-      ANNIE_WEB_PORT: "8080"
+      OWNI_DATA_DIR: /data
+      OWNI_WEB_HOST: 0.0.0.0
+      OWNI_WEB_PORT: "8080"
     volumes:
-      - annie-data:/data
+      - owni-data:/data
     # Only on this machine: put a reverse proxy with https in front (see docs/runbook.md).
     ports:
       - "127.0.0.1:8080:8080"
@@ -24,13 +24,13 @@ services:
     security_opt:
       - no-new-privileges:true
     # The instances' computers (ADR 0013, docs/runbook.md 6j): uncomment on a server where Owni is
-    # the only service. The socket is root on this machine. ANNIE_COMPUTER=docker goes in .env, and
+    # the only service. The socket is root on this machine. OWNI_COMPUTER=docker goes in .env, and
     # DOCKER_GID is the socket's group: stat -c %g /var/run/docker.sock
     # volumes:
-    #   - annie-data:/data
+    #   - owni-data:/data
     #   - /var/run/docker.sock:/var/run/docker.sock
     # group_add:
     #   - "${DOCKER_GID:-999}"
 
 volumes:
-  annie-data:
+  owni-data:

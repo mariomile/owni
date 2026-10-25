@@ -189,7 +189,7 @@ export function formBody(form: WebForm, values: Readonly<Record<string, string>>
 	}
 	const shown = pairs.filter((p) => p[2]).map(([k, v]): [string, string] => [k, v]);
 	if (form.enctype === "multipart/form-data") {
-		const boundary = `----annie${randomBytes(12).toString("hex")}`;
+		const boundary = `----owni${randomBytes(12).toString("hex")}`;
 		const parts = pairs.map(([k, v]) => `--${boundary}\r\nContent-Disposition: form-data; name="${k.replace(/["\r\n]/g, "_")}"\r\n\r\n${v}\r\n`);
 		return { contentType: `multipart/form-data; boundary=${boundary}`, body: Buffer.from(`${parts.join("")}--${boundary}--\r\n`), shown };
 	}

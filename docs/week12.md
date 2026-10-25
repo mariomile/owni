@@ -11,14 +11,14 @@ Branch `week-11` (PR #11, su `main`) e `week-12`. Decisione: [ADR 0010](adr/0010
 
 ## Settimana 12: l'abbonamento (verificato dai test, con un finto Stripe)
 
-- **Prova, poi abbonamento**: alla registrazione parte la prova (`ANNIE_CLOUD_TRIAL_DAYS`, 14 giorni di default). Finita senza abbonamento, la cella resta spenta. Una pagina rimanda a quella di registrazione («Owni è in pausa»), un'API risponde 402, i webhook di Telegram non la svegliano e nemmeno i task programmati. I dati restano.
+- **Prova, poi abbonamento**: alla registrazione parte la prova (`OWNI_CLOUD_TRIAL_DAYS`, 14 giorni di default). Finita senza abbonamento, la cella resta spenta. Una pagina rimanda a quella di registrazione («Owni è in pausa»), un'API risponde 402, i webhook di Telegram non la svegliano e nemmeno i task programmati. I dati restano.
 - **Abbonarsi e gestire**: con lo stesso link via email dell'accesso. Chi ha finito la prova riceve il link a Checkout di Stripe. «Gestisci l'abbonamento» porta a Checkout o al portale clienti (fatture, carta, disdetta). La carta la vede solo Stripe.
 - **Webhook firmati** (`/stripe/webhook`): firma HMAC-SHA256 di Stripe, al massimo 5 minuti di età. Una firma sbagliata o mancante risponde 400 e non cambia niente. Lo stato dell'abbonamento si rilegge da Stripe a ogni evento. «Pagamento in ritardo» lascia Owni accesa, «annullato» o «non pagato» la sospende.
 - **Consumo a contatore** (facoltativo): il costo del modello di ogni tenant abbonato va a un Billing Meter di Stripe in centesimi di dollaro, solo quello successivo all'abbonamento. Ogni invio ha un identificativo, quindi un nuovo tentativo non conta due volte. Le celle accese si leggono almeno una volta l'ora.
 - **Abbonarsi in prova** tiene i giorni restanti: Stripe addebita alla fine della prova.
 - **Prezzo come configurazione**: quota fissa, prezzo per unità di consumo, valuta, IVA e coupon si impostano su Stripe, senza toccare il codice.
 - **`pnpm cloud status`** mostra anche lo stato: in prova fino a quando, abbonato, pagamento in ritardo, sospeso.
-- Senza `ANNIE_CLOUD_STRIPE_SECRET_KEY` non cambia niente: Owni Cloud resta gratuito.
+- Senza `OWNI_CLOUD_STRIPE_SECRET_KEY` non cambia niente: Owni Cloud resta gratuito.
 
 ## Review indipendente
 

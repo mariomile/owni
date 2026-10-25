@@ -4,7 +4,7 @@
 # from the repository root, before `pnpm tauri build --config src-tauri/tauri.local.conf.json`.
 set -euo pipefail
 
-NODE_VERSION=22.22.0
+NODE_VERSION=24.22.1
 root=$(cd "$(dirname "$0")/../.." && pwd)
 tauri="$root/desktop/src-tauri"
 out="$tauri/server"
@@ -50,7 +50,7 @@ data="$work/data"
 port=47899
 # Its stdin stays open as the app's does: at its end the server stops (server-entry.mjs).
 cd "$out"
-sleep 120 | ANNIE_DATA_DIR="$data" ANNIE_WEB_HOST=127.0.0.1 ANNIE_WEB_PORT=$port ANNIE_MODEL_PROVIDER=faux NODE_ENV=production \
+sleep 120 | OWNI_DATA_DIR="$data" OWNI_WEB_HOST=127.0.0.1 OWNI_WEB_PORT=$port OWNI_MODEL_PROVIDER=faux NODE_ENV=production \
 	"$bin/node-universal-apple-darwin" server-entry.mjs > "$work/server.log" 2>&1 &
 server=$!
 for _ in $(seq 1 60); do

@@ -4,9 +4,9 @@ Branch `week1-core`. Dettagli di design in [`architettura.md`](architettura.md).
 
 ## Cosa funziona (verificato dai test)
 
-- **Nucleo multi-tenant**: `AnnieRuntime` con registry di tenant e istanze, un file SQLite Pi Durable per istanza in `data/tenants/<t>/instances/<i>/engine/`.
+- **Nucleo multi-tenant**: `OwniRuntime` con registry di tenant e istanze, un file SQLite Pi Durable per istanza in `data/tenants/<t>/instances/<i>/engine/`.
 - **Crash e ripresa**: `test/crash-resume.test.ts` avvia un processo figlio, gli fa contare fino a 6 con il tool `slow_counter`, lo uccide con `SIGKILL` dopo il checkpoint dello step 3, avvia un secondo processo sullo stesso storage e chiama `resume()`. Il run completa con la risposta "Fatto. Ho contato fino a 6." e il log degli effetti mostra ogni step eseguito una volta sola: 1-3 dal primo processo, 4-6 dal secondo. Ripetuto 5 volte di fila senza fallimenti.
-- **Modello finto deterministico**: pi-ai 1.3.0 include un faux provider. L'adapter lo usa come modello `faux/annie-dev`, che decide la risposta solo in base al transcript: per questo un nuovo processo dopo il crash continua esattamente da dove era. Nessuna chiave e nessuna rete nei test.
+- **Modello finto deterministico**: pi-ai 1.3.0 include un faux provider. L'adapter lo usa come modello `faux/owni-dev`, che decide la risposta solo in base al transcript: per questo un nuovo processo dopo il crash continua esattamente da dove era. Nessuna chiave e nessuna rete nei test.
 - **Isolamento tra tenant**: due tenant con la stessa istanza e lo stesso thread non vedono storage, segreti, chiavi modello e audit l'uno dell'altro (`test/isolation.test.ts`, controlla anche i byte su disco).
 - **Egress default deny**: istanza senza policy non apre il modello; provider non consentito rifiutato; canale non consentito rifiutato prima del motore; con modello locale zero chiamate `fetch` (`test/egress.test.ts`).
 - **Telegram**: adapter long polling con `fetch`, normalizzazione in `InboundMessage`, offset, invio spezzato a 4096 caratteri, errori senza token, start/stop, flusso completo Telegram → nucleo → Telegram, messaggio riconsegnato che non produce una seconda risposta. Tutto con `fetch` finto (`test/telegram.test.ts`). Nessuna chiamata all'API Telegram reale.

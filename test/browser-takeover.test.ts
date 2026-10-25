@@ -13,7 +13,7 @@ import { Workspace } from "../src/core/workspace.ts";
 import { tempDataDir } from "./helpers.ts";
 
 // Match browser-file-chooser.test.ts: use the installed browser, never download one.
-const chrome = process.env.ANNIE_CHROMIUM_PATH ?? (existsSync("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome") ? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" : undefined);
+const chrome = process.env.OWNI_CHROMIUM_PATH ?? (existsSync("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome") ? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" : undefined);
 const available = chrome !== undefined && existsSync(chrome);
 const scope = "acme/ops";
 const alice = sessionKey(scope, { channel: "web", threadId: "alice-main" });

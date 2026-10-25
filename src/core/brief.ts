@@ -4,7 +4,7 @@ import { recurringCallReads } from "./recurring-invoices.ts";
 import { businessCallReads } from "./business-report.ts";
 import { cashflowCallReads } from "./cashflow.ts";
 import { clientCallReads } from "./clients.ts";
-import type { AnnieTool } from "./engine.ts";
+import type { OwniTool } from "./engine.ts";
 import { expenseCallReads } from "./expenses.ts";
 import { invoiceCallReads } from "./invoices.ts";
 import { QUOTE_SOON_DAYS, quoteCallReads } from "./quotes.ts";
@@ -152,7 +152,7 @@ const READS: ReadonlyMap<string, (args: Record<string, unknown>) => boolean> = n
  * The brief reads mail written by anyone: in its thread every tool that writes, sends or
  * remembers refuses, so nothing a mail says can make Owni act. The person acts from another chat.
  */
-export function readOnlyInBriefs(tools: readonly AnnieTool[], isBriefThread: (thread: { channel: string; threadId: string }) => Promise<boolean>): AnnieTool[] {
+export function readOnlyInBriefs(tools: readonly OwniTool[], isBriefThread: (thread: { channel: string; threadId: string }) => Promise<boolean>): OwniTool[] {
 	return tools.map((tool) =>
 		READ_ONLY_TOOLS.has(tool.name)
 			? tool

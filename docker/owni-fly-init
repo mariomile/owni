@@ -3,15 +3,15 @@
 # network before anything else: no packet goes out except on loopback and as a reply to a
 # connection that came in (a machine has no services, so none does). It takes away Fly's API
 # socket inside the machine, which no firewall sees. Only then does it mark the machine sealed;
-# annie-run starts no command on a machine that is not, checks the firewall again before each
+# owni-run starts no command on a machine that is not, checks the firewall again before each
 # one, and gives commands no vsock or packet socket. Then it waits: with no call and no command
-# for ANNIE_IDLE_S seconds it returns, and the machine stops by itself, even if whoever started
+# for OWNI_IDLE_S seconds it returns, and the machine stops by itself, even if whoever started
 # it is gone. Any step failing ends it here (set -e): the machine stops, sealed or not at all.
 set -eu
-rm -f /run/annie/sealed
-mkdir -p /run/annie
+rm -f /run/owni/sealed
+mkdir -p /run/owni
 # State in memory: nothing of a previous boot, no stale seal.
-mount -t tmpfs -o mode=0700,nosuid,nodev,noexec,size=16m tmpfs /run/annie
+mount -t tmpfs -o mode=0700,nosuid,nodev,noexec,size=16m tmpfs /run/owni
 for table in iptables ip6tables; do
 	"$table" -P OUTPUT DROP
 	"$table" -F OUTPUT
@@ -27,5 +27,5 @@ fi
 mount -t tmpfs -o mode=1777,nosuid,nodev,size=256m tmpfs /tmp
 # The volume comes up owned by root; only its top folder changes hands.
 chown 1000:1000 /work
-echo rules > /run/annie/sealed
-exec /usr/local/bin/annie-run idle "${ANNIE_IDLE_S:-600}"
+echo rules > /run/owni/sealed
+exec /usr/local/bin/owni-run idle "${OWNI_IDLE_S:-600}"

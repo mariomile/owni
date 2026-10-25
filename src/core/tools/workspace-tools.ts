@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import { readPdfPage } from "../document-reader.ts";
 import { DocumentTexts } from "../document-texts.ts";
 import { DocumentError, type DocumentText, documentKind, documentLabel, documentPartsLabel, documentSectionAt, looksLikeDocument, oldFormatAdvice, signedPlainText } from "../documents.ts";
-import type { AnnieTool } from "../engine.ts";
+import type { OwniTool } from "../engine.ts";
 import { parseQuery, QUERY_LIMITS, type QueryTerm } from "../text-match.ts";
 import { imageProblem, imageType } from "../images.ts";
 import { inertMarkers } from "../untrusted.ts";
@@ -22,7 +22,7 @@ const MAX_READ = 100_000;
 const pathParam = { type: "string", description: "Relative path in the workspace, e.g. report/ottobre.md", minLength: 1, maxLength: 300 };
 
 /** The instance's file tools: write, read, search, list, delete, and send to the current conversation. */
-export function createWorkspaceTools(options: WorkspaceToolsOptions): AnnieTool[] {
+export function createWorkspaceTools(options: WorkspaceToolsOptions): OwniTool[] {
 	const { workspace } = options;
 	/** This instance's documents' text, so reading a long one in pieces or searching again does not parse it each time. */
 	const texts = new DocumentTexts();

@@ -5,7 +5,7 @@ import type { CellProvider, CellStatus } from "./provider.ts";
 export type RailwayCellOptions = {
 	/** An account or workspace token (Authorization: Bearer). Never logged. */
 	readonly token: string;
-	/** A public image of Owni, e.g. ghcr.io/<owner>/annie:latest (built by .github/workflows/image.yml). */
+	/** A public image of Owni, e.g. ghcr.io/<owner>/owni:latest (built by .github/workflows/image.yml). */
 	readonly image: string;
 	/** Where the control plane keeps which Railway project is which cell. */
 	readonly dataDir: string;
@@ -82,18 +82,18 @@ export class RailwayCellProvider implements CellProvider {
 		assertId(id);
 		if (this.record(id) !== undefined) throw new Error(`Cell ${id} exists`);
 		const project = (await this.gql<{ projectCreate: { id: string; environments: { edges: { node: { id: string; name: string } }[] } } }>(GQL.projectCreate, {
-			input: { name: `annie-${id}`, ...(this.options.workspaceId === undefined ? {} : { teamId: this.options.workspaceId }) },
+			input: { name: `owni-${id}`, ...(this.options.workspaceId === undefined ? {} : { teamId: this.options.workspaceId }) },
 		})).projectCreate;
 		const environmentId = project.environments.edges[0]?.node.id;
 		try {
 			if (environmentId === undefined) throw new Error(`Railway project for ${id} has no environment`);
 			const scope = { projectId: project.id, environmentId };
-			const serviceId = (await this.gql<{ serviceCreate: { id: string } }>(GQL.serviceCreate, { input: { projectId: project.id, name: "annie", source: { image: this.options.image } } })).serviceCreate.id;
+			const serviceId = (await this.gql<{ serviceCreate: { id: string } }>(GQL.serviceCreate, { input: { projectId: project.id, name: "owni", source: { image: this.options.image } } })).serviceCreate.id;
 			// Region first, so the volume (the tenant's data) is made in the EU.
 			await this.gql(GQL.instance, { serviceId, environmentId, input: { sleepApplication: true, region: this.options.region ?? DEFAULT_REGION, healthcheckPath: "/healthz" } });
 			await this.gql(GQL.volumeCreate, { input: { ...scope, serviceId, mountPath: "/data" } });
 			await this.gql(GQL.variables, {
-				input: { ...scope, serviceId, skipDeploys: true, variables: { ...env, ANNIE_DATA_DIR: "/data", ANNIE_WEB_HOST: "0.0.0.0", ANNIE_WEB_PORT: "8080", PORT: "8080" } },
+				input: { ...scope, serviceId, skipDeploys: true, variables: { ...env, OWNI_DATA_DIR: "/data", OWNI_WEB_HOST: "0.0.0.0", OWNI_WEB_PORT: "8080", PORT: "8080" } },
 			});
 			const domain = (await this.gql<{ serviceDomainCreate: { domain: string } }>(GQL.domain, { input: { environmentId, serviceId, targetPort: 8080 } })).serviceDomainCreate.domain;
 			this.save(id, { ...scope, serviceId, domain, deployed: false, awake: false });

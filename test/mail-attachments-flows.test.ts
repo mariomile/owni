@@ -3,7 +3,7 @@ import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { type RunningAnnie, startAnnie } from "../src/app.ts";
+import { type RunningOwni, startOwni } from "../src/app.ts";
 import { GOOGLE_SCOPE, GOOGLE_WRITE_SCOPE } from "../src/connectors/google.ts";
 import { AGENT_CHANNEL } from "../src/core/agent-messages.ts";
 import { readOnlyInBriefs } from "../src/core/brief.ts";
@@ -20,7 +20,7 @@ import { quoteMailProblem } from "../src/core/quote-mail.ts";
 import { QuoteStore } from "../src/core/quote-store.ts";
 import { createQuoteTools, type QuoteEvent } from "../src/core/tools/quote-tools.ts";
 import { Workspace } from "../src/core/workspace.ts";
-import { loadAnnieConfig } from "../src/main/config.ts";
+import { loadOwniConfig } from "../src/main/config.ts";
 import { B70, BETA, cleanTemp, FILES, fakeMail, fattura, G1, G2, GAMMA, inside, outside, type Party, setup, TUESDAY } from "./solleciti-fixtures.ts";
 import { loadTools } from "./helpers.ts";
 
@@ -33,7 +33,7 @@ afterEach(async () => {
 });
 
 function temp(): string {
-	const dir = mkdtempSync(join(tmpdir(), "annie-mail-flows-"));
+	const dir = mkdtempSync(join(tmpdir(), "owni-mail-flows-"));
 	dirs.push(dir);
 	return dir;
 }
@@ -459,14 +459,14 @@ describe("attachments in the app, through the approval card", () => {
 	it("a quote and a sollecito with their files reach Gmail only once approved, byte for byte; the audit has counts only", async () => {
 		const dataDir = temp();
 		const google = fakeGoogle();
-		const config = loadAnnieConfig({ ANNIE_DATA_DIR: dataDir, ANNIE_MODEL_PROVIDER: "faux", ANNIE_WEB_PORT: "1", ANNIE_GOOGLE_CLIENT_ID: "c", ANNIE_GOOGLE_CLIENT_SECRET: "s", ANNIE_GOOGLE_WRITE: "1" });
-		const annie: RunningAnnie = await startAnnie({ ...config, web: { ...config.web, port: 0 } }, { googleFetch: google.fetch, schedulerIntervalMs: 60_000, log: () => {} });
-		closers.push(() => annie.stop());
-		const base = `http://127.0.0.1:${(annie.server.address() as AddressInfo).port}`;
-		const login = await fetch(`${base}/api/login`, { method: "POST", headers: { "x-annie": "1" }, body: JSON.stringify({ token: (annie.ownerLink as string).split("#")[1] }) });
+		const config = loadOwniConfig({ OWNI_DATA_DIR: dataDir, OWNI_MODEL_PROVIDER: "faux", OWNI_WEB_PORT: "1", OWNI_GOOGLE_CLIENT_ID: "c", OWNI_GOOGLE_CLIENT_SECRET: "s", OWNI_GOOGLE_WRITE: "1" });
+		const owni: RunningOwni = await startOwni({ ...config, web: { ...config.web, port: 0 } }, { googleFetch: google.fetch, schedulerIntervalMs: 60_000, log: () => {} });
+		closers.push(() => owni.stop());
+		const base = `http://127.0.0.1:${(owni.server.address() as AddressInfo).port}`;
+		const login = await fetch(`${base}/api/login`, { method: "POST", headers: { "x-owni": "1" }, body: JSON.stringify({ token: (owni.ownerLink as string).split("#")[1] }) });
 		const cookie = (login.headers.get("set-cookie") ?? "").split(";")[0] as string;
 		const api = async (path: string, body?: unknown, method?: string) => {
-			const res = await fetch(`${base}${path}`, { method: method ?? (body === undefined ? "GET" : "POST"), headers: { cookie, "x-annie": "1" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+			const res = await fetch(`${base}${path}`, { method: method ?? (body === undefined ? "GET" : "POST"), headers: { cookie, "x-owni": "1" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
 			// biome-ignore lint: test
 			return (await res.json()) as any;
 		};
@@ -479,10 +479,10 @@ describe("attachments in the app, through the approval card", () => {
 		const thread = (await api(`/api/instances/${config.instanceId}/threads`, {})).thread as { id: string };
 		const entries = async () => (await api(`/api/instances/${config.instanceId}/threads/${thread.id}`)).entries as { from: string; text?: string }[];
 		const reply = async (text: string): Promise<string> => {
-			const before = (await entries()).filter((e) => e.from === "annie").length;
+			const before = (await entries()).filter((e) => e.from === "owni").length;
 			await api(`/api/instances/${config.instanceId}/threads/${thread.id}/messages`, { text });
 			for (const start = Date.now(); Date.now() - start < 30_000; ) {
-				const now = (await entries()).filter((e) => e.from === "annie");
+				const now = (await entries()).filter((e) => e.from === "owni");
 				if (now.length > before) return now.at(-1)?.text ?? "";
 				await new Promise((r) => setTimeout(r, 30));
 			}
@@ -505,7 +505,7 @@ describe("attachments in the app, through the approval card", () => {
 			const before = (await entries()).length;
 			await api(`/api/instances/${config.instanceId}/threads/${thread.id}/messages`, { text });
 			for (const start = Date.now(); Date.now() - start < 30_000; ) {
-				const found = (await entries()).slice(before).find((e) => e.from === "annie" && e.text?.includes(mark));
+				const found = (await entries()).slice(before).find((e) => e.from === "owni" && e.text?.includes(mark));
 				if (found !== undefined) return found.text ?? "";
 				await new Promise((r) => setTimeout(r, 30));
 			}

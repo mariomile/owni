@@ -1,4 +1,4 @@
-import { AnnieRuntime } from "../../src/core/runtime.ts";
+import { OwniRuntime } from "../../src/core/runtime.ts";
 import { piDurableEngine } from "../../src/core/adapters/pi-durable.ts";
 import type { DurableEngine } from "../../src/core/engine.ts";
 const dataDir = process.argv[2]!;
@@ -14,9 +14,9 @@ const engine: DurableEngine = { async open(options) {
 		const value = Reflect.get(target, key); return typeof value === "function" ? value.bind(target) : value;
 	} });
 } };
-const runtime = new AnnieRuntime({ dataDir, engine, tools: [{ name: "slow", description: "held", replaySafe: true, parameters: { type: "object", properties: {} }, async execute(_args, ctx) { began(); await new Promise<void>((resolve) => ctx.signal.addEventListener("abort", () => resolve(), { once: true })); return "stopped"; } }] });
+const runtime = new OwniRuntime({ dataDir, engine, tools: [{ name: "slow", description: "held", replaySafe: true, parameters: { type: "object", properties: {} }, async execute(_args, ctx) { began(); await new Promise<void>((resolve) => ctx.signal.addEventListener("abort", () => resolve(), { once: true })); return "stopped"; } }] });
 await runtime.registry.createTenant({ id: "acme", name: "Acme" });
-await runtime.registry.createInstance("acme", { id: "ops", name: "Ops", model: { provider: "faux", modelId: "annie-dev" }, egress: { modelProviders: ["faux"], channels: ["test"] }, allowedUsers: { test: ["u"] } });
+await runtime.registry.createInstance("acme", { id: "ops", name: "Ops", model: { provider: "faux", modelId: "owni-dev" }, egress: { modelProviders: ["faux"], channels: ["test"] }, allowedUsers: { test: ["u"] } });
 setInterval(() => {}, 1_000);
 if (mode === "admission") runtime.onRunEvent((event) => { if (event.run.status === "succeeded") console.log("ADMITTED_OUTCOME"); });
 await runtime.submit({ tenantId: "acme", instanceId: "ops", channel: "test", threadId: "one", userId: "u", text: mode === "admission" ? "hello" : "/tool slow {}", messageId: "first" });

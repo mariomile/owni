@@ -1,6 +1,6 @@
 import { makeDocumentFile } from "../document-reader.ts";
 import { DocumentError, documentKind } from "../documents.ts";
-import type { AnnieTool } from "../engine.ts";
+import type { OwniTool } from "../engine.ts";
 import { MAKE_LIMITS, type MakeFormat, picturePaths } from "../make-document.ts";
 import { type Workspace, WorkspaceError } from "../workspace.ts";
 
@@ -12,7 +12,7 @@ const MAX_TEXT = 400_000;
 const FORMATS: Record<string, { format: MakeFormat; label: string }> = { docx: { format: "docx", label: "Word" }, xlsx: { format: "xlsx", label: "Excel" }, pdf: { format: "pdf", label: "PDF" } };
 
 /** Creating Word, Excel and PDF files from Markdown or a CSV (ADR 0029), in the workspace, to send with file_send. */
-export function createDocumentTools(options: DocumentToolsOptions): AnnieTool[] {
+export function createDocumentTools(options: DocumentToolsOptions): OwniTool[] {
 	const { workspace } = options;
 	return [
 		{

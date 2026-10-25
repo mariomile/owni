@@ -125,16 +125,16 @@ function faceSeed(id) {
 
 /** The look of an agente: the same id always gives the same face. Owni, the first, stays in the console's own black and white (--face-mono). */
 function faceLook(agent) {
-	const id = agent?.id ?? agent?.instanceId ?? agent?.name ?? "annie";
+	const id = agent?.id ?? agent?.instanceId ?? agent?.name ?? "owni";
 	// One hash per trait, so that the traits do not move together.
 	const pick = (trait, list) => list[faceSeed(`${id}:${trait}`) % list.length];
-	const annie = id === "annie";
+	const owni = id === "owni";
 	return {
-		color: annie ? "var(--face-mono)" : pick("color", FACE_COLORS),
-		eye: annie ? "var(--face-mono-eye)" : "#111",
-		shape: annie ? "round" : pick("shape", Object.keys(FACE_SHAPES)),
-		eyes: annie ? "tall" : pick("eyes", ["dot", "tall", "wide"]),
-		extra: annie ? "none" : pick("extra", ["none", "antenna", "cheeks", "brow"]),
+		color: owni ? "var(--face-mono)" : pick("color", FACE_COLORS),
+		eye: owni ? "var(--face-mono-eye)" : "#111",
+		shape: owni ? "round" : pick("shape", Object.keys(FACE_SHAPES)),
+		eyes: owni ? "tall" : pick("eyes", ["dot", "tall", "wide"]),
+		extra: owni ? "none" : pick("extra", ["none", "antenna", "cheeks", "brow"]),
 		delay: faceSeed(id) % 5000,
 	};
 }
@@ -194,7 +194,7 @@ export function thinking(agents) {
 
 /** An empty page or list: the agente's face waiting, what is missing, and how to fill it. */
 export function emptyNote(tag, title, ...text) {
-	return h(tag, h("span.empty-mark", { "aria-hidden": "true" }, face(state.instance ?? { id: "annie" }, 40)), h("b", title), ...text);
+	return h(tag, h("span.empty-mark", { "aria-hidden": "true" }, face(state.instance ?? { id: "owni" }, 40)), h("b", title), ...text);
 }
 
 /** A tile with a service's first letter, in a colour of its own: the catalog has no logos. */
@@ -302,7 +302,7 @@ export class ApiError extends Error {
 export async function api(path, { method = "GET", body, raw } = {}) {
 	const res = await fetch(path, {
 		method,
-		headers: { "x-annie": "1", ...(raw ? { "content-type": "application/octet-stream" } : body !== undefined ? { "content-type": "application/json" } : {}) },
+		headers: { "x-owni": "1", ...(raw ? { "content-type": "application/octet-stream" } : body !== undefined ? { "content-type": "application/json" } : {}) },
 		body: raw ?? (body === undefined ? undefined : JSON.stringify(body)),
 		credentials: "same-origin",
 	});
@@ -310,7 +310,7 @@ export async function api(path, { method = "GET", body, raw } = {}) {
 	if (res.status === 401 && !path.startsWith("/api/login")) {
 		state.me = undefined;
 		// The session shows the login: this module imports nothing.
-		window.dispatchEvent(new Event("annie:unauthorized"));
+		window.dispatchEvent(new Event("owni:unauthorized"));
 		throw new ApiError(401, data.error ?? "Accesso richiesto");
 	}
 	if (!res.ok) throw new ApiError(res.status, data.error ?? `Errore ${res.status}`, data);
@@ -397,7 +397,7 @@ export function selectInstance(id) {
 		state.setup = undefined;
 		state.setupLeft = 0;
 	}
-	store("annie.instance", id);
+	store("owni.instance", id);
 	return true;
 }
 

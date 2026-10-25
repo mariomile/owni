@@ -68,7 +68,7 @@ export function salesEnvOf(options: SalesEnvOptions): SalesEnv {
 	const { whoIs, record, now: clock, make, ...stores } = options;
 	const now = clock ?? (() => new Date());
 	// The approver of another agente's request is who said yes (ADR 0108); outside a conversation, Owni herself.
-	const who = (ctx: ToolContext) => ctx.approvedBy ?? (ctx.thread === undefined ? "annie" : (whoIs(ctx.thread) ?? `${ctx.thread.channel}:${ctx.thread.threadId}`));
+	const who = (ctx: ToolContext) => ctx.approvedBy ?? (ctx.thread === undefined ? "owni" : (whoIs(ctx.thread) ?? `${ctx.thread.channel}:${ctx.thread.threadId}`));
 	return {
 		...stores,
 		now,

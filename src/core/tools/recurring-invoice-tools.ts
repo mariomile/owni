@@ -9,7 +9,7 @@
  */
 import { AGENT_CHANNEL } from "../agent-messages.ts";
 import { type Candidate, FORM_NOTE, findNamed } from "../client-find.ts";
-import type { AnnieTool, ToolContext } from "../engine.ts";
+import type { OwniTool, ToolContext } from "../engine.ts";
 import { todayIn } from "../italian-calendar.ts";
 import type { Marker } from "../marker.ts";
 import { PeriodError, readPeriod } from "../periods.ts";
@@ -87,10 +87,10 @@ const PERSON_OPS: Partial<Record<RecurringOp, string>> = {
 	remove: "tolgo la fattura ricorrente",
 };
 
-export function createRecurringInvoiceTools(options: RecurringToolsOptions): AnnieTool[] {
+export function createRecurringInvoiceTools(options: RecurringToolsOptions): OwniTool[] {
 	const env: RecurringEnv = options;
 	const { store, timeZone, sales } = env;
-	const who = (ctx: ToolContext) => (ctx.thread === undefined ? "annie" : (options.whoIs(ctx.thread) ?? `${ctx.thread.channel}:${ctx.thread.threadId}`));
+	const who = (ctx: ToolContext) => (ctx.thread === undefined ? "owni" : (options.whoIs(ctx.thread) ?? `${ctx.thread.channel}:${ctx.thread.threadId}`));
 	const marker = (ctx: ToolContext): Marker => ({ by: who(ctx), at: env.now().toISOString() });
 	const audit = async (ctx: ToolContext, op: RecurringEvent["op"], count: number) => {
 		// Its own step: an audit that failed is written on the rerun, after the change it records.

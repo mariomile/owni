@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
-import { type RunningAnnie, startAnnie } from "../src/app.ts";
+import { type RunningOwni, startOwni } from "../src/app.ts";
 import { readOnlyInBriefs } from "../src/core/brief.ts";
 import type { ToolContext } from "../src/core/engine.ts";
 import { checkCodiceFiscale, checkVatNumber, EU_VAT_COUNTRIES, euVatProblem, normalizeTaxId, parseTaxId, partitaIvaProblem } from "../src/core/tax-ids.ts";
@@ -10,7 +10,7 @@ import { fence, inertMarkers, untrusted } from "../src/core/untrusted.ts";
 import { answerOf, DEFAULT_VIES_URL, viesCheckUrl, viesClient, ViesError, type ViesOptions } from "../src/core/vies.ts";
 import { dailyLimit } from "../src/core/web-search.ts";
 import { runChecks } from "../src/main/check.ts";
-import { loadAnnieConfig } from "../src/main/config.ts";
+import { loadOwniConfig } from "../src/main/config.ts";
 import { tempDataDir } from "./helpers.ts";
 
 const closers: (() => Promise<void>)[] = [];
@@ -660,59 +660,59 @@ describe("untrusted", () => {
 });
 
 describe("VIES configuration", () => {
-	const base = { ANNIE_DATA_DIR: "/tmp/annie-vat", ANNIE_MODEL_PROVIDER: "faux" };
+	const base = { OWNI_DATA_DIR: "/tmp/owni-vat", OWNI_MODEL_PROVIDER: "faux" };
 
-	it("is off unless the operator sets ANNIE_VAT_CHECK=1; then the Commission's REST API, 200 requests a day per account, 2000 for the server", () => {
-		expect(loadAnnieConfig(base).vatCheck).toBeUndefined();
-		expect(loadAnnieConfig({ ...base, ANNIE_VAT_CHECK: "0" }).vatCheck).toBeUndefined();
-		expect(loadAnnieConfig({ ...base, ANNIE_VAT_CHECK: "1" }).vatCheck).toEqual({ url: "https://ec.europa.eu/taxation_customs/vies/rest-api", maxPerDay: 200, maxPerDayServer: 2000 });
-		expect(loadAnnieConfig({ ...base, ANNIE_VAT_CHECK: "true", ANNIE_VAT_CHECK_URL: "http://localhost:8080/vies", ANNIE_VAT_CHECK_MAX_PER_DAY: "50", ANNIE_VAT_CHECK_MAX_PER_DAY_SERVER: "500" }).vatCheck).toEqual({ url: "http://localhost:8080/vies", maxPerDay: 50, maxPerDayServer: 500 });
+	it("is off unless the operator sets OWNI_VAT_CHECK=1; then the Commission's REST API, 200 requests a day per account, 2000 for the server", () => {
+		expect(loadOwniConfig(base).vatCheck).toBeUndefined();
+		expect(loadOwniConfig({ ...base, OWNI_VAT_CHECK: "0" }).vatCheck).toBeUndefined();
+		expect(loadOwniConfig({ ...base, OWNI_VAT_CHECK: "1" }).vatCheck).toEqual({ url: "https://ec.europa.eu/taxation_customs/vies/rest-api", maxPerDay: 200, maxPerDayServer: 2000 });
+		expect(loadOwniConfig({ ...base, OWNI_VAT_CHECK: "true", OWNI_VAT_CHECK_URL: "http://localhost:8080/vies", OWNI_VAT_CHECK_MAX_PER_DAY: "50", OWNI_VAT_CHECK_MAX_PER_DAY_SERVER: "500" }).vatCheck).toEqual({ url: "http://localhost:8080/vies", maxPerDay: 50, maxPerDayServer: 500 });
 	});
 
-	it("refuses bad values and overrides without ANNIE_VAT_CHECK=1", () => {
-		const on = { ...base, ANNIE_VAT_CHECK: "1" };
-		expect(() => loadAnnieConfig({ ...base, ANNIE_VAT_CHECK: "si" })).toThrow("ANNIE_VAT_CHECK: 1 to look VAT numbers up in the EU's VIES, 0 (default) for the formal check only");
-		expect(() => loadAnnieConfig({ ...base, ANNIE_VAT_CHECK_URL: BASE })).toThrow("ANNIE_VAT_CHECK_URL set without ANNIE_VAT_CHECK=1");
-		expect(() => loadAnnieConfig({ ...base, ANNIE_VAT_CHECK_MAX_PER_DAY: "5" })).toThrow("ANNIE_VAT_CHECK_MAX_PER_DAY set without ANNIE_VAT_CHECK=1");
-		expect(() => loadAnnieConfig({ ...on, ANNIE_VAT_CHECK_URL: "http://vies.example/" })).toThrow("ANNIE_VAT_CHECK_URL: an https address (http only on localhost)");
-		expect(() => loadAnnieConfig({ ...on, ANNIE_VAT_CHECK_URL: "https://u:p@vies.example/" })).toThrow("no user name or password");
-		expect(() => loadAnnieConfig({ ...on, ANNIE_VAT_CHECK_URL: "https://vies.example/?x=1" })).toThrow("without a query or a fragment");
-		for (const value of ["0", "1.5", "abc", "100001"]) expect(() => loadAnnieConfig({ ...on, ANNIE_VAT_CHECK_MAX_PER_DAY: value })).toThrow("ANNIE_VAT_CHECK_MAX_PER_DAY: a whole number from 1 to 100000");
-		for (const value of ["0", "2.5", "1000001"]) expect(() => loadAnnieConfig({ ...on, ANNIE_VAT_CHECK_MAX_PER_DAY_SERVER: value })).toThrow("ANNIE_VAT_CHECK_MAX_PER_DAY_SERVER: a whole number from 1 to 1000000");
-		expect(() => loadAnnieConfig({ ...base, ANNIE_VAT_CHECK_MAX_PER_DAY_SERVER: "5" })).toThrow("ANNIE_VAT_CHECK_MAX_PER_DAY_SERVER set without ANNIE_VAT_CHECK=1");
+	it("refuses bad values and overrides without OWNI_VAT_CHECK=1", () => {
+		const on = { ...base, OWNI_VAT_CHECK: "1" };
+		expect(() => loadOwniConfig({ ...base, OWNI_VAT_CHECK: "si" })).toThrow("OWNI_VAT_CHECK: 1 to look VAT numbers up in the EU's VIES, 0 (default) for the formal check only");
+		expect(() => loadOwniConfig({ ...base, OWNI_VAT_CHECK_URL: BASE })).toThrow("OWNI_VAT_CHECK_URL set without OWNI_VAT_CHECK=1");
+		expect(() => loadOwniConfig({ ...base, OWNI_VAT_CHECK_MAX_PER_DAY: "5" })).toThrow("OWNI_VAT_CHECK_MAX_PER_DAY set without OWNI_VAT_CHECK=1");
+		expect(() => loadOwniConfig({ ...on, OWNI_VAT_CHECK_URL: "http://vies.example/" })).toThrow("OWNI_VAT_CHECK_URL: an https address (http only on localhost)");
+		expect(() => loadOwniConfig({ ...on, OWNI_VAT_CHECK_URL: "https://u:p@vies.example/" })).toThrow("no user name or password");
+		expect(() => loadOwniConfig({ ...on, OWNI_VAT_CHECK_URL: "https://vies.example/?x=1" })).toThrow("without a query or a fragment");
+		for (const value of ["0", "1.5", "abc", "100001"]) expect(() => loadOwniConfig({ ...on, OWNI_VAT_CHECK_MAX_PER_DAY: value })).toThrow("OWNI_VAT_CHECK_MAX_PER_DAY: a whole number from 1 to 100000");
+		for (const value of ["0", "2.5", "1000001"]) expect(() => loadOwniConfig({ ...on, OWNI_VAT_CHECK_MAX_PER_DAY_SERVER: value })).toThrow("OWNI_VAT_CHECK_MAX_PER_DAY_SERVER: a whole number from 1 to 1000000");
+		expect(() => loadOwniConfig({ ...base, OWNI_VAT_CHECK_MAX_PER_DAY_SERVER: "5" })).toThrow("OWNI_VAT_CHECK_MAX_PER_DAY_SERVER set without OWNI_VAT_CHECK=1");
 	});
 
 	it("reaches the cells of Owni Cloud", () => {
 		const passed = /const passed = \[([^\]]*)\]/.exec(readFileSync("src/main/cloud.ts", "utf8"))?.[1] ?? "";
-		for (const name of ["ANNIE_VAT_CHECK", "ANNIE_VAT_CHECK_URL", "ANNIE_VAT_CHECK_MAX_PER_DAY", "ANNIE_VAT_CHECK_MAX_PER_DAY_SERVER"]) expect(passed).toContain(`"${name}"`);
+		for (const name of ["OWNI_VAT_CHECK", "OWNI_VAT_CHECK_URL", "OWNI_VAT_CHECK_MAX_PER_DAY", "OWNI_VAT_CHECK_MAX_PER_DAY_SERVER"]) expect(passed).toContain(`"${name}"`);
 	});
 
-	it("pnpm annie check asks for a known partita IVA: active is ok; not active or a member state down a warning; no answer a failure", async () => {
-		const env = { ...base, ANNIE_VAT_CHECK: "1", ANNIE_VAT_CHECK_URL: BASE };
+	it("pnpm owni check asks for a known partita IVA: active is ok; not active or a member state down a warning; no answer a failure", async () => {
+		const env = { ...base, OWNI_VAT_CHECK: "1", OWNI_VAT_CHECK_URL: BASE };
 		const probe = url("IT", "00905811006");
-		const partitaIva = async (fake: ReturnType<typeof fakeVies>, config: Record<string, string> = env) => (await runChecks(loadAnnieConfig(config), fake.fetch)).find((r) => r.name === "Partita IVA");
+		const partitaIva = async (fake: ReturnType<typeof fakeVies>, config: Record<string, string> = env) => (await runChecks(loadOwniConfig(config), fake.fetch)).find((r) => r.name === "Partita IVA");
 		const off = fakeVies({});
 		expect(await partitaIva(off, base)).toBeUndefined();
 		expect(off.asked).toHaveLength(0);
 		expect(await partitaIva(fakeVies({ [probe]: VALID_IT }))).toEqual({ name: "Partita IVA", ok: true, detail: "vies.example risponde, la partita IVA di prova IT00905811006 risulta attiva" });
 		expect(await partitaIva(fakeVies({ [probe]: INVALID_IT }))).toEqual({ name: "Partita IVA", ok: true, detail: "vies.example risponde. Attenzione: la partita IVA di prova IT00905811006 risulta non attiva: aggiorna VIES_PROBE in src/main/check.ts" });
 		expect(await partitaIva(fakeVies({ [probe]: failing("MS_UNAVAILABLE") }))).toMatchObject({ ok: true, detail: expect.stringContaining("Attenzione: il servizio dell'Italia non risponde al VIES") });
-		expect(await partitaIva(fakeVies({}))).toEqual({ name: "Partita IVA", ok: false, detail: "il VIES risponde 404: controlla che vies.example sia raggiungibile, o ANNIE_VAT_CHECK_URL" });
+		expect(await partitaIva(fakeVies({}))).toEqual({ name: "Partita IVA", ok: false, detail: "il VIES risponde 404: controlla che vies.example sia raggiungibile, o OWNI_VAT_CHECK_URL" });
 		expect(await partitaIva(fakeVies({ [probe]: "<html>" }))).toMatchObject({ ok: false, detail: expect.stringContaining("illeggibile") });
 	});
 });
 
 describe("vat_check in an instance", () => {
-	it("is offered without ANNIE_VAT_CHECK, on paper only, asking nothing", async () => {
+	it("is offered without OWNI_VAT_CHECK, on paper only, asking nothing", async () => {
 		const fake = fakeVies({});
 		const { reply } = await boot(tempDataDir(), {}, fake.fetch);
 		expect(await reply('/tool vat_check {"number":"IT00000500157"}')).toContain("Il controllo nel VIES non è attivo su questo server");
 		expect(fake.asked).toHaveLength(0);
 	});
 
-	it("with ANNIE_VAT_CHECK=1 asks the VIES, and leaves no audit line with the number", async () => {
+	it("with OWNI_VAT_CHECK=1 asks the VIES, and leaves no audit line with the number", async () => {
 		const fake = fakeVies({ [url("IT", "00000500157")]: VALID_IT });
-		const { reply, dataDir } = await boot(tempDataDir(), { ANNIE_VAT_CHECK: "1", ANNIE_VAT_CHECK_URL: BASE }, fake.fetch);
+		const { reply, dataDir } = await boot(tempDataDir(), { OWNI_VAT_CHECK: "1", OWNI_VAT_CHECK_URL: BASE }, fake.fetch);
 		expect(await reply('/tool vat_check {"number":"00000500157"}')).toContain("Partita IVA IT00000500157 attiva nel VIES (");
 		expect(fake.asked.map((a) => a.url)).toEqual([url("IT", "00000500157")]);
 		const audit = readFileSync(`${dataDir}/tenants/default/audit.jsonl`, "utf8");
@@ -722,8 +722,8 @@ describe("vat_check in an instance", () => {
 
 	it("in the brief's thread it checks on paper only: the VIES is never asked", async () => {
 		const fake = fakeVies({ [url("IT", "00000500157")]: VALID_IT });
-		const { reply, api } = await boot(tempDataDir(), { ANNIE_VAT_CHECK: "1", ANNIE_VAT_CHECK_URL: BASE }, fake.fetch);
-		const brief = (await api("/api/instances/annie/brief", { time: "07:30" }, "PUT")).brief;
+		const { reply, api } = await boot(tempDataDir(), { OWNI_VAT_CHECK: "1", OWNI_VAT_CHECK_URL: BASE }, fake.fetch);
+		const brief = (await api("/api/instances/owni/brief", { time: "07:30" }, "PUT")).brief;
 		expect(await reply('/tool vat_check {"number":"00000500157"}', brief.threadId)).toContain("Per il controllo nel VIES scrivimi in un'altra conversazione: qui solo il controllo formale.");
 		expect(fake.asked).toHaveLength(0);
 		expect(await reply('/tool vat_check {"number":"00000500157"}')).toContain("attiva nel VIES");
@@ -732,22 +732,22 @@ describe("vat_check in an instance", () => {
 });
 
 async function boot(dataDir: string, env: Record<string, string>, vatCheckFetch: typeof fetch) {
-	const config = loadAnnieConfig({ ANNIE_DATA_DIR: dataDir, ANNIE_MODEL_PROVIDER: "faux", ANNIE_WEB_PORT: "1", ...env });
-	const annie: RunningAnnie = await startAnnie({ ...config, web: { ...config.web, port: 0 } }, { vatCheckFetch, schedulerIntervalMs: 60_000, log: () => {} });
-	closers.push(() => annie.stop());
-	const base = `http://127.0.0.1:${(annie.server.address() as AddressInfo).port}`;
-	const login = await fetch(`${base}/api/login`, { method: "POST", headers: { "x-annie": "1" }, body: JSON.stringify({ token: (annie.ownerLink as string).split("#")[1] }) });
+	const config = loadOwniConfig({ OWNI_DATA_DIR: dataDir, OWNI_MODEL_PROVIDER: "faux", OWNI_WEB_PORT: "1", ...env });
+	const owni: RunningOwni = await startOwni({ ...config, web: { ...config.web, port: 0 } }, { vatCheckFetch, schedulerIntervalMs: 60_000, log: () => {} });
+	closers.push(() => owni.stop());
+	const base = `http://127.0.0.1:${(owni.server.address() as AddressInfo).port}`;
+	const login = await fetch(`${base}/api/login`, { method: "POST", headers: { "x-owni": "1" }, body: JSON.stringify({ token: (owni.ownerLink as string).split("#")[1] }) });
 	const cookie = (login.headers.get("set-cookie") ?? "").split(";")[0] as string;
 	const api = async (path: string, body?: unknown, method = body === undefined ? "GET" : "POST") => {
-		const res = await fetch(`${base}${path}`, { method, headers: { cookie, "x-annie": "1" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+		const res = await fetch(`${base}${path}`, { method, headers: { cookie, "x-owni": "1" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
 		// biome-ignore lint: test
 		return (await res.json()) as any;
 	};
-	const thread = (await api("/api/instances/annie/threads", {})).thread;
+	const thread = (await api("/api/instances/owni/threads", {})).thread;
 	const reply = async (text: string, threadId: string = thread.id): Promise<string> => {
-		const answers = async () => ((await api(`/api/instances/annie/threads/${threadId}`)).entries as { from: string; text?: string }[]).filter((e) => e.from === "annie");
+		const answers = async () => ((await api(`/api/instances/owni/threads/${threadId}`)).entries as { from: string; text?: string }[]).filter((e) => e.from === "owni");
 		const before = (await answers()).length;
-		await api(`/api/instances/annie/threads/${threadId}/messages`, { text });
+		await api(`/api/instances/owni/threads/${threadId}/messages`, { text });
 		for (const start = Date.now(); Date.now() - start < 20_000; ) {
 			const now = await answers();
 			if (now.length > before) return now.at(-1)?.text ?? "";

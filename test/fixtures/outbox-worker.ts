@@ -15,7 +15,7 @@
 import { appendFileSync } from "node:fs";
 import { TelegramAdapter } from "../../src/channels/telegram.ts";
 import { piDurableEngine } from "../../src/core/adapters/pi-durable.ts";
-import { AnnieRuntime } from "../../src/core/index.ts";
+import { OwniRuntime } from "../../src/core/index.ts";
 import { connectChannel } from "../../src/gateway.ts";
 
 const [mode, dataDir, callsFile, send] = process.argv.slice(2) as [string, string, string, string];
@@ -35,7 +35,7 @@ const fakeFetch = (async (url: string | URL | Request, init?: RequestInit) => {
 	return Response.json({ ok: true, result: { message_id: 1 } });
 }) as typeof fetch;
 
-const runtime = new AnnieRuntime({ dataDir, engine: piDurableEngine });
+const runtime = new OwniRuntime({ dataDir, engine: piDurableEngine });
 const adapter = new TelegramAdapter({ token: "123:TEST", tenantId: "acme", instanceId: "ops", fetch: fakeFetch });
 connectChannel(runtime, adapter, { tenantId: "acme", instanceId: "ops" });
 
@@ -44,7 +44,7 @@ if (mode === "start") {
 	await runtime.registry.createInstance("acme", {
 		id: "ops",
 		name: "Ops",
-		model: { provider: "faux", modelId: "annie-dev" },
+		model: { provider: "faux", modelId: "owni-dev" },
 		egress: { modelProviders: ["faux"], channels: ["telegram"] },
 		allowedUsers: { telegram: ["7"] },
 	});

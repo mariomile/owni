@@ -6,7 +6,7 @@
 import { existsSync } from "node:fs";
 import { TelegramAdapter } from "../channels/telegram.ts";
 import { piDurableEngine } from "../core/adapters/pi-durable.ts";
-import { AnnieRuntime, createSlowCounter, modelApiKeySecret, NotFound } from "../core/index.ts";
+import { OwniRuntime, createSlowCounter, modelApiKeySecret, NotFound } from "../core/index.ts";
 import { connectChannel } from "../gateway.ts";
 import { ConfigError, loadTelegramConfig, type TelegramConfig } from "./config.ts";
 
@@ -17,13 +17,13 @@ try {
 	config = loadTelegramConfig(process.env);
 } catch (error) {
 	if (error instanceof ConfigError) {
-		console.error(`annie: ${error.message}`);
+		console.error(`owni: ${error.message}`);
 		process.exit(1);
 	}
 	throw error;
 }
 
-const runtime = new AnnieRuntime({ dataDir: config.dataDir, engine: piDurableEngine, tools: [createSlowCounter()] });
+const runtime = new OwniRuntime({ dataDir: config.dataDir, engine: piDurableEngine, tools: [createSlowCounter()] });
 await bootstrap(runtime, config);
 
 const adapter = new TelegramAdapter({
@@ -37,7 +37,7 @@ connectChannel(runtime, adapter, { tenantId: config.tenantId, instanceId: config
 const { pending } = await runtime.resume(config.tenantId, config.instanceId);
 await adapter.start();
 console.error(
-	`annie: tenant=${config.tenantId} instance=${config.instanceId} model=${config.modelProvider}/${config.modelId} ` +
+	`owni: tenant=${config.tenantId} instance=${config.instanceId} model=${config.modelProvider}/${config.modelId} ` +
 		`resumed=${pending}, listening on Telegram (Ctrl+C to stop)`,
 );
 
@@ -51,7 +51,7 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
 	});
 }
 
-async function bootstrap(runtime: AnnieRuntime, config: TelegramConfig): Promise<void> {
+async function bootstrap(runtime: OwniRuntime, config: TelegramConfig): Promise<void> {
 	try {
 		await runtime.registry.getTenant(config.tenantId);
 	} catch (error) {
@@ -62,8 +62,8 @@ async function bootstrap(runtime: AnnieRuntime, config: TelegramConfig): Promise
 		const instance = await runtime.registry.getInstance(config.tenantId, config.instanceId);
 		if (instance.model.provider !== config.modelProvider || instance.model.modelId !== config.modelId) {
 			console.error(
-				`annie: instance ${config.instanceId} is configured for ${instance.model.provider}/${instance.model.modelId}; ` +
-					`ANNIE_MODEL_PROVIDER/ANNIE_MODEL_ID are ignored for an existing instance.`,
+				`owni: instance ${config.instanceId} is configured for ${instance.model.provider}/${instance.model.modelId}; ` +
+					`OWNI_MODEL_PROVIDER/OWNI_MODEL_ID are ignored for an existing instance.`,
 			);
 		}
 	} catch (error) {
@@ -80,7 +80,7 @@ async function bootstrap(runtime: AnnieRuntime, config: TelegramConfig): Promise
 	}
 	const instance = await runtime.registry.getInstance(config.tenantId, config.instanceId);
 	if ((instance.allowedUsers.telegram ?? []).length === 0) {
-		console.error("annie: no Telegram user is allowed, every message will be rejected. Set ANNIE_TELEGRAM_ALLOWED_USERS in .env.");
+		console.error("owni: no Telegram user is allowed, every message will be rejected. Set OWNI_TELEGRAM_ALLOWED_USERS in .env.");
 	}
 	if (config.modelApiKey !== undefined) {
 		await runtime.secrets(config.tenantId).set(modelApiKeySecret(config.modelProvider), config.modelApiKey);

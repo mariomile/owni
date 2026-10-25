@@ -64,7 +64,7 @@ async function fakeDocker(options: { healthy?: boolean } = {}) {
 describe("Docker cell provider", () => {
 	it("a cell that never becomes healthy is stopped, and the tenant is not left stuck", async () => {
 		const docker = await fakeDocker({ healthy: false });
-		const provider = new DockerCellProvider({ image: "annie:local", socketPath: docker.socketPath, startTimeoutMs: 500 });
+		const provider = new DockerCellProvider({ image: "owni:local", socketPath: docker.socketPath, startTimeoutMs: 500 });
 		await provider.create("b1", {});
 		await expect(provider.start("b1")).rejects.toThrow(/did not answer in time/);
 		expect(await provider.status("b1")).toBe("stopped");
@@ -75,13 +75,13 @@ describe("Docker cell provider", () => {
 
 	it("creates each cell locked down, on a network where cells cannot reach each other, reachable only from this host", async () => {
 		const docker = await fakeDocker();
-		const provider = new DockerCellProvider({ image: "annie:local", socketPath: docker.socketPath });
-		await provider.create("a1", { ANNIE_TENANT_ID: "a1", ANNIE_CELL_SECRET: "s".repeat(32) });
+		const provider = new DockerCellProvider({ image: "owni:local", socketPath: docker.socketPath });
+		await provider.create("a1", { OWNI_TENANT_ID: "a1", OWNI_CELL_SECRET: "s".repeat(32) });
 		const create = docker.calls.find((c) => c.path.startsWith("/containers/create"))?.body;
-		expect(create.Env).toEqual(expect.arrayContaining(["ANNIE_TENANT_ID=a1", "ANNIE_DATA_DIR=/data", "ANNIE_WEB_HOST=0.0.0.0"]));
+		expect(create.Env).toEqual(expect.arrayContaining(["OWNI_TENANT_ID=a1", "OWNI_DATA_DIR=/data", "OWNI_WEB_HOST=0.0.0.0"]));
 		expect(create.HostConfig).toMatchObject({
-			Binds: ["annie-cell-a1:/data"],
-			NetworkMode: "annie-cells",
+			Binds: ["owni-cell-a1:/data"],
+			NetworkMode: "owni-cells",
 			PortBindings: { "8080/tcp": [{ HostIp: "127.0.0.1", HostPort: "" }] },
 			ReadonlyRootfs: true,
 			CapDrop: ["ALL"],
@@ -90,7 +90,7 @@ describe("Docker cell provider", () => {
 		});
 		expect(create.HostConfig.Memory).toBe(512 * 1024 * 1024);
 		expect(create.User).toBe("1000:1000");
-		expect(docker.calls.find((c) => c.path.startsWith("/networks/create"))?.body).toMatchObject({ Name: "annie-cells", Driver: "bridge", Options: { "com.docker.network.bridge.enable_icc": "false" } });
+		expect(docker.calls.find((c) => c.path.startsWith("/networks/create"))?.body).toMatchObject({ Name: "owni-cells", Driver: "bridge", Options: { "com.docker.network.bridge.enable_icc": "false" } });
 		// A second cell reuses the network.
 		await provider.create("a2", {});
 		expect(docker.calls.filter((c) => c.path.startsWith("/networks/create"))).toHaveLength(1);
@@ -101,31 +101,31 @@ describe("Docker cell provider", () => {
 		expect(await provider.baseUrl("a1")).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
 		expect(await provider.list()).toEqual(["a1"]);
 		// Upgrade: a new container with the cell's own environment changed, the volume kept, running again.
-		await provider.upgrade("a1", { ANNIE_MODEL_ID: "nuovo" });
+		await provider.upgrade("a1", { OWNI_MODEL_ID: "nuovo" });
 		const recreated = docker.calls.filter((c) => c.path.startsWith("/containers/create")).at(-1)?.body;
-		expect(recreated.Env).toEqual(expect.arrayContaining(["ANNIE_TENANT_ID=a1", `ANNIE_CELL_SECRET=${"s".repeat(32)}`, "ANNIE_MODEL_ID=nuovo"]));
+		expect(recreated.Env).toEqual(expect.arrayContaining(["OWNI_TENANT_ID=a1", `OWNI_CELL_SECRET=${"s".repeat(32)}`, "OWNI_MODEL_ID=nuovo"]));
 		expect(recreated.Env).not.toContain("PATH=/usr/local/bin");
-		expect(recreated.HostConfig.Binds).toEqual(["annie-cell-a1:/data"]);
-		expect(docker.calls.some((c) => c.method === "DELETE" && c.path.startsWith("/volumes/annie-cell-a1"))).toBe(false);
+		expect(recreated.HostConfig.Binds).toEqual(["owni-cell-a1:/data"]);
+		expect(docker.calls.some((c) => c.method === "DELETE" && c.path.startsWith("/volumes/owni-cell-a1"))).toBe(false);
 		expect(await provider.status("a1")).toBe("running");
 		await provider.stop("a1");
 		expect(await provider.status("a1")).toBe("stopped");
 		await provider.destroy("a1");
 		expect(await provider.status("a1")).toBe("missing");
-		expect(docker.calls.filter((c) => c.method === "DELETE" && c.path.includes("a1")).map((c) => c.path.split("?")[0])).toEqual(["/containers/annie-cell-a1", "/containers/annie-cell-a1", "/volumes/annie-cell-a1"]);
+		expect(docker.calls.filter((c) => c.method === "DELETE" && c.path.includes("a1")).map((c) => c.path.split("?")[0])).toEqual(["/containers/owni-cell-a1", "/containers/owni-cell-a1", "/volumes/owni-cell-a1"]);
 		await expect(provider.create("../x", {})).rejects.toThrow(/Invalid cell id/);
 		expect(() => new DockerCellProvider({ image: "x", memoryMb: Number.NaN })).toThrow(/128 MB/);
 	});
 });
 
-// With a Docker daemon and the Owni image: ANNIE_TEST_DOCKER_IMAGE=annie:local pnpm vitest run test/docker-provider.test.ts
-const image = process.env.ANNIE_TEST_DOCKER_IMAGE;
+// With a Docker daemon and the Owni image: OWNI_TEST_DOCKER_IMAGE=owni:local pnpm vitest run test/docker-provider.test.ts
+const image = process.env.OWNI_TEST_DOCKER_IMAGE;
 describe.skipIf(image === undefined)("Docker cell provider, real daemon", () => {
 	it("sign up through the control plane into a container cell, sleep, wake with the data still there", async () => {
 		const dataDir = tempDataDir();
 		const provider = new DockerCellProvider({ image: image as string });
 		const mailer = new MemoryMailer();
-		const cp = await startControlPlane({ dataDir, domain: "annie.test", publicScheme: "http", provider, mailer, cellEnv: { ANNIE_MODEL_PROVIDER: "faux" }, idleMs: 0, web: { host: "127.0.0.1", port: 0 }, tickMs: 0, log: () => {} });
+		const cp = await startControlPlane({ dataDir, domain: "owni.test", publicScheme: "http", provider, mailer, cellEnv: { OWNI_MODEL_PROVIDER: "faux" }, idleMs: 0, web: { host: "127.0.0.1", port: 0 }, tickMs: 0, log: () => {} });
 		closers.push(async () => {
 			await cp.stop();
 			for (const id of await provider.list()) await provider.destroy(id);
@@ -133,7 +133,7 @@ describe.skipIf(image === undefined)("Docker cell provider, real daemon", () => 
 		const port = (cp.server.address() as AddressInfo).port;
 		const call = (host: string, path: string, body?: unknown, cookie?: string) =>
 			new Promise<{ status: number; body: any; cookie: string }>((resolve, reject) => {
-				const req = request({ host: "127.0.0.1", port, path, method: body === undefined ? "GET" : "POST", headers: { host, "x-annie": "1", ...(cookie ? { cookie } : {}) } }, (res) => {
+				const req = request({ host: "127.0.0.1", port, path, method: body === undefined ? "GET" : "POST", headers: { host, "x-owni": "1", ...(cookie ? { cookie } : {}) } }, (res) => {
 					let text = "";
 					res.on("data", (c) => (text += c));
 					res.on("end", () => resolve({ status: res.statusCode ?? 0, body: text.startsWith("{") ? JSON.parse(text) : text, cookie: String(res.headers["set-cookie"] ?? "").split(";")[0] as string }));
@@ -141,17 +141,17 @@ describe.skipIf(image === undefined)("Docker cell provider, real daemon", () => 
 				req.on("error", reject);
 				req.end(body === undefined ? undefined : JSON.stringify(body));
 			});
-		expect((await call("annie.test", "/api/signup", { email: "anna@example.com" })).status).toBe(200);
+		expect((await call("owni.test", "/api/signup", { email: "anna@example.com" })).status).toBe(200);
 		const token = /#([\w-]+)/.exec(mailer.sent[0]?.text ?? "")?.[1];
 		const started = Date.now();
-		const verified = await call("annie.test", "/api/verify", { token });
+		const verified = await call("owni.test", "/api/verify", { token });
 		expect(verified.status).toBe(200);
 		const url = new URL(verified.body.loginUrl);
 		const login = await call(url.host, "/api/login", { token: url.hash.slice(1) });
 		expect(login.status).toBe(200);
-		const thread = (await call(url.host, "/api/instances/annie/threads", {}, login.cookie)).body.thread;
-		await call(url.host, `/api/instances/annie/threads/${thread.id}/messages`, { text: "ciao dal container" }, login.cookie);
-		const answered = async () => ((await call(url.host, `/api/instances/annie/threads/${thread.id}`, undefined, login.cookie)).body.entries as { from: string }[]).some((e) => e.from === "annie");
+		const thread = (await call(url.host, "/api/instances/owni/threads", {}, login.cookie)).body.thread;
+		await call(url.host, `/api/instances/owni/threads/${thread.id}/messages`, { text: "ciao dal container" }, login.cookie);
+		const answered = async () => ((await call(url.host, `/api/instances/owni/threads/${thread.id}`, undefined, login.cookie)).body.entries as { from: string }[]).some((e) => e.from === "owni");
 		while (!(await answered())) await new Promise((r) => setTimeout(r, 100));
 		console.log(`docker cell: sign-up to first answer in ${((Date.now() - started) / 1000).toFixed(1)} s`);
 		// Idle: stopped. The next request with a session wakes it, and the conversation is still there.
@@ -159,7 +159,7 @@ describe.skipIf(image === undefined)("Docker cell provider, real daemon", () => 
 		await cp.tick(new Date());
 		expect(await provider.status(tenant)).toBe("stopped");
 		const woke = Date.now();
-		const again = await call(url.host, `/api/instances/annie/threads/${thread.id}`, undefined, login.cookie);
+		const again = await call(url.host, `/api/instances/owni/threads/${thread.id}`, undefined, login.cookie);
 		console.log(`docker cell: wake in ${((Date.now() - woke) / 1000).toFixed(1)} s`);
 		expect(again.body.entries.some((e: { text?: string }) => e.text === "ciao dal container")).toBe(true);
 		// What a cell costs: memory while it runs, disk while it sleeps.
@@ -173,15 +173,15 @@ describe.skipIf(image === undefined)("Docker cell provider, real daemon", () => 
 				req.on("error", reject);
 				req.end();
 			});
-		const stats = await docker(`/containers/annie-cell-${tenant}/stats?stream=false`);
+		const stats = await docker(`/containers/owni-cell-${tenant}/stats?stream=false`);
 		console.log(`docker cell: ${Math.round((stats.memory_stats?.usage ?? 0) / 1024 / 1024)} MB of memory while running`);
 		// An upgrade keeps the conversation.
-		await provider.upgrade(tenant, { ANNIE_TIME_ZONE: "Europe/Berlin" });
-		const after = await call(url.host, `/api/instances/annie/threads/${thread.id}`, undefined, login.cookie);
+		await provider.upgrade(tenant, { OWNI_TIME_ZONE: "Europe/Berlin" });
+		const after = await call(url.host, `/api/instances/owni/threads/${thread.id}`, undefined, login.cookie);
 		expect(after.body.entries.some((e: { text?: string }) => e.text === "ciao dal container")).toBe(true);
 		await provider.stop(tenant);
 		const df = await docker("/system/df");
-		const volume = (df.Volumes as { Name: string; UsageData?: { Size?: number } }[]).find((v) => v.Name === `annie-cell-${tenant}`);
+		const volume = (df.Volumes as { Name: string; UsageData?: { Size?: number } }[]).find((v) => v.Name === `owni-cell-${tenant}`);
 		console.log(`docker cell: ${((volume?.UsageData?.Size ?? 0) / 1024 / 1024).toFixed(1)} MB on disk while asleep`);
 	}, 180_000);
 });

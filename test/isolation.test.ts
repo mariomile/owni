@@ -2,7 +2,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { piDurableEngine } from "../src/core/adapters/pi-durable.ts";
-import { AnnieRuntime, type DurableEngine, type EngineOpenOptions, modelApiKeySecret, type Reply, tenantId } from "../src/core/index.ts";
+import { OwniRuntime, type DurableEngine, type EngineOpenOptions, modelApiKeySecret, type Reply, tenantId } from "../src/core/index.ts";
 import { FAUX_MODEL, tempDataDir, waitFor } from "./helpers.ts";
 
 /** Records what the core hands to the engine, without running anything. */
@@ -33,7 +33,7 @@ function filesUnder(dir: string): string[] {
 describe("tenant isolation", () => {
 	it("keeps storage, secrets and audit of two tenants apart", async () => {
 		const dataDir = tempDataDir();
-		const runtime = new AnnieRuntime({ dataDir, engine: piDurableEngine });
+		const runtime = new OwniRuntime({ dataDir, engine: piDurableEngine });
 		for (const tenant of ["acme", "globex"]) {
 			await runtime.registry.createTenant({ id: tenant, name: tenant });
 			await runtime.registry.createInstance(tenant, { id: "ops", name: "ops", model: FAUX_MODEL, egress: { modelProviders: ["faux"], channels: ["test"] }, allowedUsers: { test: ["u"] } });
@@ -84,7 +84,7 @@ describe("tenant isolation", () => {
 	it("hands an instance only its own tenant's model key, and only for allowed providers", async () => {
 		const dataDir = tempDataDir();
 		const opened: EngineOpenOptions[] = [];
-		const runtime = new AnnieRuntime({ dataDir, engine: recordingEngine(opened) });
+		const runtime = new OwniRuntime({ dataDir, engine: recordingEngine(opened) });
 		for (const tenant of ["acme", "globex"]) {
 			await runtime.registry.createTenant({ id: tenant, name: tenant });
 			await runtime.registry.createInstance(tenant, {

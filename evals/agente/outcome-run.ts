@@ -17,7 +17,7 @@ try {
 	}
 } catch (error) { errors.push(String(error)); }
 const status = errors.length || rows.some((r) => r.status === "error") ? "error" : rows.some((r) => r.status === "failed") ? "failed" : "passed";
-const report = { at: new Date().toISOString(), kind: "integration-outcome-contract", model: { provider: "faux", model: "annie-dev" }, status, selectedCases, measuredCases: rows.length, passedCases: rows.filter((r) => r.status === "passed").length, errors, rows };
+const report = { at: new Date().toISOString(), kind: "integration-outcome-contract", model: { provider: "faux", model: "owni-dev" }, status, selectedCases, measuredCases: rows.length, passedCases: rows.filter((r) => r.status === "passed").length, errors, rows };
 const dir = join(dirname(fileURLToPath(import.meta.url)), "last-report");
 await mkdir(dir, { recursive: true });
 await writeFile(join(dir, "outcomes.json"), `${JSON.stringify(report, null, 2)}\n`);

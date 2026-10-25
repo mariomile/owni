@@ -3,4 +3,4 @@
 // instead of keeping the data folder locked.
 process.stdin.on("end", () => process.kill(process.pid, "SIGTERM"));
 process.stdin.resume();
-await import("./dist/main/annie.js");
+await import("./dist/main/owni.js");

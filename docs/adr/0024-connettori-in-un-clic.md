@@ -5,7 +5,7 @@ Fino alla settimana 28 un connettore MCP si aggiungeva a mano: URL, header segre
 ## Come funziona
 
 - **Il catalogo** (`src/connectors/catalog.ts`): servizi con un server MCP remoto ufficiale (Streamable HTTP), con nome, descrizione in italiano, indirizzo, tipo di accesso (account, token, nessuno) e gruppo. Indirizzi controllati il 17 ottobre 2026 sugli elenchi pubblici dei fornitori. Fuori, per ora, chi accetta solo app approvate prima (Asana, Vercel).
-- **Accesso con l'account**: il flusso di autorizzazione MCP con l'SDK (`auth()`), Owni come client pubblico registrato da sola (registrazione dinamica), PKCE. «Accedi e aggiungi» avvia l'accesso prima di salvare: se il servizio rifiuta, non resta niente. Il servizio rimanda a `<indirizzo della console>/oauth/mcp/callback` (`ANNIE_PUBLIC_URL`, o l'indirizzo del link di login), che passa codice e stato alla console nel frammento; la console chiude con una sua richiesta, che porta la sessione (come per Google, ADR 0005).
+- **Accesso con l'account**: il flusso di autorizzazione MCP con l'SDK (`auth()`), Owni come client pubblico registrato da sola (registrazione dinamica), PKCE. «Accedi e aggiungi» avvia l'accesso prima di salvare: se il servizio rifiuta, non resta niente. Il servizio rimanda a `<indirizzo della console>/oauth/mcp/callback` (`OWNI_PUBLIC_URL`, o l'indirizzo del link di login), che passa codice e stato alla console nel frammento; la console chiude con una sua richiesta, che porta la sessione (come per Google, ADR 0005).
 - **Lo stato**: 18 byte casuali con il tenant, valido 10 minuti, una volta sola, legato alla persona che l'ha iniziato; il verificatore PKCE sta con lo stato, in memoria. Un nuovo «Collega» sostituisce quello lasciato a metà.
 - **Dove sta l'accesso**: un segreto per istanza e connettore (`mcp-oauth.<istanza>.<connettore>`) con il client registrato, i token e i server trovati. Le scritture di uno stesso segreto vanno una alla volta nel processo. Un client registrato per un altro indirizzo di ritorno si registra di nuovo.
 - **Rinnovo**: il trasporto MCP rinnova da solo. Le richieste al server MCP passano dal fetch del connettore (policy e host); quelle al server di autorizzazione dal fetch dell'accesso, sotto la stessa policy. In background un accesso non parte mai: il connettore diventa «Da collegare».
@@ -25,6 +25,6 @@ Fino alla settimana 28 un connettore MCP si aggiungeva a mano: URL, header segre
 
 - Le azioni di scrittura dei servizi collegati (una issue, un rimborso Stripe) partono senza approvazione, come per i connettori aggiunti a mano. L'approvazione per gli strumenti che scrivono (con le annotazioni `readOnlyHint` dei server) è il passo successivo.
 - Un riavvio durante un accesso lo perde: l'owner preme di nuovo «Collega».
-- Senza un indirizzo https (`ANNIE_PUBLIC_URL`) molti servizi rifiutano di rimandare alla console, tranne che verso `localhost`; la console lo dice.
+- Senza un indirizzo https (`OWNI_PUBLIC_URL`) molti servizi rifiutano di rimandare alla console, tranne che verso `localhost`; la console lo dice.
 - Context7 e Hugging Face si collegano senza account; i loro token opzionali (limiti più alti, dati privati) si mettono con il modulo personalizzato.
 - I primi 64 strumenti sono quelli nell'ordine del server; la scelta degli strumenti da parte dell'owner non c'è ancora.

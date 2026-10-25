@@ -19,7 +19,7 @@ export type EngineOpenOptions = {
 	 * credentials (process env, ~/.aws, ...) so that each tenant uses its own keys.
 	 */
 	readonly apiKey: (provider: string) => Promise<string | undefined>;
-	readonly tools: readonly AnnieTool[];
+	readonly tools: readonly OwniTool[];
 	/**
 	 * A function is read again on each message: what it returns now is what a conversation runs
 	 * with from that message on (the skills of the agente, ADR 0059).
@@ -123,7 +123,7 @@ export type ToolResult = string | { readonly text: string; readonly images: read
 export type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
 
 /** An engine-agnostic tool. `parameters` is a JSON Schema object. */
-export type AnnieTool = {
+export type OwniTool = {
 	readonly name: string;
 	readonly description: string;
 	readonly parameters: Record<string, unknown>;

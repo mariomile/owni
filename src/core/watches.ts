@@ -433,7 +433,7 @@ export type WatchTarget = {
 	readonly store: WatchStore;
 	/** Read a page under the instance's policy (readPage with its guard). */
 	readonly read: (url: string) => Promise<{ title: string; text: string }>;
-	/** Admit the message into the instance (AnnieRuntime.submitScheduled, kind "watch"). */
+	/** Admit the message into the instance (OwniRuntime.submitScheduled, kind "watch"). */
 	readonly submit: (request: { channel: string; threadId: string; text: string; messageId: string; scheduleId: string; onBehalfOf: { channel: string; userId: string } | undefined; kind: "watch" }) => Promise<unknown>;
 };
 

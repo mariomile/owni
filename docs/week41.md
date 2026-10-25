@@ -18,7 +18,7 @@ Branch `week-41`. «Che tempo fa?» è una delle domande più fatte a un assiste
 - Errori: 401 e 403 con e senza chiave, 429, 5xx, risposta illeggibile o troppo grande, tempo scaduto, date impossibili.
 - Quota spesa solo per le risposte riuscite, mai per un nome vuoto, un posto non trovato, un errore o un riavvio; i tentativi, anche falliti, hanno un tetto a parte.
 - Recinto: un nome di posto ostile, con finti segni di recinto, a capo e «ignora le istruzioni», resta dentro.
-- Configurazione: acceso, spento, indirizzi non validi (porta, credenziali, query), limite giornaliero; `pnpm annie check` prova il servizio.
+- Configurazione: acceso, spento, indirizzi non validi (porta, credenziali, query), limite giornaliero; `pnpm owni check` prova il servizio.
 
 ## Review indipendente
 

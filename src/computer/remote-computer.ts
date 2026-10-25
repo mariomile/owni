@@ -87,7 +87,7 @@ export class RemoteComputerProvider implements ComputerProvider {
 			method,
 			headers: {
 				authorization: `Bearer ${computerToken(this.options.cellSecret)}`,
-				"x-annie-tenant": this.options.tenant,
+				"x-owni-tenant": this.options.tenant,
 				...(body === undefined ? {} : { "content-type": typeof body === "string" ? "application/json" : "application/octet-stream" }),
 			},
 			...(body === undefined ? {} : { body }),

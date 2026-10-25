@@ -144,7 +144,7 @@ describe("draft with a model", () => {
 });
 
 function pipelineHarness(client: ModelClient) {
-	const dataDir = mkdtempSync(join(tmpdir(), "annie-segm-"));
+	const dataDir = mkdtempSync(join(tmpdir(), "owni-segm-"));
 	const notifications: { text: string; buttons: readonly string[] }[] = [];
 	const audit = new AuditLog(dataDir, tid("acme"));
 	const crm = new FakeCrmAdapter();
@@ -205,12 +205,12 @@ describe("Pi completion client", () => {
 				if (provider !== "faux") throw new EgressDenied("model_provider", provider);
 			},
 			createProvider: () => {
-				const faux = fauxProvider({ provider: "faux", models: [{ id: "annie-dev", name: "dev" }] });
+				const faux = fauxProvider({ provider: "faux", models: [{ id: "owni-dev", name: "dev" }] });
 				faux.setResponses([fauxAssistantMessage('{"ok":true}')]);
 				return faux.provider;
 			},
 		});
-		const result = await client.complete({ model: { provider: "faux", modelId: "annie-dev" }, system: "s", user: "u", maxTokens: 100 });
+		const result = await client.complete({ model: { provider: "faux", modelId: "owni-dev" }, system: "s", user: "u", maxTokens: 100 });
 		expect(result.text).toBe('{"ok":true}');
 		expect(result.inputTokens).toBeGreaterThanOrEqual(0);
 		await expect(client.complete({ model: { provider: "anthropic", modelId: "claude-haiku-5-5" }, system: "s", user: "u", maxTokens: 10 })).rejects.toThrow(EgressDenied);

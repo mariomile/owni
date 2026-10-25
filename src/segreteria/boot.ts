@@ -11,7 +11,7 @@ import { DEFAULT_MODEL_ROLES, FAUX_MODEL_ROLES } from "../core/model-routing.ts"
 import { instanceDir, lockFile, tenantDir } from "../core/paths.ts";
 import { assertModelProviderAllowed, type EgressPolicy } from "../core/policy.ts";
 import { NotFound } from "../core/errors.ts";
-import type { AnnieRuntime } from "../core/runtime.ts";
+import type { OwniRuntime } from "../core/runtime.ts";
 import { modelApiKeySecret } from "../core/secrets.ts";
 import { UsageLedger } from "../core/usage.ts";
 import { loadChecks } from "./checks.ts";
@@ -42,7 +42,7 @@ export type RunningSegreteria = { readonly service: SegreteriaService; readonly 
  * tenant's secret store, take its lock and start polling the mailbox and Telegram.
  * An existing egress policy is the owner's: it is never widened here.
  */
-export async function startSegreteria(runtime: AnnieRuntime, config: SegreteriaBootConfig, log: (message: string) => void): Promise<RunningSegreteria> {
+export async function startSegreteria(runtime: OwniRuntime, config: SegreteriaBootConfig, log: (message: string) => void): Promise<RunningSegreteria> {
 	const egress: EgressPolicy = { modelProviders: [config.modelProvider], channels: ["telegram"], connectors: ["gmail", "hubspot"] };
 	const roles = config.modelProvider === "faux" ? FAUX_MODEL_ROLES : DEFAULT_MODEL_ROLES;
 	try {
@@ -60,7 +60,7 @@ export async function startSegreteria(runtime: AnnieRuntime, config: SegreteriaB
 		];
 		if (missing.length > 0) {
 			throw new SegreteriaConfigError(
-				`instance ${config.tenantId}/${config.instanceId} does not allow ${missing.join(", ")}. Update its egress policy (instance.json) or use another ANNIE_SEGRETERIA_INSTANCE_ID.`,
+				`instance ${config.tenantId}/${config.instanceId} does not allow ${missing.join(", ")}. Update its egress policy (instance.json) or use another OWNI_SEGRETERIA_INSTANCE_ID.`,
 			);
 		}
 	} catch (error) {

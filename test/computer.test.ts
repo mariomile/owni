@@ -5,13 +5,13 @@ import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { type RunningAnnie, startAnnie } from "../src/app.ts";
+import { type RunningOwni, startOwni } from "../src/app.ts";
 import { DockerComputerProvider } from "../src/computer/docker-computer.ts";
 import { ComputerError, computerKey, tarFiles, untarFirstFile, workPath } from "../src/core/computer.ts";
 import { readOnlyInBriefs } from "../src/core/brief.ts";
 import { createComputerTools, report } from "../src/core/tools/computer-tools.ts";
 import { Workspace } from "../src/core/workspace.ts";
-import { loadAnnieConfig } from "../src/main/config.ts";
+import { loadOwniConfig } from "../src/main/config.ts";
 import { tempDataDir } from "./helpers.ts";
 
 const closers: (() => Promise<void>)[] = [];
@@ -51,7 +51,7 @@ async function fakeDocker(options: { stopsBehindOurBack?: boolean; garbage?: boo
 			res.writeHead(200, { "content-type": "text/plain" });
 			return res.end("OK");
 		}
-		if ((m = /^\/images\/(.+)\/json$/.exec(path)) !== null) return decodeURIComponent(m[1] as string) === (options.image ?? "annie-computer:test") ? json(res, 200, { Id: "sha256:1" }) : json(res, 404, { message: "No such image" });
+		if ((m = /^\/images\/(.+)\/json$/.exec(path)) !== null) return decodeURIComponent(m[1] as string) === (options.image ?? "owni-computer:test") ? json(res, 200, { Id: "sha256:1" }) : json(res, 404, { message: "No such image" });
 		if (req.method === "POST" && path === "/volumes/create") {
 			if (!volumes.has(body.Name)) volumes.set(body.Name, body);
 			return json(res, 201, volumes.get(body.Name));
@@ -62,7 +62,7 @@ async function fakeDocker(options: { stopsBehindOurBack?: boolean; garbage?: boo
 		}
 		if (req.method === "POST" && path === "/containers/create") {
 			const name = url.searchParams.get("name") as string;
-			if (body.Image !== (options.image ?? "annie-computer:test")) return json(res, 404, { message: `No such image: ${body.Image}` });
+			if (body.Image !== (options.image ?? "owni-computer:test")) return json(res, 404, { message: `No such image: ${body.Image}` });
 			if (containers.has(name)) return json(res, 409, { message: "Conflict. The container name is already in use" });
 			// The container's /work is its volume: it outlives the container.
 			const work = join(root, (body.HostConfig.Binds[0] as string).split(":")[0] as string);
@@ -168,7 +168,7 @@ function extract(archive: Buffer, dir: string): void {
 	}
 }
 
-const provider = (socketPath: string, extra: Partial<ConstructorParameters<typeof DockerComputerProvider>[0]> = {}) => new DockerComputerProvider({ image: "annie-computer:test", socketPath, ...extra });
+const provider = (socketPath: string, extra: Partial<ConstructorParameters<typeof DockerComputerProvider>[0]> = {}) => new DockerComputerProvider({ image: "owni-computer:test", socketPath, ...extra });
 
 describe("the computer's paths and archives", () => {
 	it("paths under /work: relative, no way out, normalized", () => {
@@ -182,10 +182,10 @@ describe("the computer's paths and archives", () => {
 	});
 
 	it("a computer's name is a hash: any ids fit, and two instances never share one", () => {
-		expect(computerKey("default", "annie")).toMatch(/^[0-9a-f]{32}$/);
+		expect(computerKey("default", "owni")).toMatch(/^[0-9a-f]{32}$/);
 		expect(computerKey("a-b", "c")).not.toBe(computerKey("a", "b-c"));
 		expect(computerKey("t".repeat(200), "i".repeat(200))).toMatch(/^[0-9a-f]{32}$/);
-		expect(computerKey("default", "annie")).toBe(computerKey("default", "annie"));
+		expect(computerKey("default", "owni")).toBe(computerKey("default", "owni"));
 	});
 
 	it("a tar of files with long paths reads back; the first regular file is found past folders", () => {
@@ -205,15 +205,15 @@ describe("Docker computer", () => {
 		const docker = await fakeDocker();
 		const computer = provider(docker.socketPath, { runtime: "runsc", memoryMb: 512 });
 		closers.push(() => computer.close());
-		const run = await computer.run("default-annie", "echo ciao", { timeoutS: 10 });
+		const run = await computer.run("default-owni", "echo ciao", { timeoutS: 10 });
 		expect(run).toMatchObject({ exitCode: 0, stdout: "ciao\n", stderr: "", timedOut: false });
 		const create = docker.calls.find((c) => c.path.startsWith("/containers/create"))?.body;
 		expect(create).toMatchObject({
-			Image: "annie-computer:test",
+			Image: "owni-computer:test",
 			// The container idles as nobody: commands, as 1000, cannot signal it.
 			User: "65534:65534",
 			NetworkDisabled: true,
-			Labels: { "annie.computer": "default-annie", "annie.computer.spec": expect.stringMatching(/^[0-9a-f]{16}$/) },
+			Labels: { "owni.computer": "default-owni", "owni.computer.spec": expect.stringMatching(/^[0-9a-f]{16}$/) },
 			HostConfig: {
 				NetworkMode: "none",
 				ReadonlyRootfs: true,
@@ -224,18 +224,18 @@ describe("Docker computer", () => {
 				PidsLimit: 128,
 				Ulimits: [{ Name: "fsize", Soft: 1024 ** 3, Hard: 1024 ** 3 }],
 				Runtime: "runsc",
-				Binds: ["annie-computer-default-annie:/work"],
+				Binds: ["owni-computer-default-owni:/work"],
 			},
 		});
 		expect(JSON.stringify(create)).not.toMatch(/PortBindings|Privileged|docker\.sock/);
-		expect(docker.calls.find((c) => c.path === "/volumes/create")?.body).toEqual({ Name: "annie-computer-default-annie", Labels: { "annie.computer": "default-annie" } });
+		expect(docker.calls.find((c) => c.path === "/volumes/create")?.body).toEqual({ Name: "owni-computer-default-owni", Labels: { "owni.computer": "default-owni" } });
 		// The command runs as uid 1000 in /work, as an argument (never pasted into the script), killed
 		// by timeout(1) when its time is up; then whatever it left running goes too.
 		const exec = docker.calls.find((c) => c.path.endsWith("/exec"))?.body;
-		expect(exec).toMatchObject({ User: "1000:1000", WorkingDir: "/work", Cmd: ["sh", "-c", 'timeout -s KILL 10 sh -c "$1"; s=$?; kill -9 -1 2>/dev/null; exit $s', "annie", "echo ciao"] });
+		expect(exec).toMatchObject({ User: "1000:1000", WorkingDir: "/work", Cmd: ["sh", "-c", 'timeout -s KILL 10 sh -c "$1"; s=$?; kill -9 -1 2>/dev/null; exit $s', "owni", "echo ciao"] });
 		expect(docker.kills()).toContain("kill -9 -1");
 		// A second command reuses the running computer.
-		await computer.run("default-annie", "true", { timeoutS: 5 });
+		await computer.run("default-owni", "true", { timeoutS: 5 });
 		expect(docker.calls.filter((c) => c.path.startsWith("/containers/create"))).toHaveLength(1);
 	});
 
@@ -277,15 +277,15 @@ describe("Docker computer", () => {
 		expect((await computer.run("k", "echo di nuovo", { timeoutS: 5 })).stdout).toBe("di nuovo\n");
 		expect(docker.calls.filter((c) => c.path.endsWith("/start") && c.path.startsWith("/containers"))).toHaveLength(2);
 		await new Promise((r) => setTimeout(r, 300));
-		expect(docker.calls.some((c) => c.path.startsWith("/containers/annie-computer-k/stop"))).toBe(true);
+		expect(docker.calls.some((c) => c.path.startsWith("/containers/owni-computer-k/stop"))).toBe(true);
 		await computer.reset("k");
-		expect(docker.calls.map((c) => `${c.method} ${c.path}`)).toEqual(expect.arrayContaining(["DELETE /containers/annie-computer-k?force=true", "DELETE /volumes/annie-computer-k"]));
+		expect(docker.calls.map((c) => `${c.method} ${c.path}`)).toEqual(expect.arrayContaining(["DELETE /containers/owni-computer-k?force=true", "DELETE /volumes/owni-computer-k"]));
 		expect(docker.containers.size).toBe(0);
 	});
 
 	it("a missing image says what the operator has to do", async () => {
 		const docker = await fakeDocker();
-		const computer = new DockerComputerProvider({ image: "annie-computer:missing", socketPath: docker.socketPath });
+		const computer = new DockerComputerProvider({ image: "owni-computer:missing", socketPath: docker.socketPath });
 		await expect(computer.run("k", "true", { timeoutS: 5 })).rejects.toThrow("docker/computer.Dockerfile");
 	});
 });
@@ -314,9 +314,9 @@ describe("Docker computer, its limits and its life", () => {
 		closers.push(() => after.close());
 		expect((await after.run("k", "cat nota.txt", { timeoutS: 5 })).stdout).toBe("resto\n");
 		expect(docker.calls.filter((c) => c.path.startsWith("/containers/create"))).toHaveLength(2);
-		expect(docker.calls.some((c) => c.method === "DELETE" && c.path === "/containers/annie-computer-k?force=true")).toBe(true);
+		expect(docker.calls.some((c) => c.method === "DELETE" && c.path === "/containers/owni-computer-k?force=true")).toBe(true);
 		expect(docker.calls.some((c) => c.method === "DELETE" && c.path.startsWith("/volumes/"))).toBe(false);
-		expect(docker.containers.get("annie-computer-k")?.create.HostConfig.Memory).toBe(1024 * 1024 * 1024);
+		expect(docker.containers.get("owni-computer-k")?.create.HostConfig.Memory).toBe(1024 * 1024 * 1024);
 		// The same spec again: nothing recreated.
 		await after.close();
 		const same = provider(docker.socketPath, { memoryMb: 1024 });
@@ -327,7 +327,7 @@ describe("Docker computer, its limits and its life", () => {
 
 	it("a container with the computer's name that is not this computer is never used", async () => {
 		const docker = await fakeDocker();
-		docker.containers.set("annie-computer-k", { running: true, work: tmpdir(), create: { Labels: { "annie.computer": "altro" } } });
+		docker.containers.set("owni-computer-k", { running: true, work: tmpdir(), create: { Labels: { "owni.computer": "altro" } } });
 		const computer = provider(docker.socketPath);
 		await expect(computer.run("k", "true", { timeoutS: 5 })).rejects.toThrow("is not this computer");
 		expect(docker.calls.some((c) => c.path.endsWith("/exec"))).toBe(false);
@@ -351,9 +351,9 @@ describe("Docker computer, its limits and its life", () => {
 		closers.push(() => computer.close());
 		await computer.run("uno", "true", { timeoutS: 5 });
 		await computer.run("due", "true", { timeoutS: 5 });
-		for (let i = 0; i < 50 && docker.containers.get("annie-computer-uno")?.running; i++) await new Promise((r) => setTimeout(r, 10));
-		expect(docker.containers.get("annie-computer-uno")?.running).toBe(false);
-		expect(docker.containers.get("annie-computer-due")?.running).toBe(true);
+		for (let i = 0; i < 50 && docker.containers.get("owni-computer-uno")?.running; i++) await new Promise((r) => setTimeout(r, 10));
+		expect(docker.containers.get("owni-computer-uno")?.running).toBe(false);
+		expect(docker.containers.get("owni-computer-due")?.running).toBe(true);
 	});
 
 	it("commands on one computer run one at a time", async () => {
@@ -373,10 +373,10 @@ describe("Docker computer, its limits and its life", () => {
 		const second = provider(docker.socketPath);
 		closers.push(() => second.close());
 		expect(await second.stopLeftovers()).toBe(1);
-		expect(docker.containers.get("annie-computer-k")?.running).toBe(false);
+		expect(docker.containers.get("owni-computer-k")?.running).toBe(false);
 		expect(await second.check()).toBeUndefined();
-		expect(await new DockerComputerProvider({ image: "annie-computer:missing", socketPath: docker.socketPath }).check()).toContain("docker build -f docker/computer.Dockerfile");
-		expect(await new DockerComputerProvider({ image: "annie-computer:test", socketPath: join(tmpdir(), "nessun-docker.sock") }).check()).toMatch(/^Docker non risponde/);
+		expect(await new DockerComputerProvider({ image: "owni-computer:missing", socketPath: docker.socketPath }).check()).toContain("docker build -f docker/computer.Dockerfile");
+		expect(await new DockerComputerProvider({ image: "owni-computer:test", socketPath: join(tmpdir(), "nessun-docker.sock") }).check()).toMatch(/^Docker non risponde/);
 	});
 
 	it("an output stream that is not Docker's frames is refused", async () => {
@@ -413,7 +413,7 @@ describe("computer_run", () => {
 		const workspace = new Workspace(mkdtempSync(join(tmpdir(), "ws-")));
 		const events: Record<string, unknown>[] = [];
 		const logs: string[] = [];
-		const [run] = createComputerTools({ computer, key: "default-annie", policy: async () => ({ modelProviders: ["faux"], channels: ["web"], connectors }), workspace, record: async (e) => void events.push(e), log: (m) => void logs.push(m) });
+		const [run] = createComputerTools({ computer, key: "default-owni", policy: async () => ({ modelProviders: ["faux"], channels: ["web"], connectors }), workspace, record: async (e) => void events.push(e), log: (m) => void logs.push(m) });
 		const steps = new Map<string, unknown>();
 		let calls = 0;
 		const ctx = {
@@ -473,7 +473,7 @@ describe("computer_run", () => {
 		const source = readFileSync("src/main/cloud.ts", "utf8");
 		const passed = /const passed = \[([^\]]*)\]/.exec(source)?.[1] ?? "";
 		expect(passed).not.toMatch(/COMPUTER|DOCKER|FLY/);
-		expect([...source.matchAll(/cellEnv\.(\w+) = ([^;]+);/g)].map((m) => `${m[1]}=${m[2]}`)).toEqual(['ANNIE_COMPUTER=""', 'ANNIE_COMPUTER="cloud"', "ANNIE_COMPUTER_URL=url"]);
+		expect([...source.matchAll(/cellEnv\.(\w+) = ([^;]+);/g)].map((m) => `${m[1]}=${m[2]}`)).toEqual(['OWNI_COMPUTER=""', 'OWNI_COMPUTER="cloud"', "OWNI_COMPUTER_URL=url"]);
 	});
 
 	it("bad paths and missing workspace files are refused before anything runs", async () => {
@@ -489,23 +489,23 @@ describe("the computer in an instance", () => {
 		const docker = await fakeDocker();
 		const computer = provider(docker.socketPath);
 		closers.push(() => computer.close());
-		const config = loadAnnieConfig({ ANNIE_DATA_DIR: tempDataDir(), ANNIE_MODEL_PROVIDER: "faux", ANNIE_WEB_PORT: "1" });
-		const annie: RunningAnnie = await startAnnie({ ...config, web: { ...config.web, port: 0 } }, { computer, schedulerIntervalMs: 60_000, log: () => {} });
-		closers.push(() => annie.stop());
-		const base = `http://127.0.0.1:${(annie.server.address() as AddressInfo).port}`;
-		const login = await fetch(`${base}/api/login`, { method: "POST", headers: { "x-annie": "1" }, body: JSON.stringify({ token: (annie.ownerLink as string).split("#")[1] }) });
+		const config = loadOwniConfig({ OWNI_DATA_DIR: tempDataDir(), OWNI_MODEL_PROVIDER: "faux", OWNI_WEB_PORT: "1" });
+		const owni: RunningOwni = await startOwni({ ...config, web: { ...config.web, port: 0 } }, { computer, schedulerIntervalMs: 60_000, log: () => {} });
+		closers.push(() => owni.stop());
+		const base = `http://127.0.0.1:${(owni.server.address() as AddressInfo).port}`;
+		const login = await fetch(`${base}/api/login`, { method: "POST", headers: { "x-owni": "1" }, body: JSON.stringify({ token: (owni.ownerLink as string).split("#")[1] }) });
 		const cookie = (login.headers.get("set-cookie") ?? "").split(";")[0] as string;
 		const api = async (path: string, body?: unknown, method?: string, as = cookie) => {
-			const res = await fetch(`${base}${path}`, { method: method ?? (body === undefined ? "GET" : "POST"), headers: { cookie: as, "x-annie": "1" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+			const res = await fetch(`${base}${path}`, { method: method ?? (body === undefined ? "GET" : "POST"), headers: { cookie: as, "x-owni": "1" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
 			return { status: res.status, ...((await res.json()) as any) };
 		};
 		expect((await api("/api/computer")).available).toBe(true);
 		expect((await api("/api/computer", undefined, "GET", "")).status).toBe(401);
-		const thread = (await api("/api/instances/annie/threads", {})).thread;
+		const thread = (await api("/api/instances/owni/threads", {})).thread;
 		const reply = async (text: string) => {
-			const count = async () => ((await api(`/api/instances/annie/threads/${thread.id}`)).entries as { from: string; text?: string }[]).filter((e) => e.from === "annie");
+			const count = async () => ((await api(`/api/instances/owni/threads/${thread.id}`)).entries as { from: string; text?: string }[]).filter((e) => e.from === "owni");
 			const before = (await count()).length;
-			await api(`/api/instances/annie/threads/${thread.id}/messages`, { text });
+			await api(`/api/instances/owni/threads/${thread.id}/messages`, { text });
 			for (const start = Date.now(); Date.now() - start < 20_000; ) {
 				const now = await count();
 				if (now.length > before) return now.at(-1)?.text ?? "";
@@ -515,25 +515,25 @@ describe("the computer in an instance", () => {
 		};
 		const ask = '/tool computer_run {"command":"echo dal computer"}';
 		expect(await reply(ask)).toContain("non ha acceso il computer");
-		expect((await api("/api/instances/annie/computer-allowed", { allowed: true }, "PUT")).allowed).toBe(true);
+		expect((await api("/api/instances/owni/computer-allowed", { allowed: true }, "PUT")).allowed).toBe(true);
 		expect(await reply(ask)).toContain("dal computer");
-		expect((await api("/api/instances/annie/computer", undefined, "DELETE")).status).toBe(200);
+		expect((await api("/api/instances/owni/computer", undefined, "DELETE")).status).toBe(200);
 		expect(docker.containers.size).toBe(0);
 		expect((await api("/api/instances/nessuna/computer", undefined, "DELETE")).status).toBe(404);
 	}, 30_000);
 
 	it("without a computer the console says it is not available", async () => {
-		const config = loadAnnieConfig({ ANNIE_DATA_DIR: tempDataDir(), ANNIE_MODEL_PROVIDER: "faux", ANNIE_WEB_PORT: "1" });
+		const config = loadOwniConfig({ OWNI_DATA_DIR: tempDataDir(), OWNI_MODEL_PROVIDER: "faux", OWNI_WEB_PORT: "1" });
 		expect(config.computer).toBeUndefined();
-		expect(() => loadAnnieConfig({ ANNIE_DATA_DIR: tempDataDir(), ANNIE_MODEL_PROVIDER: "faux", ANNIE_COMPUTER: "fly" })).toThrow("ANNIE_COMPUTER");
-		expect(loadAnnieConfig({ ANNIE_DATA_DIR: tempDataDir(), ANNIE_MODEL_PROVIDER: "faux", ANNIE_COMPUTER: "docker", ANNIE_COMPUTER_RUNTIME: "runsc" }).computer).toMatchObject({ image: "annie-computer:latest", runtime: "runsc", memoryMb: 1024 });
-		const annie = await startAnnie({ ...config, web: { ...config.web, port: 0 } }, { schedulerIntervalMs: 60_000, log: () => {} });
-		closers.push(() => annie.stop());
-		const base = `http://127.0.0.1:${(annie.server.address() as AddressInfo).port}`;
-		const login = await fetch(`${base}/api/login`, { method: "POST", headers: { "x-annie": "1" }, body: JSON.stringify({ token: (annie.ownerLink as string).split("#")[1] }) });
+		expect(() => loadOwniConfig({ OWNI_DATA_DIR: tempDataDir(), OWNI_MODEL_PROVIDER: "faux", OWNI_COMPUTER: "fly" })).toThrow("OWNI_COMPUTER");
+		expect(loadOwniConfig({ OWNI_DATA_DIR: tempDataDir(), OWNI_MODEL_PROVIDER: "faux", OWNI_COMPUTER: "docker", OWNI_COMPUTER_RUNTIME: "runsc" }).computer).toMatchObject({ image: "owni-computer:latest", runtime: "runsc", memoryMb: 1024 });
+		const owni = await startOwni({ ...config, web: { ...config.web, port: 0 } }, { schedulerIntervalMs: 60_000, log: () => {} });
+		closers.push(() => owni.stop());
+		const base = `http://127.0.0.1:${(owni.server.address() as AddressInfo).port}`;
+		const login = await fetch(`${base}/api/login`, { method: "POST", headers: { "x-owni": "1" }, body: JSON.stringify({ token: (owni.ownerLink as string).split("#")[1] }) });
 		const cookie = (login.headers.get("set-cookie") ?? "").split(";")[0] as string;
-		const res = await fetch(`${base}/api/instances/annie/computer-allowed`, { method: "PUT", headers: { cookie, "x-annie": "1" }, body: JSON.stringify({ allowed: true }) });
+		const res = await fetch(`${base}/api/instances/owni/computer-allowed`, { method: "PUT", headers: { cookie, "x-owni": "1" }, body: JSON.stringify({ allowed: true }) });
 		expect(res.status).toBe(501);
-		expect(await (await fetch(`${base}/api/computer`, { headers: { cookie, "x-annie": "1" } })).json()).toEqual({ available: false });
+		expect(await (await fetch(`${base}/api/computer`, { headers: { cookie, "x-owni": "1" } })).json()).toEqual({ available: false });
 	});
 });

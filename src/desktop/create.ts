@@ -12,7 +12,7 @@ export function createDesktopProvider(config: DesktopConfig, context: { readonly
 	return new RemoteDesktopProvider({ url: config.url, token: config.token, ...extra });
 }
 
-/** What the desktops are, for the log and `pnpm annie check`. */
+/** What the desktops are, for the log and `pnpm owni check`. */
 export function desktopLabel(config: DesktopConfig): string {
 	if (config.kind === "local") return "questo Mac";
 	return config.kind === "docker" ? `Docker${config.network === "internet" ? ", con internet" : ""}` : "remoto";

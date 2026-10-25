@@ -113,7 +113,7 @@ export function render() {
 	const content = h(chat ? "div.page-content.chat-content" : "div.page-content");
 	mount(main, workspaceNav(item), content);
 	const shell = h(
-		`div.shell${store("annie.rail") === "closed" ? ".collapsed" : ""}`,
+		`div.shell${store("owni.rail") === "closed" ? ".collapsed" : ""}`,
 		h("header.topbar", h("button.icon-btn.rail-menu", {
 			"aria-label": "Apri la barra laterale", "aria-controls": "rail", "aria-expanded": "false",
 			onclick: () => { shell.classList.toggle("open"); syncRailControls(); },
@@ -139,7 +139,7 @@ function toggleRail() {
 	const shell = document.querySelector(".shell");
 	if (!shell) return;
 	shell.classList.toggle("collapsed");
-	store("annie.rail", shell.classList.contains("collapsed") ? "closed" : "open");
+	store("owni.rail", shell.classList.contains("collapsed") ? "closed" : "open");
 	syncRailControls();
 }
 
@@ -365,7 +365,7 @@ export function closeMenu() {
 }
 
 function cycleTheme() {
-	const current = store("annie.theme") ?? "auto";
+	const current = store("owni.theme") ?? "auto";
 	const next = current === "auto" ? "dark" : current === "dark" ? "light" : "auto";
 	applyTheme(next);
 	toast(next === "auto" ? "Tema: come il sistema" : next === "dark" ? "Tema scuro" : "Tema chiaro");

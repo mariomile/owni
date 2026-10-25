@@ -1,4 +1,4 @@
-import type { AnnieTool } from "../engine.ts";
+import type { OwniTool } from "../engine.ts";
 import { type EgressPolicy, webHostAllowed } from "../policy.ts";
 import { DocumentError, type DocumentText, documentKind, documentLabel, documentPartsLabel } from "../documents.ts";
 import { documentLimit, urlFileName, webDocument } from "../web-documents.ts";
@@ -51,7 +51,7 @@ type Dossier = { readonly question: string; readonly at: string; readonly today:
  * the report is in the dossier, puts the dossier's list of sources under it and sends the file.
  * The model writes; the sources it cites are the ones that were read.
  */
-export function createResearchTools(options: ResearchToolsOptions): AnnieTool[] {
+export function createResearchTools(options: ResearchToolsOptions): OwniTool[] {
 	const addressAllowed = options.addressAllowed ?? publicAddress;
 	return [
 		{

@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { AGENT_LIMITS, AgentRate, chainProblem, type Origin } from "../agent-messages.ts";
 import type { Activity } from "../agent-activity.ts";
-import type { AnnieTool } from "../engine.ts";
+import type { OwniTool } from "../engine.ts";
 
 /** Another agente this one may write to: it accepts messages from it (ADR 0042). */
 export type Colleague = { readonly id: string; readonly name: string; readonly tagline?: string };
@@ -24,7 +24,7 @@ export function createAgentTools(options: {
 	/** All conversations of this agente together, so new threads do not buy new messages. */
 	readonly total?: AgentRate;
 	readonly record?: (event: { type: "agent.message.sent"; to: string; chars: number }) => Promise<void>;
-}): AnnieTool[] {
+}): OwniTool[] {
 	const rate = options.rate ?? new AgentRate();
 	const total = options.total ?? new AgentRate(AGENT_LIMITS.perAgentHour);
 	const find = (all: readonly Colleague[], wanted: string) => {

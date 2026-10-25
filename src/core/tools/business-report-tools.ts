@@ -8,7 +8,7 @@ import { statementOf } from "../bank.ts";
 import type { BankStore } from "../bank-store.ts";
 import type { ClientCard } from "../clients.ts";
 import type { ClientStore } from "../client-store.ts";
-import type { AnnieTool, ToolContext } from "../engine.ts";
+import type { OwniTool, ToolContext } from "../engine.ts";
 import type { ExpenseStore } from "../expense-store.ts";
 import { InvoiceScanner } from "../invoice-scan.ts";
 import type { InvoiceStore } from "../invoice-store.ts";
@@ -63,7 +63,7 @@ const DESCRIPTION = [
  * only, through their own stores and the shared scanner; nothing kept here. Only the export
  * writes, a new CSV under report/. Today is read once per call.
  */
-export function createBusinessReportTools(options: BusinessReportToolsOptions): AnnieTool[] {
+export function createBusinessReportTools(options: BusinessReportToolsOptions): OwniTool[] {
 	const { workspace, timeZone } = options;
 	const now = options.now ?? (() => new Date());
 	const scanner = options.scanner ?? new InvoiceScanner(workspace);

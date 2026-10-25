@@ -3,11 +3,11 @@ import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { type RunningAnnie, startAnnie } from "../src/app.ts";
+import { type RunningOwni, startOwni } from "../src/app.ts";
 import { TelegramAdapter } from "../src/channels/telegram.ts";
 import { WhatsAppAdapter } from "../src/channels/whatsapp.ts";
 import { ImageGenerationError, imageGenerator } from "../src/core/image-generation.ts";
-import { loadAnnieConfig } from "../src/main/config.ts";
+import { loadOwniConfig } from "../src/main/config.ts";
 import { JPEG, PNG, tempDataDir } from "./helpers.ts";
 
 const closers: (() => Promise<void>)[] = [];
@@ -104,15 +104,15 @@ describe("image generation service", () => {
 	});
 
 	it("is configured with a key and an address; gpt-image-1 for OpenAI; cells of Owni Cloud get it", () => {
-		const base = { ANNIE_DATA_DIR: tempDataDir(), ANNIE_MODEL_PROVIDER: "faux" };
-		expect(loadAnnieConfig(base).images).toBeUndefined();
-		expect(loadAnnieConfig({ ...base, ANNIE_IMAGE_URL: "https://api.openai.com/v1", ANNIE_IMAGE_API_KEY: KEY }).images).toEqual({ url: "https://api.openai.com/v1", apiKey: KEY, model: "gpt-image-1", maxPerDay: 100 });
-		expect(() => loadAnnieConfig({ ...base, ANNIE_IMAGE_API_KEY: KEY })).toThrow("ANNIE_IMAGE_URL");
-		expect(() => loadAnnieConfig({ ...base, ANNIE_IMAGE_URL: "http://evil.example/v1", ANNIE_IMAGE_API_KEY: KEY })).toThrow("ANNIE_IMAGE_URL");
-		expect(() => loadAnnieConfig({ ...base, ANNIE_IMAGE_URL: "https://images.example/v1", ANNIE_IMAGE_API_KEY: KEY })).toThrow("ANNIE_IMAGE_MODEL");
-		expect(() => loadAnnieConfig({ ...base, ANNIE_IMAGE_URL: "https://api.openai.com/v1", ANNIE_IMAGE_API_KEY: KEY, ANNIE_IMAGE_MAX_PER_DAY: "0" })).toThrow("ANNIE_IMAGE_MAX_PER_DAY");
+		const base = { OWNI_DATA_DIR: tempDataDir(), OWNI_MODEL_PROVIDER: "faux" };
+		expect(loadOwniConfig(base).images).toBeUndefined();
+		expect(loadOwniConfig({ ...base, OWNI_IMAGE_URL: "https://api.openai.com/v1", OWNI_IMAGE_API_KEY: KEY }).images).toEqual({ url: "https://api.openai.com/v1", apiKey: KEY, model: "gpt-image-1", maxPerDay: 100 });
+		expect(() => loadOwniConfig({ ...base, OWNI_IMAGE_API_KEY: KEY })).toThrow("OWNI_IMAGE_URL");
+		expect(() => loadOwniConfig({ ...base, OWNI_IMAGE_URL: "http://evil.example/v1", OWNI_IMAGE_API_KEY: KEY })).toThrow("OWNI_IMAGE_URL");
+		expect(() => loadOwniConfig({ ...base, OWNI_IMAGE_URL: "https://images.example/v1", OWNI_IMAGE_API_KEY: KEY })).toThrow("OWNI_IMAGE_MODEL");
+		expect(() => loadOwniConfig({ ...base, OWNI_IMAGE_URL: "https://api.openai.com/v1", OWNI_IMAGE_API_KEY: KEY, OWNI_IMAGE_MAX_PER_DAY: "0" })).toThrow("OWNI_IMAGE_MAX_PER_DAY");
 		const passed = /const passed = \[([^\]]*)\]/.exec(readFileSync("src/main/cloud.ts", "utf8"))?.[1] ?? "";
-		for (const name of ["ANNIE_IMAGE_URL", "ANNIE_IMAGE_API_KEY", "ANNIE_IMAGE_MODEL", "ANNIE_IMAGE_MAX_PER_DAY"]) expect(passed).toContain(`"${name}"`);
+		for (const name of ["OWNI_IMAGE_URL", "OWNI_IMAGE_API_KEY", "OWNI_IMAGE_MODEL", "OWNI_IMAGE_MAX_PER_DAY"]) expect(passed).toContain(`"${name}"`);
 	});
 });
 
@@ -127,8 +127,8 @@ describe("pictures in chats", () => {
 			if (refusePhotos && method === "sendPhoto") return Response.json({ ok: false, error_code: 400, description: "Bad Request: PHOTO_INVALID_DIMENSIONS" }, { status: 400 });
 			return Response.json({ ok: true, result: { message_id: 1 } });
 		}) as typeof fetch;
-		const adapter = new TelegramAdapter({ token: "1:T", tenantId: "default", instanceId: "annie", fetch: telegramFetch });
-		const base = { tenantId: "default", instanceId: "annie", channel: "telegram", threadId: "7", idempotencyKey: "k" };
+		const adapter = new TelegramAdapter({ token: "1:T", tenantId: "default", instanceId: "owni", fetch: telegramFetch });
+		const base = { tenantId: "default", instanceId: "owni", channel: "telegram", threadId: "7", idempotencyKey: "k" };
 		await adapter.sendFile({ ...base, name: "faro.png", data: PNG, caption: "Il faro" });
 		await adapter.sendFile({ ...base, name: "report.pdf", data: Uint8Array.from([1, 2, 3]) });
 		// A name that says picture is not enough: the bytes decide.
@@ -157,8 +157,8 @@ describe("pictures in chats", () => {
 			if (refuseImages && body.type === "image") return Response.json({ error: { code: 131053, message: "Media upload error" } }, { status: 400 });
 			return Response.json({ messages: [{ id: "wamid.x" }] });
 		}) as typeof fetch;
-		const wa = new WhatsAppAdapter({ accessToken: "EAAGtoken0123456789", phoneNumberId: "123", appSecret: "s", verifyToken: "v", tenantId: "default", instanceId: "annie", fetch: graphFetch });
-		const base = { tenantId: "default", instanceId: "annie", channel: "whatsapp", threadId: "393331234567", idempotencyKey: "k" };
+		const wa = new WhatsAppAdapter({ accessToken: "EAAGtoken0123456789", phoneNumberId: "123", appSecret: "s", verifyToken: "v", tenantId: "default", instanceId: "owni", fetch: graphFetch });
+		const base = { tenantId: "default", instanceId: "owni", channel: "whatsapp", threadId: "393331234567", idempotencyKey: "k" };
 		await wa.sendFile({ ...base, name: "faro.png", data: PNG, caption: "Il faro" });
 		expect(sent.at(-1)).toMatchObject({ type: "image", image: { id: "media-1", caption: "Il faro" } });
 		refuseImages = true;
@@ -170,26 +170,26 @@ describe("pictures in chats", () => {
 describe("image generation in an instance", () => {
 	it("is off until the owner turns it on; then it makes the picture, saves it and sends it; the audit never has the request", async () => {
 		const service = await fakeImages();
-		const { annie, api, reply, entries, dataDir, base } = await boot(tempDataDir(), { ANNIE_IMAGE_URL: service.url, ANNIE_IMAGE_API_KEY: KEY, ANNIE_IMAGE_MODEL: "gpt-image-1", ANNIE_IMAGE_MAX_PER_DAY: "2" });
+		const { owni, api, reply, entries, dataDir, base } = await boot(tempDataDir(), { OWNI_IMAGE_URL: service.url, OWNI_IMAGE_API_KEY: KEY, OWNI_IMAGE_MODEL: "gpt-image-1", OWNI_IMAGE_MAX_PER_DAY: "2" });
 		expect(await api("/api/images")).toMatchObject({ available: true, host: new URL(service.url).host, maxPerDay: 2 });
 		const ask = '/tool image_generate {"prompt":"a red fox reading a newspaper, flat illustration","shape":"square"}';
 		expect(await reply(ask)).toContain("la generazione di immagini non è attiva per questa istanza");
 		expect(service.asked).toHaveLength(0);
-		expect((await api("/api/instances/annie/images", { allowed: "si" }, "PUT")).status).toBe(400);
-		expect((await api("/api/instances/annie/images", { allowed: true }, "PUT")).allowed).toBe(true);
+		expect((await api("/api/instances/owni/images", { allowed: "si" }, "PUT")).status).toBe(400);
+		expect((await api("/api/instances/owni/images", { allowed: true }, "PUT")).allowed).toBe(true);
 
 		const made = await reply(ask);
 		expect(made).toMatch(/^Fatto\. Immagine creata e inviata in questa conversazione: immagini\/a-red-fox-reading-a-newspaper-flat-[\w-]+\.png/);
 		const path = /immagini\/[\w-]+\.png/.exec(made)?.[0] as string;
-		expect(await annie.runtime.workspace("default", "annie").read(path)).toEqual(Buffer.from(PNG));
+		expect(await owni.runtime.workspace("default", "owni").read(path)).toEqual(Buffer.from(PNG));
 		expect((await entries()).some((e) => e.file?.path === path)).toBe(true);
 
 		// A picture of the workspace to change.
-		await annie.runtime.workspace("default", "annie").write("uploads/foto.jpg", JPEG);
+		await owni.runtime.workspace("default", "owni").write("uploads/foto.jpg", JPEG);
 		expect(await reply('/tool image_generate {"prompt":"same photo, sky at sunset","from":"uploads/foto.jpg"}')).toMatch(/Immagine creata/);
 		expect(service.asked[1]?.path).toBe("/v1/images/edits");
 		expect(service.asked[1]?.form?.image.name).toBe("foto.jpg");
-		await annie.runtime.workspace("default", "annie").write("note.txt", "testo");
+		await owni.runtime.workspace("default", "owni").write("note.txt", "testo");
 		expect(await reply('/tool image_generate {"prompt":"change it","from":"note.txt"}')).toContain("Errore: note.txt non è un'immagine");
 		expect(await reply('/tool image_generate {"prompt":"change it","from":"manca.png"}')).toContain("Errore");
 		expect(service.asked).toHaveLength(2);
@@ -207,9 +207,9 @@ describe("image generation in an instance", () => {
 
 		// Only the owner turns it on.
 		const { link } = await api("/api/people", { name: "Luca" });
-		const member = await fetch(`${base}/api/login`, { method: "POST", headers: { "x-annie": "1" }, body: JSON.stringify({ token: String(link).split("#")[1] }) });
+		const member = await fetch(`${base}/api/login`, { method: "POST", headers: { "x-owni": "1" }, body: JSON.stringify({ token: String(link).split("#")[1] }) });
 		const cookie = (member.headers.get("set-cookie") ?? "").split(";")[0] as string;
-		expect((await fetch(`${base}/api/instances/annie/images`, { method: "PUT", headers: { cookie, "x-annie": "1" }, body: JSON.stringify({ allowed: true }) })).status).toBe(403);
+		expect((await fetch(`${base}/api/instances/owni/images`, { method: "PUT", headers: { cookie, "x-owni": "1" }, body: JSON.stringify({ allowed: true }) })).status).toBe(403);
 	});
 
 	it("a refusal of the service reaches the model in plain words and costs none of the day's pictures; variations come with their caption", async () => {
@@ -217,8 +217,8 @@ describe("image generation in an instance", () => {
 		const service = await fakeImages((asked) =>
 			refuse ? { status: 400, body: { error: { code: "moderation_blocked", message: "no" } } } : { body: { data: Array.from({ length: Number(asked.json?.n ?? 1) }, () => ({ b64_json: Buffer.from(PNG).toString("base64") })) } },
 		);
-		const { api, reply, entries } = await boot(tempDataDir(), { ANNIE_IMAGE_URL: service.url, ANNIE_IMAGE_API_KEY: KEY, ANNIE_IMAGE_MODEL: "gpt-image-1", ANNIE_IMAGE_MAX_PER_DAY: "2" });
-		await api("/api/instances/annie/images", { allowed: true }, "PUT");
+		const { api, reply, entries } = await boot(tempDataDir(), { OWNI_IMAGE_URL: service.url, OWNI_IMAGE_API_KEY: KEY, OWNI_IMAGE_MODEL: "gpt-image-1", OWNI_IMAGE_MAX_PER_DAY: "2" });
+		await api("/api/instances/owni/images", { allowed: true }, "PUT");
 		expect(await reply('/tool image_generate {"prompt":"something"}')).toMatch(/Errore: il servizio di immagini ha rifiutato la richiesta per i suoi limiti sui contenuti: riformula/);
 		expect(await reply('/tool image_generate {"prompt":"something"}')).toMatch(/limiti sui contenuti/);
 		refuse = false;
@@ -232,29 +232,29 @@ describe("image generation in an instance", () => {
 	it("is not offered by a server without an image service", async () => {
 		const { api, reply } = await boot(tempDataDir());
 		expect(await api("/api/images")).toMatchObject({ available: false });
-		expect((await api("/api/instances/annie/images", { allowed: true }, "PUT")).status).toBe(501);
+		expect((await api("/api/instances/owni/images", { allowed: true }, "PUT")).status).toBe(501);
 		expect(await reply('/tool image_generate {"prompt":"a cat"}')).toContain("Tool image_generate is not available");
 	});
 });
 
 async function boot(dataDir: string, env: Record<string, string> = {}) {
-	const loaded = loadAnnieConfig({ ANNIE_DATA_DIR: dataDir, ANNIE_MODEL_PROVIDER: "faux", ANNIE_WEB_PORT: "1", ...env });
-	const annie: RunningAnnie = await startAnnie({ ...loaded, web: { ...loaded.web, port: 0 } }, { schedulerIntervalMs: 60_000, log: () => {} });
-	closers.push(() => annie.stop());
-	const base = `http://127.0.0.1:${(annie.server.address() as AddressInfo).port}`;
-	const login = await fetch(`${base}/api/login`, { method: "POST", headers: { "x-annie": "1" }, body: JSON.stringify({ token: (annie.ownerLink as string).split("#")[1] }) });
+	const loaded = loadOwniConfig({ OWNI_DATA_DIR: dataDir, OWNI_MODEL_PROVIDER: "faux", OWNI_WEB_PORT: "1", ...env });
+	const owni: RunningOwni = await startOwni({ ...loaded, web: { ...loaded.web, port: 0 } }, { schedulerIntervalMs: 60_000, log: () => {} });
+	closers.push(() => owni.stop());
+	const base = `http://127.0.0.1:${(owni.server.address() as AddressInfo).port}`;
+	const login = await fetch(`${base}/api/login`, { method: "POST", headers: { "x-owni": "1" }, body: JSON.stringify({ token: (owni.ownerLink as string).split("#")[1] }) });
 	const cookie = (login.headers.get("set-cookie") ?? "").split(";")[0] as string;
 	const api = async (path: string, body?: unknown, method?: string) => {
-		const res = await fetch(`${base}${path}`, { method: method ?? (body === undefined ? "GET" : "POST"), headers: { cookie, "x-annie": "1" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+		const res = await fetch(`${base}${path}`, { method: method ?? (body === undefined ? "GET" : "POST"), headers: { cookie, "x-owni": "1" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
 		// biome-ignore lint: test
 		return { status: res.status, ...((await res.json()) as any) };
 	};
-	const thread = (await api("/api/instances/annie/threads", {})).thread;
-	const entries = async () => (await api(`/api/instances/annie/threads/${thread.id}`)).entries as { from: string; text?: string; file?: { path: string; caption?: string } }[];
+	const thread = (await api("/api/instances/owni/threads", {})).thread;
+	const entries = async () => (await api(`/api/instances/owni/threads/${thread.id}`)).entries as { from: string; text?: string; file?: { path: string; caption?: string } }[];
 	const reply = async (text: string): Promise<string> => {
-		const answers = async () => (await entries()).filter((e) => e.from === "annie" && e.text !== undefined);
+		const answers = async () => (await entries()).filter((e) => e.from === "owni" && e.text !== undefined);
 		const before = (await answers()).length;
-		await api(`/api/instances/annie/threads/${thread.id}/messages`, { text });
+		await api(`/api/instances/owni/threads/${thread.id}/messages`, { text });
 		for (const start = Date.now(); Date.now() - start < 20_000; ) {
 			const now = await answers();
 			if (now.length > before) return now.at(-1)?.text ?? "";
@@ -262,5 +262,5 @@ async function boot(dataDir: string, env: Record<string, string> = {}) {
 		}
 		throw new Error("no reply");
 	};
-	return { annie, api, reply, entries, dataDir, base };
+	return { owni, api, reply, entries, dataDir, base };
 }

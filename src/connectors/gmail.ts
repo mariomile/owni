@@ -106,7 +106,7 @@ export class GmailMailAdapter implements MailAdapter {
 		_tenantId: string,
 		args: { to: string; subject: string; bodyText: string; inReplyToMessageId: string; idempotencyKey: string },
 	): Promise<{ sentMessageId: string }> {
-		const messageId = `<annie.${createHash("sha256").update(args.idempotencyKey).digest("hex").slice(0, 32)}@annie.local>`;
+		const messageId = `<owni.${createHash("sha256").update(args.idempotencyKey).digest("hex").slice(0, 32)}@owni.local>`;
 		const earlier = await this.api<{ messages?: { id: string }[] }>(
 			"messages.list",
 			`${API}/messages?${new URLSearchParams({ q: `in:sent rfc822msgid:${messageId}`, maxResults: "1" })}`,

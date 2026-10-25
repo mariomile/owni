@@ -25,9 +25,9 @@ export type DockerComputerOptions = {
 
 /** Docker Engine API 1.41: Docker 20.10 and later. */
 const API = "/v1.41";
-const LABEL = "annie.computer";
+const LABEL = "owni.computer";
 /** A hash of how the container was created: a change of image, runtime or limits recreates it (the files stay). */
-const SPEC_LABEL = "annie.computer.spec";
+const SPEC_LABEL = "owni.computer.spec";
 const API_TIMEOUT_MS = 30_000;
 /** Kept of each of stdout (the start) and stderr (the end); the rest is read and dropped. */
 const MAX_STREAM_BYTES = 64 * 1024;
@@ -73,7 +73,7 @@ export class DockerComputerProvider implements ComputerProvider {
 				const timeoutS = Math.max(1, Math.min(COMPUTER_LIMITS.maxTimeoutS, Math.round(options.timeoutS)));
 				// timeout(1) kills the command when its time is up; then everything it left running goes too.
 				const limit = this.full.has(key) ? `ulimit -f ${FULL_FILE_BLOCKS}; ` : "";
-				const cmd = ["sh", "-c", `${limit}timeout -s KILL ${timeoutS} sh -c "$1"; s=$?; kill -9 -1 2>/dev/null; exit $s`, "annie", command];
+				const cmd = ["sh", "-c", `${limit}timeout -s KILL ${timeoutS} sh -c "$1"; s=$?; kill -9 -1 2>/dev/null; exit $s`, "owni", command];
 				const waitMs = (timeoutS + 15) * 1000;
 				const started = Date.now();
 				const out = await this.exec(key, cmd, waitMs, options.signal).catch(async (error: unknown) => {
@@ -434,7 +434,7 @@ export class DockerComputerProvider implements ComputerProvider {
 
 function name(key: string): string {
 	if (!/^[a-z0-9][a-z0-9_-]{0,100}$/.test(key)) throw new Error("Invalid computer key");
-	return `annie-computer-${key}`;
+	return `owni-computer-${key}`;
 }
 
 function message(error: unknown): string {

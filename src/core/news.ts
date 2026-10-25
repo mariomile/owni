@@ -26,15 +26,15 @@ export type NewsFeed = {
 
 export type NewsConfig = { readonly feeds: readonly NewsFeed[] };
 
-/** Feeds the operator may list in ANNIE_NEWS_FEEDS, at most. */
+/** Feeds the operator may list in OWNI_NEWS_FEEDS, at most. */
 export const MAX_FEEDS = 30;
 /** A feed's name, at most, in characters. */
 export const MAX_FEED_NAME = 40;
 
 /**
- * The built-in feeds, when the operator sets no ANNIE_NEWS_FEEDS: well-known public feeds,
+ * The built-in feeds, when the operator sets no OWNI_NEWS_FEEDS: well-known public feeds,
  * Italian first, one or more per section. The addresses could not be fetched where this list was
- * written: verify them with `pnpm annie check`, which fetches each one and names those that fail.
+ * written: verify them with `pnpm owni check`, which fetches each one and names those that fail.
  */
 export const DEFAULT_NEWS_FEEDS: readonly NewsFeed[] = [
 	{ name: "ANSA Ultima ora", url: "https://www.ansa.it/sito/notizie/topnews/topnews_rss.xml", section: "ultima ora" },
@@ -80,7 +80,7 @@ export type News = {
 };
 
 export type NewsOptions = {
-	/** Each feed's own time, redirects and body included: 6 seconds for a person waiting, more for pnpm annie check. */
+	/** Each feed's own time, redirects and body included: 6 seconds for a person waiting, more for pnpm owni check. */
 	readonly timeoutMs?: number;
 	/** Tests: the addresses of a host a redirect points to. */
 	readonly resolve?: (host: string) => Promise<readonly string[]>;

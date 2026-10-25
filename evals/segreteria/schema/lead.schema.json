@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "annie/evals/segreteria/lead.schema.json",
+  "$id": "owni/evals/segreteria/lead.schema.json",
   "title": "LeadFields (spec §4.1) - output atteso dall'estrattore Haiku",
   "description": "Campi della spec §4.1. rawSubject, rawSnippet, receivedAt, mailMessageId e ownerUserId sono riempiti dal codice dall'email in ingresso, non dal modello: nel gold non compaiono. title e originalLanguage sono AGGIUNTE proposte (spec §6 titoli e lingua) da confermare con Craft/Ship. A7: phone/email solo se scritti dal mittente; nessun altro dato personale (C.F., data di nascita, IBAN, indirizzo privato) nel lead.",
   "type": "object",

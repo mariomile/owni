@@ -7,7 +7,7 @@ Regole:
 - **Facoltativa per persona**, non imposta dall'owner: l'owner decide di chiederla, la console non la rende obbligatoria. Rendere la verifica obbligatoria per il tenant è un passo successivo, se un cliente lo chiede.
 - **Un codice vale una volta** (si salva l'ultimo passo usato) ed è accettato un passo prima o dopo, per l'orologio del telefono.
 - **Cinque tentativi in dieci minuti** per persona, contati prima della verifica, sul login e sulla disattivazione. Il conteggio vive nel processo e si azzera al riavvio: un limite contro i tentativi a raffica, non un registro.
-- **Attivarla chiude le altre sessioni** della persona: una sessione aperta con un link rubato non sopravvive. Il reset fatto dall'owner (console o `pnpm annie person reset-2fa`) le chiude tutte.
+- **Attivarla chiude le altre sessioni** della persona: una sessione aperta con un link rubato non sopravvive. Il reset fatto dall'owner (console o `pnpm owni person reset-2fa`) le chiude tutte.
 - **Il segreto TOTP sta in `people.json`**, nella cartella dati del tenant, come gli hash dei link. Non arriva mai al browser dopo l'attivazione, né nei log, né nell'audit. Chi ha accesso al disco ha comunque tutto: i backup vanno conservati cifrati (runbook).
 - **Le scritture su `people.json` e `sessions.json` passano da un lock condiviso fra processi**, perché la riga di comando li modifica mentre Owni gira.
 

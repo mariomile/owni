@@ -9,7 +9,7 @@ import type { CellProvider } from "../src/cloud/provider.ts";
 import { createComputerProvider } from "../src/computer/create.ts";
 import { RemoteComputerProvider } from "../src/computer/remote-computer.ts";
 import { ComputerError, type ComputerProvider, type ComputerRun, computerKey } from "../src/core/computer.ts";
-import { ConfigError, loadAnnieConfig, loadComputerConfig } from "../src/main/config.ts";
+import { ConfigError, loadOwniConfig, loadComputerConfig } from "../src/main/config.ts";
 import { tempDataDir } from "./helpers.ts";
 
 /** The computers of Owni Cloud (ADR 0015): cells ask the control plane, which holds Fly's token. */
@@ -86,7 +86,7 @@ async function controlPlane(computer: ComputerProvider, state: Record<string, un
 			...state,
 		}),
 	);
-	const cp = await startControlPlane({ dataDir, domain: "annie.test", publicScheme: "http", provider: idle, mailer: new MemoryMailer(), cellEnv: {}, idleMs: 60_000, web: { host: "127.0.0.1", port: 0 }, tickMs: 0, computer, ...(billing === undefined ? {} : { billing }), log: () => {} });
+	const cp = await startControlPlane({ dataDir, domain: "owni.test", publicScheme: "http", provider: idle, mailer: new MemoryMailer(), cellEnv: {}, idleMs: 60_000, web: { host: "127.0.0.1", port: 0 }, tickMs: 0, computer, ...(billing === undefined ? {} : { billing }), log: () => {} });
 	running.push(cp);
 	return `http://127.0.0.1:${(cp.server.address() as AddressInfo).port}`;
 }
@@ -113,10 +113,10 @@ describe("computers through the control plane", () => {
 		const url = await controlPlane(new Recorder());
 		await expect(new RemoteComputerProvider({ url, tenant: "aaaa", cellSecret: SECRET_B }).run(KEY, "x", { timeoutS: 5 })).rejects.toThrow("HTTP 404");
 		await expect(new RemoteComputerProvider({ url, tenant: "zzzz", cellSecret: SECRET_A }).run(KEY, "x", { timeoutS: 5 })).rejects.toThrow("HTTP 404");
-		const raw = await fetch(`${url}/internal/computer/run`, { method: "POST", headers: { authorization: `Bearer ${SECRET_A}`, "x-annie-tenant": "aaaa" }, body: JSON.stringify({ key: KEY, command: "x", timeoutS: 5 }) });
+		const raw = await fetch(`${url}/internal/computer/run`, { method: "POST", headers: { authorization: `Bearer ${SECRET_A}`, "x-owni-tenant": "aaaa" }, body: JSON.stringify({ key: KEY, command: "x", timeoutS: 5 }) });
 		expect(raw.status).toBe(404);
 		// Through a tenant's own host the cell's internal paths stay closed.
-		const viaTenant = await fetch(`${url}/internal/computer/check`, { headers: { host: "aaaa.annie.test" } });
+		const viaTenant = await fetch(`${url}/internal/computer/check`, { headers: { host: "aaaa.owni.test" } });
 		expect(viaTenant.status).toBe(404);
 	});
 
@@ -180,7 +180,7 @@ describe("computers through the control plane", () => {
 	it("tells a cell when Owni Cloud offers no computer", async () => {
 		const dataDir = tempDataDir();
 		writeFileSync(join(dataDir, "control-plane.json"), JSON.stringify({ accounts: [{ email: "a@x.example", tenant: "aaaa", createdAt: new Date().toISOString() }], cells: [{ tenant: "aaaa", secret: SECRET_A, nextWakeAt: null }], links: [] }));
-		const cp = await startControlPlane({ dataDir, domain: "annie.test", publicScheme: "http", provider: idle, mailer: new MemoryMailer(), cellEnv: {}, idleMs: 60_000, web: { host: "127.0.0.1", port: 0 }, tickMs: 0, log: () => {} });
+		const cp = await startControlPlane({ dataDir, domain: "owni.test", publicScheme: "http", provider: idle, mailer: new MemoryMailer(), cellEnv: {}, idleMs: 60_000, web: { host: "127.0.0.1", port: 0 }, tickMs: 0, log: () => {} });
 		running.push(cp);
 		const a = new RemoteComputerProvider({ url: `http://127.0.0.1:${(cp.server.address() as AddressInfo).port}`, tenant: "aaaa", cellSecret: SECRET_A });
 		expect(await a.check()).toBe("Owni Cloud non offre il computer");
@@ -190,7 +190,7 @@ describe("computers through the control plane", () => {
 	it("runs nothing for a tenant whose trial is over", async () => {
 		const past = new Date(Date.now() - 40 * 86_400_000).toISOString();
 		const recorder = new Recorder();
-		const billing = new StripeBilling({ secretKey: "sk_test_annie", webhookSecret: "whsec_test_annie", price: "price_flat", trialDays: 14, apiBase: "http://127.0.0.1:1" });
+		const billing = new StripeBilling({ secretKey: "sk_test_owni", webhookSecret: "whsec_test_owni", price: "price_flat", trialDays: 14, apiBase: "http://127.0.0.1:1" });
 		const url = await controlPlane(recorder, { billingSince: past, accounts: [{ email: "a@x.example", tenant: "aaaa", createdAt: past }] }, billing);
 		const a = new RemoteComputerProvider({ url, tenant: "aaaa", cellSecret: SECRET_A });
 		await expect(a.run(KEY, "x", { timeoutS: 5 })).rejects.toThrow("periodo di prova è finito");
@@ -200,16 +200,16 @@ describe("computers through the control plane", () => {
 
 describe("computer settings", () => {
 	it("reads Docker, Fly and the cell's computers, and refuses what Fly cannot give", () => {
-		expect(loadComputerConfig({ ANNIE_COMPUTER: "docker" })).toMatchObject({ kind: "docker", image: "annie-computer:latest" });
-		const fly = { ANNIE_COMPUTER: "fly", FLY_API_TOKEN: "t", ANNIE_FLY_ORG: "annie", ANNIE_COMPUTER_IMAGE: "registry.fly.io/annie-computer:fly" };
-		expect(loadComputerConfig(fly)).toEqual({ kind: "fly", token: "t", org: "annie", region: "fra", image: "registry.fly.io/annie-computer:fly", memoryMb: 1024, cpus: 1, diskMb: 2048 });
-		expect(() => loadComputerConfig({ ...fly, ANNIE_COMPUTER_IMAGE: "" })).toThrow(ConfigError);
-		expect(() => loadComputerConfig({ ...fly, ANNIE_COMPUTER_MEMORY_MB: "1000" })).toThrow("256");
-		expect(() => loadComputerConfig({ ...fly, ANNIE_COMPUTER_CPUS: "0.5" })).toThrow("whole CPUs");
-		expect(() => loadComputerConfig({ ANNIE_COMPUTER: "cloud", ANNIE_COMPUTER_URL: "https://annie.example" })).toThrow("ANNIE_CELL_SECRET");
-		expect(() => loadComputerConfig({ ANNIE_COMPUTER: "podman" })).toThrow("docker or fly");
-		const cell = loadAnnieConfig({ ANNIE_MODEL_PROVIDER: "faux", ANNIE_TENANT_ID: "aaaa", ANNIE_CELL_SECRET: SECRET_A, ANNIE_COMPUTER: "cloud", ANNIE_COMPUTER_URL: "https://annie.example/" });
-		expect(cell.computer).toEqual({ kind: "cloud", url: "https://annie.example" });
+		expect(loadComputerConfig({ OWNI_COMPUTER: "docker" })).toMatchObject({ kind: "docker", image: "owni-computer:latest" });
+		const fly = { OWNI_COMPUTER: "fly", FLY_API_TOKEN: "t", OWNI_FLY_ORG: "owni", OWNI_COMPUTER_IMAGE: "registry.fly.io/owni-computer:fly" };
+		expect(loadComputerConfig(fly)).toEqual({ kind: "fly", token: "t", org: "owni", region: "fra", image: "registry.fly.io/owni-computer:fly", memoryMb: 1024, cpus: 1, diskMb: 2048 });
+		expect(() => loadComputerConfig({ ...fly, OWNI_COMPUTER_IMAGE: "" })).toThrow(ConfigError);
+		expect(() => loadComputerConfig({ ...fly, OWNI_COMPUTER_MEMORY_MB: "1000" })).toThrow("256");
+		expect(() => loadComputerConfig({ ...fly, OWNI_COMPUTER_CPUS: "0.5" })).toThrow("whole CPUs");
+		expect(() => loadComputerConfig({ OWNI_COMPUTER: "cloud", OWNI_COMPUTER_URL: "https://owni.example" })).toThrow("OWNI_CELL_SECRET");
+		expect(() => loadComputerConfig({ OWNI_COMPUTER: "podman" })).toThrow("docker or fly");
+		const cell = loadOwniConfig({ OWNI_MODEL_PROVIDER: "faux", OWNI_TENANT_ID: "aaaa", OWNI_CELL_SECRET: SECRET_A, OWNI_COMPUTER: "cloud", OWNI_COMPUTER_URL: "https://owni.example/" });
+		expect(cell.computer).toEqual({ kind: "cloud", url: "https://owni.example" });
 		expect(createComputerProvider(cell.computer as NonNullable<typeof cell.computer>, { tenant: "aaaa", dataDir: tempDataDir(), cellSecret: SECRET_A })).toBeInstanceOf(RemoteComputerProvider);
 	});
 });

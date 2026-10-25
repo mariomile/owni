@@ -22,7 +22,7 @@ Lasciati e scritti nell'ADR: la foto compressa dall'app, un solo `from`, il cont
 
 | Cosa | Limite |
 |---|---|
-| Immagini al giorno | `ANNIE_IMAGE_MAX_PER_DAY` per account (100), solo quelle fatte |
+| Immagini al giorno | `OWNI_IMAGE_MAX_PER_DAY` per account (100), solo quelle fatte |
 | Varianti | da 1 a 4 per richiesta |
 | Descrizione | 4.000 caratteri |
 | Foto da ritoccare | JPEG, PNG o WebP fino a 20 MB |

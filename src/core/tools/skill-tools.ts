@@ -1,4 +1,4 @@
-import type { AnnieTool } from "../engine.ts";
+import type { OwniTool } from "../engine.ts";
 import { parseSkillMd, type Skill, SkillError, type SkillStore, SKILL_LIMITS, skillName, toSkillMd } from "../skills.ts";
 import type { Workspace } from "../workspace.ts";
 
@@ -21,7 +21,7 @@ export function createSkillTools(options: {
 	readonly whoIs: (thread: Thread) => string | undefined;
 	/** Saved, deleted and read skills, for the audit (names only, never their steps). */
 	readonly record?: (event: { type: "skill.saved" | "skill.deleted" | "skill.read"; skill: string; replaced?: boolean; draft?: true }) => Promise<void>;
-}): AnnieTool[] {
+}): OwniTool[] {
 	const { store, workspace } = options;
 	const who = (thread: Thread | undefined) => (thread === undefined ? undefined : options.whoIs(thread));
 	const notPrivate = "Errore: le skill si salvano e si cancellano solo in una conversazione con una persona sola; l'owner le gestisce anche dalla console.";

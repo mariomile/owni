@@ -9,7 +9,7 @@ const cleanups: (() => Promise<void>)[] = [];
 afterEach(async () => { for (const cleanup of cleanups.splice(0).reverse()) await cleanup(); });
 
 async function helper(body: string, timeoutMs = 2000) {
-	const dir = await mkdtemp(join(tmpdir(), "annie-local-desktop-"));
+	const dir = await mkdtemp(join(tmpdir(), "owni-local-desktop-"));
 	cleanups.push(() => rm(dir, { recursive: true, force: true }));
 	// Punctuation in the executable name proves this never goes through a shell.
 	const executable = join(dir, "helper with ' quotes; $(exit 1).mjs");

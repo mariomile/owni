@@ -51,7 +51,7 @@ afterEach(() => {
 });
 
 function temp(): string {
-	const dir = mkdtempSync(join(tmpdir(), "annie-recurring-"));
+	const dir = mkdtempSync(join(tmpdir(), "owni-recurring-"));
 	dirs.push(dir);
 	return dir;
 }
@@ -542,7 +542,7 @@ describe("the draft is sales_invoices' own", () => {
 			};
 			const byHand = all.find((i) => i.id === "BZ-0002");
 			const recurring = s.drafts()[0];
-			expect(recurring?.by).toBe("annie");
+			expect(recurring?.by).toBe("owni");
 			expect(strip(recurring)).toEqual(strip(byHand));
 		});
 	}

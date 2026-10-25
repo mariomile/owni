@@ -10,7 +10,7 @@ import { AgentDoc, type ConversationId, createRegistry, defineDoc, Harness } fro
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { piDurableEngine } from "../src/core/adapters/pi-durable.ts";
-import type { AnnieTool, EngineOpenOptions, EngineReply } from "../src/core/engine.ts";
+import type { OwniTool, EngineOpenOptions, EngineReply } from "../src/core/engine.ts";
 import { instanceId, tenantId } from "../src/core/ids.ts";
 import { instanceFile } from "../src/core/paths.ts";
 import { TenantRegistry } from "../src/core/registry.ts";
@@ -38,7 +38,7 @@ vi.mock("node:fs/promises", async (importOriginal) => {
 	};
 });
 
-const DEV = { provider: "faux", modelId: "annie-dev" };
+const DEV = { provider: "faux", modelId: "owni-dev" };
 const GROK = { provider: "xai", modelId: "grok-4.7" };
 
 const providers = vi.hoisted(() => new Map<string, Provider>());
@@ -55,7 +55,7 @@ function shownInstructions(messages: readonly Message[]): string | null | undefi
 }
 
 /** A tool that holds the turn until the session closes, or answers at once. */
-function hold(blocking: boolean, started: () => void = () => {}): AnnieTool {
+function hold(blocking: boolean, started: () => void = () => {}): OwniTool {
 	return {
 		name: "hold",
 		description: "Wait",
@@ -121,7 +121,7 @@ async function leftForGrok(threadKeys: readonly string[]): Promise<{ storageDir:
 
 /** The instructions each chat's conversation holds, read from a closed session's storage. */
 async function storedInstructions(storageDir: string): Promise<Record<string, string | undefined>> {
-	const ThreadsDoc = defineDoc<{ threads: Record<string, number> }>({ kind: "annie.threads", version: 1, scope: "session", initial: () => ({ threads: {} }) });
+	const ThreadsDoc = defineDoc<{ threads: Record<string, number> }>({ kind: "owni.threads", version: 1, scope: "session", initial: () => ({ threads: {} }) });
 	const models = createModels({
 		credentials: { read: async () => undefined, list: async () => [], modify: async () => {}, delete: async () => {} },
 		authContext: { env: async () => undefined, fileExists: async () => false },
@@ -399,8 +399,8 @@ describe("restart after the configuration changed", () => {
 		models.setProvider(faux.provider);
 		const storage = await openNodeSqliteStorage(join(storageDir, "pi-durable.sqlite"));
 		const harness = await Harness.open(storage, { models, registry: createRegistry(), settings: { compaction: { keepRecentTokens: 1 } } }, BACKGROUND_CONTEXT);
-		const threads = defineDoc<{ threads: Record<string, number> }>({ kind: "annie.threads", version: 1, scope: "session", initial: () => ({ threads: {} }) });
-		const choices = defineDoc<{ models: Record<string, typeof DEV> }>({ kind: "annie.thread-models", version: 1, scope: "session", initial: () => ({ models: {} }) });
+		const threads = defineDoc<{ threads: Record<string, number> }>({ kind: "owni.threads", version: 1, scope: "session", initial: () => ({ threads: {} }) });
+		const choices = defineDoc<{ models: Record<string, typeof DEV> }>({ kind: "owni.thread-models", version: 1, scope: "session", initial: () => ({ models: {} }) });
 		const id = (await harness.snapshot(threads, BACKGROUND_CONTEXT))!.threads["web:t1"] as ConversationId;
 		await (await harness.conversation(id, BACKGROUND_CONTEXT))!.compact(undefined, BACKGROUND_CONTEXT);
 		await waitFor(() => sent.length === 1);

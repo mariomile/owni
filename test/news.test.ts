@@ -1,14 +1,14 @@
 import { readFileSync } from "node:fs";
 import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
-import { type RunningAnnie, startAnnie } from "../src/app.ts";
+import { type RunningOwni, startOwni } from "../src/app.ts";
 import { BRIEF_INSTRUCTION, readOnlyInBriefs } from "../src/core/brief.ts";
 import type { ToolContext } from "../src/core/engine.ts";
 import { withoutBlocks } from "../src/core/html-text.ts";
 import { DEFAULT_NEWS_FEEDS, feedNews, looksLikeFeed, MAX_ITEMS, NEWS_SECTIONS, type NewsFeed, type NewsOptions, parseDate, parseFeed, SUMMARY_CHARS } from "../src/core/news.ts";
 import { createNewsTools } from "../src/core/tools/news-tools.ts";
 import { runChecks } from "../src/main/check.ts";
-import { loadAnnieConfig } from "../src/main/config.ts";
+import { loadOwniConfig } from "../src/main/config.ts";
 import { tempDataDir } from "./helpers.ts";
 
 const closers: (() => Promise<void>)[] = [];
@@ -590,14 +590,14 @@ describe("news_headlines", () => {
 });
 
 describe("news configuration", () => {
-	const base = { ANNIE_DATA_DIR: "/tmp/annie-news", ANNIE_MODEL_PROVIDER: "faux" };
+	const base = { OWNI_DATA_DIR: "/tmp/owni-news", OWNI_MODEL_PROVIDER: "faux" };
 
-	it("is off unless the operator sets ANNIE_NEWS=1; then the built-in feeds, https, named once, every section covered", () => {
-		expect(loadAnnieConfig(base).news).toBeUndefined();
-		expect(loadAnnieConfig({ ...base, ANNIE_NEWS: "0" }).news).toBeUndefined();
-		expect(loadAnnieConfig({ ...base, ANNIE_NEWS: "1" }).news).toEqual({ feeds: DEFAULT_NEWS_FEEDS });
-		expect(() => loadAnnieConfig({ ...base, ANNIE_NEWS: "si" })).toThrow("ANNIE_NEWS: 1 to offer the news headlines (public RSS/Atom feeds), 0 (default) for none");
-		expect(() => loadAnnieConfig({ ...base, ANNIE_NEWS_FEEDS: "Il Post|https://www.ilpost.it/feed/" })).toThrow("ANNIE_NEWS_FEEDS set without ANNIE_NEWS=1");
+	it("is off unless the operator sets OWNI_NEWS=1; then the built-in feeds, https, named once, every section covered", () => {
+		expect(loadOwniConfig(base).news).toBeUndefined();
+		expect(loadOwniConfig({ ...base, OWNI_NEWS: "0" }).news).toBeUndefined();
+		expect(loadOwniConfig({ ...base, OWNI_NEWS: "1" }).news).toEqual({ feeds: DEFAULT_NEWS_FEEDS });
+		expect(() => loadOwniConfig({ ...base, OWNI_NEWS: "si" })).toThrow("OWNI_NEWS: 1 to offer the news headlines (public RSS/Atom feeds), 0 (default) for none");
+		expect(() => loadOwniConfig({ ...base, OWNI_NEWS_FEEDS: "Il Post|https://www.ilpost.it/feed/" })).toThrow("OWNI_NEWS_FEEDS set without OWNI_NEWS=1");
 		expect(new Set(DEFAULT_NEWS_FEEDS.map((f) => f.name)).size).toBe(DEFAULT_NEWS_FEEDS.length);
 		for (const feed of DEFAULT_NEWS_FEEDS) {
 			expect(new URL(feed.url).protocol).toBe("https:");
@@ -611,9 +611,9 @@ describe("news configuration", () => {
 		for (const feed of DEFAULT_NEWS_FEEDS.filter((f) => f.name.startsWith("BBC"))) expect(["mondo", "tecnologia"]).toContain(feed.section);
 	});
 
-	it("ANNIE_NEWS_FEEDS replaces the list: Nome|https://url, an optional section, a query allowed", () => {
-		const on = { ...base, ANNIE_NEWS: "true" };
-		expect(loadAnnieConfig({ ...on, ANNIE_NEWS_FEEDS: " Il Post|https://www.ilpost.it/feed/|italia ; Locale|https://giornale.example/rss?sezione=1 ;" }).news).toEqual({
+	it("OWNI_NEWS_FEEDS replaces the list: Nome|https://url, an optional section, a query allowed", () => {
+		const on = { ...base, OWNI_NEWS: "true" };
+		expect(loadOwniConfig({ ...on, OWNI_NEWS_FEEDS: " Il Post|https://www.ilpost.it/feed/|italia ; Locale|https://giornale.example/rss?sezione=1 ;" }).news).toEqual({
 			feeds: [
 				{ name: "Il Post", url: "https://www.ilpost.it/feed/", section: "italia" },
 				{ name: "Locale", url: "https://giornale.example/rss?sezione=1" },
@@ -622,12 +622,12 @@ describe("news configuration", () => {
 	});
 
 	it("refuses feeds that are not https, carry credentials or a fragment, bad names, unknown sections, repeats, or more than 30", () => {
-		const on = { ...base, ANNIE_NEWS: "1" };
-		const load = (feeds: string) => () => loadAnnieConfig({ ...on, ANNIE_NEWS_FEEDS: feeds });
-		expect(load("Post|http://www.ilpost.it/feed/")).toThrow("ANNIE_NEWS_FEEDS (Post): an https address (http only on localhost)");
-		expect(load("Post|https://u:p@www.ilpost.it/feed/")).toThrow("ANNIE_NEWS_FEEDS (Post): no user name or password");
-		expect(load("Post|https://www.ilpost.it/feed/#x")).toThrow("ANNIE_NEWS_FEEDS (Post): an address without a fragment");
-		expect(load("Post|javascript:alert(1)")).toThrow("ANNIE_NEWS_FEEDS (Post): an https address");
+		const on = { ...base, OWNI_NEWS: "1" };
+		const load = (feeds: string) => () => loadOwniConfig({ ...on, OWNI_NEWS_FEEDS: feeds });
+		expect(load("Post|http://www.ilpost.it/feed/")).toThrow("OWNI_NEWS_FEEDS (Post): an https address (http only on localhost)");
+		expect(load("Post|https://u:p@www.ilpost.it/feed/")).toThrow("OWNI_NEWS_FEEDS (Post): no user name or password");
+		expect(load("Post|https://www.ilpost.it/feed/#x")).toThrow("OWNI_NEWS_FEEDS (Post): an address without a fragment");
+		expect(load("Post|javascript:alert(1)")).toThrow("OWNI_NEWS_FEEDS (Post): an https address");
 		expect(load("|https://www.ilpost.it/feed/")).toThrow("a feed's name is 1 to 40 characters");
 		expect(load(`${"x".repeat(41)}|https://www.ilpost.it/feed/`)).toThrow("a feed's name is 1 to 40 characters");
 		expect(load("Po\u0007st|https://www.ilpost.it/feed/")).toThrow("without control characters");
@@ -636,38 +636,38 @@ describe("news configuration", () => {
 		expect(load("Post|https://www.ilpost.it/feed/|gossip")).toThrow("the section of Post is one of ultima ora, italia, politica, mondo, economia, tecnologia, sport");
 		expect(load("Post|https://a.example/rss;post|https://b.example/rss")).toThrow("the name post is listed twice");
 		expect(load("A|https://a.example/rss;B|https://a.example/rss")).toThrow("the address of B is listed twice");
-		expect(load(Array.from({ length: 31 }, (_, i) => `F${i}|https://f${i}.example/rss`).join(";"))).toThrow("ANNIE_NEWS_FEEDS: 1 to 30 feeds");
-		expect(load(";;")).toThrow("ANNIE_NEWS_FEEDS: 1 to 30 feeds");
+		expect(load(Array.from({ length: 31 }, (_, i) => `F${i}|https://f${i}.example/rss`).join(";"))).toThrow("OWNI_NEWS_FEEDS: 1 to 30 feeds");
+		expect(load(";;")).toThrow("OWNI_NEWS_FEEDS: 1 to 30 feeds");
 	});
 
 	it("reaches the cells of Owni Cloud", () => {
 		const passed = /const passed = \[([^\]]*)\]/.exec(readFileSync("src/main/cloud.ts", "utf8"))?.[1] ?? "";
-		for (const name of ["ANNIE_NEWS", "ANNIE_NEWS_FEEDS"]) expect(passed).toContain(`"${name}"`);
+		for (const name of ["OWNI_NEWS", "OWNI_NEWS_FEEDS"]) expect(passed).toContain(`"${name}"`);
 	});
 
-	it("pnpm annie check reports every feed by name, never by address; some failing is a warning, none answering a failure", async () => {
+	it("pnpm owni check reports every feed by name, never by address; some failing is a warning, none answering a failure", async () => {
 		const notizie = (results: Awaited<ReturnType<typeof runChecks>>) => results.find((r) => r.name === "Notizie");
 		const fresh = new Date().toUTCString();
 		const off = fakeFeeds();
-		expect(notizie(await runChecks(loadAnnieConfig(base), off.fetch))).toBeUndefined();
+		expect(notizie(await runChecks(loadOwniConfig(base), off.fetch))).toBeUndefined();
 		expect(off.asked).toHaveLength(0);
-		const env = { ...base, ANNIE_NEWS: "1", ANNIE_NEWS_FEEDS: "Il Post|https://www.ilpost.it/feed/;Segreto|https://giornale.example/rss?token=abc123;Vuoto|https://vuoto.example/rss" };
+		const env = { ...base, OWNI_NEWS: "1", OWNI_NEWS_FEEDS: "Il Post|https://www.ilpost.it/feed/;Segreto|https://giornale.example/rss?token=abc123;Vuoto|https://vuoto.example/rss" };
 		const files: Record<string, Answer> = { "https://www.ilpost.it/feed/": rss([{ title: "Oggi", pubDate: fresh }]), "https://giornale.example/rss?token=abc123": rss([{ title: "Oggi", pubDate: fresh }]), "https://vuoto.example/rss": rss([{ title: "Senza data" }]) };
 		const ok = fakeFeeds(files);
-		expect(notizie(await runChecks(loadAnnieConfig(env), ok.fetch))).toEqual({ name: "Notizie", ok: true, detail: "3 feed su 3 rispondono: Il Post ok; Segreto ok; Vuoto senza notizie datate. Attenzione: senza notizie datate Vuoto. Controlla ANNIE_NEWS_FEEDS, o togli quei feed" });
+		expect(notizie(await runChecks(loadOwniConfig(env), ok.fetch))).toEqual({ name: "Notizie", ok: true, detail: "3 feed su 3 rispondono: Il Post ok; Segreto ok; Vuoto senza notizie datate. Attenzione: senza notizie datate Vuoto. Controlla OWNI_NEWS_FEEDS, o togli quei feed" });
 		expect(ok.asked.every((a) => a.signal instanceof AbortSignal)).toBe(true);
-		const some = notizie(await runChecks(loadAnnieConfig(env), fakeFeeds({ ...files, "https://giornale.example/rss?token=abc123": () => new Response("no", { status: 403 }), "https://www.ilpost.it/feed/": "<html></html>" }).fetch));
-		expect(some).toEqual({ name: "Notizie", ok: true, detail: "1 feed su 3 rispondono: Il Post non ha mandato un feed; Segreto risponde 403; Vuoto senza notizie datate. Attenzione: non vanno Il Post, Segreto; senza notizie datate Vuoto. Controlla ANNIE_NEWS_FEEDS, o togli quei feed" });
+		const some = notizie(await runChecks(loadOwniConfig(env), fakeFeeds({ ...files, "https://giornale.example/rss?token=abc123": () => new Response("no", { status: 403 }), "https://www.ilpost.it/feed/": "<html></html>" }).fetch));
+		expect(some).toEqual({ name: "Notizie", ok: true, detail: "1 feed su 3 rispondono: Il Post non ha mandato un feed; Segreto risponde 403; Vuoto senza notizie datate. Attenzione: non vanno Il Post, Segreto; senza notizie datate Vuoto. Controlla OWNI_NEWS_FEEDS, o togli quei feed" });
 		expect(some?.detail).not.toContain("abc123");
-		const none = notizie(await runChecks(loadAnnieConfig(env), fakeFeeds({}).fetch));
-		expect(none).toEqual({ name: "Notizie", ok: false, detail: "0 feed su 3 rispondono: Il Post risponde 404; Segreto risponde 404; Vuoto risponde 404. Controlla la rete e ANNIE_NEWS_FEEDS" });
+		const none = notizie(await runChecks(loadOwniConfig(env), fakeFeeds({}).fetch));
+		expect(none).toEqual({ name: "Notizie", ok: false, detail: "0 feed su 3 rispondono: Il Post risponde 404; Segreto risponde 404; Vuoto risponde 404. Controlla la rete e OWNI_NEWS_FEEDS" });
 	});
 });
 
 describe("news_headlines in an instance", () => {
 	it("is offered when the operator turned it on, through the faux model, and leaves no audit line", async () => {
 		const fake = fakeFeeds({ "https://www.ilpost.it/feed/": rss([{ title: "Una notizia di adesso", link: "https://www.ilpost.it/adesso/", pubDate: new Date().toUTCString() }]) });
-		const { reply, dataDir } = await boot(tempDataDir(), { ANNIE_NEWS: "1", ANNIE_NEWS_FEEDS: "Il Post|https://www.ilpost.it/feed/|italia" }, fake.fetch);
+		const { reply, dataDir } = await boot(tempDataDir(), { OWNI_NEWS: "1", OWNI_NEWS_FEEDS: "Il Post|https://www.ilpost.it/feed/|italia" }, fake.fetch);
 		const answer = await reply('/tool news_headlines {"topic":"notizia"}');
 		expect(answer).toContain("• Una notizia di adesso (Il Post, alle ");
 		expect(answer).toContain("https://www.ilpost.it/adesso/");
@@ -686,22 +686,22 @@ describe("news_headlines in an instance", () => {
 });
 
 async function boot(dataDir: string, env: Record<string, string>, newsFetch: typeof fetch) {
-	const config = loadAnnieConfig({ ANNIE_DATA_DIR: dataDir, ANNIE_MODEL_PROVIDER: "faux", ANNIE_WEB_PORT: "1", ...env });
-	const annie: RunningAnnie = await startAnnie({ ...config, web: { ...config.web, port: 0 } }, { newsFetch, schedulerIntervalMs: 60_000, log: () => {} });
-	closers.push(() => annie.stop());
-	const base = `http://127.0.0.1:${(annie.server.address() as AddressInfo).port}`;
-	const login = await fetch(`${base}/api/login`, { method: "POST", headers: { "x-annie": "1" }, body: JSON.stringify({ token: (annie.ownerLink as string).split("#")[1] }) });
+	const config = loadOwniConfig({ OWNI_DATA_DIR: dataDir, OWNI_MODEL_PROVIDER: "faux", OWNI_WEB_PORT: "1", ...env });
+	const owni: RunningOwni = await startOwni({ ...config, web: { ...config.web, port: 0 } }, { newsFetch, schedulerIntervalMs: 60_000, log: () => {} });
+	closers.push(() => owni.stop());
+	const base = `http://127.0.0.1:${(owni.server.address() as AddressInfo).port}`;
+	const login = await fetch(`${base}/api/login`, { method: "POST", headers: { "x-owni": "1" }, body: JSON.stringify({ token: (owni.ownerLink as string).split("#")[1] }) });
 	const cookie = (login.headers.get("set-cookie") ?? "").split(";")[0] as string;
 	const api = async (path: string, body?: unknown) => {
-		const res = await fetch(`${base}${path}`, { method: body === undefined ? "GET" : "POST", headers: { cookie, "x-annie": "1" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+		const res = await fetch(`${base}${path}`, { method: body === undefined ? "GET" : "POST", headers: { cookie, "x-owni": "1" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
 		// biome-ignore lint: test
 		return (await res.json()) as any;
 	};
-	const thread = (await api("/api/instances/annie/threads", {})).thread;
+	const thread = (await api("/api/instances/owni/threads", {})).thread;
 	const reply = async (text: string): Promise<string> => {
-		const answers = async () => ((await api(`/api/instances/annie/threads/${thread.id}`)).entries as { from: string; text?: string }[]).filter((e) => e.from === "annie");
+		const answers = async () => ((await api(`/api/instances/owni/threads/${thread.id}`)).entries as { from: string; text?: string }[]).filter((e) => e.from === "owni");
 		const before = (await answers()).length;
-		await api(`/api/instances/annie/threads/${thread.id}/messages`, { text });
+		await api(`/api/instances/owni/threads/${thread.id}/messages`, { text });
 		for (const start = Date.now(); Date.now() - start < 20_000; ) {
 			const now = await answers();
 			if (now.length > before) return now.at(-1)?.text ?? "";

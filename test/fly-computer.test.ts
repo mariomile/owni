@@ -7,13 +7,13 @@ import { fakeFly, runProcess } from "./fake-fly.ts";
 
 /**
  * The computer on micro-VMs (ADR 0015), against a stand-in for Fly's Machines API whose execs
- * run docker/annie-run.py here: a state folder and a /work per app, the runner as it runs in the
+ * run docker/owni-run.py here: a state folder and a /work per app, the runner as it runs in the
  * machine. Run as root, the runner drops to a uid of its own (4242 here, 1000 on the machine).
  */
 const root = mkdtempSync(join(tmpdir(), "fly-computer-"));
 // uid 1000 reaches its /work through here, as it does on the machine.
 chmodSync(root, 0o755);
-const runner = join(import.meta.dirname, "..", "docker", "annie-run.py");
+const runner = join(import.meta.dirname, "..", "docker", "owni-run.py");
 const asRoot = process.getuid?.() === 0;
 const UID = asRoot ? 4242 : (process.getuid?.() ?? 0);
 const dirs = (app: string) => ({ state: join(root, app, "state"), work: join(root, app, "work") });
@@ -32,14 +32,14 @@ const backend = {
 				chownSync(work, UID, UID);
 			}
 		}
-		// What annie-fly-init leaves once the machine is cut off the network.
+		// What owni-fly-init leaves once the machine is cut off the network.
 		writeFileSync(join(state, "sealed"), "");
 	},
 	exec(app: string, command: readonly string[], stdin: string) {
 		const { state, work } = dirs(app);
-		if (command[0] !== "/usr/local/bin/annie-run") return Promise.resolve({ exit_code: 127, stdout: "", stderr: "not found" });
+		if (command[0] !== "/usr/local/bin/owni-run") return Promise.resolve({ exit_code: 127, stdout: "", stderr: "not found" });
 		if (killedBySignal.has(String(command[1]))) return Promise.resolve({ exit_code: 0, exit_signal: 9, stdout: "", stderr: "" });
-		return runProcess("python3", [runner, ...command.slice(1)], stdin, { ANNIE_RUN_STATE: state, ANNIE_RUN_WORK: work, ANNIE_RUN_UID: String(UID) });
+		return runProcess("python3", [runner, ...command.slice(1)], stdin, { OWNI_RUN_STATE: state, OWNI_RUN_WORK: work, OWNI_RUN_UID: String(UID) });
 	},
 	async destroy(app: string) {
 		rmSync(join(root, app), { recursive: true, force: true });
@@ -49,7 +49,7 @@ const backend = {
 let fly: Awaited<ReturnType<typeof fakeFly>>;
 const appOf = (key: string) => computer().appOf(key);
 const computer = (extra: Partial<ConstructorParameters<typeof FlyComputerProvider>[0]> = {}) =>
-	new FlyComputerProvider({ token: "fly-test-token", org: "annie", region: "fra", image: "registry.fly.io/annie-computer:fly", apiUrl: fly.url, salt: "sale-di-prova-0123456789", waitSliceS: 1, chunkBytes: 10, diskMb: 1, ...extra });
+	new FlyComputerProvider({ token: "fly-test-token", org: "owni", region: "fra", image: "registry.fly.io/owni-computer:fly", apiUrl: fly.url, salt: "sale-di-prova-0123456789", waitSliceS: 1, chunkBytes: 10, diskMb: 1, ...extra });
 
 beforeAll(async () => {
 	fly = await fakeFly(backend);
@@ -66,17 +66,17 @@ describe("the computer on a Fly machine", () => {
 		expect(run).toMatchObject({ exitCode: 3, stderr: "errore\n", timedOut: false, killed: false, truncated: false, diskFull: false });
 		expect(run.stdout).toBe(`${UID}\n${realpathSync(dirs(appOf("aaaa1111")).work)}\n`);
 		const app = fly.apps.get(appOf("aaaa1111"));
-		expect(app).toMatchObject({ network: appOf("aaaa1111"), org: "annie" });
+		expect(app).toMatchObject({ network: appOf("aaaa1111"), org: "owni" });
 		expect(app?.volumes).toEqual([{ id: expect.any(String), name: "work", size_gb: 1, region: "fra", encrypted: true, attached_machine_id: app?.machines[0]?.id, state: "created" }]);
 		const config = app?.machines[0]?.config as Record<string, unknown>;
 		expect(config).toMatchObject({
-			image: "registry.fly.io/annie-computer:fly",
+			image: "registry.fly.io/owni-computer:fly",
 			services: [],
 			restart: { policy: "no" },
 			mounts: [{ volume: app?.volumes[0]?.id, path: "/work" }],
 			guest: { cpu_kind: "shared", cpus: 1, memory_mb: 1024 },
-			env: { ANNIE_IDLE_S: "600" },
-			metadata: { annie_computer: "aaaa1111" },
+			env: { OWNI_IDLE_S: "600" },
+			metadata: { owni_computer: "aaaa1111" },
 		});
 		// A second command reuses the machine.
 		expect((await c.run("aaaa1111", "echo di nuovo", { timeoutS: 10 })).stdout).toBe("di nuovo\n");
@@ -154,12 +154,12 @@ describe("the computer on a Fly machine", () => {
 	it("updates the machine when the image changes, on the same volume", async () => {
 		await computer().put("hhhh8888", [{ path: "resta.txt", data: Buffer.from("ciao") }]);
 		const before = fly.apps.get(appOf("hhhh8888"))?.machines[0];
-		const c = computer({ image: "registry.fly.io/annie-computer:nuova" });
+		const c = computer({ image: "registry.fly.io/owni-computer:nuova" });
 		expect((await c.run("hhhh8888", "cat resta.txt", { timeoutS: 10 })).stdout).toBe("ciao");
 		const app = fly.apps.get(appOf("hhhh8888"));
 		expect(app?.machines).toHaveLength(1);
 		expect(app?.machines[0]?.id).toBe(before?.id);
-		expect(app?.machines[0]?.config).toMatchObject({ image: "registry.fly.io/annie-computer:nuova", mounts: [{ volume: app?.volumes[0]?.id }] });
+		expect(app?.machines[0]?.config).toMatchObject({ image: "registry.fly.io/owni-computer:nuova", mounts: [{ volume: app?.volumes[0]?.id }] });
 		expect(app?.volumes).toHaveLength(1);
 	});
 
@@ -181,7 +181,7 @@ describe("the computer on a Fly machine", () => {
 
 	it("uses a volume left free again, and grows the volume with the quota", async () => {
 		const app = appOf("kkkk1111");
-		fly.apps.set(app, { name: app, network: app, org: "annie", machines: [], volumes: [{ id: "vol_left", name: "work", size_gb: 1, region: "fra", encrypted: true, attached_machine_id: null, state: "created" }] });
+		fly.apps.set(app, { name: app, network: app, org: "owni", machines: [], volumes: [{ id: "vol_left", name: "work", size_gb: 1, region: "fra", encrypted: true, attached_machine_id: null, state: "created" }] });
 		await computer().run("kkkk1111", "true", { timeoutS: 10 });
 		expect(fly.apps.get(app)?.volumes).toHaveLength(1);
 		expect(fly.apps.get(app)?.machines[0]?.config).toMatchObject({ mounts: [{ volume: "vol_left" }] });
@@ -205,7 +205,7 @@ describe("the computer on a Fly machine", () => {
 		const state = dirs("idle").state;
 		mkdirSync(state, { recursive: true });
 		const started = Date.now();
-		const out = await runProcess("python3", [runner, "idle", "1"], "", { ANNIE_RUN_STATE: state, ANNIE_RUN_WORK: root });
+		const out = await runProcess("python3", [runner, "idle", "1"], "", { OWNI_RUN_STATE: state, OWNI_RUN_WORK: root });
 		expect(out.exit_code).toBe(0);
 		expect(Date.now() - started).toBeLessThan(5000);
 	});

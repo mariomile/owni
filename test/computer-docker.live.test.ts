@@ -3,13 +3,13 @@ import { DockerComputerProvider } from "../src/computer/docker-computer.ts";
 
 /**
  * The computer on a real Docker daemon, with the real image (CI's Image workflow builds it):
- * ANNIE_TEST_COMPUTER_IMAGE=annie-computer:ci pnpm vitest run test/computer-docker.live.test.ts
+ * OWNI_TEST_COMPUTER_IMAGE=owni-computer:ci pnpm vitest run test/computer-docker.live.test.ts
  */
-const image = process.env.ANNIE_TEST_COMPUTER_IMAGE;
+const image = process.env.OWNI_TEST_COMPUTER_IMAGE;
 const key = `live-${process.pid}`;
 
 describe.skipIf(image === undefined)("the computer on a real Docker host", () => {
-	const computer = new DockerComputerProvider({ image: image as string, ...(process.env.ANNIE_TEST_COMPUTER_RUNTIME ? { runtime: process.env.ANNIE_TEST_COMPUTER_RUNTIME } : {}) });
+	const computer = new DockerComputerProvider({ image: image as string, ...(process.env.OWNI_TEST_COMPUTER_RUNTIME ? { runtime: process.env.OWNI_TEST_COMPUTER_RUNTIME } : {}) });
 	afterAll(() => computer.reset(key));
 
 	it("runs as uid 1000 in /work, with no network and a read-only system", async () => {
@@ -19,7 +19,7 @@ describe.skipIf(image === undefined)("the computer on a real Docker host", () =>
 		expect((await computer.run(key, "ls /sys/class/net", { timeoutS: 10 })).stdout.trim()).toBe("lo");
 		const net = await computer.run(key, "python3 -c \"import socket; socket.create_connection(('1.1.1.1', 53), 3)\"", { timeoutS: 10 });
 		expect(net.exitCode).not.toBe(0);
-		expect((await computer.run(key, "touch /etc/annie", { timeoutS: 10 })).exitCode).not.toBe(0);
+		expect((await computer.run(key, "touch /etc/owni", { timeoutS: 10 })).exitCode).not.toBe(0);
 		expect((await computer.run(key, "touch /work/ok && touch /tmp/ok", { timeoutS: 10 })).exitCode).toBe(0);
 	}, 120_000);
 

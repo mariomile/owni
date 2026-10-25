@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { makeDocumentFile } from "../document-reader.ts";
 import { DocumentError } from "../documents.ts";
-import type { AnnieTool, ToolContext } from "../engine.ts";
+import type { OwniTool, ToolContext } from "../engine.ts";
 import type { DdtStore } from "../ddt-store.ts";
 import type { ExpenseStore } from "../expense-store.ts";
 import { euros, n1 } from "../format-words.ts";
@@ -73,12 +73,12 @@ type Draft = { readonly supplier: SupplierSaid; readonly lines: readonly DraftLi
  * only. create, change, mark_sent, cancel, document, export and lead_time write (and the brief's
  * list, which marks what it said); suggest, list and status only read. Today is read once per call.
  */
-export function createOrderTools(options: OrderToolsOptions): AnnieTool[] {
+export function createOrderTools(options: OrderToolsOptions): OwniTool[] {
 	const { store, workspace, timeZone } = options;
 	const now = options.now ?? (() => new Date());
 	const make = options.make ?? ((input: MakeInput) => makeDocumentFile(input));
 	const scanner = options.invoices === undefined ? undefined : (options.scanner ?? new InvoiceScanner(workspace));
-	const who = (ctx: ToolContext) => (ctx.thread === undefined ? "annie" : (options.whoIs(ctx.thread) ?? `${ctx.thread.channel}:${ctx.thread.threadId}`));
+	const who = (ctx: ToolContext) => (ctx.thread === undefined ? "owni" : (options.whoIs(ctx.thread) ?? `${ctx.thread.channel}:${ctx.thread.threadId}`));
 	const marker = (ctx: ToolContext): Marker => ({ by: who(ctx), at: now().toISOString() });
 	const audit = async (ctx: ToolContext, op: OrderEvent["op"], count: number) => {
 		await ctx.step("audit", async () => {

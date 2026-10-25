@@ -21,7 +21,7 @@ import { type McpOAuth, McpOAuthError } from "../connectors/mcp-oauth.ts";
 import { attachmentNote } from "../core/attachment-note.ts";
 import { decideAgentRequest, decideConnectorAction, decideToolProposal, decideWebAction, isApprover, NotAnApprover, OWNER, type Approver } from "../core/approvals.ts";
 import { AgentRequestError } from "../core/agent-requests.ts";
-import type { AnnieTool } from "../core/engine.ts";
+import type { OwniTool } from "../core/engine.ts";
 import { type ConnectorAction, ConnectorActionError, type ConnectorActionResult } from "../core/connector-actions.ts";
 import { documentKind, documentLabel } from "../core/documents.ts";
 import { recordingLabel } from "../core/recordings.ts";
@@ -47,7 +47,7 @@ import { ConnectorHttpError } from "../connectors/http.ts";
 import { instanceId } from "../core/ids.ts";
 import type { InstanceRecord, ModelSelection } from "../core/registry.ts";
 import { type ChatModelChoice, ChatModelRefused, ChatModels } from "../core/chat-models.ts";
-import type { AnnieRuntime } from "../core/runtime.ts";
+import type { OwniRuntime } from "../core/runtime.ts";
 import { modelApiKeySecret } from "../core/secrets.ts";
 import { type Schedule, ScheduleError, schedulePerson, threadPerson } from "../core/schedules.ts";
 import { firstLook, parseAmount, type Watch, WatchError, watchUrl } from "../core/watches.ts";
@@ -139,7 +139,7 @@ export class BrowserPanelError extends Error {
 }
 
 export type WebAppOptions = {
-	readonly runtime: AnnieRuntime;
+	readonly runtime: OwniRuntime;
 	readonly tenantId: string;
 	readonly people: PeopleStore;
 	readonly sessions: SessionStore;
@@ -195,7 +195,7 @@ export type WebAppOptions = {
 	/** Runs an approved connector call on the instance's live connection (ADR 0025). */
 	readonly runConnectorAction?: (instanceId: string) => (action: ConnectorAction) => Promise<ConnectorActionResult>;
 	/** The instance's own tools, opening it when needed: another agente's request an approver approved runs with them (ADR 0108). */
-	readonly agentRequestTools?: (instanceId: string) => () => Promise<readonly AnnieTool[] | undefined>;
+	readonly agentRequestTools?: (instanceId: string) => () => Promise<readonly OwniTool[] | undefined>;
 	/** The WhatsApp number of each instance that has one: its webhook. */
 	readonly whatsappHooks?: ReadonlyMap<string, WhatsAppAdapter>;
 	/** The phone number of each instance that has one: its webhook (ADR 0012). */
@@ -239,7 +239,7 @@ export type WebAppOptions = {
 	readonly log?: (message: string) => void;
 };
 
-const COOKIE = "annie_session";
+const COOKIE = "owni_session";
 const MAX_CODE_ATTEMPTS = 5;
 const CODE_LOCK_MS = 10 * 60 * 1000;
 const MAX_UPLOAD = 20 * 1024 * 1024;
@@ -1539,7 +1539,7 @@ export function createWebApp(options: WebAppOptions): Server {
 		if (record.egress.channels.includes("web")) {
 			const channel = channelOf(record.id);
 			for (const thread of (await channel.threads(me.id)).slice(0, 5)) {
-				if ((await channel.transcript(thread.id)).some((e) => e.from === "annie" && e.text !== REPLY_FAILED && e.text !== REPLY_CANCELLED)) {
+				if ((await channel.transcript(thread.id)).some((e) => e.from === "owni" && e.text !== REPLY_FAILED && e.text !== REPLY_CANCELLED)) {
 					tried = true;
 					break;
 				}
@@ -2122,7 +2122,7 @@ export function createWebApp(options: WebAppOptions): Server {
 
 	const server = createServer((req, res) => {
 		void handle(req, res).catch((error: unknown) => {
-			options.log?.(`web: ${req.method} ${new URL(req.url ?? "/", "http://annie.local").pathname}: ${error instanceof Error ? error.message : String(error)}`);
+			options.log?.(`web: ${req.method} ${new URL(req.url ?? "/", "http://owni.local").pathname}: ${error instanceof Error ? error.message : String(error)}`);
 			if (!res.headersSent) send(res, 500, { error: "Errore interno" });
 			else res.end();
 		});
@@ -2130,13 +2130,13 @@ export function createWebApp(options: WebAppOptions): Server {
 
 	async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
 		securityHeaders(res);
-		const url = new URL(req.url ?? "/", "http://annie.local");
+		const url = new URL(req.url ?? "/", "http://owni.local");
 		if (req.method === "GET" && url.pathname === "/healthz") return send(res, 200, { ok: true });
 		if (req.method === "GET" && url.pathname === "/internal/cell") return cellState(req, res);
 		if (req.method === "POST" && url.pathname === "/internal/owner-link") return ownerLink(req, res);
 		// A cell on a platform has a public address of its own: there it answers only what came through
 		// the control plane, which checks sleep and subscription first.
-		if (options.cell !== undefined && !sameSecret(String(req.headers["x-annie-proxy"] ?? ""), cellProxyToken)) return send(res, 404, { error: "Not found" });
+		if (options.cell !== undefined && !sameSecret(String(req.headers["x-owni-proxy"] ?? ""), cellProxyToken)) return send(res, 404, { error: "Not found" });
 		if (req.method === "GET" && url.pathname in STATIC) return serveStatic(res, STATIC[url.pathname] as string);
 		const hook = /^\/hooks\/telegram\/([a-z0-9_-]+)$/.exec(url.pathname);
 		if (req.method === "POST" && hook !== null) return telegramHook(req, res, hook[1] as string);
@@ -2152,7 +2152,7 @@ export function createWebApp(options: WebAppOptions): Server {
 		const match = routes.find((r) => r.method === req.method && r.pattern.test(url.pathname));
 		if (match === undefined) return send(res, 404, { error: "Not found" });
 		// A header a cross-site form or image cannot send: every change needs it.
-		if (req.method !== "GET" && req.headers["x-annie"] !== "1") return send(res, 403, { error: "Missing X-Owni header" });
+		if (req.method !== "GET" && req.headers["x-owni"] !== "1") return send(res, 403, { error: "Missing X-Owni header" });
 		let person: Person | undefined;
 		if (match.auth !== "none") {
 			const personId = await options.sessions.personOf(cookie(req, COOKIE));
@@ -2252,7 +2252,7 @@ export function createWebApp(options: WebAppOptions): Server {
 			throw error;
 		}
 		const bearer = /^Bearer\s+(\S+)$/i.exec(String(req.headers.authorization ?? ""))?.[1];
-		const token = bearer ?? String(req.headers["x-annie-token"] ?? url.searchParams.get("token") ?? "");
+		const token = bearer ?? String(req.headers["x-owni-token"] ?? url.searchParams.get("token") ?? "");
 		const key = req.headers["idempotency-key"] ?? req.headers["x-idempotency-key"];
 		let result;
 		try {

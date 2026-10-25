@@ -20,7 +20,7 @@ Un tool, `exchange_rate`, sui tassi di riferimento dell'euro della Banca Central
 - **Tre file della BCE.** Il giorno, gli ultimi 90 giorni, la storia dal 1999 (solo per date più vecchie), tenuti in memoria.
   - Il file del giorno resta finché basta. Dopo le 16:00 di Francoforte, se non ha ancora il cambio di oggi, si riprova ogni 5 minuti fino alle 18:00, poi al più ogni ora fino a mezzanotte; intanto Owni dice che la BCE oggi non ha pubblicato.
   - Un download fallito non si ripete per 2 minuti.
-- **Acceso dall'operatore.** Con `ANNIE_EXCHANGE_RATES=1`, come il meteo (ADR 0039). Dal server non esce nessun dato di chi scrive, solo la richiesta di un file pubblico, ma vale il principio dell'architettura: niente in uscita senza una configurazione esplicita. Così un server senza rete non ha un tool che fallisce.
+- **Acceso dall'operatore.** Con `OWNI_EXCHANGE_RATES=1`, come il meteo (ADR 0039). Dal server non esce nessun dato di chi scrive, solo la richiesta di un file pubblico, ma vale il principio dell'architettura: niente in uscita senza una configurazione esplicita. Così un server senza rete non ha un tool che fallisce.
 - **Formattazione condivisa.** Numeri, importi e date all'italiana sono in `src/core/italian-format.ts`, usato da calcoli, meteo e cambi.
 
 ## Limiti

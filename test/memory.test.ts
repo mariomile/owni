@@ -87,13 +87,13 @@ describe("MemoryStore", () => {
 	it("keeps memories across restarts and refuses empty or too long ones, and a full archivio", () => {
 		const dir = tempDataDir();
 		const store = new MemoryStore(dir);
-		const m = store.add({ about: "test:anna", text: "  Lavora da Roma  ", source: "annie" });
+		const m = store.add({ about: "test:anna", text: "  Lavora da Roma  ", source: "owni" });
 		expect(m.text).toBe("Lavora da Roma");
 		expect(new MemoryStore(dir).list()).toEqual([m]);
-		expect(() => store.add({ about: "test:anna", text: " ", source: "annie" })).toThrow();
-		expect(() => store.add({ about: "test:anna", text: "x".repeat(501), source: "annie" })).toThrow();
-		for (let i = 0; i < MEMORY_LIMITS.archived; i++) store.add({ about: "test:anna", text: `dettaglio ${i}`, source: "annie", archived: true });
-		expect(() => store.add({ about: "test:anna", text: "uno di troppo", source: "annie", archived: true })).toThrow(/archivio è pieno/);
+		expect(() => store.add({ about: "test:anna", text: " ", source: "owni" })).toThrow();
+		expect(() => store.add({ about: "test:anna", text: "x".repeat(501), source: "owni" })).toThrow();
+		for (let i = 0; i < MEMORY_LIMITS.archived; i++) store.add({ about: "test:anna", text: `dettaglio ${i}`, source: "owni", archived: true });
+		expect(() => store.add({ about: "test:anna", text: "uno di troppo", source: "owni", archived: true })).toThrow(/archivio è pieno/);
 		expect(store.forSubject("test:luca")).toEqual([]);
 	});
 });
@@ -121,8 +121,8 @@ describe("memoria: l'archivio", () => {
 
 	it("when the essential ones are full the oldest goes to the archivio instead of a refusal; the archivio has a cap", () => {
 		const store = new MemoryStore(tempDataDir());
-		for (let i = 0; i < MEMORY_LIMITS.essential; i++) store.add({ about: "test:anna", text: `fatto ${i}`, source: "annie" });
-		store.add({ about: "test:anna", text: "il più nuovo", source: "annie" });
+		for (let i = 0; i < MEMORY_LIMITS.essential; i++) store.add({ about: "test:anna", text: `fatto ${i}`, source: "owni" });
+		store.add({ about: "test:anna", text: "il più nuovo", source: "owni" });
 		expect(store.forSubject("test:anna")).toHaveLength(MEMORY_LIMITS.essential);
 		expect(store.forSubject("test:anna").map((m) => m.text)).not.toContain("fatto 0");
 		expect(store.archivedFor("test:anna")).toBe(1);

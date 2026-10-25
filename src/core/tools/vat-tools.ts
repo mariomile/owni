@@ -1,11 +1,11 @@
-import type { AnnieTool, ToolContext } from "../engine.ts";
+import type { OwniTool, ToolContext } from "../engine.ts";
 import { capitalized, italianDateTime, twoDigits } from "../italian-format.ts";
 import { type CodiceFiscale, EU_VAT_COUNTRIES, type EuVatCountry, parseTaxId } from "../tax-ids.ts";
 import { untrusted } from "../untrusted.ts";
 import { type Vies, type ViesAnswer, ViesError } from "../vies.ts";
 
 export type VatToolsOptions = {
-	/** The VIES, when the operator turned it on (ANNIE_VAT_CHECK=1): without it, only the formal check. */
+	/** The VIES, when the operator turned it on (OWNI_VAT_CHECK=1): without it, only the formal check. */
 	readonly vies?: Vies;
 	/** The account: the VIES's answers are kept per account. */
 	readonly tenant: string;
@@ -30,7 +30,7 @@ const ADE = "«Verifica partita IVA» sul sito dell'Agenzia delle Entrate";
  * states and are fenced as data. No audit line: nothing changes, like weather and exchange rates,
  * and a line without the number (which is never written down) would say nothing.
  */
-export function createVatTools(options: VatToolsOptions): AnnieTool[] {
+export function createVatTools(options: VatToolsOptions): OwniTool[] {
 	const online = options.vies !== undefined;
 	return [
 		{
