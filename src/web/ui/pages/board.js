@@ -1,5 +1,5 @@
 // Board page.
-import { api, confirmDialog, face, fmt, go, h, head, icon, mount, state, store, toast } from "../common.js";
+import { api, confirmDialog, face, fmt, go, h, head, icon, mount, route, instanceHref, state, store, toast } from "../common.js";
 import { refreshInstances, refreshSetup } from "../session.js";
 import { render } from "../shell.js";
 
@@ -354,7 +354,7 @@ export async function viewBoard(main) {
 		const alone = h("input", { type: "checkbox", checked: c.auto !== undefined });
 		const aloneRow = h("label.board-alone", alone, h("span", aloneLabel));
 		if (c.status === "da_rivedere") {
-			moves.push(h("button.btn.accent", { onclick: act(withComment({ status: "fatto" }), `Scheda #${c.n} approvata`) }, icon("check"), "Approva"));
+			moves.push(h("button.btn.accent", { onclick: act(withComment({ status: "fatto" }), `Risultato dell’incarico #${c.n} accettato`) }, icon("check"), "Accetta risultato"));
 			moves.push(
 				h(
 					"button.btn",
@@ -523,10 +523,11 @@ export async function viewBoard(main) {
 		}
 	};
 
-	const newCard = () => {
-		const title = h("input.board-new-title", { type: "text", maxlength: 120, placeholder: "Titolo della scheda", "aria-label": "Titolo" });
+	const newCard = (intent) => {
+		const title = h("input.board-new-title", { type: "text", maxlength: 120, placeholder: "Titolo dell’incarico", "aria-label": "Titolo" });
 		const description = h("textarea.board-new-desc", { rows: 4, placeholder: "Cosa fare e quando è finito: l'agente vede solo questo", "aria-label": "Descrizione" });
 		const assignee = h("select", h("option", { value: "" }, "Nessuno, per ora"), data.agents.filter((a) => a.canAssign).map((a) => h("option", { value: a.id }, a.emoji ? `${a.emoji} ${a.name}` : a.name)));
+		if (route().instanceId && data.agents.some((a) => a.id === route().instanceId && a.canAssign)) assignee.value = route().instanceId;
 		const priority = h("select", PRIORITIES.map(([v, l]) => h("option", { value: v, selected: v === "normale" ? "selected" : undefined }, l)));
 		const due = h("input", { type: "date", "aria-label": "Scadenza" });
 		const parents = data.cards.filter((x) => !x.parent && x.status !== "fatto").sort((a, b) => a.n - b.n);
@@ -570,7 +571,7 @@ export async function viewBoard(main) {
 		);
 		const dialog = h(
 			"dialog.board-dialog.board-new",
-			h("h2", "Nuova scheda"),
+			h("h2", "Nuovo incarico"),
 			title,
 			description,
 			h("div.board-fields", h("label.field", h("span", "Affida a"), assignee), h("label.field", h("span", "Priorità"), priority)),
@@ -609,6 +610,8 @@ export async function viewBoard(main) {
 			}
 		});
 		dialog.addEventListener("close", () => dialog.remove());
+		if (assignee.value) { aloneRow.hidden = false; repeatRow.hidden = false; }
+		if (intent === "ripeti" && assignee.value) { every.value = "settimana"; drawRepeat(); }
 		document.body.append(dialog);
 		dialog.showModal();
 		title.focus();
@@ -654,12 +657,26 @@ export async function viewBoard(main) {
 	const routines = data.routines?.length ? h("details.board-routines", { open: store("annie.board.routines") !== "0" ? "" : undefined, ontoggle: (e) => store("annie.board.routines", e.currentTarget.open ? "1" : "0") }, h("summary", `Si ripetono (${data.routines.length})`), h("ul", data.routines.map(routineRow))) : null;
 	mount(
 		main,
-		head(null, h("h1", "Board"), "Le cose da fare, affidate agli agenti. L'agente ci lavora in una conversazione con chi gliel'ha affidata e la sposta in «Da rivedere»; poi una persona la chiude, o la rimanda indietro con un commento. Puoi anche chiedere in chat: «mettilo in board per Ricercatore», e avviarla da qui.", h("button.btn.accent", { onclick: newCard }, icon("plus"), "Nuova scheda")),
+		head(null, h("h1", "Board degli incarichi"), "Le cose da fare, affidate agli agenti. L'agente ci lavora in una conversazione con chi gliel'ha affidata e la sposta in «Da rivedere»; poi una persona la chiude, o la rimanda indietro con un commento. Puoi anche chiedere in chat: «mettilo in board per Ricercatore», e avviarla da qui.", h("button.btn.accent", { onclick: newCard }, icon("plus"), "Nuovo incarico")),
 		routines,
 		filters,
 		columns,
 	);
 	if (filters) redraw();
+	const intent = route().rest[0];
+	if (main.isConnected && intent) {
+		if (intent === "nuovo" || intent === "ripeti") {
+			history.replaceState(null, "", instanceHref("board", [], route().instanceId ?? null));
+			newCard(intent);
+		} else {
+			const card = data.cards.find((c) => c.id === intent);
+			if (card) {
+				history.replaceState(null, "", instanceHref("board", [], route().instanceId ?? null));
+				cardDialog(card);
+			}
+			else main.prepend(h("p.load-warning", { role: "status" }, "L'incarico non è disponibile. Qui trovi quelli a cui hai accesso."));
+		}
+	}
 	// The agenti move schede while the page is open: it follows them, unless a scheda is open.
 	const look = (d) => JSON.stringify([d.cards.map((c) => [c.id, c.updatedAt]), (d.routines ?? []).map((r) => [r.id, r.next, r.problem, r.paused, r.last])]);
 	const shown = look(data);

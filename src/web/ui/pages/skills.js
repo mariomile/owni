@@ -45,7 +45,7 @@ export async function viewSkills(main) {
 		const close = () => (editor.hidden = true);
 		mount(
 			editor,
-			h("h2", skill ? `Modifica /${skill.name}` : "Nuova skill"),
+			h("h2", skill ? `Modifica /${skill.name}` : "Nuova procedura"),
 			h("label.field", h("span", "Nome"), name, command),
 			h("label.field", h("span", "Quando usarla"), description, h("small", `${inst.name} vede questa riga in ogni conversazione e apre i passi quando un compito corrisponde.`)),
 			h("label.field", h("span", "Passi"), body),
@@ -89,7 +89,7 @@ export async function viewSkills(main) {
 		);
 	mount(
 		main,
-		head(agentLabel(inst), h("h1", "Skill"), `Procedure con un nome che ${inst.name} apre quando servono. Il nome è il comando: /chiusura-del-mese ottobre la lancia da qui, da Telegram e da WhatsApp. Le vede chi scrive a ${inst.name}; ognuno cambia le sue, l'owner tutte.`, h("button.btn.accent", { onclick: () => edit() }, icon("plus"), "Nuova skill")),
+		head(agentLabel(inst), h("h1", "Procedure"), `Procedure con un nome che ${inst.name} apre quando servono. Il nome è il comando: /chiusura-del-mese ottobre la lancia da qui, da Telegram e da WhatsApp. Le vede chi scrive a ${inst.name}; ognuno cambia le sue, l'owner tutte.`, h("button.btn.accent", { onclick: () => edit() }, icon("plus"), "Nuova procedura")),
 		h(
 			"div.stack",
 			editor,

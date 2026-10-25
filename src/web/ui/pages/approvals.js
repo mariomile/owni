@@ -1,8 +1,8 @@
 // Approvals page, with the connector and Google action cards.
-import { agentLabel, api, emptyNote, fmt, go, h, head, mount, needInstance, state, store, toast } from "../common.js";
-import { agentRequestCard, askedByNote, connectorActionCard, decisionCard, googleActionCard } from "../cards.js";
+import { api, emptyNote, fmt, h, head, icon, instanceHref, mount, route, state, toast } from "../common.js";
+import { agentRequestCard, askedByNote, connectorActionCard, decideWith, decisionCard, googleActionCard } from "../cards.js";
 import { refreshCounters } from "../session.js";
-import { render } from "../shell.js";
+import { render, renderRail } from "../shell.js";
 
 // ---------- approvazioni ----------
 /** A proposed tool's name as a title: «cambio_eur» reads «Cambio eur». */
@@ -12,11 +12,48 @@ function toolTitle(name) {
 }
 
 export async function viewApprovals(main) {
-	if (needInstance(main)) return;
-	const inst = state.instance;
-	const { proposals } = await api(`/api/instances/${inst.id}/proposals`);
+	const person = state.me;
+	mount(main, head(null, "Autorizzazioni", "Le azioni che aspettano una tua decisione, fra gli agenti a cui hai accesso."), h("p.muted", { role: "status" }, "Carico le richieste…"));
+	let inbox;
+	try {
+		inbox = await api("/api/approvals");
+	} catch (error) {
+		if (!main.isConnected || state.me !== person) return;
+		mount(main, head(null, "Autorizzazioni", "Non sono riuscita a caricare tutte le richieste."), h("div.card.pad", { role: "alert" }, h("p", error.message), h("p.muted", "Questo non significa che non ci sia niente da autorizzare."), h("button.btn", { onclick: () => void viewApprovals(main) }, "Riprova")));
+		return;
+	}
+	if (!main.isConnected || state.me !== person) return;
+	const groups = inbox.groups.map(approvalGroup);
+	state.pendingApprovals = inbox.pendingApprovals;
+	renderRail();
+	mount(main, head(null, "Autorizzazioni", "Controlla agente e conseguenza prima di decidere. Autorizzare un'azione è diverso da accettare il risultato di un incarico."),
+		h("div.stack", groups.flatMap((group) => group.pending), inbox.pendingApprovals ? null : emptyNote("div.card.empty", "Niente da autorizzare", "Qui compaiono le azioni che puoi decidere, per tutti gli agenti consentiti."), groups.some((group) => group.decided.length) ? h("details.approval-history", h("summary", "Decisioni precedenti"), h("div.stack", groups.flatMap((group) => group.decided))) : null),
+	);
+	const [type, instanceId, id] = route().rest;
+	if (type && instanceId && id) {
+		const target = [...main.querySelectorAll("[data-approval]")].find((el) => el.dataset.approval === `${type}:${instanceId}:${id}`);
+		if (target) {
+			target.closest("details")?.setAttribute("open", "");
+			target.setAttribute("tabindex", "-1");
+			target.focus();
+			target.scrollIntoView({ block: "start" });
+		} else main.prepend(h("p.load-warning", { role: "status" }, "La richiesta non è più in attesa oppure non è disponibile. L'elenco mostra le richieste attuali."));
+	}
+}
+
+/** After a decision the card has folded away: counters and the page are read again. */
+const redraw = () => void refreshCounters().finally(render);
+
+function approvalGroup(group) {
+	const inst = group.instance;
+	const proposals = group.proposals;
 	const pending = proposals.filter((p) => p.status === "pending");
-	const decided = proposals.filter((p) => p.status !== "pending").reverse();
+	const decided = proposals.filter((p) => p.status !== "pending").reverse().slice(0, 20);
+	const mark = (type, item, el) => {
+		el.dataset.approval = `${type}:${inst.id}:${item.id ?? item.praticaId}`;
+		el.querySelector("header > div")?.append(h("small.dossier-meta", inst.name));
+		return el;
+	};
 	const card = (p) => {
 		const el = h(
 			"article.card.pad.dossier",
@@ -29,22 +66,15 @@ export async function viewApprovals(main) {
 			p.decidedAt ? h("p.mono.muted", `Deciso il ${fmt.time(p.decidedAt)}`) : null,
 		);
 		if (p.status === "pending" && inst.isApprover) {
-			const decide = async (decision) => {
-				try {
-					await api(`/api/instances/${inst.id}/proposals/${p.id}/decision`, { method: "POST", body: { decision } });
-					el.querySelector(".chip.accent")?.remove();
-					el.querySelector(".actions")?.remove();
-					el.append(h(`div.stamp.${decision === "approved" ? "ok" : "bad"}`, decision === "approved" ? "Approvato" : "Rifiutato"));
-					setTimeout(() => void refreshCounters().then(render), 900);
-				} catch (error) {
-					toast(error.message, true);
-				}
-			};
-			el.append(h("div.actions", h("button.btn.accent", { onclick: () => decide("approved") }, "Approva"), h("button.btn.danger", { onclick: () => decide("rejected") }, "Rifiuta"), h("span.muted", "Approvato, gira isolato e raggiunge solo gli host dichiarati.")));
+			const decide = (decision, event) => decideWith(el, event.currentTarget, async () => {
+				await api(`/api/instances/${inst.id}/proposals/${p.id}/decision`, { method: "POST", body: { decision } });
+				toast(decision === "approved" ? "Strumento approvato" : "Strumento rifiutato");
+			}, redraw);
+			el.append(h("div.actions", h("button.btn.accent", { onclick: (e) => decide("approved", e) }, icon("check"), "Approva"), h("button.btn.danger", { onclick: (e) => decide("rejected", e) }, "Rifiuta"), h("span.muted", "Approvato, gira isolato e raggiunge solo gli host dichiarati.")));
 		}
 		return decisionCard(el, inst, p.status === "pending");
 	};
-	const { actions } = await api(`/api/instances/${inst.id}/web-actions`);
+	const actions = group.webActions;
 	const ACTION_STAMP = { done: ["ok", "Inviato"], failed: ["bad", "Non inviato"], rejected: ["bad", "Rifiutato"], expired: ["bad", "Scaduto"], uncertain: ["bad", "Esito incerto"], running: ["ok", "In invio"] };
 	const actionCard = (a) => {
 		const el = h(
@@ -60,71 +90,34 @@ export async function viewApprovals(main) {
 			a.status !== "pending" && ACTION_STAMP[a.status] ? h(`div.stamp.${ACTION_STAMP[a.status][0]}`, ACTION_STAMP[a.status][1]) : null,
 		);
 		if (a.status === "pending") {
-			const decide = async (decision) => {
-				try {
-					const { action } = await api(`/api/instances/${inst.id}/web-actions/${a.id}/decision`, { method: "POST", body: { decision } });
-					toast(action.status === "done" ? "Modulo inviato" : action.status === "rejected" ? "Richiesta rifiutata" : action.status === "failed" ? "Il modulo non è partito: vedi la risposta" : action.status === "uncertain" ? "Esito incerto: controlla sul sito" : `Richiesta ${action.status}`, action.status === "failed" || action.status === "uncertain");
-					setTimeout(() => void refreshCounters().then(render), 600);
-				} catch (error) {
-					toast(error.message, true);
-				}
-			};
-			el.append(h("div.actions", h("button.btn.accent", { onclick: () => decide("approved") }, "Invia"), h("button.btn.danger", { onclick: () => decide("rejected") }, "Rifiuta"), h("span.muted", "Il modulo parte una volta sola, con questi valori. Se nel frattempo il sito lo cambia, non parte.")));
+			const decide = (decision, event) => decideWith(el, event.currentTarget, async () => {
+				const { action } = await api(`/api/instances/${inst.id}/web-actions/${a.id}/decision`, { method: "POST", body: { decision } });
+				toast(action.status === "done" ? "Modulo inviato" : action.status === "rejected" ? "Richiesta rifiutata" : action.status === "failed" ? "Il modulo non è partito: vedi la risposta" : action.status === "uncertain" ? "Esito incerto: controlla sul sito" : `Richiesta ${action.status}`, action.status === "failed" || action.status === "uncertain");
+			}, redraw);
+			el.append(h("div.actions", h("button.btn.accent", { onclick: (e) => decide("approved", e) }, "Invia"), h("button.btn.danger", { onclick: (e) => decide("rejected", e) }, "Rifiuta"), h("span.muted", "Il modulo parte una volta sola, con questi valori. Se nel frattempo il sito lo cambia, non parte.")));
 		}
 		return decisionCard(el, inst, a.status === "pending");
 	};
 	const pendingActions = actions.filter((a) => a.status === "pending");
 	const decidedActions = actions.filter((a) => a.status !== "pending").reverse();
-	const { actions: connectorActions } = await api(`/api/instances/${inst.id}/connector-actions`).catch(() => ({ actions: [] }));
-	const afterConnector = () => setTimeout(() => void refreshCounters().then(render), 600);
-	const pendingConnector = connectorActions.filter((a) => a.status === "pending").map((a) => connectorActionCard(inst, a, afterConnector));
-	const decidedConnector = connectorActions.filter((a) => a.status !== "pending").reverse().slice(0, 20).map((a) => connectorActionCard(inst, a, afterConnector));
-	const { requests: agentRequests } = await api(`/api/instances/${inst.id}/agent-requests`).catch(() => ({ requests: [] }));
-	const pendingAgent = agentRequests.filter((a) => a.status === "pending").map((a) => agentRequestCard(inst, a, afterConnector));
-	const decidedAgent = agentRequests.filter((a) => a.status !== "pending").reverse().slice(0, 20).map((a) => agentRequestCard(inst, a, afterConnector));
-	const { actions: googleActions } = await api(`/api/instances/${inst.id}/google-actions`).catch(() => ({ actions: [] }));
-	const afterGoogle = () => setTimeout(() => void refreshCounters().then(render), 600);
-	const pendingGoogle = googleActions.filter((a) => a.status === "pending").map((a) => googleActionCard(inst, a, afterGoogle));
-	const decidedGoogle = googleActions.filter((a) => a.status !== "pending").reverse().slice(0, 20).map((a) => googleActionCard(inst, a, afterGoogle));
-	// Everything waiting for this person, in one place: drafts of every segreteria they approve too.
-	const drafts = [];
-	for (const s of state.instances.filter((i) => i.hasSegreteria && i.isApprover)) {
-		const waiting = (await api(`/api/instances/${s.id}/pratiche`)).pratiche.filter((p) => p.status === "draft_ready");
-		if (waiting.length)
-			drafts.push(
-				h(
-					"article.card.pad.dossier",
-					h("header", h("div", h("h2", `${waiting.length} ${waiting.length === 1 ? "bozza aspetta" : "bozze aspettano"} Approva`), h("small.dossier-meta", s.name)), h("span.chip.accent", "Segreteria")),
-					h("ul", waiting.slice(0, 5).map((p) => h("li", `${p.lead.fullName ?? p.lead.company ?? p.lead.email ?? "Sconosciuto"} · ${p.lead.rawSubject}`))),
-					h(
-						"div.actions",
-						h(
-							"button.btn",
-							{
-								onclick: () => {
-									state.instance = s;
-									store("annie.instance", s.id);
-									go("segreteria", waiting[0].praticaId);
-								},
-							},
-							"Apri la segreteria",
-						),
-					),
-				),
-			);
-	}
-	mount(main, 
-		head(agentLabel(inst), h("h1", "Approvazioni"), "Tutto ciò che aspetta una tua decisione: le mail e gli eventi che Owni prepara sul tuo Google, le azioni sui servizi collegati (Notion, Linear, GitHub…) che cambiano qualcosa, le bozze della segreteria, i moduli che Owni chiede di inviare e i tool che scrive da sola, spenti finché un approvatore non li legge e li approva."),
-		h(
-			"div.stack",
-			drafts,
-			pendingGoogle,
-			pendingConnector,
-			pendingAgent,
-			pendingActions.map(actionCard),
-			pending.map(card),
-			drafts.length || pendingGoogle.length || pendingConnector.length || pendingAgent.length || pendingActions.length || pending.length ? null : emptyNote("div.card.empty", "Niente da approvare", "Le mail e gli eventi che Owni prepara per te compaiono qui e in chat; le azioni sui servizi collegati, le bozze della segreteria, i moduli da inviare e i tool che Owni propone qui e su Telegram o WhatsApp."),
-			decidedGoogle.length || decidedConnector.length || decidedAgent.length || decidedActions.length || decided.length ? [h("h3.section-title", "Decisi"), decidedGoogle, decidedConnector, decidedAgent, decidedActions.slice(0, 20).map(actionCard), decided.map(card)] : null,
-		),
-	);
+	const connectorActions = group.connectorActions;
+	const afterConnector = redraw;
+	const pendingConnector = connectorActions.filter((a) => a.status === "pending").map((a) => mark("connector", a, connectorActionCard(inst, a, afterConnector)));
+	const decidedConnector = connectorActions.filter((a) => a.status !== "pending").reverse().slice(0, 20).map((a) => mark("connector", a, connectorActionCard(inst, a, afterConnector)));
+	const agentRequests = group.agentRequests;
+	const pendingAgent = agentRequests.filter((a) => a.status === "pending").map((a) => mark("agent", a, agentRequestCard(inst, a, afterConnector)));
+	const decidedAgent = agentRequests.filter((a) => a.status !== "pending").reverse().slice(0, 20).map((a) => mark("agent", a, agentRequestCard(inst, a, afterConnector)));
+	const googleActions = group.googleActions;
+	const afterGoogle = redraw;
+	const pendingGoogle = googleActions.filter((a) => a.status === "pending").map((a) => mark("google", a, googleActionCard(inst, a, afterGoogle)));
+	const decidedGoogle = googleActions.filter((a) => a.status !== "pending").reverse().slice(0, 20).map((a) => mark("google", a, googleActionCard(inst, a, afterGoogle)));
+	const practices = group.pratiche.filter((practice) => practice.status === "draft_ready").map((practice) => mark("pratica", practice, h("article.card.pad.dossier",
+		h("header", h("div", h("h2", practice.lead.rawSubject || "Risposta commerciale da autorizzare"), h("small.dossier-meta", "Pratica commerciale · Invio da autorizzare"))),
+		h("p", practice.lead.fullName ?? practice.lead.company ?? practice.lead.email ?? "Richiesta commerciale"),
+		h("a.btn", { href: instanceHref("segreteria", [practice.praticaId], inst.id) }, "Apri la pratica e controlla la bozza"),
+	)));
+	return {
+		pending: [...practices, ...pendingGoogle, ...pendingConnector, ...pendingAgent, ...pendingActions.map((a) => mark("web", a, actionCard(a))), ...pending.map((p) => mark("proposal", p, card(p)))],
+		decided: [...decidedGoogle, ...decidedConnector, ...decidedAgent, ...decidedActions.slice(0, 20).map((a) => mark("web", a, actionCard(a))), ...decided.map((p) => mark("proposal", p, card(p)))],
+	};
 }

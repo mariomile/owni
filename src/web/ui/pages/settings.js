@@ -1,5 +1,5 @@
 // Impostazioni page, with the cards for each capability and channel.
-import { agentLabel, api, confirmDialog, face, go, h, head, icon, mount, needInstance, route, state, store, toast } from "../common.js";
+import { agentLabel, api, confirmDialog, face, go, h, head, icon, instanceHref, mount, needInstance, route, state, store, toast } from "../common.js";
 import { copyBox, copyButton } from "../listen.js";
 import { chatModelCache, modelFacts, subscriptionState } from "../models.js";
 import { TONES } from "../tones.js";
@@ -630,6 +630,10 @@ function deleteCard(inst) {
 export async function viewSettings(main) {
 	if (needInstance(main)) return;
 	const inst = state.instance;
+	if (state.me.role !== "owner") {
+		mount(main, head(agentLabel(inst), "Configurazione", "La configurazione dell'agente è riservata all'owner.", h("a.btn", { href: `#/agente/${encodeURIComponent(inst.id)}` }, "Torna al profilo")));
+		return;
+	}
 	const [{ settings }, { people }, tg, wa, google, voice, search, tel, computer, speech, images, models, desktop, providers] = await Promise.all([
 		api(`/api/instances/${inst.id}/settings`),
 		api("/api/people"),
@@ -646,6 +650,7 @@ export async function viewSettings(main) {
 		api("/api/desktop").catch(() => ({ available: false })),
 		api("/api/providers").catch((error) => ({ localEnabled: false, providers: [], error: error.message })),
 	]);
+	if (!main.isConnected || state.instance !== inst || state.me?.role !== "owner") return;
 	const name = h("input", { type: "text", value: settings.name, maxlength: "80", "aria-label": "Nome" });
 	const emoji = h("input.emoji-input", { type: "text", value: settings.persona.emoji ?? "", placeholder: "🙂", maxlength: "16", "aria-label": "Emoji" });
 	const tagline = h("input", { type: "text", value: settings.persona.tagline ?? "", maxlength: "120", placeholder: "Cosa fa, in una riga" });
@@ -661,7 +666,7 @@ export async function viewSettings(main) {
 	const save = async () => {
 		try {
 			await api(`/api/instances/${inst.id}/settings`, { method: "PUT", body: { name: name.value, instructions: instructions.value, persona: { emoji: emoji.value, tagline: tagline.value, tone: tone.value }, webPeople: rows.filter((r) => r.c.checked).map((r) => r.p.id), webApprovers: rows.filter((r) => r.a.checked).map((r) => r.p.id) } });
-			toast("Impostazioni salvate");
+			toast("Identità e accessi salvati");
 			await refreshInstances();
 			render();
 		} catch (error) {
@@ -669,81 +674,94 @@ export async function viewSettings(main) {
 		}
 	};
 	const e = settings.egress;
-	mount(main, 
-		head(
-			agentLabel(inst),
-			h("h1", "Impostazioni"),
-			"La personalità di questo agente, chi può usarlo dal web, chi approva le sue azioni.",
-			h("button.btn.ghost", { onclick: () => (setupHidden(inst.id, false), go("inizia")) }, "Primi passi"),
-			h("button.btn.accent", { onclick: save }, "Salva"),
-		),
-		h("nav.settings-nav", { "aria-label": "Sezioni delle impostazioni" },
-			h("a", { href: "#/impostazioni/providers" }, icon("spark"), "Provider"),
-			h("a", { href: "#/impostazioni/computer-use" }, icon("screen"), "Computer Use"),
-			h("a", { href: "#/impostazioni/personalita" }, icon("impostazioni"), "Personalità e accessi"),
-		),
-		anchor("providers", providersCard(inst, providers, models)),
-		anchor("computer-use", computerUseCard(inst, (settings.egress.connectors ?? []).includes(desktop.connector ?? "schermo"), desktop)),
-		h(
-			"div.grid-2",
-			h(
-				"div.stack",
-				anchor(
-					"personalita",
-					h(
-						"div.card.pad",
-						h("h3.section-title", "Personalità"),
-						h("div.field", h("span", "Nome"), h("div.name-row", h("span.name-face", face(inst, 40)), emoji, name)),
-						h("label.field", h("span", "Cosa fa, in una riga"), tagline),
-						h("label.field", h("span", "Tono"), tone),
-						h("label.field", h("span", "Istruzioni"), instructions, h("small", "Cosa sa fare e le sue regole. Nome, ruolo e tono gli arrivano dopo queste.")),
-					),
-				),
-				tg === undefined ? null : anchor("telegram", telegramCard(inst, tg.telegram)),
-				wa === undefined ? null : whatsappCard(inst, wa.whatsapp),
-				tel === undefined ? null : phoneCard(inst, tel.phone),
-				google.available ? googleCard(inst, (settings.egress.connectors ?? []).includes("google")) : null,
-				voice.available ? voiceCard(inst, voice.host, (settings.egress.connectors ?? []).includes("voice")) : null,
-				speech.available ? anchor("voce", speechCard(inst, speech.host, (settings.egress.connectors ?? []).includes("speech"), voice.available && (settings.egress.connectors ?? []).includes("voice"))) : null,
-				search.available ? anchor("ricerca", searchCard(inst, search.host, (settings.egress.connectors ?? []).includes("web_search"), settings.egress.web ?? [])) : null,
-				images.available ? anchor("immagini", imagesCard(inst, images.host, images.maxPerDay, (settings.egress.connectors ?? []).includes("image_generation"))) : null,
-				anchor("siti", webCard(inst, settings.egress.web ?? [])),
-				webActionsCard(inst, (settings.egress.connectors ?? []).includes("web-actions")),
-				anchor("agenti", agentsCard(inst, settings)),
-				computer.available ? computerCard(inst, (settings.egress.connectors ?? []).includes("computer"), computer.problem) : null,
-				desktop.kind === "local" ? null : anchor("schermo", desktopCard(inst, (settings.egress.connectors ?? []).includes("schermo"), desktop)),
-			),
-			h(
-				"div.stack",
-				h("div.card", h("table.ledger", h("thead", h("tr", h("th", "Persona"), h("th", "Scrive"), h("th", "Approva"))), h("tbody", rows.map((r) => r.row)))),
-				h(
-					"div.card.pad",
-					h("h3.section-title", "Cosa può raggiungere"),
-					h(
-						"dl.lead",
-						h("dt", "Modello"),
-						settings.model.provider === "faux" ? h("dd", "Modello di prova") : h("dd.mono", settings.model.modelId),
-						h("dt", "Canali"),
-						h("dd", e.channels.map((c) => CHANNEL_NAMES[c] ?? c).join(", ") || "nessuno"),
-						h("dt", "Connettori"),
-						h("dd", (e.connectors ?? []).join(", ") || "nessuno"),
-					),
-					h("p.muted", "Tutto il resto le è chiuso. I connettori si consentono dalla loro pagina."),
-				),
-				settings.deletable ? anchor("elimina", deleteCard(inst)) : null,
-			),
-		),
+	const allowed = (id) => (e.connectors ?? []).includes(id);
+	const modelEditor = providersCard(inst, providers, models);
+	modelEditor.classList.remove("card", "pad");
+	const modelDetails = fold({ title: "Cambia modello o gestisci provider", glyph: "spark", lead: "Abbonamenti, chiavi API e scelta del modello. Ogni modifica ha il suo comando." }, anchor("providers", modelEditor));
+	const groups = [
+		{ id: "identita", label: "Identità", glyph: "agenti", anchors: ["personalita", "elimina"], content: [
+			anchor("personalita", h("div.card.pad",
+				h("h2", "Identità e istruzioni"),
+				h("div.field", h("span", "Nome"), h("div.name-row", h("span.name-face", face(inst, 40)), emoji, name)),
+				h("label.field", h("span", "Cosa fa, in una riga"), tagline),
+				h("label.field", h("span", "Tono"), tone),
+				h("label.field", h("span", "Istruzioni"), instructions, h("small", "Cosa sa fare e le sue regole. Nome, ruolo e tono gli arrivano dopo queste.")),
+			)),
+			settings.deletable ? fold({ title: "Elimina agente", glyph: "trash", lead: "Eliminazione definitiva, con conferma del nome." }, anchor("elimina", deleteCard(inst))) : null,
+		] },
+		{ id: "modello", label: "Modello", glyph: "spark", anchors: ["providers"], content: [
+			h("div.card.pad", h("h2", "Modello attuale"), h("p", settings.model.provider === "faux" ? "Modello di prova" : settings.model.modelId), h("p.muted", "Puoi continuare a usare l'agente con questo modello. Cambialo soltanto quando serve.")),
+			modelDetails,
+		] },
+		{ id: "capacita", label: "Capacità", glyph: "connettori", anchors: ["computer-use", "google", "vocali", "voce", "ricerca", "immagini", "siti", "azioni-web", "agenti", "computer", "schermo"], content: [
+			h("div.card.pad", h("h2", "Servizi e strumenti"), h("p.muted", "Aggiungi o modifica un servizio quando serve al lavoro dell'agente. I permessi e le approvazioni restano quelli di ogni capacità."), h("div.actions", h("a.btn", { href: instanceHref("connettori", [], inst.id) }, "Apri servizi e strumenti")), h("p.muted.small", `Connettori consentiti: ${(e.connectors ?? []).join(", ") || "nessuno"}.`)),
+			google.available ? anchor("google", googleCard(inst, allowed("google"))) : null,
+			voice.available ? anchor("vocali", voiceCard(inst, voice.host, allowed("voice"))) : null,
+			speech.available ? anchor("voce", speechCard(inst, speech.host, allowed("speech"), voice.available && allowed("voice"))) : null,
+			search.available ? anchor("ricerca", searchCard(inst, search.host, allowed("web_search"), e.web ?? [])) : null,
+			images.available ? anchor("immagini", imagesCard(inst, images.host, images.maxPerDay, allowed("image_generation"))) : null,
+			anchor("siti", webCard(inst, e.web ?? [])),
+			anchor("azioni-web", webActionsCard(inst, allowed("web-actions"))),
+			anchor("computer-use", computerUseCard(inst, allowed(desktop.connector ?? "schermo"), desktop)),
+			computer.available ? anchor("computer", computerCard(inst, allowed("computer"), computer.problem)) : null,
+			desktop.kind === "local" ? null : anchor("schermo", desktopCard(inst, allowed("schermo"), desktop)),
+			anchor("agenti", agentsCard(inst, settings)),
+		] },
+		{ id: "canali", label: "Canali", glyph: "chat", anchors: ["telegram", "whatsapp", "telefono"], content: [
+			h("div.card.pad", h("h2", "Dove risponde"), h("p", e.channels.map((c) => CHANNEL_NAMES[c] ?? c).join(", ") || "Nessun canale attivo"), h("p.muted", "Telegram, WhatsApp e telefono sono facoltativi. Ogni canale salva i propri accessi con il pulsante nel suo modulo.")),
+			tg === undefined ? null : anchor("telegram", telegramCard(inst, tg.telegram)),
+			wa === undefined ? null : anchor("whatsapp", whatsappCard(inst, wa.whatsapp)),
+			tel === undefined ? null : anchor("telefono", phoneCard(inst, tel.phone)),
+		] },
+		{ id: "accessi", label: "Accessi", glyph: "persone", anchors: [], content: [
+			h("div.card", h("div.pad", h("h2", "Chi può scrivere e approvare"), h("p.muted", "Scrivere all'agente e approvare le sue azioni sono permessi distinti. Essere owner non aggiunge automaticamente il permesso di scrivere. Questi accessi riguardano la console web; gli altri canali hanno i propri elenchi.")), h("table.ledger", h("thead", h("tr", h("th", "Persona"), h("th", "Scrive"), h("th", "Approva"))), h("tbody", rows.map((r) => r.row)))),
+		] },
+	];
+	const requested = route().rest[0];
+	let active = groups.find((group) => group.id === requested || group.anchors.includes(requested))?.id ?? "identita";
+	const saveBar = h("div.card.pad.settings-save", h("p.muted.small", "Salva insieme nome, tono, istruzioni e accessi web, anche se li hai modificati in sezioni diverse."), h("button.btn.accent", { type: "button", onclick: save }, "Salva identità e accessi"));
+	const independentNote = h("p.muted.small.settings-save-note", "Questa sezione salva separatamente: Usa il pulsante del singolo modulo. Gli interruttori salvano subito.");
+	const panels = groups.map((group) => h("section.stack.settings-panel", { id: `settings-panel-${group.id}`, "aria-labelledby": `settings-section-${group.id}`, "data-settings-section": group.id }, group.content));
+	const show = (id) => {
+		active = id;
+		for (const [i, panel] of panels.entries()) panel.hidden = groups[i].id !== active;
+		for (const link of nav.querySelectorAll("a")) {
+			if (link.dataset.settingsSection === active) link.setAttribute("aria-current", "page");
+			else link.removeAttribute("aria-current");
+		}
+		saveBar.hidden = active !== "identita" && active !== "accessi";
+		independentNote.hidden = !saveBar.hidden;
+	};
+	const nav = h("nav.settings-nav", { "aria-label": "Sezioni della configurazione" }, groups.map((group) => h("a", {
+		id: `settings-section-${group.id}`,
+		href: instanceHref("impostazioni", [group.id], inst.id),
+		"data-settings-section": group.id,
+		"aria-controls": `settings-panel-${group.id}`,
+		onclick: (event) => {
+			if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+			event.preventDefault();
+			// No hashchange: the existing form nodes keep every unsaved input across sections.
+			history.replaceState(null, "", instanceHref("impostazioni", [group.id], inst.id));
+			show(group.id);
+		},
+	}, icon(group.glyph), group.label)));
+	show(active);
+	mount(main,
+		head(agentLabel(inst), h("h1", "Configurazione"), `Configura ${inst.name} una sezione alla volta. Materiali e procedure restano nel suo profilo.`, h("a.btn.ghost", { href: `#/agente/${encodeURIComponent(inst.id)}` }, "Profilo agente"), h("button.btn.ghost", { onclick: () => (setupHidden(inst.id, false), go("inizia")) }, "Primi passi")),
+		nav, saveBar, independentNote, panels,
 	);
+	if (requested === "modello") modelDetails.open = true;
 }
 
 /** Where people reach an agente, as they call it. */
-const CHANNEL_NAMES = { web: "Console web", telegram: "Telegram", whatsapp: "WhatsApp", phone: "Telefono", mail: "Mail" };
+const CHANNEL_NAMES = { web: "Console web", telegram: "Telegram", whatsapp: "WhatsApp", phone: "Telefono", mail: "Mail", agente: "Collaborazione tra agenti" };
 
 /** A card that «Primi passi» can point at: #/impostazioni/<id> scrolls to it and makes it flash. */
 function anchor(id, card) {
 	card.id = `card-${id}`;
 	if (route().rest[0] === id)
 		requestAnimationFrame(() => {
+			for (let parent = card.parentElement; parent; parent = parent.parentElement) if (parent.tagName === "DETAILS") parent.open = true;
 			if (card.tagName === "DETAILS") card.open = true;
 			card.scrollIntoView({ behavior: "smooth", block: "start" });
 			card.classList.add("flash");

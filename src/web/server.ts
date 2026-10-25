@@ -33,6 +33,7 @@ import { parseSkillMd, type Skill, SkillError, toSkillMd } from "../core/skills.
 import { checkPersona, cleanName, type Persona, PersonaError } from "../core/persona.ts";
 import { AGENT_CHANNEL } from "../core/agent-messages.ts";
 import { runtimeActivity } from "../core/agent-activity.ts";
+import type { Pratica } from "../core/practice.ts";
 import { type BoardStore, dueText } from "../core/board.ts";
 import type { ScreenViews } from "../core/screen-views.ts";
 import type { RoutineStore } from "../core/board-routines.ts";
@@ -1188,12 +1189,13 @@ export function createWebApp(options: WebAppOptions): Server {
 	});
 
 	// --- segreteria ---
+	const publicPractices = (all: readonly Pratica[]) => [...all].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).map(({ mail: _mail, ...p }) => p);
 	route("GET", "/api/instances/:id/pratiche", "person", async ({ person, params }) => {
 		await instanceAccess(person as Person, params[0] as string);
 		const service = options.segreterie?.get(params[0] as string);
 		if (service === undefined) throw new HttpError(404, "Questo agente non è una segreteria");
 		const all = await service.practices.list();
-		return { pratiche: all.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).map(({ mail: _mail, ...p }) => p) };
+		return { pratiche: publicPractices(all) };
 	});
 	route("POST", "/api/instances/:id/pratiche/:pid/action", "person", async ({ person, params, req }) => {
 		const p = person as Person;
@@ -2062,28 +2064,46 @@ export function createWebApp(options: WebAppOptions): Server {
 	});
 	const usageSummary = async () => ({ todayUsd: await options.usage.todaySpent(), softUsd: DEFAULT_COST_CAPS.softUsdPerDay, hardUsd: DEFAULT_COST_CAPS.hardUsdPerDay });
 	route("GET", "/api/usage", "person", async () => ({ usage: await usageSummary() }));
-	// The rail needs counts, not every private form, proposed tool and board event. One request
-	// replaces the per-instance HTTP waterfall, using the same visibility rules as those pages.
-	route("GET", "/api/console-summary", "person", async ({ person }) => {
-		const p = person as Person;
+	// The inbox and rail share the same eligible objects across every visible instance. Counts
+	// skip the public payload projections; no source failure is turned into an empty queue.
+	const collectApprovals = async (p: Person, includeGroups: boolean) => {
 		const visible = (await runtime.registry.listInstances(tenantId)).filter((r) => p.role === "owner" || (r.allowedUsers.web ?? []).includes(p.id));
+		const groups = [];
 		let pendingApprovals = 0;
+		const now = new Date();
 		for (const r of visible) {
 			const approver = await mayDecideAll(p, r.id);
-			const [web, connectors, google, proposals, practices, agentRequests] = await Promise.all([
-				runtime.webActions(tenantId, r.id).list(),
-				runtime.connectorActions(tenantId, r.id).list(),
-				runtime.googleActions(tenantId, r.id).list(),
+			const [allWeb, allConnectors, allGoogle, proposals, practices, agentRequests] = await Promise.all([
+				runtime.webActions(tenantId, r.id).list(now),
+				runtime.connectorActions(tenantId, r.id).list(now),
+				runtime.googleActions(tenantId, r.id).list(now),
 				approver ? runtime.proposals(tenantId, r.id).list() : [],
 				approver ? (options.segreterie?.get(r.id)?.practices.list() ?? []) : [],
-				approver ? runtime.agentRequests(tenantId, r.id).list() : [],
+				approver ? runtime.agentRequests(tenantId, r.id).list(now) : [],
 			]);
-			pendingApprovals += agentRequests.filter((a) => a.status === "pending").length;
-			pendingApprovals += [...web, ...connectors].filter((a) => a.status === "pending" && (approver || a.requester === `web:${p.id}`)).length;
-			pendingApprovals += google.filter((a) => a.status === "pending" && a.personId === p.id).length;
-			pendingApprovals += proposals.filter((a) => a.status === "pending").length;
+			const webActions = approver ? allWeb : allWeb.filter((a) => a.requester === `web:${p.id}`);
+			const connectorActions = approver ? allConnectors : allConnectors.filter((a) => a.requester === `web:${p.id}`);
+			const googleActions = allGoogle.filter((a) => a.personId === p.id);
+			for (const items of [proposals, webActions, connectorActions, agentRequests, googleActions]) {
+				pendingApprovals += items.filter((a) => a.status === "pending").length;
+			}
 			pendingApprovals += practices.filter((a) => a.status === "draft_ready").length;
+			if (includeGroups) groups.push({
+				instance: { id: r.id, name: r.name, isApprover: approver },
+				proposals,
+				webActions,
+				connectorActions,
+				agentRequests,
+				googleActions: googleActions.map(cardView),
+				pratiche: publicPractices(practices),
+			});
 		}
+		return { groups, pendingApprovals };
+	};
+	route("GET", "/api/approvals", "person", async ({ person }) => collectApprovals(person as Person, true));
+	route("GET", "/api/console-summary", "person", async ({ person }) => {
+		const p = person as Person;
+		const { pendingApprovals } = await collectApprovals(p, false);
 		let boardReview = 0;
 		if (options.board !== undefined) {
 			for (const card of options.board.store.list()) {

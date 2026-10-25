@@ -1,15 +1,40 @@
 // Cards for what an agente asks to do through a connector or Google: shown in Approvazioni and in the chat.
-import { api, face, faceColor, fmt, h, toast } from "./common.js";
+import { api, face, faceColor, fmt, h, icon, toast } from "./common.js";
 
 /**
  * An approval card, finished the same way for every kind: the face of the agente asking,
  * and, while it waits, an edge in that agente's colour.
  */
-export function decisionCard(el, inst, pending) {
-	el.querySelector("header")?.prepend(h("span.dossier-face", face(inst, 32)));
+export function decisionCard(el, inst, pending, size = 32) {
+	el.querySelector("header")?.prepend(h("span.dossier-face", face(inst, size)));
 	el.classList.toggle("pending", pending);
 	el.style.setProperty("--glow", faceColor(inst));
 	return el;
+}
+
+/**
+ * A decision from the card's own buttons: the one pressed shows it is working and both wait; once
+ * decided the card folds away, then the list is drawn again. On failure the buttons come back.
+ */
+export async function decideWith(el, button, request, after) {
+	const buttons = [...el.querySelectorAll(".actions button")];
+	for (const b of buttons) b.disabled = true;
+	button.classList.add("busy");
+	button.setAttribute("aria-busy", "true");
+	try {
+		await request();
+	} catch (error) {
+		for (const b of buttons) b.disabled = false;
+		button.classList.remove("busy");
+		button.removeAttribute("aria-busy");
+		toast(error.message, true);
+		return;
+	}
+	if (!matchMedia("(prefers-reduced-motion: reduce)").matches) {
+		const height = el.offsetHeight;
+		await el.animate([{ opacity: 1, height: `${height}px`, filter: "blur(0)" }, { opacity: 0, height: "0px", paddingBlock: "0px", filter: "blur(3px)" }], { duration: 320, easing: "cubic-bezier(.22, 1, .36, 1)", fill: "forwards" }).finished.catch(() => {});
+	}
+	after();
 }
 
 const CONNECTOR_STAMP = { done: ["ok", "Fatto"], failed: ["bad", "Non riuscito"], rejected: ["bad", "Rifiutato"], expired: ["bad", "Scaduto"], uncertain: ["bad", "Esito incerto"], running: ["ok", "In corso"] };
@@ -26,18 +51,13 @@ export function connectorActionCard(inst, a, after, compact = false) {
 		a.status !== "pending" && CONNECTOR_STAMP[a.status] ? h(`div.stamp.${CONNECTOR_STAMP[a.status][0]}`, CONNECTOR_STAMP[a.status][1]) : null,
 	);
 	if (a.status === "pending") {
-		const decide = async (decision) => {
-			try {
-				const { action } = await api(`/api/instances/${inst.id}/connector-actions/${a.id}/decision`, { method: "POST", body: { decision } });
-				toast(action.status === "done" ? `Fatto su ${a.connectorName}` : action.status === "rejected" ? "Richiesta rifiutata" : action.status === "failed" ? "Non è stata fatta: vedi i dettagli" : action.status === "uncertain" ? `Esito incerto: controlla su ${a.connectorName}` : action.status === "expired" ? "La richiesta era scaduta" : `Richiesta ${action.status}`, action.status !== "done" && action.status !== "rejected");
-				after();
-			} catch (error) {
-				toast(error.message, true);
-			}
-		};
-		el.append(h("div.actions", h("button.btn.accent", { onclick: () => decide("approved") }, "Approva"), h("button.btn.danger", { onclick: () => decide("rejected") }, "Rifiuta"), compact ? null : h("span.muted", `Se la approvi, Owni la fa una volta sola, con questi valori, su ${a.connectorName}.`)));
+		const decide = (decision, event) => decideWith(el, event.currentTarget, async () => {
+			const { action } = await api(`/api/instances/${inst.id}/connector-actions/${a.id}/decision`, { method: "POST", body: { decision } });
+			toast(action.status === "done" ? `Fatto su ${a.connectorName}` : action.status === "rejected" ? "Richiesta rifiutata" : action.status === "failed" ? "Non è stata fatta: vedi i dettagli" : action.status === "uncertain" ? `Esito incerto: controlla su ${a.connectorName}` : action.status === "expired" ? "La richiesta era scaduta" : `Richiesta ${action.status}`, action.status !== "done" && action.status !== "rejected");
+		}, after);
+		el.append(h("div.actions", h("button.btn.accent", { onclick: (e) => decide("approved", e) }, icon("check"), "Approva"), h("button.btn.danger", { onclick: (e) => decide("rejected", e) }, "Rifiuta"), compact ? null : h("span.muted", `Se la approvi, Owni la fa una volta sola, con questi valori, su ${a.connectorName}.`)));
 	}
-	return compact ? el : decisionCard(el, inst, a.status === "pending");
+	return decisionCard(el, inst, a.status === "pending", compact ? 26 : 32);
 }
 
 /** Which agente asked, and its words shown as a quote: a request to read, never an approval (ADR 0108). */
@@ -59,16 +79,11 @@ export function agentRequestCard(inst, a, after) {
 		a.status !== "pending" && CONNECTOR_STAMP[a.status] ? h(`div.stamp.${CONNECTOR_STAMP[a.status][0]}`, CONNECTOR_STAMP[a.status][1]) : null,
 	);
 	if (a.status === "pending") {
-		const decide = async (decision) => {
-			try {
-				const { request } = await api(`/api/instances/${inst.id}/agent-requests/${a.id}/decision`, { method: "POST", body: { decision } });
-				toast(request.status === "done" ? "Fatto" : request.status === "rejected" ? "Richiesta rifiutata" : request.status === "failed" ? "Non è stata fatta: vedi i dettagli" : request.status === "uncertain" ? "Esito incerto: controlla prima di rifarla" : request.status === "expired" ? "La richiesta era scaduta" : `Richiesta ${request.status}`, request.status !== "done" && request.status !== "rejected");
-				after();
-			} catch (error) {
-				toast(error.message, true);
-			}
-		};
-		el.append(h("div.actions", h("button.btn.accent", { onclick: () => decide("approved") }, "Approva"), h("button.btn.danger", { onclick: () => decide("rejected") }, "Rifiuta"), h("span.muted", `Se la approvi, ${inst.name} la fa una volta sola, con questi valori; l'esito torna a «${a.askedBy.name}».`)));
+		const decide = (decision, event) => decideWith(el, event.currentTarget, async () => {
+			const { request } = await api(`/api/instances/${inst.id}/agent-requests/${a.id}/decision`, { method: "POST", body: { decision } });
+			toast(request.status === "done" ? "Fatto" : request.status === "rejected" ? "Richiesta rifiutata" : request.status === "failed" ? "Non è stata fatta: vedi i dettagli" : request.status === "uncertain" ? "Esito incerto: controlla prima di rifarla" : request.status === "expired" ? "La richiesta era scaduta" : `Richiesta ${request.status}`, request.status !== "done" && request.status !== "rejected");
+		}, after);
+		el.append(h("div.actions", h("button.btn.accent", { onclick: (e) => decide("approved", e) }, icon("check"), "Approva"), h("button.btn.danger", { onclick: (e) => decide("rejected", e) }, "Rifiuta"), h("span.muted", `Se la approvi, ${inst.name} la fa una volta sola, con questi valori; l'esito torna a «${a.askedBy.name}».`)));
 	}
 	return decisionCard(el, inst, a.status === "pending");
 }
@@ -178,22 +193,13 @@ export function googleActionCard(inst, a, after, compact = false) {
 		a.status !== "pending" && GOOGLE_STAMP[a.status] ? h(`div.stamp.${GOOGLE_STAMP[a.status][0]}`, GOOGLE_STAMP[a.status][1]) : null,
 	);
 	if (a.status === "pending") {
-		const buttons = [];
-		const decide = async (decision) => {
-			for (const b of buttons) b.disabled = true;
-			try {
-				const { action } = await api(`/api/instances/${inst.id}/google-actions/${a.id}/decision`, { method: "POST", body: { decision } });
-				const words = { done: doneWord, rejected: "Richiesta rifiutata", failed: "Non è riuscito: vedi il motivo", uncertain: "Esito incerto: controlla in Google", expired: "Richiesta scaduta", running: "In corso" };
-				toast(words[action.status] ?? "Richiesta decisa", action.status === "failed" || action.status === "uncertain");
-				after();
-			} catch (error) {
-				for (const b of buttons) b.disabled = false;
-				toast(error.message, true);
-			}
-		};
-		buttons.push(h(`button.btn${a.kind === "calendar.delete" ? ".danger" : ".accent"}`, { onclick: () => decide("approved") }, verb), h("button.btn.ghost", { onclick: () => decide("rejected") }, "Rifiuta"));
-		el.append(h("div.actions", ...buttons, h("span.muted", `Una volta sola, esattamente così. Scade ${fmt.time(expires)}.`)));
+		const decide = (decision, event) => decideWith(el, event.currentTarget, async () => {
+			const { action } = await api(`/api/instances/${inst.id}/google-actions/${a.id}/decision`, { method: "POST", body: { decision } });
+			const words = { done: doneWord, rejected: "Richiesta rifiutata", failed: "Non è riuscito: vedi il motivo", uncertain: "Esito incerto: controlla in Google", expired: "Richiesta scaduta", running: "In corso" };
+			toast(words[action.status] ?? "Richiesta decisa", action.status === "failed" || action.status === "uncertain");
+		}, after);
+		el.append(h("div.actions", h(`button.btn${a.kind === "calendar.delete" ? ".danger" : ".accent"}`, { onclick: (e) => decide("approved", e) }, a.kind === "calendar.delete" ? null : icon("check"), verb), h("button.btn.ghost", { onclick: (e) => decide("rejected", e) }, "Rifiuta"), h("span.muted", `Una volta sola, esattamente così. Scade ${fmt.time(expires)}.`)));
 	}
-	return compact ? el : decisionCard(el, inst, a.status === "pending");
+	return decisionCard(el, inst, a.status === "pending", compact ? 26 : 32);
 }
 

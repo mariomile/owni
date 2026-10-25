@@ -2,6 +2,23 @@
 
 Piattaforma open source di agenti sempre attivi per aziende attente a privacy e controllo dei processi: ogni cliente ha i suoi agenti, che parlano con le persone sui canali, usano i sistemi dell'azienda e non fanno nulla di irreversibile senza un'approvazione.
 
+## Esperienza quotidiana
+
+**Conversazioni**:
+L’elenco delle conversazioni della persona, anche con agenti diversi e con più agenti insieme. Unifica gli ingressi a chat singole e stanze; non rende visibili le conversazioni di altre persone.
+
+**Lavori**:
+La vista degli incarichi consentiti, delle autorizzazioni e degli esiti nelle conversazioni della persona. Gli agenti si filtrano dentro la vista; cambiare agente nella chat non ne cambia implicitamente il perimetro.
+
+**Incarico**:
+Una scheda della board presentata come lavoro da affidare e seguire. Nel codice e nei tool rimane la scheda esistente; la Board è una vista alternativa, con gli stessi quattro stati e regole di revisione.
+
+**Richiede te**:
+Filtro operativo sulle decisioni che competono alla persona: Autorizzare un’azione e accettare un risultato sono azioni distinte. Non sostituisce lo stato dell’incarico o dell’esecuzione.
+
+**Procedure**:
+Il nome usato nella configurazione dell’agente per le skill esistenti. Comandi, bozze, import/export SKILL.md e diritti di modifica restano quelli delle skill.
+
 ## Chi
 
 **Owner**:

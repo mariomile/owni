@@ -26,9 +26,9 @@ export function setupSteps(setup) {
 
 /** Steps left that the owner can take from the console: what the counters show. */
 export function setupLeft(setup) {
-	return setupSteps(setup).filter((s) => !s.done && s.own).length;
+	return setupSteps(setup).filter((s) => ["model", "tried"].includes(s.id) && !s.done && s.own).length;
 }
 
 export function stepsLeftText(n) {
-	return n === 1 ? "Primi passi: ne manca 1" : `Primi passi: ne mancano ${n}`;
+	return n === 1 ? "Completa il primo utilizzo" : "Collega il modello e prova il tuo assistente";
 }

@@ -1,5 +1,5 @@
 // Automazioni page.
-import { agentLabel, api, confirmDialog, emptyNote, fmt, h, head, icon, mount, needInstance, state, toast } from "../common.js";
+import { agentLabel, api, confirmDialog, emptyNote, fmt, h, head, icon, mount, needInstance, route, state, toast } from "../common.js";
 import { copyBox } from "../listen.js";
 import { refreshThreads } from "../shell.js";
 import { runHistory } from "../runs.js";
@@ -20,7 +20,7 @@ export async function viewAutomations(main) {
 		});
 	const where = (a) => {
 		if (a.channel !== "web") return `risponde su ${CHANNEL_NAME[a.channel] ?? a.channel}`;
-		const t = state.threads.find((x) => x.id === a.threadId);
+		const t = state.threads.find((x) => x.id === a.threadId && (!x.instanceId || x.instanceId === inst.id));
 		return t ? h("a", { href: `#/chat/${encodeURIComponent(t.id)}` }, `risponde in «${t.title}»`) : "risponde nella sua chat";
 	};
 	const runs = (a) => `${a.runs === 1 ? "1 chiamata" : `${a.runs} chiamate`}, l'ultima ${fmt.time(a.lastRunAt)}`;
@@ -66,7 +66,7 @@ export async function viewAutomations(main) {
 		if (!inst.canChat) return toast(`Per creare un'automazione devi poter scrivere a ${inst.name}`, true);
 		const name = h("input", { type: "text", maxlength: 80, placeholder: "Es. Ordini dal sito" });
 		const instruction = h("textarea", { rows: 3, maxlength: 2000, placeholder: "Es. Riassumi l'ordine e dimmi se c'è da spedire oggi" });
-		const chat = h("select", h("option", { value: "" }, "Una chat nuova, con il nome dell'automazione"), state.threads.map((t) => h("option", { value: t.id }, t.title)));
+		const chat = h("select", h("option", { value: "" }, "Una chat nuova, con il nome dell'automazione"), state.threads.filter((t) => !t.instanceId || t.instanceId === inst.id).map((t) => h("option", { value: t.id }, t.title)));
 		const save = async () => {
 			if (!name.value.trim() || !instruction.value.trim()) return toast("Servono un nome e cosa deve fare", true);
 			try {
@@ -81,7 +81,7 @@ export async function viewAutomations(main) {
 		};
 		mount(
 			panel,
-			h("h2", "Nuova automazione"),
+			h("h2", "Nuovo evento esterno"),
 			h("label.field", h("span", "Nome"), name),
 			h("label.field", h("span", "Cosa deve fare"), instruction, h("small", `${inst.name} riceve questa istruzione con i dati della chiamata (un modulo, un ordine, un pagamento), trattati come dati e non come ordini.`)),
 			h("label.field", h("span", "Dove ti risponde"), chat),
@@ -91,10 +91,12 @@ export async function viewAutomations(main) {
 		name.focus();
 	};
 	await refresh();
+	if (!main.isConnected || state.instance !== inst) return;
 	mount(
 		main,
-		head(agentLabel(inst), h("h1", "Automazioni"), `Indirizzi segreti che fanno lavorare ${inst.name} quando un altro servizio li chiama: un modulo compilato, un ordine dal sito, un pagamento su Stripe, uno Zap. Al più 30 chiamate l'ora per automazione. Ognuno vede le sue, l'owner tutte.`, h("button.btn.accent", { onclick: create }, icon("plus"), "Nuova automazione")),
+		head(agentLabel(inst), h("h1", "Eventi esterni"), `Indirizzi segreti che fanno lavorare ${inst.name} quando un altro servizio li chiama: un modulo compilato, un ordine dal sito, un pagamento su Stripe, uno Zap. Al più 30 chiamate l'ora per automazione. Ognuno vede le sue, l'owner tutte.`, h("button.btn.accent", { onclick: create }, icon("plus"), "Nuovo evento esterno")),
 		h("div.stack", panel, listBox, runHistory([inst], { sources: ["automation"], names, title: "Esiti delle tue automazioni" })),
 	);
+	if (route().rest[0] === "nuovo") create();
 }
 

@@ -1,5 +1,5 @@
 // Agenti page.
-import { agentLabel, api, emptyNote, face, faceColor, go, h, head, icon, mount, state, store, toast } from "../common.js";
+import { agentLabel, api, emptyNote, face, faceColor, go, h, head, icon, instanceHref, mount, state, store, toast } from "../common.js";
 import { TONES } from "../tones.js";
 import { refreshInstances, refreshSetup } from "../session.js";
 import { render } from "../shell.js";
@@ -75,7 +75,7 @@ export function agentForm() {
 			store("annie.instance", state.instance.id);
 			toast(`Agente ${agentLabel(instance)} creato`);
 			await refreshSetup();
-			go("chat");
+			go("agente", instance.id);
 			render();
 		} catch (error) {
 			toast(error.message, true);
@@ -84,7 +84,7 @@ export function agentForm() {
 	const dialog = h(
 		"dialog.agent-form",
 		h("h2", "Nuovo agente"),
-		h("p.muted", "Un agente con personalità, memoria, file, task e connettori suoi. Parte con il modello dell'agente principale; all'inizio solo tu puoi scrivergli, poi decidi chi in Impostazioni."),
+		h("p.muted", "Aggiungi un agente quando serve un compito o un insieme di accessi separato. Parte con il modello dell'agente principale; all'inizio solo tu puoi scrivergli. Dal profilo decidi materiali, capacità e accessi."),
 		h("div.field", h("span", "Parti da"), chips),
 		h("div.field", h("span", "Nome"), h("div.name-row", preview, emoji, name)),
 		h("label.field", h("span", "Cosa fa, in una riga"), tagline),
@@ -156,13 +156,6 @@ async function teamsForm() {
 export async function viewAgents(main) {
 	const owner = state.me.role === "owner";
 	const { agents } = await api("/api/agents");
-	const switchTo = (agent, view) => {
-		state.instance = state.instances.find((i) => i.id === agent.id) ?? state.instance;
-		store("annie.instance", state.instance.id);
-		state.threads = [];
-		void refreshSetup().then(render);
-		go(view);
-	};
 	const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 	const writesTo = (a) => agents.filter((x) => x.acceptsFrom?.includes(a.id)).map((x) => x.name);
 	// «Fate squadra»: every agente may ask every other one; the per-agente card in Impostazioni stays the fine control.
@@ -184,7 +177,7 @@ export async function viewAgents(main) {
 			h("div.agent-face", face(a, 60)),
 			h(
 				"div.agent-body",
-				h("h2", a.name, a.id === state.instance?.id ? h("span.tag", "aperto") : null),
+				h("h2", h("a.agent-profile-link", { href: `#/agente/${encodeURIComponent(a.id)}` }, a.name), a.id === state.instance?.id ? h("span.tag", "aperto") : null),
 				a.tagline ? h("p", a.tagline) : null,
 				h("p.muted.small", [a.model?.provider === "faux" ? "Modello di prova" : a.model?.name, TONES.find(([v]) => v === a.tone)?.[1], a.channels.filter((c) => c !== "web" && c !== "agente").join(", ")].filter(Boolean).join(" · ")),
 				h("p.muted.small", h("span.tag", a.busy ? `Occupato${a.busyFor === undefined ? "" : ` da ${a.busyFor < 90 ? `${a.busyFor} s` : `${Math.round(a.busyFor / 60)} min`}`}` : "Libero"), a.doing ? ` ${a.busy ? "sta lavorando su" : "scheda in corso"}: ${a.doing}` : ""),
@@ -194,8 +187,9 @@ export async function viewAgents(main) {
 			),
 			h(
 				"div.agent-actions",
-				a.canChat ? h("button.btn.small.accent", { onclick: () => switchTo(a, "chat") }, "Chatta") : null,
-				owner ? h("button.btn.small.ghost", { title: "Personalità e impostazioni", onclick: () => switchTo(a, "impostazioni") }, "Impostazioni") : null,
+				a.canChat ? h("a.btn.small.accent", { href: instanceHref("chat", [], a.id) }, "Scrivi") : null,
+				h("a.btn.small.ghost", { href: `#/agente/${encodeURIComponent(a.id)}` }, "Profilo"),
+				owner ? h("a.btn.small.ghost", { href: instanceHref("impostazioni", ["identita"], a.id) }, "Configura") : null,
 			),
 		);
 		// Each card glows in its agente's colour, so the faces read as a team and not as a list.
@@ -204,8 +198,9 @@ export async function viewAgents(main) {
 	};
 	mount(
 		main,
-		head(null, h("h1", "Agenti"), "Ognuno ha la sua personalità, la sua memoria, i suoi task, file e connettori. Ognuno può avere il suo bot su Telegram e WhatsApp.", owner ? h("div.row-gap", teamButton, h("button.btn.ghost", { title: "Più agenti già pronti a lavorare insieme", onclick: () => teamsForm() }, "Squadre pronte"), h("button.btn.accent", { onclick: () => agentForm() }, icon("plus"), "Nuovo agente")) : null),
+		head(null, h("h1", "Agenti"), "Il tuo assistente e gli eventuali agenti con responsabilità separate. Dal profilo trovi materiali, procedure, capacità e configurazione.", owner ? h("button.btn.accent", { onclick: () => agentForm() }, icon("plus"), "Nuovo agente") : null),
 		agents.length === 0 ? emptyNote("div.empty", "Nessun agente", owner ? "Crea il primo con Nuovo agente." : "Chiedi all'owner di aggiungerti a un agente.") : h("div.agents", agents.map(card)),
+		owner ? h("details.card.fold.agent-team-options", h("summary", h("span.fold-glyph", icon("agenti")), h("span.fold-text", h("b", "Estendi il team quando serve"), h("small", "Squadre pronte e collaborazione tra agenti.")), h("span.fold-chevron", icon("down"))), h("div.fold-body", h("p.muted", "Una nuova conversazione non richiede un nuovo agente. Aggiungi una squadra o consenti la collaborazione quando vuoi dividere responsabilità e accessi."), h("div.actions", teamButton, h("button.btn.ghost", { title: "Più agenti già pronti a lavorare insieme", onclick: () => teamsForm() }, "Squadre pronte")))) : null,
 	);
 }
 

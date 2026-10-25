@@ -214,7 +214,7 @@ export type WebPage = {
 	readonly setCookies: readonly string[];
 };
 
-export const USER_AGENT = "Owni/1.0 (+https://github.com/mariomile/annie)";
+export const USER_AGENT = "Owni/1.0 (+https://github.com/mariomile/owni)";
 
 export class WebFetchRefused extends Error {
 	override readonly name = "WebFetchRefused";
