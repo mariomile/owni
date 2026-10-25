@@ -1,4 +1,4 @@
-import { stat } from "node:fs/promises";
+import { readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { ARTIFACT_LIMITS, ArtifactStore } from "../src/core/artifacts.ts";
@@ -80,6 +80,15 @@ describe("artifacts (ADR 0112)", () => {
 		expect((await channel.artifacts.meta(thread.id, id))?.versions).toHaveLength(2);
 	});
 
+	it("a crash between the page and the conversation's list: the rerun puts it in the list", async () => {
+		const { dir, channel, thread } = await setup();
+		const made = await channel.artifacts.create(thread.id, { title: "Piano", html: PAGE, key: "k1" });
+		const index = join(dir, "web", "artifacts", thread.id, "index.json");
+		await writeFile(index, "[]\n");
+		expect(await channel.artifacts.create(thread.id, { title: "Piano", html: PAGE, key: "k1" })).toEqual(made);
+		expect(JSON.parse(await readFile(index, "utf8"))).toEqual([made.id]);
+	});
+
 	it("refuses pages too big, too many versions or artifacts, an unknown id, and works only in the console", async () => {
 		const { channel, thread, create, update, web } = await setup();
 		const big = `<p>${"x".repeat(ARTIFACT_LIMITS.maxBytes)}</p>`;
@@ -101,6 +110,9 @@ describe("artifacts (ADR 0112)", () => {
 	it("reads nothing outside its folders", async () => {
 		const store = new ArtifactStore(tempDataDir());
 		expect(await store.meta("../..", "a_000000000000")).toBeUndefined();
+		expect(await store.meta("..", "a_000000000000")).toBeUndefined();
+		expect(await store.meta(".", "a_000000000000")).toBeUndefined();
+		await expect(store.create("..", { title: "x", html: PAGE, key: "k" })).rejects.toThrow("conversazione non valida");
 		expect(await store.read(PERSON, "../meta", 1)).toBeUndefined();
 		expect(await store.read(PERSON, "a_000000000000", 0)).toBeUndefined();
 		await expect(store.create("../x", { title: "x", html: PAGE, key: "k" })).rejects.toThrow("conversazione non valida");

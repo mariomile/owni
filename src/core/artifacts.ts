@@ -24,7 +24,8 @@ export type ArtifactMeta = { readonly id: string; readonly threadId: string; rea
 export class ArtifactError extends Error {}
 
 const ARTIFACT_ID = /^a_[0-9a-f]{12}$/;
-const THREAD = /^[A-Za-z0-9_.-]{1,80}$/;
+/** A thread id is a single path segment: dots only between other characters, so never `.` or `..`. */
+const THREAD = /^(?=.{1,80}$)[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*$/;
 
 /**
  * The HTML pages an agente makes in its conversations (ADR 0112): one folder per thread, one per
@@ -45,9 +46,13 @@ export class ArtifactStore {
 		const id = `a_${createHash("sha256").update(`${threadId}:${input.key}`).digest("hex").slice(0, 12)}`;
 		return this.serial(threadId, async () => {
 			const meta = await this.meta(threadId, id);
-			if (meta !== undefined) return ref(meta, meta.versions[0] as ArtifactVersion);
-			const { title, html } = checked(input.title, input.html);
 			const ids = await this.ids(threadId);
+			if (meta !== undefined) {
+				// A rerun after a crash between the page and the list: the list catches up.
+				if (!ids.includes(id)) await this.list(threadId, [...ids, id]);
+				return ref(meta, meta.versions[0] as ArtifactVersion);
+			}
+			const { title, html } = checked(input.title, input.html);
 			if (ids.length >= ARTIFACT_LIMITS.maxPerThread) throw new ArtifactError(`questa conversazione ha già ${ARTIFACT_LIMITS.maxPerThread} artifact: aggiorna uno di quelli che ci sono`);
 			const at = new Date().toISOString();
 			const version: ArtifactVersion = { version: 1, at, bytes: Buffer.byteLength(html), title, key: input.key };

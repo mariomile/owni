@@ -318,10 +318,13 @@ describe("web console", () => {
 		expect(shown.status).toBe(200);
 		expect(shown.body).toBe(page);
 		const csp = shown.headers.get("content-security-policy") ?? "";
-		expect(csp).toMatch(/^sandbox allow-scripts allow-popups allow-forms allow-modals;/);
+		expect(csp).toMatch(/^sandbox allow-scripts allow-modals;/);
 		expect(csp).not.toContain("allow-same-origin");
 		expect(csp).toContain("frame-ancestors 'self'");
+		// Nothing goes out: no requests, no forms, no pictures from any https address.
 		expect(csp).toContain("connect-src 'none'");
+		expect(csp).toContain("form-action 'none'");
+		expect(csp).not.toMatch(/(img|media)-src[^;]* https:(;| |$)/);
 		expect(shown.headers.get("x-frame-options")).toBeNull();
 		expect(shown.headers.get("content-type")).toBe("text/html; charset=utf-8");
 		expect(shown.headers.get("x-content-type-options")).toBe("nosniff");

@@ -33,7 +33,7 @@ export function artifactPanel(onShow = () => {}) {
 	const versions = h("select.artifact-versions", { "aria-label": "Versione", hidden: true });
 	const newTab = h("a.icon-btn", { target: "_blank", rel: "noopener", title: "Apri in una nuova scheda", "aria-label": "Apri in una nuova scheda" }, icon("external"));
 	const download = h("a.icon-btn", { title: "Scarica", "aria-label": "Scarica" }, icon("install"));
-	const frame = h("iframe.artifact-frame", { sandbox: "allow-scripts allow-popups allow-forms allow-modals", referrerpolicy: "no-referrer", title: "Artifact" });
+	const frame = h("iframe.artifact-frame", { sandbox: "allow-scripts allow-modals", referrerpolicy: "no-referrer", title: "Artifact" });
 	const el = h(
 		"aside.browser-panel.artifact-panel",
 		{ hidden: true, "aria-label": "Artifact" },

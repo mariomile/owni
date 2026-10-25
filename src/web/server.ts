@@ -2417,14 +2417,14 @@ function securityHeaders(res: ServerResponse): void {
 
 /**
  * An HTML page the console shows in a frame (ADR 0112): sandboxed by its own CSP, so it runs with
- * an opaque origin (no session cookie, no calls to Owni), reaches nothing but a few CDNs, and is
- * framed only by the console. `download`: sent as a file with this name instead.
+ * an opaque origin (no session cookie, no calls to Owni), loads nothing but a few CDNs, sends
+ * nothing out (no requests, forms or pictures from elsewhere), and is framed only by the console. `download`: sent as a file with this name instead.
  */
 const ARTIFACT_CSP =
-	"sandbox allow-scripts allow-popups allow-forms allow-modals; default-src 'none'; " +
-	"script-src 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com https://cdnjs.cloudflare.com; " +
+	"sandbox allow-scripts allow-modals; default-src 'none'; " +
+	"script-src 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://unpkg.com https://cdnjs.cloudflare.com; " +
 	"style-src 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com https://cdnjs.cloudflare.com https://fonts.googleapis.com; " +
-	"font-src https://fonts.gstatic.com data:; img-src data: blob: https:; media-src data: blob: https:; connect-src 'none'; frame-ancestors 'self'";
+	"font-src https://fonts.gstatic.com data:; img-src data: blob: https://cdn.jsdelivr.net https://unpkg.com https://cdnjs.cloudflare.com; media-src data: blob:; connect-src 'none'; form-action 'none'; frame-ancestors 'self'";
 
 function sandboxedHtml(res: ServerResponse, data: Buffer, download?: string): typeof STREAMED {
 	res.removeHeader("x-frame-options");

@@ -17,7 +17,7 @@ export type ArtifactToolsOptions = {
 const WHEN =
 	"An artifact is a self-contained HTML page shown live next to the console conversation, like a document the person keeps open: use it for substantial standalone visual or interactive content (a dashboard, a calculator, a report laid out as a page, a small game, a diagram, a form to try out). " +
 	"Not for short answers, explanations, lists or tables that read fine in the chat: write those. " +
-	"Write one complete HTML document with its CSS and JavaScript inline. It runs sandboxed: it cannot call Owni or any server (no fetch), and has no cookies or storage of the console; scripts and styles may come only from cdn.jsdelivr.net, unpkg.com or cdnjs.cloudflare.com, fonts from Google Fonts, pictures from https or data: URLs. " +
+	"Write one complete HTML document with its CSS and JavaScript inline. It runs sandboxed: it cannot call Owni or any server (no fetch, no forms, no new windows), and localStorage, sessionStorage and cookies throw; scripts, styles and pictures may come only from cdn.jsdelivr.net, unpkg.com or cdnjs.cloudflare.com, fonts from Google Fonts, otherwise inline or data: URLs. " +
 	`At most ${ARTIFACT_LIMITS.maxBytes / 1024} KB. Only in the console: elsewhere make a file with file_write and send it with file_send.`;
 
 /**
