@@ -26,7 +26,7 @@ const mocks = vi.hoisted(() => {
 		};
 		return node;
 	};
-	return { h, mount: (el: UiNode, ...children: any[]) => { el.children = children.flat(Infinity).filter((v) => v != null && v !== false); }, api: vi.fn(), toast: vi.fn(), state: {} as Record<string, any>, icon: (name: string) => h("svg", name), fmt: { time: (at: string) => at }, store: vi.fn() };
+	return { h, mount: (el: UiNode, ...children: any[]) => { el.children = children.flat(Infinity).filter((v) => v != null && v !== false); }, api: vi.fn(), toast: vi.fn(), state: {} as Record<string, any>, icon: (name: string) => h("svg", name), face: () => h("svg.face"), faceColor: () => "#000", emptyNote: (tag: string, ...text: any[]) => h(tag, ...text), fmt: { time: (at: string) => at }, store: vi.fn() };
 });
 vi.mock("../src/web/ui/common.js", () => mocks);
 // @ts-expect-error Browser modules deliberately use plain JavaScript.
@@ -91,13 +91,18 @@ describe("quiet conversation work status", () => {
 		expect(find(el, "p.run-note").textContent).toBe("Le azioni già completate restano.");
 	});
 
-	it("retains an expanded activity log across newer progress events and rejects stale or foreign events", async () => {
-		const { el } = await control([run("running", { progress: [{ kind: "tool_start", at: "2026-10-25T10:00:00Z" }] })]);
-		el.querySelector("details")!.open = true;
-		mocks.state.onRun(run("running", { updatedAt: "2026-10-25T10:02:00Z", progress: [{ kind: "tool_progress", at: "2026-10-25T10:02:00Z" }] }));
-		expect(el.querySelector("details")?.open).toBe(true);
-		mocks.state.onRun(run("succeeded"));
-		expect(el.hidden).toBe(false);
+	it("lists live actions while running, folds the log once over, and rejects stale or foreign events", async () => {
+		const { el } = await control([run("running", { progress: [{ kind: "tool_start", toolName: "web_search", at: "2026-10-25T10:00:00Z" }] })]);
+		expect(find(el, "li.run-task.now").textContent).toContain("Cerco sul web");
+		mocks.state.onRun(run("running", { updatedAt: "2026-10-25T10:02:00Z", progress: [{ kind: "tool_start", toolName: "web_search", at: "2026-10-25T10:00:00Z" }, { kind: "tool_end", toolName: "web_search", at: "2026-10-25T10:01:00Z" }, { kind: "tool_start", toolName: "web_search", at: "2026-10-25T10:02:00Z" }] }));
+		const items = all(el).filter((node) => node.tag.startsWith("li.run-task"));
+		expect(items.map((node) => node.tag)).toEqual(["li.run-task.done", "li.run-task.now.enter"]);
+		expect(el.querySelector("details")).toBeUndefined();
+		mocks.state.onRun(run("failed", { updatedAt: "2026-10-25T10:03:00Z", progress: [{ kind: "tool_start", toolName: "web_search", at: "2026-10-25T10:00:00Z" }] }));
+		expect(all(el).some((node) => node.tag === "ol.run-tasks")).toBe(false);
+		expect(el.querySelector("details")).toBeDefined();
+		expect(mocks.state.onRun(run("succeeded", { updatedAt: "2026-10-25T10:01:00Z" }))).toBe(true);
+		expect(el.attrs["data-state"]).toBe("failed");
 		expect(mocks.state.onRun(run("succeeded", { threadId: "another-person" }))).toBe(false);
 	});
 

@@ -19,7 +19,7 @@ const mocks = vi.hoisted(() => {
 		return el;
 	};
 	const h = (spec: string, attrs?: unknown, ...kids: unknown[]) => (attrs !== null && typeof attrs === "object" && !Array.isArray(attrs) && !("tag" in attrs) ? node(spec, kids) : node(spec, [attrs, ...kids]));
-	return { h, api: () => Promise.resolve({}), toast: () => {}, face: () => "face", faceColor: () => "#000", fmt: { time: () => "ora" } };
+	return { h, api: () => Promise.resolve({}), toast: () => {}, face: () => "face", faceColor: () => "#000", icon: () => "icon", fmt: { time: () => "ora" } };
 });
 vi.mock("../src/web/ui/common.js", () => mocks);
 

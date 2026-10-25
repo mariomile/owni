@@ -1,6 +1,6 @@
 // Approvals page, with the connector and Google action cards.
-import { api, emptyNote, fmt, h, head, instanceHref, mount, route, state, toast } from "../common.js";
-import { agentRequestCard, askedByNote, connectorActionCard, decisionCard, googleActionCard } from "../cards.js";
+import { api, emptyNote, fmt, h, head, icon, instanceHref, mount, route, state, toast } from "../common.js";
+import { agentRequestCard, askedByNote, connectorActionCard, decideWith, decisionCard, googleActionCard } from "../cards.js";
 import { refreshCounters } from "../session.js";
 import { render, renderRail } from "../shell.js";
 
@@ -41,6 +41,9 @@ export async function viewApprovals(main) {
 	}
 }
 
+/** After a decision the card has folded away: counters and the page are read again. */
+const redraw = () => void refreshCounters().finally(render);
+
 function approvalGroup(group) {
 	const inst = group.instance;
 	const proposals = group.proposals;
@@ -63,18 +66,11 @@ function approvalGroup(group) {
 			p.decidedAt ? h("p.mono.muted", `Deciso il ${fmt.time(p.decidedAt)}`) : null,
 		);
 		if (p.status === "pending" && inst.isApprover) {
-			const decide = async (decision) => {
-				try {
-					await api(`/api/instances/${inst.id}/proposals/${p.id}/decision`, { method: "POST", body: { decision } });
-					el.querySelector(".chip.accent")?.remove();
-					el.querySelector(".actions")?.remove();
-					el.append(h(`div.stamp.${decision === "approved" ? "ok" : "bad"}`, decision === "approved" ? "Approvato" : "Rifiutato"));
-					setTimeout(() => void refreshCounters().then(render), 900);
-				} catch (error) {
-					toast(error.message, true);
-				}
-			};
-			el.append(h("div.actions", h("button.btn.accent", { onclick: () => decide("approved") }, "Approva"), h("button.btn.danger", { onclick: () => decide("rejected") }, "Rifiuta"), h("span.muted", "Approvato, gira isolato e raggiunge solo gli host dichiarati.")));
+			const decide = (decision, event) => decideWith(el, event.currentTarget, async () => {
+				await api(`/api/instances/${inst.id}/proposals/${p.id}/decision`, { method: "POST", body: { decision } });
+				toast(decision === "approved" ? "Strumento approvato" : "Strumento rifiutato");
+			}, redraw);
+			el.append(h("div.actions", h("button.btn.accent", { onclick: (e) => decide("approved", e) }, icon("check"), "Approva"), h("button.btn.danger", { onclick: (e) => decide("rejected", e) }, "Rifiuta"), h("span.muted", "Approvato, gira isolato e raggiunge solo gli host dichiarati.")));
 		}
 		return decisionCard(el, inst, p.status === "pending");
 	};
@@ -94,30 +90,25 @@ function approvalGroup(group) {
 			a.status !== "pending" && ACTION_STAMP[a.status] ? h(`div.stamp.${ACTION_STAMP[a.status][0]}`, ACTION_STAMP[a.status][1]) : null,
 		);
 		if (a.status === "pending") {
-			const decide = async (decision) => {
-				try {
-					const { action } = await api(`/api/instances/${inst.id}/web-actions/${a.id}/decision`, { method: "POST", body: { decision } });
-					toast(action.status === "done" ? "Modulo inviato" : action.status === "rejected" ? "Richiesta rifiutata" : action.status === "failed" ? "Il modulo non è partito: vedi la risposta" : action.status === "uncertain" ? "Esito incerto: controlla sul sito" : `Richiesta ${action.status}`, action.status === "failed" || action.status === "uncertain");
-					setTimeout(() => void refreshCounters().then(render), 600);
-				} catch (error) {
-					toast(error.message, true);
-				}
-			};
-			el.append(h("div.actions", h("button.btn.accent", { onclick: () => decide("approved") }, "Invia"), h("button.btn.danger", { onclick: () => decide("rejected") }, "Rifiuta"), h("span.muted", "Il modulo parte una volta sola, con questi valori. Se nel frattempo il sito lo cambia, non parte.")));
+			const decide = (decision, event) => decideWith(el, event.currentTarget, async () => {
+				const { action } = await api(`/api/instances/${inst.id}/web-actions/${a.id}/decision`, { method: "POST", body: { decision } });
+				toast(action.status === "done" ? "Modulo inviato" : action.status === "rejected" ? "Richiesta rifiutata" : action.status === "failed" ? "Il modulo non è partito: vedi la risposta" : action.status === "uncertain" ? "Esito incerto: controlla sul sito" : `Richiesta ${action.status}`, action.status === "failed" || action.status === "uncertain");
+			}, redraw);
+			el.append(h("div.actions", h("button.btn.accent", { onclick: (e) => decide("approved", e) }, "Invia"), h("button.btn.danger", { onclick: (e) => decide("rejected", e) }, "Rifiuta"), h("span.muted", "Il modulo parte una volta sola, con questi valori. Se nel frattempo il sito lo cambia, non parte.")));
 		}
 		return decisionCard(el, inst, a.status === "pending");
 	};
 	const pendingActions = actions.filter((a) => a.status === "pending");
 	const decidedActions = actions.filter((a) => a.status !== "pending").reverse();
 	const connectorActions = group.connectorActions;
-	const afterConnector = () => setTimeout(() => void refreshCounters().then(render), 600);
+	const afterConnector = redraw;
 	const pendingConnector = connectorActions.filter((a) => a.status === "pending").map((a) => mark("connector", a, connectorActionCard(inst, a, afterConnector)));
 	const decidedConnector = connectorActions.filter((a) => a.status !== "pending").reverse().slice(0, 20).map((a) => mark("connector", a, connectorActionCard(inst, a, afterConnector)));
 	const agentRequests = group.agentRequests;
 	const pendingAgent = agentRequests.filter((a) => a.status === "pending").map((a) => mark("agent", a, agentRequestCard(inst, a, afterConnector)));
 	const decidedAgent = agentRequests.filter((a) => a.status !== "pending").reverse().slice(0, 20).map((a) => mark("agent", a, agentRequestCard(inst, a, afterConnector)));
 	const googleActions = group.googleActions;
-	const afterGoogle = () => setTimeout(() => void refreshCounters().then(render), 600);
+	const afterGoogle = redraw;
 	const pendingGoogle = googleActions.filter((a) => a.status === "pending").map((a) => mark("google", a, googleActionCard(inst, a, afterGoogle)));
 	const decidedGoogle = googleActions.filter((a) => a.status !== "pending").reverse().slice(0, 20).map((a) => mark("google", a, googleActionCard(inst, a, afterGoogle)));
 	const practices = group.pratiche.filter((practice) => practice.status === "draft_ready").map((practice) => mark("pratica", practice, h("article.card.pad.dossier",

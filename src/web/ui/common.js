@@ -72,6 +72,7 @@ const ICONS = {
 	down: ["m6 9 6 6 6-6"],
 	chevron: ["m9 6 6 6-6 6"],
 	check: ["m5 12.5 4.5 4.5L19 7"],
+	alert: ["M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Z", "M12 7.5v5.5", "M12 16.5h.01"],
 	compose: ["M12 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-6", "M17.5 3.5a2.1 2.1 0 0 1 3 3L12 15l-4 1 1-4Z"],
 	sidebar: ["M5 4h14a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1Z", "M9.5 4v16"],
 	attach: ["m20 11.5-8.2 8.2a5 5 0 0 1-7.1-7.1l8.6-8.6a3.3 3.3 0 0 1 4.7 4.7l-8.6 8.6a1.7 1.7 0 0 1-2.4-2.4l7.9-7.9"],
@@ -185,12 +186,15 @@ export function face(agent, size = 28, mood = "idle") {
 /** What stands in for an answer on its way: the faces of who may answer, looking around. */
 export function thinking(agents) {
 	const who = agents.length === 1 ? `${agents[0].name} sta pensando` : "Stanno pensando";
-	return h("div.thinking", { role: "status", "aria-label": who }, h("span.faces", agents.slice(0, 3).map((a) => face(a, 26, "thinking"))), h("span.thinking-text", `${who}…`));
+	// One agente thinks inside a turning halo of its colour, the same one its work shows once it starts.
+	const el = h("div.thinking", { role: "status", "aria-label": who }, h(`span.faces${agents.length === 1 ? ".orb" : ""}`, agents.slice(0, 3).map((a) => face(a, agents.length === 1 ? 22 : 26, "thinking"))), h("span.thinking-text", `${who}…`));
+	el.style.setProperty("--glow", faceLook(agents[0]).color);
+	return el;
 }
 
 /** An empty page or list: the agente's face waiting, what is missing, and how to fill it. */
 export function emptyNote(tag, title, ...text) {
-	return h(tag, face(state.instance ?? { id: "annie" }, 40), h("b", title), ...text);
+	return h(tag, h("span.empty-mark", { "aria-hidden": "true" }, face(state.instance ?? { id: "annie" }, 40)), h("b", title), ...text);
 }
 
 /** A tile with a service's first letter, in a colour of its own: the catalog has no logos. */
@@ -200,11 +204,91 @@ export function monogram(name) {
 	return tile;
 }
 
+// ---------- toasts ----------
+// A stack: the newest in front, the older ones tucked behind it. Pointing at the stack spreads it
+// out and holds every timer; a swipe sends one away.
+let toastsOpen = false;
+
+function layoutToasts() {
+	const shown = [...$toasts.children].filter((t) => !t.classList.contains("out")).reverse();
+	let y = 0;
+	shown.forEach((t, i) => {
+		t.style.setProperty("--y", `${-(toastsOpen ? y : i * 10)}px`);
+		t.style.setProperty("--s", toastsOpen ? "1" : String(1 - Math.min(i, 3) * 0.05));
+		t.style.setProperty("--z", String(shown.length - i));
+		t.classList.toggle("buried", !toastsOpen && i >= 3);
+		y += t.offsetHeight + 8;
+	});
+	$toasts.style.setProperty("--h", `${toastsOpen ? Math.max(0, y - 8) : (shown[0]?.offsetHeight ?? 0) + Math.min(shown.length - 1, 2) * 10}px`);
+}
+
+function holdToasts(open) {
+	if (toastsOpen === open) return;
+	toastsOpen = open;
+	$toasts.classList.toggle("open", open);
+	for (const t of $toasts.children) open ? t.hold?.() : t.go?.();
+	layoutToasts();
+}
+$toasts?.addEventListener("pointerenter", () => holdToasts(true));
+$toasts?.addEventListener("pointerleave", () => holdToasts(false));
+
 export function toast(text, bad = false) {
-	const t = h(`div.toast${bad ? ".bad" : ""}`, text);
-	$toasts.append(t);
+	const t = h(`div.toast${bad ? ".bad" : ""}`, bad ? { role: "alert" } : {}, icon(bad ? "alert" : "check"), h("span", text));
 	// An error is usually longer and says what to do: it stays longer.
-	setTimeout(() => t.remove(), bad ? 9000 : 4200);
+	let left = bad ? 9000 : 4200;
+	let started = 0;
+	let timer;
+	const close = () => {
+		clearTimeout(timer);
+		if (t.classList.contains("out")) return;
+		t.classList.add("out");
+		layoutToasts();
+		setTimeout(() => {
+			t.remove();
+			layoutToasts();
+			if (!$toasts.children.length) holdToasts(false);
+		}, 280);
+	};
+	t.close = close;
+	t.go = () => {
+		started = Date.now();
+		timer = setTimeout(close, left);
+	};
+	t.hold = () => {
+		clearTimeout(timer);
+		left = Math.max(1200, left - (Date.now() - started));
+	};
+	// Swiped down or sideways past a short distance, it goes; less than that, it springs back.
+	let from;
+	const offset = (dx, dy) => {
+		t.style.setProperty("--dx", `${dx}px`);
+		t.style.setProperty("--dy", `${dy}px`);
+	};
+	t.addEventListener("pointerdown", (e) => {
+		from = { x: e.clientX, y: e.clientY };
+		t.setPointerCapture(e.pointerId);
+		t.classList.add("dragging");
+	});
+	t.addEventListener("pointermove", (e) => {
+		if (from) offset(e.clientX - from.x, Math.max(0, e.clientY - from.y));
+	});
+	const release = (e) => {
+		if (!from) return;
+		const dx = e.clientX - from.x;
+		const dy = e.clientY - from.y;
+		from = undefined;
+		t.classList.remove("dragging");
+		if (Math.abs(dx) > 64 || dy > 36) close();
+		else offset(0, 0);
+	};
+	t.addEventListener("pointerup", release);
+	t.addEventListener("pointercancel", release);
+	$toasts.append(t);
+	if (!toastsOpen) t.go();
+	// Beyond a handful the oldest leaves, so the stack never grows into a wall.
+	const live = [...$toasts.children].filter((x) => !x.classList.contains("out"));
+	if (live.length > 5) live[0].close?.();
+	layoutToasts();
 }
 
 export class ApiError extends Error {

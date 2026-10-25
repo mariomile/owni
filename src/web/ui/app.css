@@ -464,7 +464,13 @@ label.row-gap:has(> input[type="checkbox"]) > span { min-width: 0; }
 p.chip { display: flex; white-space: normal; line-height: 1.4; border-radius: 7px; padding: 8px 10px; }
 .empty { padding: 48px 24px; text-align: center; color: var(--fg-3); font-size: 13.5px; line-height: 1.55; text-wrap: pretty; }
 .empty b { display: block; font-size: 15px; font-weight: 620; font-stretch: var(--display-stretch); letter-spacing: -0.01em; color: var(--fg); margin-bottom: 4px; }
-.empty > .face { display: block; margin: 0 auto 14px; opacity: 0.9; }
+/* The agente waiting, afloat inside two quiet rings. */
+.empty-mark { position: relative; display: grid; place-items: center; width: 92px; height: 92px; margin: 0 auto 16px; }
+.empty-mark::before, .empty-mark::after { content: ""; position: absolute; border-radius: 50%; border: 1px solid var(--border); }
+.empty-mark::before { inset: 0; mask-image: linear-gradient(to bottom, #000, transparent 85%); }
+.empty-mark::after { inset: 15px; border-color: var(--border-2); background: var(--bg-2); }
+.empty-mark > .face { position: relative; z-index: 1; animation: float 4.2s ease-in-out infinite; }
+@keyframes float { 50% { translate: 0 -3px; } }
 .empty:not(.card) { max-width: 520px; margin-inline: auto; }
 .card.empty { padding-inline: max(24px, calc((100% - 620px) / 2)); border-style: dashed; border-color: var(--border-2); background: transparent; }
 .card .empty { padding-block: 36px; }
@@ -704,27 +710,24 @@ main.is-chat { position: relative; }
 .transcript { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; display: flex; flex-direction: column; gap: 36px; padding: 28px max(24px, calc((100% - var(--chat-column)) / 2)) 28px; font-size: 16px; scroll-behavior: smooth; scroll-padding-block: 24px; }
 .dock { flex: none; padding: 0 max(24px, calc((100% - var(--chat-column)) / 2)) max(16px, env(safe-area-inset-bottom)); background: var(--bg); }
 /* Activity stays on one quiet line; only an issue needs its own explanation. */
-.run-control { --run-tone: var(--fg-3); display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 8px; padding: 0 4px; margin: 0 0 8px; color: var(--fg-2); font-size: 12.5px; }
+.run-control { --run-tone: var(--fg-3); flex: none; align-self: flex-start; width: 100%; max-width: 72ch; display: flex; flex-direction: column; color: var(--fg-2); font-size: 13.5px; animation: rise 0.3s var(--ease) backwards; }
 .run-control[hidden] { display: none; }
 .run-control-head { display: flex; gap: 12px; align-items: center; justify-content: space-between; }
 .run-control-head > :first-child { min-width: 0; overflow-wrap: anywhere; }
 .run-control-head .btn { flex: none; }
 .run-control-head h2 { margin: 0; }
-.run-control .run-control-head { grid-column: 1; min-height: 44px; gap: 8px; }
-.run-control .run-status { flex: 1; display: flex; align-items: baseline; gap: 9px; line-height: 1.5; }
-.run-control .run-status::before { content: ""; flex: none; align-self: center; width: 6px; height: 6px; border-radius: 50%; background: var(--run-tone); }
-.run-control[data-state="running"] .run-status::before { box-shadow: 0 0 0 3px color-mix(in srgb, var(--fg) 7%, transparent); }
-.run-control[data-state="queued"] .run-status::before { background: transparent; border: 1px solid var(--fg-3); }
+.run-control .run-control-head { min-height: 40px; gap: 10px; justify-content: flex-start; }
+.run-control .run-status { min-width: 0; line-height: 1.5; font-weight: 500; overflow-wrap: anywhere; }
+/* Over but still on screen: a dot of the outcome's tone where the orb was. */
+.run-control:not([data-state="running"], [data-state="queued"]) .run-status::before { content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 10px; border-radius: 50%; background: var(--run-tone); vertical-align: 1px; }
 .run-control[data-state="failed"], .run-control[data-state="delivery-failed"] { --run-tone: var(--bad); }
 .run-control[data-state="delivery-pending"], .run-control[data-state="unavailable"] { --run-tone: var(--warn); }
-.run-control:where([data-state="failed"], [data-state="delivery-failed"], [data-state="delivery-pending"], [data-state="unavailable"]) { border-left: 2px solid var(--run-tone); padding-left: 12px; }
-.run-control .btn { min-height: 44px; height: auto; padding: 6px 10px; border: 0; color: var(--fg-2); }
+.run-control .run-time { margin-right: auto; color: var(--fg-3); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.run-control .btn { min-height: 36px; height: auto; padding: 6px 10px; border: 0; color: var(--fg-3); }
 .run-control .btn:hover { color: var(--fg); }
-.run-control .run-note { grid-column: 1 / -1; grid-row: 2; margin: 0 0 8px 15px; font-size: 12.5px; line-height: 1.5; overflow-wrap: anywhere; }
-.run-control > div:has(> .run-details) { grid-column: 2; grid-row: 1; min-width: 0; }
-.run-control > div:has(> .run-details[open]) { grid-column: 1 / -1; grid-row: 3; }
-.run-control .run-details { margin: 0; }
-.run-control .run-details summary { min-height: 44px; padding: 12px 4px; color: var(--fg-3); }
+.run-control .run-note { margin: 0 0 6px 17px; font-size: 12.5px; line-height: 1.5; color: var(--fg-3); overflow-wrap: anywhere; }
+.run-control .run-body > .run-details { margin: 0 0 0 13px; }
+.run-control .run-details summary { min-height: 36px; padding: 8px 4px; color: var(--fg-3); }
 .run-control .run-details summary:hover { color: var(--fg); }
 .run-control .run-details[open] { padding-bottom: 4px; }
 .run-control .run-steps { margin: 0 0 8px; padding-left: 14px; border-left: 1px solid var(--border-2); line-height: 1.5; }
@@ -822,8 +825,29 @@ main.is-chat { position: relative; }
 /* an answer on its way: the face looks around, the words breathe */
 .thinking { align-self: flex-start; display: inline-flex; align-items: center; gap: 10px; animation: rise 0.25s var(--ease) both; }
 .thinking .faces { display: inline-flex; }
-.thinking-text { font-size: 13.5px; color: var(--fg-2); animation: breathe 2s ease-in-out infinite; }
-@keyframes breathe { 50% { color: var(--fg); } }
+.thinking-text { font-size: 13.5px; font-weight: 500; color: var(--fg-2); }
+/* Work under way: a light passes across the words, as on a native assistant. */
+.thinking-text, .run-control:is([data-state="running"], [data-state="queued"]) .run-status { background: linear-gradient(100deg, var(--fg-3) 35%, var(--fg) 50%, var(--fg-3) 65%) 0 0 / 300% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; animation: text-shimmer 2.4s linear infinite; }
+@keyframes text-shimmer { from { background-position: 100% 0; } to { background-position: 0 0; } }
+@media (prefers-reduced-motion: reduce) { .thinking-text, .run-control:is([data-state="running"], [data-state="queued"]) .run-status { background: none; color: var(--fg-2); } }
+/* The agente's face at work, inside a turning ring and a breathing glow of its colour. */
+.orb { position: relative; isolation: isolate; flex: none; display: grid; place-items: center; width: 22px; height: 22px; }
+.orb[hidden] { display: none; }
+.orb::before { content: ""; position: absolute; inset: -5px; border-radius: 50%; background: conic-gradient(transparent 0 50%, color-mix(in srgb, var(--glow, var(--fg)) 80%, transparent) 92%, transparent); -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 1.75px), #000 calc(100% - 1.5px)); mask: radial-gradient(farthest-side, transparent calc(100% - 1.75px), #000 calc(100% - 1.5px)); animation: spin 1.15s linear infinite; }
+.orb::after { content: ""; position: absolute; inset: -9px; z-index: -1; border-radius: 50%; background: radial-gradient(closest-side, color-mix(in srgb, var(--glow, var(--fg)) 24%, transparent), transparent); animation: orb-breathe 2.6s ease-in-out infinite; }
+@keyframes orb-breathe { 50% { scale: 1.2; opacity: 0.5; } }
+/* The run's last actions: done ones checked, the current one turning. */
+.run-tasks { list-style: none; margin: 0 0 6px; padding: 0; display: grid; gap: 6px; font-size: 13px; line-height: 1.45; }
+.run-task { display: flex; align-items: center; gap: 14px; min-width: 0; color: var(--fg-2); }
+.run-task > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.task-mark { flex: none; display: grid; place-items: center; width: 14px; height: 14px; margin-left: 4px; border-radius: 50%; }
+.task-mark .icon { width: 10px; height: 10px; stroke-width: 2.5; }
+.run-task.done { color: var(--fg-3); }
+.run-task.done .task-mark { background: var(--hover); color: var(--fg-2); }
+.run-task.now { color: var(--fg); }
+.run-task.now .task-mark { border: 1.5px solid var(--border-2); border-top-color: var(--fg); animation: spin 0.8s linear infinite; }
+.run-task.more { padding-left: 32px; font-size: 12px; color: var(--fg-3); }
+.run-task.enter { animation: rise 0.32s var(--ease) backwards; }
 .tray .chip { position: relative; width: 56px; height: 56px; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); background: var(--surface); }
 .tray .chip img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .tray .chip button { position: absolute; top: 2px; right: 2px; width: 20px; height: 20px; padding: 0; border: 0; border-radius: 50%; background: color-mix(in srgb, var(--fg) 70%, transparent); color: var(--surface); font-size: 14px; line-height: 20px; cursor: pointer; }
@@ -927,6 +951,20 @@ main.is-chat { position: relative; }
 .hints.ideas button .icon { width: 15px; height: 15px; color: var(--fg-3); transition: color 0.15s var(--ease); }
 .hints.ideas button:hover .icon { color: var(--fg); }
 .hints.ideas button:hover { background: var(--hover); }
+/* The landing arrives in order: face, greeting, box, then the starters one after another. */
+.welcome > * { animation: rise 0.5s var(--ease) backwards; }
+.welcome > :nth-child(2) { animation-delay: 50ms; }
+.welcome > :nth-child(3) { animation-delay: 90ms; }
+.welcome > :nth-child(4) { animation-delay: 130ms; }
+.welcome > .hints { animation: none; }
+.hints.ideas button { animation: chip-in 0.42s var(--ease) backwards; }
+.hints.ideas button:nth-child(1) { animation-delay: 190ms; }
+.hints.ideas button:nth-child(2) { animation-delay: 230ms; }
+.hints.ideas button:nth-child(3) { animation-delay: 270ms; }
+.hints.ideas button:nth-child(4) { animation-delay: 310ms; }
+.hints.ideas button:nth-child(5) { animation-delay: 350ms; }
+.hints.ideas button:nth-child(n + 6) { animation-delay: 390ms; }
+@keyframes chip-in { from { opacity: 0; transform: translateY(6px) scale(0.97); filter: blur(2px); } }
 
 /* ---------- segreteria ---------- */
 .pratiche { display: grid; grid-template-columns: 320px minmax(0, 1fr); gap: 16px; align-items: start; }
@@ -981,10 +1019,16 @@ details > summary:hover { color: var(--fg); }
 
 /* ---------- toasts, dialogs, palette, login ---------- */
 /* Toasts: a dark pill at the bottom centre, in both themes, like a system notice. */
-#toasts { position: fixed; left: 50%; bottom: 20px; translate: -50% 0; display: flex; flex-direction: column; align-items: center; gap: 8px; z-index: 70; pointer-events: none; }
-.toast { pointer-events: auto; padding: 9px 16px; border-radius: 99px; background: var(--fg); color: var(--bg); box-shadow: var(--shadow-lg); max-width: min(440px, calc(100vw - 32px)); font-size: 13px; font-weight: 500; text-align: center; animation: toast-in 0.24s var(--ease); }
+/* A stack: the newest in front, older ones tucked behind; pointed at, it spreads out. */
+#toasts { position: fixed; left: 50%; bottom: 20px; translate: -50% 0; width: min(420px, calc(100vw - 32px)); height: var(--h, 0px); z-index: 70; pointer-events: none; transition: height 0.35s var(--ease); }
+#toasts.open { pointer-events: auto; }
+.toast { position: absolute; bottom: 0; left: 50%; z-index: var(--z, 1); width: max-content; max-width: 100%; display: flex; align-items: center; gap: 9px; padding: 10px 16px 10px 12px; border-radius: 14px; background: var(--fg); color: var(--bg); box-shadow: var(--shadow-lg); font-size: 13px; font-weight: 500; line-height: 1.4; pointer-events: auto; touch-action: none; user-select: none; -webkit-user-select: none; cursor: grab; translate: calc(-50% + var(--dx, 0px)) calc(var(--y, 0px) + var(--dy, 0px)); scale: var(--s, 1); transform-origin: 50% 100%; transition: translate 0.4s var(--ease), scale 0.4s var(--ease), opacity 0.3s var(--ease); animation: toast-in 0.45s var(--ease) backwards; }
+.toast .icon { flex: none; width: 16px; height: 16px; }
 .toast.bad { background: var(--bad); color: var(--bg); }
-@keyframes toast-in { from { opacity: 0; transform: translateY(8px) scale(0.98); } to { opacity: 1; transform: none; } }
+.toast.buried { opacity: 0; pointer-events: none; }
+.toast.out { opacity: 0; scale: calc(var(--s, 1) * 0.94); pointer-events: none; }
+.toast.dragging { transition: none; cursor: grabbing; }
+@keyframes toast-in { from { opacity: 0; transform: translateY(18px) scale(0.94); filter: blur(4px); } }
 dialog { border: 1px solid var(--border); border-radius: 16px; background: var(--surface); color: var(--fg); padding: 24px; max-width: 520px; width: calc(100% - 32px); box-shadow: var(--shadow-lg); }
 dialog[open] { animation: pop 0.2s var(--ease); }
 dialog::backdrop { background: rgba(0, 0, 0, 0.45); }
@@ -1091,6 +1135,8 @@ ol.steps .stack > .choices { margin-bottom: 2px; }
 /* Google writes waiting for the person, above the chat box */
 .asks { margin: 0 0 8px; display: flex; flex-direction: column; gap: 8px; max-height: 45vh; overflow: auto; }
 .asks[hidden] { display: none; }
+.asks > * { animation: rise 0.32s var(--ease) backwards; }
+.dossier.compact .actions { margin: 12px -14px -12px; padding: 8px 14px; }
 .google-ask table.fields td:first-child { width: 120px; color: var(--fg-3); white-space: nowrap; vertical-align: top; }
 .google-ask table.fields td { padding: 6px 10px; overflow-wrap: anywhere; }
 .google-ask pre.letter { white-space: pre-wrap; overflow-wrap: anywhere; font-family: inherit; font-size: 14px; margin: 10px 0 0; padding: 12px 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg-2); max-height: 260px; overflow: auto; }
@@ -1288,3 +1334,31 @@ a.room-row:hover { background: var(--hover); }
 .thinking .faces .face:nth-child(3) .face-body { animation-delay: -0.8s; }
 @keyframes face-look { 0%, 100% { transform: translate(0, 0); } 25% { transform: translate(-2.5px, -1px); } 55% { transform: translate(2.5px, -1.5px); } 80% { transform: translate(0, 0) scaleY(0.15); } }
 @keyframes face-bob { 0%, 100% { transform: translateY(0) scale(1, 1); } 50% { transform: translateY(-1.5px) scale(1.02, 0.98); } }
+
+/* A button whose decision is on its way: a small turning ring in place of its icon. */
+.btn.busy { pointer-events: none; }
+.btn.busy .icon { display: none; }
+.btn.busy::before { content: ""; flex: none; width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid color-mix(in srgb, currentColor 30%, transparent); border-top-color: currentColor; animation: spin 0.7s linear infinite; }
+
+/* Sources: bare links become host chips; the sites a reply cites fold up underneath it. */
+.markdown a.cite { display: inline-flex; align-items: center; height: 20px; padding: 0 7px; margin: 0 1px; border-radius: 6px; background: var(--hover); color: var(--fg-2); font-size: 12px; font-weight: 500; line-height: 1; text-decoration: none; vertical-align: 1px; transition: background 0.15s var(--ease), color 0.15s var(--ease); }
+.markdown a.cite:hover { background: var(--active); color: var(--fg); }
+.sources { margin-top: 14px; font-size: 13px; }
+.sources > summary { display: inline-flex; align-items: center; gap: 8px; height: 30px; padding: 0 12px 0 5px; border: 1px solid var(--border); border-radius: 99px; color: var(--fg-2); cursor: pointer; list-style: none; transition: background 0.15s var(--ease), color 0.15s var(--ease); }
+.sources > summary::-webkit-details-marker { display: none; }
+.sources > summary:hover { background: var(--hover); color: var(--fg); }
+.source-stack { display: inline-flex; }
+.source-stack .source-mark + .source-mark { margin-left: -6px; }
+.source-mark { flex: none; display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--active); color: var(--fg); font-size: 10.5px; font-weight: 650; box-shadow: 0 0 0 2px var(--bg); }
+.source-list { list-style: none; max-width: 520px; margin: 8px 0 0; padding: 0; display: grid; gap: 2px; }
+.sources[open] .source-list { animation: rise 0.25s var(--ease) backwards; }
+.source-list a { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 10px; color: var(--fg); text-decoration: none; }
+.source-list a:hover { background: var(--hover); }
+.source-list a > span, .link-preview > span { min-width: 0; display: flex; flex-direction: column; }
+.source-list b { font-weight: 550; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.source-list small, .link-preview small { color: var(--fg-3); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.link-preview { position: fixed; left: var(--x, 0); top: var(--y, 0); z-index: 80; translate: -50% -100%; display: flex; align-items: center; gap: 10px; max-width: 320px; padding: 9px 12px 9px 9px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); box-shadow: var(--shadow-lg); font-size: 12.5px; pointer-events: none; opacity: 0; scale: 0.97; transition: opacity 0.16s var(--ease), scale 0.16s var(--ease); }
+.link-preview.below { translate: -50% 0; }
+.link-preview.on { opacity: 1; scale: 1; }
+.link-preview b { font-weight: 600; }
+.link-preview .source-mark { width: 28px; height: 28px; border-radius: 8px; font-size: 13px; box-shadow: none; }

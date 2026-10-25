@@ -10,10 +10,17 @@ import { refreshCounters } from "../session.js";
 import { refreshThreads, renderRail } from "../shell.js";
 import { conversationRuns } from "../runs.js";
 import { renderMarkdown } from "../markdown.js";
+import { linkPreviews, sources } from "../sources.js";
 
 // ---------- chat ----------
 /** A workspace picture shown in the page (not downloaded). */
 const pictureUrl = (inst, path) => `/api/instances/${inst.id}/files/raw?path=${encodeURIComponent(path)}&inline=1`;
+
+/** An answer: its markdown, and the sites it links to folded underneath. */
+function reply(text) {
+	const md = renderMarkdown(text);
+	return h("div.body", md, sources(md));
+}
 
 /** The empty chat's starters, as on Grok: what Owni can do, each one the start of a message to finish. */
 const HINTS = [
@@ -47,7 +54,22 @@ export async function viewChat(main) {
 	// Tools belong to the fixed context bar, after the conversation has loaded successfully.
 	mount(main.parentElement.querySelector(".conversation-tools"), screen.toggle, browser.toggle);
 	const transcript = h("div.transcript", { role: "log", "aria-live": "polite" });
+	linkPreviews(transcript);
 	let typing;
+	let work;
+	// New messages go above the agente's work in progress, which stays last, where its answer will be.
+	const place = (el) => transcript.insertBefore(el, work?.el.parentNode === transcript ? work.el : null);
+	// Follow the conversation while the person is at its end; leave them where they are when they scrolled up to read.
+	// Only a move up lets go: the smooth scroll to the end passes through the middle too.
+	let stick = true;
+	let lastTop = 0;
+	transcript.addEventListener("scroll", () => {
+		const top = transcript.scrollTop;
+		if (top < lastTop - 2) stick = false;
+		if (transcript.scrollHeight - top - transcript.clientHeight < 80) stick = true;
+		lastTop = top;
+	}, { passive: true });
+	const follow = () => { if (stick) transcript.scrollTop = transcript.scrollHeight; };
 	const picture = (path) => pictureUrl(inst, path);
 	// A file to download; also what a picture that does not show (deleted, not really a picture) becomes.
 	const fileLink = (file) => h("a.file", { href: `/api/instances/${inst.id}/files/raw?path=${encodeURIComponent(file.path)}` }, h("span.ext", (file.path.split(".").pop() ?? "file").slice(0, 4)), h("span", h("b", file.path.split("/").pop()), file.caption ? h("div.muted", file.caption) : null));
@@ -55,7 +77,7 @@ export async function viewChat(main) {
 		// What the board sends the agente reads as a scheda, not as a wall of instructions the person never typed.
 		const brief = entry.from === "person" ? boardNote(entry) : null;
 		if (brief) {
-			transcript.append(brief);
+			place(brief);
 			return brief;
 		}
 		const shown = entry.file && /\.(png|jpe?g|webp|gif)$/i.test(entry.file.path);
@@ -71,7 +93,9 @@ export async function viewChat(main) {
 				)
 			: entry.file
 			? fileLink(entry.file)
-			: h("div.body", entry.from === "annie" ? renderMarkdown(entry.text ?? "") : entry.text ?? "");
+			: entry.from === "annie"
+			? reply(entry.text ?? "")
+			: h("div.body", entry.text ?? "");
 		const pictures = entry.images?.length
 			? h(
 					"div.pics",
@@ -89,7 +113,7 @@ export async function viewChat(main) {
 		// Which model wrote the reply: the chat's own, or the instance's when that could not answer.
 		const by = entry.model ? h("span.by", { title: `${entry.model.provider} · ${entry.model.modelId}` }, entry.model.name ?? entry.model.modelId) : null;
 		const el = h(`div.msg.${entry.from}`, h("div.meta", entry.from === "annie" ? [face(inst, 20), h("b.who", inst.name)] : null, fmt.time(entry.at), by), pictures, entry.text || entry.file || !pictures ? body : null, actions);
-		transcript.append(el);
+		place(el);
 		return el;
 	};
 	for (const e of entries) show(e);
@@ -112,11 +136,15 @@ export async function viewChat(main) {
 	const startTyping = () => {
 		stopTyping();
 		typing = thinking([inst]);
-		transcript.append(typing);
+		place(typing);
 		transcript.scrollTop = transcript.scrollHeight;
 	};
 	// Once durable state is known, one compact status replaces the optimistic typing indicator.
-	const work = conversationRuns(inst, threadId, () => stopTyping());
+	work = conversationRuns(inst, threadId, () => {
+		stopTyping();
+		follow();
+	});
+	transcript.append(work.el);
 	state.onEntry = (event) => {
 		if (event.threadId !== threadId) return false;
 		stopTyping();
@@ -124,7 +152,7 @@ export async function viewChat(main) {
 		if (event.entry.from === "annie") void drawAsks();
 		browser.lively();
 		screen.lively();
-		transcript.scrollTop = transcript.scrollHeight;
+		follow();
 		return true;
 	};
 	const box = chatBox(inst, threadId, conversation, async (text, images) => {
@@ -149,7 +177,7 @@ export async function viewChat(main) {
 	}, modelPill(inst, model, async (picked) => {
 		await api(`/api/instances/${inst.id}/threads/${encodeURIComponent(threadId)}/model`, { method: "PUT", body: picked ? { provider: picked.provider, modelId: picked.modelId } : {} });
 	}));
-	conversation.append(transcript, h("div.dock", work.el, asks, box.el));
+	conversation.append(transcript, h("div.dock", asks, box.el));
 	transcript.scrollTop = transcript.scrollHeight;
 	// A message written on the empty chat: sent as soon as its conversation opens.
 	if (main.isConnected && store(`annie.autosend.${threadId}`) === "1") {
