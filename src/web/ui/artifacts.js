@@ -24,9 +24,9 @@ export function artifactCard(instanceId, threadId, artifact, onOpen) {
 /**
  * The panel an artifact opens in, next to the conversation (full width on a phone, with a way
  * back). The page runs in a sandboxed frame, never with the console's origin: no session, no API.
- * `onShow`: called when it opens, to close the other panels.
+ * `onShow`: called when it opens, to close the other panels; `onHide`: called when it closes.
  */
-export function artifactPanel(onShow = () => {}) {
+export function artifactPanel(onShow = () => {}, onHide = () => {}) {
 	let open = null;
 	let request = 0;
 	const title = h("span.page-title", "Artifact");
@@ -71,6 +71,7 @@ export function artifactPanel(onShow = () => {}) {
 			// A closed page stops running.
 			frame.removeAttribute("src");
 			open = null;
+			onHide();
 		}
 	};
 	return {

@@ -8,14 +8,10 @@ import { viewApprovals } from "./pages/approvals.js";
 import { viewAutomations } from "./pages/automations.js";
 import { viewBoard } from "./pages/board.js";
 import { closeModelMenu, viewDm } from "./pages/chat.js";
-import { viewConnectors } from "./pages/connectors.js";
-import { viewFiles } from "./pages/files.js";
-import { viewMemory } from "./pages/memory.js";
 import { viewPeople } from "./pages/people.js";
 import { viewRooms } from "./pages/rooms.js";
 import { viewSegreteria } from "./pages/segreteria.js";
 import { viewSettings } from "./pages/settings.js";
-import { viewSkills } from "./pages/skills.js";
 import { viewStart } from "./pages/start.js";
 import { viewTasks } from "./pages/tasks.js";
 import { viewPrograms, viewWork } from "./pages/work.js";
@@ -41,10 +37,6 @@ export const PAGES = [
 	{ id: "task", label: "Orari e pagine da controllare", group: "Lavoro", workspace: "work", view: viewTasks },
 	{ id: "automazioni", label: "Eventi esterni", group: "Lavoro", workspace: "work", view: viewAutomations },
 	{ id: "agenti", label: "Agenti", group: "Gestione", workspace: "agents", view: viewAgents },
-	{ id: "file", label: "Documenti dell'agente", group: "Materiali", workspace: "agents", view: viewFiles },
-	{ id: "memoria", label: "Memoria personale e condivisa", group: "Materiali", workspace: "agents", view: viewMemory },
-	{ id: "skill", label: "Procedure", group: "Materiali", workspace: "agents", view: viewSkills },
-	{ id: "connettori", label: "Servizi collegati", group: "Gestione", workspace: "agents", owner: true, view: viewConnectors },
 	{ id: "impostazioni", label: "Configurazione dell'agente", group: "Gestione", workspace: "agents", owner: true, view: viewSettings },
 	{ id: "inizia", label: "Primi passi", group: "Gestione", workspace: "agents", owner: true, view: viewStart },
 	{ id: "gestione", label: "Gestione", group: "Gestione", workspace: "management", view: viewManagement },
@@ -63,10 +55,6 @@ function workspaceNav(item) {
 		link("Richiede te", "#/lavori/attenzione", view === "approvazioni" || (view === "lavori" && route().rest[0] === "attenzione")),
 		link("Automazioni", "#/programmi", ["programmi", "task", "automazioni"].includes(view)),
 		state.instances.some((i) => i.hasSegreteria) ? link("Pratiche", instanceHref("segreteria", [], state.instances.find((i) => i.hasSegreteria)?.id), view === "segreteria") : null,
-	);
-	if (item.workspace === "agents" && state.instance) return h("nav.workspace-nav", { "aria-label": `Materiali e configurazione di ${state.instance.name}`, ...windowDrag() },
-		link("Documenti", instanceHref("file"), view === "file"), link("Memoria", instanceHref("memoria"), view === "memoria"), link("Procedure", instanceHref("skill"), view === "skill"),
-		state.me.role === "owner" ? link("Configurazione", instanceHref("impostazioni"), ["impostazioni", "connettori", "inizia"].includes(view)) : null,
 	);
 	if (item.id === "dm") {
 		const inst = state.instance;

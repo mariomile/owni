@@ -1,5 +1,6 @@
 // Impostazioni page, with the cards for each capability and channel.
-import { agentLabel, api, confirmDialog, face, go, h, head, icon, instanceHref, mount, needInstance, route, state, store, toast } from "../common.js";
+import { agentHome, agentLabel, api, confirmDialog, face, go, h, head, icon, instanceHref, mount, needInstance, route, state, store, toast } from "../common.js";
+import { connectorsBody } from "../connectors.js";
 import { copyBox, copyButton } from "../listen.js";
 import { chatModelCache, modelFacts, subscriptionState } from "../models.js";
 import { TONES } from "../tones.js";
@@ -631,7 +632,7 @@ export async function viewSettings(main) {
 	if (needInstance(main)) return;
 	const inst = state.instance;
 	if (state.me.role !== "owner") {
-		mount(main, head(agentLabel(inst), "Configurazione", "La configurazione dell'agente è riservata all'owner.", h("a.btn", { href: instanceHref("file", [], inst.id) }, "Apri i documenti")));
+		mount(main, head(agentLabel(inst), "Configurazione", "La configurazione dell'agente è riservata all'owner.", h("a.btn", { href: agentHome(inst.id) }, `Apri ${inst.name}`)));
 		return;
 	}
 	const [{ settings }, { people }, tg, wa, google, voice, search, tel, computer, speech, images, models, desktop, providers] = await Promise.all([
@@ -678,6 +679,9 @@ export async function viewSettings(main) {
 	const modelEditor = providersCard(inst, providers, models);
 	modelEditor.classList.remove("card", "pad");
 	const modelDetails = fold({ title: "Cambia modello o gestisci provider", glyph: "spark", lead: "Abbonamenti, chiavi API e scelta del modello. Ogni modifica ha il suo comando." }, anchor("providers", modelEditor));
+	// The services load on their own: a slow or broken one does not hold the rest of the page.
+	const services = h("div.stack", h("p.muted.small", "Caricamento…"));
+	connectorsBody(inst).then((nodes) => mount(services, nodes), (error) => mount(services, h("p.error", error.message)));
 	const groups = [
 		{ id: "identita", label: "Identità", glyph: "agenti", anchors: ["personalita", "elimina"], content: [
 			anchor("personalita", h("div.card.pad",
@@ -693,8 +697,7 @@ export async function viewSettings(main) {
 			h("div.card.pad", h("h2", "Modello attuale"), h("p", settings.model.provider === "faux" ? "Modello di prova" : settings.model.modelId), h("p.muted", "Puoi continuare a usare l'agente con questo modello. Cambialo soltanto quando serve.")),
 			modelDetails,
 		] },
-		{ id: "capacita", label: "Capacità", glyph: "connettori", anchors: ["computer-use", "google", "vocali", "voce", "ricerca", "immagini", "siti", "azioni-web", "agenti", "computer", "schermo"], content: [
-			h("div.card.pad", h("h2", "Servizi e strumenti"), h("p.muted", "Aggiungi o modifica un servizio quando serve al lavoro dell'agente. I permessi e le approvazioni restano quelli di ogni capacità."), h("div.actions", h("a.btn", { href: instanceHref("connettori", [], inst.id) }, "Apri servizi e strumenti")), h("p.muted.small", `Connettori consentiti: ${(e.connectors ?? []).join(", ") || "nessuno"}.`)),
+		{ id: "capacita", label: "Capacità", glyph: "skill", anchors: ["computer-use", "google", "vocali", "voce", "ricerca", "immagini", "siti", "azioni-web", "agenti", "computer", "schermo"], content: [
 			google.available ? anchor("google", googleCard(inst, allowed("google"))) : null,
 			voice.available ? anchor("vocali", voiceCard(inst, voice.host, allowed("voice"))) : null,
 			speech.available ? anchor("voce", speechCard(inst, speech.host, allowed("speech"), voice.available && allowed("voice"))) : null,
@@ -707,6 +710,7 @@ export async function viewSettings(main) {
 			desktop.kind === "local" ? null : anchor("schermo", desktopCard(inst, allowed("schermo"), desktop)),
 			anchor("agenti", agentsCard(inst, settings)),
 		] },
+		{ id: "servizi", label: "Servizi", glyph: "connettori", anchors: [], content: [services] },
 		{ id: "canali", label: "Canali", glyph: "chat", anchors: ["telegram", "whatsapp", "telefono"], content: [
 			h("div.card.pad", h("h2", "Dove risponde"), h("p", e.channels.map((c) => CHANNEL_NAMES[c] ?? c).join(", ") || "Nessun canale attivo"), h("p.muted", "Telegram, WhatsApp e telefono sono facoltativi. Ogni canale salva i propri accessi con il pulsante nel suo modulo.")),
 			tg === undefined ? null : anchor("telegram", telegramCard(inst, tg.telegram)),
@@ -747,7 +751,7 @@ export async function viewSettings(main) {
 	}, icon(group.glyph), group.label)));
 	show(active);
 	mount(main,
-		head(agentLabel(inst), h("h1", "Configurazione"), `Configura ${inst.name} una sezione alla volta.`, h("button.btn.ghost", { onclick: () => (setupHidden(inst.id, false), go("inizia")) }, "Primi passi")),
+		head(agentLabel(inst), h("h1", `Configurazione di ${inst.name}`), "Una sezione alla volta. Quello che sa e che fa è nel suo pannello, accanto alla conversazione.", h("button.btn.ghost", { onclick: () => (setupHidden(inst.id, false), go("inizia")) }, "Primi passi")),
 		nav, saveBar, independentNote, panels,
 	);
 	if (requested === "modello") modelDetails.open = true;

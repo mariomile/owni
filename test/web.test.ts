@@ -347,6 +347,37 @@ describe("web console", () => {
 		expect((await fetch(`${h.base}${at}/1`)).status).toBe(401);
 	});
 
+	it("lists one agente's artifacts of the person, newest first, with where each was made", async () => {
+		const h = await setup();
+		const me = h.anna.person.id;
+		const dm = await h.channel.createThread(me, "Messaggi", { dm: true });
+		const chat = await h.channel.createThread(me, "Conti");
+		const reply = await h.channel.createThread(me, "Risposta", { parent: { threadId: dm.id, entryId: "e1" } });
+		const seat = await h.channel.createThread(me, "Stanza: Vendite", { room: "r_000000000001" });
+		const theirs = await h.channel.createThread(h.luca.person.id, "Di Luca");
+		const page = "<!doctype html><p>x</p>";
+		for (const [thread, title] of [[dm, "Nel dm"], [chat, "Nella chat"], [reply, "Nel thread"], [seat, "Nel canale"], [theirs, "Di Luca"]] as const) {
+			await h.channel.artifacts.create(thread.id, { title, html: page, key: title });
+			await new Promise((r) => setTimeout(r, 5));
+		}
+		const made = (await h.channel.artifacts.all(chat.id))[0];
+		await h.channel.artifacts.update(chat.id, made?.id as string, { title: "Nella chat, rivista", html: `${page}2`, key: "again" });
+		const anna = await h.as(h.anna.token);
+		const listed = await anna("/api/instances/ops/artifacts");
+		expect(listed.status).toBe(200);
+		expect(listed.body.artifacts.map((a: any) => [a.title, a.version, a.where])).toEqual([
+			["Nella chat, rivista", 2, { kind: "chat", title: "Conti" }],
+			["Nel canale", 1, { kind: "channel" }],
+			["Nel thread", 1, { kind: "thread", title: "Risposta" }],
+			["Nel dm", 1, { kind: "dm" }],
+		]);
+		expect(listed.body.artifacts[0]).toMatchObject({ threadId: chat.id, id: made?.id });
+		expect(JSON.stringify(listed.body)).not.toContain("key");
+		// Luca sees only his own; nobody signed in sees nothing.
+		expect((await (await h.as(h.luca.token))("/api/instances/ops/artifacts")).body.artifacts.map((a: any) => a.title)).toEqual(["Di Luca"]);
+		expect((await fetch(`${h.base}/api/instances/ops/artifacts`)).status).toBe(401);
+	});
+
 	it("an HTML file of the workspace opens sandboxed like an artifact; other files stay downloads", async () => {
 		const h = await setup();
 		const anna = await h.as(h.anna.token);

@@ -382,7 +382,7 @@ export function route() {
 	return { view: view || "dm", rest: rest.map(decode), instanceId: params.get("agent") ?? undefined, params };
 }
 
-const AGENT_VIEWS = new Set(["file", "memoria", "skill", "task", "automazioni", "impostazioni", "connettori", "segreteria", "inizia"]);
+const AGENT_VIEWS = new Set(["task", "automazioni", "impostazioni", "segreteria", "inizia"]);
 
 /** A link carries its agent: opening it later never borrows another agent from the browser. */
 export function instanceHref(view, rest = [], instanceId = state.instance?.id) {
@@ -428,10 +428,26 @@ export function dmHref(instanceId, threadId) {
 	return `#/dm/${encodeURIComponent(instanceId)}${threadId ? `/t/${encodeURIComponent(threadId)}` : ""}`;
 }
 
-/** Where an address from before the canali goes now (ADR 0113): a chat opens in its agente's direct messages. */
+/** The agente's panel next to its direct conversation (ADR 0114), open at `section`. */
+export function agentInfoHref(instanceId, section) {
+	return `${dmHref(instanceId)}/info${section && section !== "attivita" ? `/${encodeURIComponent(section)}` : ""}`;
+}
+
+/** The sections of the agente's panel that had their own page before ADR 0114. */
+const MATERIALS = { file: "documenti", memoria: "memoria", skill: "procedure" };
+
+/**
+ * Where an address from before goes now: a chat opens in its agente's direct messages (ADR 0113);
+ * documents, memory and procedures in the agente's panel, its services in its configuration (ADR 0114).
+ */
 export function movedHref({ view, rest, instanceId }) {
 	if (view === "chat") return instanceId ? dmHref(instanceId, rest[0]) : "#/";
 	if (view === "stanze") return `#/${["canali", ...rest].map(encodeURIComponent).join("/")}`;
+	if (Object.hasOwn(MATERIALS, view)) {
+		const id = instanceId ?? state.instance?.id;
+		return id ? agentInfoHref(id, MATERIALS[view]) : "#/agenti";
+	}
+	if (view === "connettori") return instanceHref("impostazioni", ["servizi"], instanceId ?? null);
 	return undefined;
 }
 
@@ -445,10 +461,12 @@ export function channelHref(roomId, threadId) {
 	return `#/canali/${encodeURIComponent(roomId)}${threadId ? `/t/${encodeURIComponent(threadId)}` : ""}`;
 }
 
-/** Where an agent's own page is: its configuration for the owner, its documents for everyone else. */
+/** Where an agent's own page is: its panel next to the conversation; without a chat, its configuration for the owner. */
 export function agentHome(instanceId = state.instance?.id) {
-	if (!instanceId) return "#/agenti";
-	return instanceHref(state.me?.role === "owner" ? "impostazioni" : "file", [], instanceId);
+	const inst = state.instances.find((i) => i.id === instanceId);
+	if (inst?.canChat) return agentInfoHref(inst.id);
+	if (instanceId && state.me?.role === "owner") return instanceHref("impostazioni", [], instanceId);
+	return "#/agenti";
 }
 
 /** Only an agent already returned for this person may become the current context. */

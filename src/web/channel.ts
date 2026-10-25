@@ -133,7 +133,8 @@ export class WebChannel implements ChannelAdapter {
 		});
 	}
 
-	async threads(personId: string): Promise<WebThread[]> {
+	/** The person's chats; with `seats`, also the agente's seats in their canali. */
+	async threads(personId: string, { seats = false }: { readonly seats?: boolean } = {}): Promise<WebThread[]> {
 		let names: string[];
 		try {
 			names = await readdir(join(this.dir, "threads"));
@@ -145,7 +146,7 @@ export class WebChannel implements ChannelAdapter {
 		for (const name of names) {
 			if (!name.endsWith(".json") || !name.startsWith(`${personId}.`)) continue;
 			const thread = JSON.parse(await readFile(join(this.dir, "threads", name), "utf8")) as WebThread;
-			if (thread.room === undefined) out.push(thread);
+			if (seats || thread.room === undefined) out.push(thread);
 		}
 		return out.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 	}

@@ -5,6 +5,7 @@ import { renderMarkdown } from "../markdown.js";
 import { copyButton, listenButton } from "../listen.js";
 import { refreshConversations, render, renderRail, windowDrag } from "../shell.js";
 import { artifactCard, artifactPanel, isHtml } from "../artifacts.js";
+import { agentPanel } from "../agent-panel.js";
 
 // ---------- canali (ADR 0063, 0113) ----------
 export async function viewRooms(main) {
@@ -89,6 +90,8 @@ function markRead(roomId) {
 
 /** The artifact panel of the canale on screen (ADR 0112): an agente's HTML pages open there. */
 let artifacts;
+/** Opens the panel of an agente of the canale on screen (ADR 0114), from its name on a message. */
+let openAgent;
 const fileLink = (instanceId, file) => h("a.file", { href: `/api/instances/${encodeURIComponent(instanceId)}/files/raw?path=${encodeURIComponent(file.path)}` }, h("span.ext", (file.path.split(".").pop() ?? "file").slice(0, 4)), h("span", h("b", file.path.split("/").pop()), file.caption ? h("div.muted", file.caption) : null));
 
 /** A message of a canale or of a thread. `answer`: in the canale, the button that opens its thread; `slot`: where its replies are counted. */
@@ -101,7 +104,9 @@ function roomMessage(room, entry, answer, slot) {
 	const agent = room.agents.find((a) => a.instanceId === entry.instanceId);
 	const by = entry.model ? h("span.by", { title: `${entry.model.provider} · ${entry.model.modelId}` }, entry.model.name ?? entry.model.modelId) : null;
 	// Each agente's name in the colour of its face, so that who is speaking reads at a glance.
-	const who = h("b.who", `${agent?.emoji ? `${agent.emoji} ` : ""}${agent?.name ?? entry.instanceId}`);
+	const name = `${agent?.emoji ? `${agent.emoji} ` : ""}${agent?.name ?? entry.instanceId}`;
+	const known = state.instances.some((i) => i.id === entry.instanceId);
+	const who = known && openAgent ? h("button.who", { type: "button", title: `Apri ${agent?.name ?? "l'agente"}`, onclick: () => openAgent(entry.instanceId) }, name) : h("b.who", name);
 	who.style.setProperty("--agent", faceColor(agent ?? { id: entry.instanceId }));
 	const actions = entry.text || answer ? h("div.msg-actions", entry.text ? [copyButton(entry.text), listenButton(entry.text)] : null, answer) : null;
 	return h("div.msg.owni", h("div.meta", face(agent ?? { id: entry.instanceId }, 20), who, h("span", fmt.time(entry.at)), by), entry.artifact ? artifactCard(entry.instanceId, entry.artifact.threadId, entry.artifact, (a) => void artifacts?.openArtifact(entry.instanceId, entry.artifact.threadId, a))
@@ -187,9 +192,39 @@ async function viewRoom(main, roomId, openId) {
 	void markRead(roomId);
 	const transcript = h("div.transcript", { role: "log", "aria-live": "polite" });
 	const typing = thinking(room.agents.filter((a) => a.present));
-	// One panel at a time next to the canale: a thread or a page.
-	const panel = threadPanel(room, () => void refreshSummaries(), () => artifacts.show(false));
-	artifacts = artifactPanel(() => panel.close());
+	// One panel at a time next to the canale: a thread, a page or an agente. A page opened from an
+	// agente's panel goes back to it when closed.
+	let agent;
+	let agentOf;
+	let fromAgent = false;
+	let switching = false;
+	const only = (keep) => {
+		switching = true;
+		if (keep !== panel) panel.close();
+		if (keep !== artifacts) artifacts.show(false);
+		if (keep !== agent) agent?.show(false);
+		switching = false;
+	};
+	const panel = threadPanel(room, () => void refreshSummaries(), () => only(panel));
+	artifacts = artifactPanel(() => { fromAgent = false; only(artifacts); }, () => {
+		if (fromAgent && !switching) agent?.show(true);
+		fromAgent = false;
+	});
+	openAgent = (instanceId) => {
+		const inst = state.instances.find((i) => i.id === instanceId);
+		if (!inst) return;
+		if (agentOf === inst.id) return agent.show(!agent.isOpen());
+		agent?.show(false);
+		agent?.el.remove();
+		agent = agentPanel(inst, {
+			onShow: () => only(agent),
+			openArtifact: (threadId, page) => { void artifacts.openArtifact(inst.id, threadId, page); fromAgent = true; },
+			openFile: (path) => { artifacts.openFile(inst.id, path); fromAgent = true; },
+		});
+		agentOf = inst.id;
+		split.append(agent.el);
+		agent.show(true);
+	};
 	/** The replies under each message, as the server counts them now. */
 	const slots = new Map();
 	const children = new Set(entries.flatMap((e) => (e.thread ? [e.thread.id] : [])));
@@ -221,7 +256,7 @@ async function viewRoom(main, roomId, openId) {
 			typing.remove();
 			show(event.entry);
 			// A new page opens by itself when the place next to the canale is free; on a phone it would cover it.
-			if (event.entry.artifact && panel.el.hidden && !matchMedia("(max-width: 860px)").matches) void artifacts.openArtifact(event.entry.instanceId, event.entry.artifact.threadId, event.entry.artifact);
+			if (event.entry.artifact && panel.el.hidden && !agent?.isOpen() && !matchMedia("(max-width: 860px)").matches) void artifacts.openArtifact(event.entry.instanceId, event.entry.artifact.threadId, event.entry.artifact);
 			transcript.scrollTop = transcript.scrollHeight;
 			void markRead(roomId);
 			return true;
@@ -275,7 +310,8 @@ async function viewRoom(main, roomId, openId) {
 		h("button.icon-btn.room-remove", { onclick: remove, title: "Cancella il canale", "aria-label": `Cancella il canale ${channelName(room.title)}` }, icon("trash")),
 	);
 	if (entries.length === 0) transcript.append(h("div.room-note", `Nel canale: ${room.agents.map((a) => a.name).join(", ")}. Scrivi @nome per chiamarne uno, @tutti per tutti.`));
-	mount(main, h("div.chat-split", h("section.conversation", header, transcript, box.el), panel.el, artifacts.el));
+	const split = h("div.chat-split", h("section.conversation", header, transcript, box.el), panel.el, artifacts.el);
+	mount(main, split);
 	box.fit();
 	transcript.scrollTop = transcript.scrollHeight;
 	if (openId !== undefined) {

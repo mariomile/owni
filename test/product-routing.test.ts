@@ -42,8 +42,8 @@ describe("agent context in product navigation", () => {
 	it("gives new agent-scoped links an explicit context without filtering the work overview", () => {
 		const common = browserCommon();
 		common.state.instance = { id: "sales" };
-		common.go("file", "notes");
-		expect(common.route()).toMatchObject({ view: "file", rest: ["notes"], instanceId: "sales" });
+		common.go("impostazioni", "servizi");
+		expect(common.route()).toMatchObject({ view: "impostazioni", rest: ["servizi"], instanceId: "sales" });
 		common.go("lavori", "attenzione");
 		expect(common.location.hash).toBe("#/lavori/attenzione");
 		expect(common.route().instanceId).toBeUndefined();
@@ -71,6 +71,25 @@ describe("agent context in product navigation", () => {
 		expect(moved("#/canali/p_1.r2")).toBeUndefined();
 		expect(moved("#/dm/sales")).toBeUndefined();
 		expect(moved("#/lavori")).toBeUndefined();
+	});
+
+	it("sends the agent pages folded into its panel by ADR 0114 to the panel, and its services to its configuration", () => {
+		const common = browserCommon();
+		const moved = (hash: string) => {
+			common.location.hash = hash;
+			return common.movedHref(common.route());
+		};
+		expect(moved("#/file?agent=sales")).toBe("#/dm/sales/info/documenti");
+		expect(moved("#/memoria?agent=sales")).toBe("#/dm/sales/info/memoria");
+		expect(moved("#/skill?agent=sales/team")).toBe("#/dm/sales%2Fteam/info/procedure");
+		expect(moved("#/file")).toBe("#/agenti");
+		common.state.instance = { id: "ops" };
+		expect(moved("#/file")).toBe("#/dm/ops/info/documenti");
+		expect(moved("#/toString")).toBeUndefined();
+		expect(moved("#/connettori?agent=sales")).toBe("#/impostazioni/servizi?agent=sales");
+		expect(moved("#/connettori")).toBe("#/impostazioni/servizi");
+		expect(moved("#/dm/sales/info/memoria")).toBeUndefined();
+		expect(moved("#/impostazioni/servizi?agent=sales")).toBeUndefined();
 	});
 
 	it("names a canale the way a team chat does, the stored title untouched", () => {

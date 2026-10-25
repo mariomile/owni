@@ -25,6 +25,7 @@ Owni è «pronta al 100%» quando ognuna di queste voci è vera e verificata da 
 - [x] Accesso con link personale creato dall'owner, sessione con cookie `HttpOnly`, chi non è autorizzato non vede nulla.
 - [x] Chat con l'istanza, risposte in tempo reale, storico dei thread.
 - [x] Console come una chat di team: un messaggio diretto per agente, canali con più agenti, thread sotto ogni messaggio, non letto dal server (ADR 0113).
+- [x] Pannello dell'agente accanto alla conversazione (attività, artifact, routine, memoria, documenti, procedure); configurazione a parte, con i servizi collegati (ADR 0114).
 - [x] Segreteria: elenco pratiche, scheda con bozza, Approva, Modifica, Scarta.
 - [x] Connettori, task programmati, file, tool proposti e approvazioni.
 - [x] Spesa del giorno e audit.
