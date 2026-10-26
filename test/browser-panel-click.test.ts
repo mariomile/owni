@@ -11,7 +11,8 @@ import { type Browser, BrowseSessions, viewportPoint } from "../src/core/web-ses
 import { connectChannel } from "../src/gateway.ts";
 import { PeopleStore, SessionStore } from "../src/web/auth.ts";
 import { WebChannel } from "../src/web/channel.ts";
-import { type BrowserPanel, BrowserPanelError, createWebApp } from "../src/web/server.ts";
+import { type BrowserPanel, BrowserPanelError } from "../src/web/browser-routes.ts";
+import { createWebApp } from "../src/web/server.ts";
 import { FAUX_MODEL, tempDataDir } from "./helpers.ts";
 
 const closers: (() => Promise<void>)[] = [];
