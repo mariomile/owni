@@ -39,6 +39,14 @@ function setup(reply: (instanceId: string, text: string) => string | undefined |
 }
 
 describe("stanze", () => {
+	it("does not read @nome or @tutti inside code", () => {
+		const agents = Object.entries(NAMES).map(([instanceId, name]) => ({ instanceId, name }));
+		expect(mentioned("ecco:\n```\n@tutti\n```\nfatto", agents)).toEqual([]);
+		expect(mentioned("scrivi `@tutti` nel file", agents)).toEqual([]);
+		expect(mentioned("```sh\n@ricercatore\n", agents)).toEqual([]);
+		expect(mentioned("```\n@tutti\n``` ma @contabile guarda `@ricercatore`", agents)).toEqual(["conti"]);
+	});
+
 	it("reads @nome, the first word when it is only one agente's, and @tutti", () => {
 		const agents = Object.entries(NAMES).map(([instanceId, name]) => ({ instanceId, name }));
 		expect(mentioned("@ricercatore cerca i bandi, poi @Assistente-vendite", agents)).toEqual(["ricerca", "vendite"]);
