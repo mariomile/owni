@@ -115,7 +115,7 @@ export async function connectorsBody(inst) {
 				: c.transport.type === "api"
 					? h("p.muted", "Legge subito; per creare, modificare o cancellare chiede sempre l'approvazione.")
 					: !st.approval?.length
-						? h("p.muted", "Tutti gli strumenti leggono soltanto: Owni li usa senza chiedere.")
+						? h("p.muted", "Nessuno strumento chiede l'approvazione: leggono soltanto, o fanno modifiche che il servizio dichiara interne e non distruttive.")
 						: st.approval.length === st.tools.length
 							? h("p.muted", "Tutti gli strumenti chiedono l'approvazione prima di agire.")
 							: h("p.muted", `Chiedono l'approvazione prima di agire: ${st.approval.map((t) => t.replace(`${c.id}__`, "")).join(", ")}.`),
