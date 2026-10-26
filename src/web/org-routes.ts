@@ -77,7 +77,7 @@ export function orgRoutes(route: AddRoute, deps: OrgRoutesDeps): SaveOrg {
 	route("GET", "/api/org", "owner", view);
 	route("PUT", "/api/org", "owner", async ({ person, req }) => {
 		const body = (await readJson(req)) as { org?: unknown; version?: unknown };
-		await save(person as Person, (current) => {
+		await save(person, (current) => {
 			// Two pages open, or a squadra pronta made meanwhile: the older page does not erase it.
 			if (body.version !== orgVersion(current)) throw new HttpError(409, "L'organigramma è cambiato da quando hai aperto la pagina: ricaricala e rifai la modifica");
 			return body.org as Org;

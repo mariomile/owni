@@ -62,7 +62,7 @@ import { WebChannel, type WebEntry, type WebEvent, type WebThread } from "./chan
 import { boardRoutes } from "./board-routes.ts";
 import { orgRoutes } from "./org-routes.ts";
 import { teamRoutes } from "./team-routes.ts";
-import { type Handler, HttpError, type Route, readBody, readJson, STREAMED } from "./http.ts";
+import { type AddRoute, type Handler, HttpError, type Route, readBody, readJson, STREAMED } from "./http.ts";
 import { screenRoutes } from "./screen-routes.ts";
 import { publicRun, runRoutes } from "./run-routes.ts";
 import type { RunRecord } from "../core/run-store.ts";
@@ -267,9 +267,14 @@ export function createWebApp(options: WebAppOptions): Server {
 	const OPENUI: Record<string, string> = { "/openui/frame": "frame.html", "/openui/frame.js": "frame.js", "/openui/frame.css": "frame.css", "/openui/openui-bundle.min.js": "openui-bundle.min.js", "/openui/openui-styles.css": "openui-styles.css" };
 	const routes: Route[] = [];
 	const automationRate = new AutomationRate();
-	const route = (method: string, path: string, auth: Route["auth"], handler: Handler) =>
-		routes.push({ method, pattern: new RegExp(`^${path.replace(/:[a-z]+/g, "([^/]+)")}$`), auth, handler });
+	const route: AddRoute = (method, path, auth, handler) =>
+		routes.push({ method, pattern: new RegExp(`^${path.replace(/:[a-z]+/g, "([^/]+)")}$`), auth, handler: handler as unknown as Handler });
 
+	// The agente of this id, or a 404.
+	const knownInstance = (id: string) =>
+		runtime.registry.getInstance(tenantId, id).catch(() => {
+			throw new HttpError(404, "Agente inesistente");
+		});
 	const instanceAccess = async (person: Person, instanceId: string) => {
 		let record;
 		try {
@@ -324,25 +329,22 @@ export function createWebApp(options: WebAppOptions): Server {
 		res.setHeader("set-cookie", `${COOKIE}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0`);
 		return { ok: true };
 	});
-	route("GET", "/api/me", "person", async ({ person }) => ({ person: publicPerson(person as Person) }));
-	route("POST", "/api/me/2fa/setup", "person", async ({ person }) => {
-		const p = person as Person;
+	route("GET", "/api/me", "person", async ({ person }) => ({ person: publicPerson(person) }));
+	route("POST", "/api/me/2fa/setup", "person", async ({ person: p }) => {
 		if (p.totp !== undefined) throw new HttpError(409, "La verifica in due passaggi è già attiva");
 		const secret = await options.people.startTotp(p.id);
 		return { secret, uri: otpauthUri(secret, p.name, "Owni") };
 	});
-	route("POST", "/api/me/2fa/enable", "person", async ({ person, req }) => {
+	route("POST", "/api/me/2fa/enable", "person", async ({ person: p, req }) => {
 		const body = (await readJson(req)) as { code?: string };
-		const p = person as Person;
 		if (!(await options.people.enableTotp(p.id, String(body.code ?? "")))) throw new HttpError(400, "Codice non valido: controlla l'ora del telefono e riprova");
 		// Sessions opened with the link alone (maybe a leaked one) end; this one stays.
 		await options.sessions.endAllOf(p.id, cookie(req, COOKIE));
 		await runtime.audit(tenantId).append({ type: "web.2fa_enabled", personId: p.id });
 		return { ok: true };
 	});
-	route("POST", "/api/me/2fa/disable", "person", async ({ person, req }) => {
+	route("POST", "/api/me/2fa/disable", "person", async ({ person: p, req }) => {
 		const body = (await readJson(req)) as { code?: string };
-		const p = person as Person;
 		if (p.totp === undefined) return { ok: true };
 		if (!(await checkCode(p.id, String(body.code ?? "")))) throw new HttpError(400, "Codice non valido");
 		await options.people.clearTotp(p.id);
@@ -375,15 +377,13 @@ export function createWebApp(options: WebAppOptions): Server {
 			throw error instanceof PersonaError ? new HttpError(400, error.message) : error;
 		}
 	};
-	route("GET", "/api/instances", "person", async ({ person }) => {
-		const p = person as Person;
+	route("GET", "/api/instances", "person", async ({ person: p }) => {
 		const all = await runtime.registry.listInstances(tenantId);
 		const visible = all.filter((r) => p.role === "owner" || (r.allowedUsers.web ?? []).includes(p.id));
 		return { instances: await Promise.all(visible.map((r) => describeInstance(r, p))) };
 	});
 	// The page «Agenti» (ADR 0041): each agente with its face, its model and what it does by itself.
-	route("GET", "/api/agents", "person", async ({ person }) => {
-		const p = person as Person;
+	route("GET", "/api/agents", "person", async ({ person: p }) => {
 		const all = await runtime.registry.listInstances(tenantId);
 		const visible = all.filter((r) => p.role === "owner" || (r.allowedUsers.web ?? []).includes(p.id));
 		const activity = runtimeActivity({ runtime, tenant: tenantId, board: options.board, channel: (id) => options.channels.get(id) });
@@ -451,8 +451,8 @@ export function createWebApp(options: WebAppOptions): Server {
 		if (options.createInstance === undefined) throw new HttpError(501, "Questa installazione non crea agenti dalla console");
 		const body = (await readJson(req)) as { id?: unknown; name?: unknown; instructions?: unknown; persona?: unknown };
 		const id = typeof body.id === "string" ? body.id.trim() : "";
-		await makeAgent(person as Person, { id, name: typeof body.name === "string" ? body.name : "", instructions: typeof body.instructions === "string" ? body.instructions : undefined, persona: personaOf(body.persona) });
-		return { instance: await describeInstance(await runtime.registry.getInstance(tenantId, id), person as Person) };
+		await makeAgent(person, { id, name: typeof body.name === "string" ? body.name : "", instructions: typeof body.instructions === "string" ? body.instructions : undefined, persona: personaOf(body.persona) });
+		return { instance: await describeInstance(await runtime.registry.getInstance(tenantId, id), person) };
 	});
 
 	// Deleting an agente (ADR 0046): the owner types its name, as it is now, to confirm.
@@ -460,16 +460,14 @@ export function createWebApp(options: WebAppOptions): Server {
 	route("DELETE", "/api/instances/:id", "owner", async ({ person, params, req }) => {
 		const remover = options.deleteInstance;
 		if (remover === undefined) throw new HttpError(501, "Questa installazione non elimina agenti dalla console");
-		const id = params[0] as string;
-		const record = await runtime.registry.getInstance(tenantId, id).catch(() => {
-			throw new HttpError(404, "Agente inesistente");
-		});
+		const id = params[0];
+		const record = await knownInstance(id);
 		if (id === remover.main) throw new HttpError(400, `${record.name} è l'agente principale: non si elimina`);
 		if (options.segreterie?.has(id)) throw new HttpError(400, "La segreteria non si elimina dalla console");
 		const body = (await readJson(req)) as { confirm?: unknown };
 		if (body.confirm !== record.name) throw new HttpError(400, `Per confermare scrivi il nome dell'agente esattamente così: «${record.name}»`);
 		await remover.run(id);
-		await runtime.audit(tenantId).append({ type: "web.instance_deleted", instanceId: id, personId: (person as Person).id });
+		await runtime.audit(tenantId).append({ type: "web.instance_deleted", instanceId: id, personId: person.id });
 		return { ok: true };
 	});
 
@@ -507,20 +505,18 @@ export function createWebApp(options: WebAppOptions): Server {
 	runRoutes(route, { runtime, tenantId, access: instanceAccess, channel: channelOf });
 	// The person's chats with the agente, without the threads under a message: those show in their conversation.
 	route("GET", "/api/instances/:id/threads", "person", async ({ person, params }) => {
-		await instanceAccess(person as Person, params[0] as string);
-		return { threads: (await channelOf(params[0] as string).threads((person as Person).id)).filter((t) => t.parent === undefined) };
+		await instanceAccess(person, params[0]);
+		return { threads: (await channelOf(params[0]).threads(person.id)).filter((t) => t.parent === undefined) };
 	});
 	// --- direct conversation (ADR 0113): one per person and agente, a thread under any of its messages ---
-	route("GET", "/api/instances/:id/dm", "person", async ({ person, params }) => {
-		const p = person as Person;
-		const { record } = await instanceAccess(p, params[0] as string);
+	route("GET", "/api/instances/:id/dm", "person", async ({ person: p, params }) => {
+		const { record } = await instanceAccess(p, params[0]);
 		const { dm, entries } = await directTimeline(channelOf(record.id), p.id);
 		const model = dm === undefined ? undefined : await runtime.chatModel(tenantId, record.id, "web", dm.id).catch(() => undefined);
 		return { ...(dm === undefined ? {} : { thread: dm }), entries, ...(model === undefined ? {} : { model: named(model) }) };
 	});
-	route("POST", "/api/instances/:id/dm", "person", async ({ person, params, req }) => {
-		const p = person as Person;
-		const { record, member } = await instanceAccess(p, params[0] as string);
+	route("POST", "/api/instances/:id/dm", "person", async ({ person: p, params, req }) => {
+		const { record, member } = await instanceAccess(p, params[0]);
 		if (!member) throw new HttpError(403, "Non sei tra le persone che possono scrivere a questo agente");
 		const body = (await readJson(req)) as { model?: unknown };
 		// A model picked before the first message: checked before the conversation exists.
@@ -529,9 +525,8 @@ export function createWebApp(options: WebAppOptions): Server {
 		return { thread, ...(choice === undefined ? {} : { model: await giveChatModel(record, p, thread.id, choice) }) };
 	});
 	// A thread under one message of the person's direct conversation: the same one each time.
-	route("POST", "/api/instances/:id/threads", "person", async ({ person, params, req }) => {
-		const p = person as Person;
-		const { record, member } = await instanceAccess(p, params[0] as string);
+	route("POST", "/api/instances/:id/threads", "person", async ({ person: p, params, req }) => {
+		const { record, member } = await instanceAccess(p, params[0]);
 		if (!member) throw new HttpError(403, "Non sei tra le persone che possono scrivere a questo agente");
 		const body = (await readJson(req)) as { parent?: unknown };
 		if (typeof body.parent !== "string") throw new HttpError(400, "Serve il messaggio a cui rispondere");
@@ -548,17 +543,16 @@ export function createWebApp(options: WebAppOptions): Server {
 		}
 		return { thread };
 	});
-	route("POST", "/api/instances/:id/threads/:thread/read", "person", async ({ person, params }) => {
-		const p = person as Person;
-		await instanceAccess(p, params[0] as string);
-		if ((await channelOf(params[0] as string).markRead(params[1] as string, p.id)) === undefined) throw new HttpError(404, "No such thread");
+	route("POST", "/api/instances/:id/threads/:thread/read", "person", async ({ person: p, params }) => {
+		await instanceAccess(p, params[0]);
+		if ((await channelOf(params[0]).markRead(params[1], p.id)) === undefined) throw new HttpError(404, "No such thread");
 		return { ok: true };
 	});
 	route("GET", "/api/instances/:id/threads/:thread", "person", async ({ person, params }) => {
-		const { record } = await instanceAccess(person as Person, params[0] as string);
-		const channel = channelOf(params[0] as string);
-		const thread = await channel.thread(params[1] as string);
-		if (thread === undefined || thread.personId !== (person as Person).id) throw new HttpError(404, "No such thread");
+		const { record } = await instanceAccess(person, params[0]);
+		const channel = channelOf(params[0]);
+		const thread = await channel.thread(params[1]);
+		if (thread === undefined || thread.personId !== person.id) throw new HttpError(404, "No such thread");
 		// The transcript reads without the instance: one that cannot open shows no model.
 		const model = await runtime.chatModel(tenantId, record.id, "web", thread.id).catch(() => undefined);
 		return { thread, entries: (await channel.transcript(thread.id)).map(shown), ...(model === undefined ? {} : { model: named(model) }) };
@@ -592,12 +586,12 @@ export function createWebApp(options: WebAppOptions): Server {
 		}
 	};
 	route("GET", "/api/instances/:id/threads/:thread/browser", "person", async ({ person, params }) => {
-		const { browser } = await browserThread(person as Person, params[0] as string, params[1] as string);
-		return { browser: await browser.state(params[0] as string, params[1] as string), available: browser.available() };
+		const { browser } = await browserThread(person, params[0], params[1]);
+		return { browser: await browser.state(params[0], params[1]), available: browser.available() };
 	});
 	route("GET", "/api/instances/:id/threads/:thread/browser.png", "person", async ({ person, params, res }) => {
-		const { browser } = await browserThread(person as Person, params[0] as string, params[1] as string);
-		const picture = await browser.picture(params[0] as string, params[1] as string);
+		const { browser } = await browserThread(person, params[0], params[1]);
+		const picture = await browser.picture(params[0], params[1]);
 		if (picture === undefined) throw new HttpError(404, "Nessuna pagina aperta");
 		res.writeHead(200, { "content-type": "image/png", "content-length": picture.png.length, "x-content-type-options": "nosniff", "cache-control": "no-store" });
 		res.end(picture.png);
@@ -611,17 +605,17 @@ export function createWebApp(options: WebAppOptions): Server {
 		},
 	});
 	route("POST", "/api/instances/:id/threads/:thread/browser", "person", async ({ person, params, req }) => {
-		const { browser, canChat } = await browserThread(person as Person, params[0] as string, params[1] as string);
+		const { browser, canChat } = await browserThread(person, params[0], params[1]);
 		if (!canChat) throw new HttpError(403, "Non sei tra le persone che possono scrivere a questo agente");
 		const body = (await readJson(req)) as { url?: unknown; back?: unknown };
-		const [instanceId, threadId] = [params[0] as string, params[1] as string];
+		const [instanceId, threadId] = [params[0], params[1]];
 		if (body.back === true) return { browser: await browserCall(() => browser.back(instanceId, threadId)) };
 		if (typeof body.url !== "string" || body.url.trim() === "" || body.url.length > 2000) throw new HttpError(400, "Scrivi l'indirizzo di una pagina");
 		const raw = body.url.trim();
 		const url = /^[a-z][\w+.-]*:\/\//i.test(raw) ? raw : `https://${raw}`;
 		// Which site, never the full address: the audit keeps who drove the agente's browser where, refused or not.
 		const host = URL.canParse(url) ? new URL(url).host : "";
-		const record = (ok: boolean) => runtime.audit(tenantId).append({ type: "web.browser.opened", instanceId, personId: (person as Person).id, host, ok });
+		const record = (ok: boolean) => runtime.audit(tenantId).append({ type: "web.browser.opened", instanceId, personId: person.id, host, ok });
 		try {
 			const state = await browserCall(() => browser.open(instanceId, threadId, url));
 			await record(true);
@@ -632,14 +626,14 @@ export function createWebApp(options: WebAppOptions): Server {
 		}
 	});
 	route("POST", "/api/instances/:id/threads/:thread/browser/click", "person", async ({ person, params, req }) => {
-		const { browser, canChat } = await browserThread(person as Person, params[0] as string, params[1] as string);
+		const { browser, canChat } = await browserThread(person, params[0], params[1]);
 		if (!canChat) throw new HttpError(403, "Non sei tra le persone che possono scrivere a questo agente");
 		const { x, y } = (await readJson(req)) as { x?: unknown; y?: unknown };
 		if (typeof x !== "number" || typeof y !== "number" || !(x >= 0 && x <= 1 && y >= 0 && y <= 1)) throw new HttpError(400, "Il clic non è sulla pagina");
-		const instanceId = params[0] as string;
-		const record = (ok: boolean) => runtime.audit(tenantId).append({ type: "web.browser.clicked", instanceId, personId: (person as Person).id, ok });
+		const instanceId = params[0];
+		const record = (ok: boolean) => runtime.audit(tenantId).append({ type: "web.browser.clicked", instanceId, personId: person.id, ok });
 		try {
-			const state = await browserCall(() => browser.click(instanceId, params[1] as string, x, y));
+			const state = await browserCall(() => browser.click(instanceId, params[1], x, y));
 			await record(true);
 			return { browser: state };
 		} catch (error) {
@@ -648,79 +642,74 @@ export function createWebApp(options: WebAppOptions): Server {
 		}
 	});
 	for (const action of ["takeover", "release"] as const) {
-		route("POST", `/api/instances/:id/threads/:thread/browser/${action}`, "person", async ({ person, params }) => {
-			const p = person as Person;
-			const [instanceId, threadId] = params as [string, string];
+		route("POST", `/api/instances/:id/threads/:thread/browser/${action}`, "person", async ({ person: p, params }) => {
+			const [instanceId, threadId] = params;
 			const { browser } = await browserThread(p, instanceId, threadId);
 			const state = await browserCall(() => browser[action](instanceId, threadId, p.id));
 			await runtime.audit(tenantId).append({ type: action === "takeover" ? "web.browser.takeover" : "web.browser.released", instanceId, personId: p.id });
 			return { browser: state };
 		});
 	}
-	route("POST", "/api/instances/:id/threads/:thread/browser/type", "person", async ({ person, params, req }) => {
-		const p = person as Person;
-		const [instanceId, threadId] = params as [string, string];
+	route("POST", "/api/instances/:id/threads/:thread/browser/type", "person", async ({ person: p, params, req }) => {
+		const [instanceId, threadId] = params;
 		const { browser } = await browserThread(p, instanceId, threadId);
 		const body = (await readJson(req)) as { text?: unknown };
 		if (typeof body.text !== "string" || body.text.length === 0 || body.text.length > MAX_TYPED) throw new HttpError(400, `Scrivi da 1 a ${MAX_TYPED} caratteri`);
 		// Private input goes only to the focused field: never to a transcript or audit event.
 		return { browser: await browserCall(() => browser.typeText(instanceId, threadId, p.id, body.text as string)) };
 	});
-	route("POST", "/api/instances/:id/threads/:thread/browser/press", "person", async ({ person, params, req }) => {
-		const p = person as Person;
-		const [instanceId, threadId] = params as [string, string];
+	route("POST", "/api/instances/:id/threads/:thread/browser/press", "person", async ({ person: p, params, req }) => {
+		const [instanceId, threadId] = params;
 		const { browser } = await browserThread(p, instanceId, threadId);
 		const body = (await readJson(req)) as { key?: unknown };
 		if (typeof body.key !== "string" || !(PRESS_KEYS as readonly string[]).includes(body.key)) throw new HttpError(400, "Tasto non disponibile");
 		return { browser: await browserCall(() => browser.press(instanceId, threadId, p.id, body.key as PressKey)) };
 	});
-	route("GET", "/api/instances/:id/threads/:thread/browser/profile", "person", async ({ person, params }) => {
-		const p = person as Person;
-		const { browser } = await browserThread(p, params[0] as string, params[1] as string);
-		return browserCall(() => browser.profile(params[0] as string, p.id));
+	route("GET", "/api/instances/:id/threads/:thread/browser/profile", "person", async ({ person: p, params }) => {
+		const { browser } = await browserThread(p, params[0], params[1]);
+		return browserCall(() => browser.profile(params[0], p.id));
 	});
-	route("DELETE", "/api/instances/:id/threads/:thread/browser/profile", "person", async ({ person, params }) => {
-		const p = person as Person;
-		const instanceId = params[0] as string;
-		const { browser } = await browserThread(p, instanceId, params[1] as string);
+	route("DELETE", "/api/instances/:id/threads/:thread/browser/profile", "person", async ({ person: p, params }) => {
+		const instanceId = params[0];
+		const { browser } = await browserThread(p, instanceId, params[1]);
 		await browserCall(() => browser.clearProfile(instanceId, p.id));
 		await runtime.audit(tenantId).append({ type: "web.browser.profile_cleared", instanceId, personId: p.id });
 		return { ok: true };
 	});
 	// --- a chat's own model (ADR 0036): among the providers with a key that the owner allowed ---
 	route("GET", "/api/instances/:id/chat-models", "person", async ({ person, params }) => {
-		const { record } = await instanceAccess(person as Person, params[0] as string);
-		return { instanceModel: named(record.model), providers: await chatProviders(record, person as Person) };
+		const { record } = await instanceAccess(person, params[0]);
+		return { instanceModel: named(record.model), providers: await chatProviders(record, person) };
 	});
 	route("GET", "/api/instances/:id/chat-models/:provider", "person", async ({ person, params }) => {
-		const { record } = await instanceAccess(person as Person, params[0] as string);
-		const provider = (await chatProviders(record, person as Person)).find((p) => p.id === params[1]);
+		const { record } = await instanceAccess(person, params[0]);
+		const provider = (await chatProviders(record, person)).find((p) => p.id === params[1]);
 		if (provider === undefined) throw new HttpError(404, "Provider non disponibile");
 		if (options.models === undefined) throw new HttpError(404, "Provider non disponibile");
 		return { models: chats.models(provider.id) };
 	});
 	route("PUT", "/api/instances/:id/threads/:thread/model", "person", async ({ person, params, req }) => {
-		const { record } = await instanceAccess(person as Person, params[0] as string);
-		const thread = await channelOf(params[0] as string).thread(params[1] as string);
-		if (thread === undefined || thread.personId !== (person as Person).id) throw new HttpError(404, "No such thread");
+		const { record } = await instanceAccess(person, params[0]);
+		const thread = await channelOf(params[0]).thread(params[1]);
+		if (thread === undefined || thread.personId !== person.id) throw new HttpError(404, "No such thread");
 		const body = (await readJson(req)) as Record<string, unknown>;
 		// {}: back to the instance's model.
-		const choice = Object.keys(body).length === 0 ? undefined : await chatModelChoice(record, person as Person, body);
-		const model = await giveChatModel(record, person as Person, thread.id, choice);
+		const choice = Object.keys(body).length === 0 ? undefined : await chatModelChoice(record, person, body);
+		const model = await giveChatModel(record, person, thread.id, choice);
 		return model === undefined ? {} : { model };
 	});
 	route("POST", "/api/instances/:id/threads/:thread/messages", "person", async ({ person, params, req }) => {
-		const { record } = await instanceAccess(person as Person, params[0] as string);
+		const { record } = await instanceAccess(person, params[0]);
 		const body = (await readJson(req)) as { text?: string; images?: unknown };
 		const text = String(body.text ?? "").trim();
 		// Pictures the person uploaded to the workspace just before: by path, under uploads/.
 		const paths = Array.isArray(body.images) ? body.images : [];
 		if (paths.length > IMAGE_LIMITS.perMessage || paths.some((p) => typeof p !== "string" || !/^uploads\/[^/]{1,130}$/.test(p))) throw new HttpError(400, `Al massimo ${IMAGE_LIMITS.perMessage} immagini caricate, da uploads/`);
 		if ((text === "" && paths.length === 0) || text.length > 20_000) throw new HttpError(400, "Messaggio vuoto o troppo lungo");
-		const channel = channelOf(params[0] as string);
-		const thread = await channel.thread(params[1] as string);
-		if (thread === undefined || thread.personId !== (person as Person).id) throw new HttpError(400, "Conversazione non trovata");
-		const workspace = runtime.workspace(tenantId, params[0] as string);
+		const channel = channelOf(params[0]);
+		const thread = await channel.thread(params[1]);
+		if (thread === undefined || thread.personId !== person.id) throw new HttpError(400, "Conversazione non trovata");
+		const workspace = runtime.workspace(tenantId, params[0]);
 		const images = [];
 		for (const path of paths as string[]) {
 			const file = await workspaceCall(() => workspace.stat(path));
@@ -733,15 +722,14 @@ export function createWebApp(options: WebAppOptions): Server {
 		}
 		const context = await threadContext(channel, thread, record.name);
 		try {
-			return { entry: await channel.post(params[1] as string, (person as Person).id, text, { images, ...(context === undefined ? {} : { context }) }) };
+			return { entry: await channel.post(params[1], person.id, text, { images, ...(context === undefined ? {} : { context }) }) };
 		} catch (error) {
 			if (error instanceof UserNotAllowed) throw new HttpError(403, "Non sei tra le persone che possono scrivere a questo agente");
 			if (error instanceof EgressDenied) throw new HttpError(403, "Questo agente non accetta messaggi dal web");
 			throw new HttpError(400, error instanceof Error ? error.message : String(error));
 		}
 	});
-	route("GET", "/api/events", "person", async ({ person, req, res }) => {
-		const p = person as Person;
+	route("GET", "/api/events", "person", async ({ person: p, req, res }) => {
 		res.writeHead(200, { "content-type": "text/event-stream; charset=utf-8", "cache-control": "no-store", connection: "keep-alive", "x-accel-buffering": "no" });
 		res.write(": connected\n\n");
 		let disconnected = false;
@@ -814,13 +802,13 @@ export function createWebApp(options: WebAppOptions): Server {
 
 	// --- files ---
 	route("GET", "/api/instances/:id/files", "person", async ({ person, params }) => {
-		await instanceAccess(person as Person, params[0] as string);
-		return { files: await runtime.workspace(tenantId, params[0] as string).list() };
+		await instanceAccess(person, params[0]);
+		return { files: await runtime.workspace(tenantId, params[0]).list() };
 	});
 	route("GET", "/api/instances/:id/files/raw", "person", async ({ person, params, url, res }) => {
-		await instanceAccess(person as Person, params[0] as string);
+		await instanceAccess(person, params[0]);
 		const path = url.searchParams.get("path") ?? "";
-		const data = await workspaceCall(() => runtime.workspace(tenantId, params[0] as string).read(path));
+		const data = await workspaceCall(() => runtime.workspace(tenantId, params[0]).read(path));
 		const name = path.split("/").at(-1) ?? "file";
 		// A picture can be shown in the page (thumbnails in the chat): only one whose bytes are a JPEG, PNG, GIF or WebP, never SVG.
 		const picture = url.searchParams.get("inline") === "1" ? imageType(data) : undefined;
@@ -842,9 +830,8 @@ export function createWebApp(options: WebAppOptions): Server {
 	});
 	// --- artifacts (ADR 0112): an agente's HTML pages, only to the person of the conversation ---
 	// The person's pages made by one agente, newest first, with where each was made (ADR 0114).
-	route("GET", "/api/instances/:id/artifacts", "person", async ({ person, params }) => {
-		const p = person as Person;
-		const instanceId = params[0] as string;
+	route("GET", "/api/instances/:id/artifacts", "person", async ({ person: p, params }) => {
+		const instanceId = params[0];
 		await instanceAccess(p, instanceId);
 		const channel = channelOf(instanceId);
 		const rooms = new Map<string, Promise<Room | undefined>>();
@@ -871,61 +858,59 @@ export function createWebApp(options: WebAppOptions): Server {
 		return { artifacts: perThread.flat().sort((a, b) => b.at.localeCompare(a.at)) };
 	});
 	route("GET", "/api/instances/:id/artifacts/:thread/:artifact", "person", async ({ person, params }) => {
-		await ownThread(person as Person, params[0] as string, params[1] as string);
-		const meta = await channelOf(params[0] as string).artifacts.meta(params[1] as string, params[2] as string);
+		await ownThread(person, params[0], params[1]);
+		const meta = await channelOf(params[0]).artifacts.meta(params[1], params[2]);
 		if (meta === undefined) throw new HttpError(404, "No such artifact");
 		return { artifact: { id: meta.id, createdAt: meta.createdAt, versions: meta.versions.map(({ key: _key, ...v }) => v) } };
 	});
 	route("GET", "/api/instances/:id/artifacts/:thread/:artifact/:version", "person", async ({ person, params, url, res }) => {
-		await ownThread(person as Person, params[0] as string, params[1] as string);
-		const store = channelOf(params[0] as string).artifacts;
+		await ownThread(person, params[0], params[1]);
+		const store = channelOf(params[0]).artifacts;
 		const version = Number(params[3]);
-		const data = /^[1-9]\d{0,3}$/.test(params[3] as string) ? await store.read(params[1] as string, params[2] as string, version) : undefined;
+		const data = /^[1-9]\d{0,3}$/.test(params[3]) ? await store.read(params[1], params[2], version) : undefined;
 		if (data === undefined) throw new HttpError(404, "No such artifact");
 		if (url.searchParams.get("download") !== "1") return sandboxedHtml(res, data);
-		const title = (await store.meta(params[1] as string, params[2] as string))?.versions.find((v) => v.version === version)?.title ?? "artifact";
+		const title = (await store.meta(params[1], params[2]))?.versions.find((v) => v.version === version)?.title ?? "artifact";
 		return sandboxedHtml(res, data, `${title.replace(/[\\/:*?"<>|]+/g, "_")}.html`);
 	});
 	route("PUT", "/api/instances/:id/files/raw", "person", async ({ person, params, url, req }) => {
-		const { member } = await instanceAccess(person as Person, params[0] as string);
-		if (!member && (person as Person).role !== "owner") throw new HttpError(403, "Forbidden");
+		const { member } = await instanceAccess(person, params[0]);
+		if (!member && person.role !== "owner") throw new HttpError(403, "Forbidden");
 		const name = (url.searchParams.get("name") ?? "file").replace(/[^\w.\- ]+/g, "_").replace(/^\.+/, "").slice(0, 120) || "file";
 		const data = await readBody(req, MAX_UPLOAD);
-		const workspace = runtime.workspace(tenantId, params[0] as string);
+		const workspace = runtime.workspace(tenantId, params[0]);
 		// Never over an earlier upload: messages point at their photos by path (phones call them all image.jpg).
 		const taken = (await workspaceCall(() => workspace.stat(`uploads/${name}`))) !== undefined;
 		const unique = taken ? name.replace(/(\.[^.]*)?$/, (ext) => `-${randomUUID().slice(0, 8)}${ext}`) : name;
 		const file = await workspaceCall(() => workspace.write(`uploads/${unique}`, data));
-		await runtime.audit(tenantId).append({ type: "web.upload", instanceId: params[0], personId: (person as Person).id, path: file.path, bytes: file.size });
+		await runtime.audit(tenantId).append({ type: "web.upload", instanceId: params[0], personId: person.id, path: file.path, bytes: file.size });
 		// The note the console puts in the message: the same words Telegram and WhatsApp files get.
 		const kind = documentKind(unique, data);
 		const recording = kind === undefined ? recordingLabel(data) : undefined;
 		return { file, note: attachmentNote(file.path, data), ...(kind === undefined ? {} : { document: documentLabel(kind) }), ...(recording === undefined ? {} : { recording }) };
 	});
 	route("DELETE", "/api/instances/:id/files", "person", async ({ person, params, url }) => {
-		await instanceAccess(person as Person, params[0] as string);
-		if ((person as Person).role !== "owner") throw new HttpError(403, "Solo l'owner può eliminare file da qui");
-		await workspaceCall(() => runtime.workspace(tenantId, params[0] as string).remove(url.searchParams.get("path") ?? ""));
+		await instanceAccess(person, params[0]);
+		if (person.role !== "owner") throw new HttpError(403, "Solo l'owner può eliminare file da qui");
+		await workspaceCall(() => runtime.workspace(tenantId, params[0]).remove(url.searchParams.get("path") ?? ""));
 		return { ok: true };
 	});
 
 	// --- tasks programmati ---
-	route("GET", "/api/instances/:id/schedules", "person", async ({ person, params }) => {
-		const p = person as Person;
-		await instanceAccess(p, params[0] as string);
-		const all = await runtime.schedules(tenantId, params[0] as string).list();
+	route("GET", "/api/instances/:id/schedules", "person", async ({ person: p, params }) => {
+		await instanceAccess(p, params[0]);
+		const all = await runtime.schedules(tenantId, params[0]).list();
 		// A member sees the tasks that act for them; the owner sees all.
 		const words = (s: (typeof all)[number]) => ("cron" in s.when ? describeCron(s.when.cron) : undefined);
 		return { schedules: (p.role === "owner" ? all : all.filter((s) => mine(s, p))).map((s) => ({ ...s, ...(words(s) === undefined ? {} : { whenText: words(s) }) })) };
 	});
-	route("POST", "/api/instances/:id/schedules", "person", async ({ person, params, req }) => {
-		const p = person as Person;
-		await instanceAccess(p, params[0] as string);
+	route("POST", "/api/instances/:id/schedules", "person", async ({ person: p, params, req }) => {
+		await instanceAccess(p, params[0]);
 		const body = (await readJson(req)) as { instruction?: string; at?: string; cron?: string; timeZone?: string; threadId?: string };
-		const thread = await channelOf(params[0] as string).thread(String(body.threadId ?? ""));
+		const thread = await channelOf(params[0]).thread(String(body.threadId ?? ""));
 		if (thread === undefined || thread.personId !== p.id) throw new HttpError(400, "Scegli una tua chat dove ricevere i risultati");
 		try {
-			const schedule = await runtime.schedules(tenantId, params[0] as string).create({
+			const schedule = await runtime.schedules(tenantId, params[0]).create({
 				instruction: String(body.instruction ?? ""),
 				channel: "web",
 				threadId: thread.id,
@@ -944,41 +929,37 @@ export function createWebApp(options: WebAppOptions): Server {
 		const mineToo = who.channel === "web" && who.userId === p.id;
 		return { ...rest, ...(p.role === "owner" ? { person: who } : {}), path: `/hooks/automazione/${instance}/${a.id}`, mine: mineToo, canEdit: mineToo || p.role === "owner" };
 	};
-	route("GET", "/api/instances/:id/automations", "person", async ({ person, params }) => {
-		const p = person as Person;
-		await instanceAccess(p, params[0] as string);
-		const all = runtime.automations(tenantId, params[0] as string).list();
-		return { automations: all.filter((a) => p.role === "owner" || (a.person.channel === "web" && a.person.userId === p.id)).map((a) => automationView(params[0] as string, a, p)) };
+	route("GET", "/api/instances/:id/automations", "person", async ({ person: p, params }) => {
+		await instanceAccess(p, params[0]);
+		const all = runtime.automations(tenantId, params[0]).list();
+		return { automations: all.filter((a) => p.role === "owner" || (a.person.channel === "web" && a.person.userId === p.id)).map((a) => automationView(params[0], a, p)) };
 	});
-	route("POST", "/api/instances/:id/automations", "person", async ({ person, params, req }) => {
-		const p = person as Person;
-		await instanceAccess(p, params[0] as string);
+	route("POST", "/api/instances/:id/automations", "person", async ({ person: p, params, req }) => {
+		await instanceAccess(p, params[0]);
 		const body = (await readJson(req)) as { name?: unknown; instruction?: unknown; threadId?: unknown };
-		const thread = await channelOf(params[0] as string).thread(String(body.threadId ?? ""));
+		const thread = await channelOf(params[0]).thread(String(body.threadId ?? ""));
 		if (thread === undefined || thread.personId !== p.id) throw new HttpError(400, "Scegli una tua chat dove ricevere i risultati");
 		try {
-			const { automation, token } = runtime.automations(tenantId, params[0] as string).create({ name: String(body.name ?? ""), instruction: String(body.instruction ?? ""), channel: "web", threadId: thread.id, person: { channel: "web", userId: p.id } });
+			const { automation, token } = runtime.automations(tenantId, params[0]).create({ name: String(body.name ?? ""), instruction: String(body.instruction ?? ""), channel: "web", threadId: thread.id, person: { channel: "web", userId: p.id } });
 			await runtime.audit(tenantId).append({ type: "automation.created", instanceId: params[0], personId: p.id, automationId: automation.id });
 			// The token only now: it is kept as a hash.
-			return { automation: automationView(params[0] as string, automation, p), token };
+			return { automation: automationView(params[0], automation, p), token };
 		} catch (error) {
 			if (error instanceof AutomationError) throw new HttpError(400, error.message);
 			throw error;
 		}
 	});
-	route("DELETE", "/api/instances/:id/automations/:aid", "person", async ({ person, params }) => {
-		const p = person as Person;
-		await instanceAccess(p, params[0] as string);
-		const removed = runtime.automations(tenantId, params[0] as string).remove(params[1] as string, (a) => p.role === "owner" || (a.person.channel === "web" && a.person.userId === p.id));
+	route("DELETE", "/api/instances/:id/automations/:aid", "person", async ({ person: p, params }) => {
+		await instanceAccess(p, params[0]);
+		const removed = runtime.automations(tenantId, params[0]).remove(params[1], (a) => p.role === "owner" || (a.person.channel === "web" && a.person.userId === p.id));
 		if (removed === undefined) throw new HttpError(404, "Automazione non trovata");
 		await runtime.audit(tenantId).append({ type: "automation.deleted", instanceId: params[0], personId: p.id, automationId: removed.id });
 		return { ok: true };
 	});
 	// --- brief del mattino: one per person and instance ---
 	const briefOf = async (instanceId: string, p: Person) => (await runtime.schedules(tenantId, instanceId).list()).find((s) => s.kind === "brief" && mine(s, p));
-	route("GET", "/api/instances/:id/brief", "person", async ({ person, params }) => {
-		const p = person as Person;
-		const { record } = await instanceAccess(p, params[0] as string);
+	route("GET", "/api/instances/:id/brief", "person", async ({ person: p, params }) => {
+		const { record } = await instanceAccess(p, params[0]);
 		const brief = await briefOf(record.id, p);
 		const when = brief !== undefined && "cron" in brief.when ? briefWhen(brief.when.cron) : undefined;
 		return {
@@ -993,9 +974,8 @@ export function createWebApp(options: WebAppOptions): Server {
 		briefChanges.set(key, next);
 		return next;
 	};
-	route("PUT", "/api/instances/:id/brief", "person", async ({ person, params, req }) => {
-		const p = person as Person;
-		const { record, member } = await instanceAccess(p, params[0] as string);
+	route("PUT", "/api/instances/:id/brief", "person", async ({ person: p, params, req }) => {
+		const { record, member } = await instanceAccess(p, params[0]);
 		if (!member) throw new HttpError(403, "Non sei tra le persone che possono scrivere a questo agente");
 		const body = (await readJson(req)) as { time?: unknown; weekdaysOnly?: unknown };
 		const cron = briefCron(String(body.time ?? ""), body.weekdaysOnly !== false);
@@ -1022,9 +1002,8 @@ export function createWebApp(options: WebAppOptions): Server {
 			return { brief: { scheduleId: schedule.id, threadId: thread.id, nextRunAt: schedule.nextRunAt, ...briefWhen(cron) } };
 		});
 	});
-	route("DELETE", "/api/instances/:id/brief", "person", async ({ person, params }) => {
-		const p = person as Person;
-		const { record } = await instanceAccess(p, params[0] as string);
+	route("DELETE", "/api/instances/:id/brief", "person", async ({ person: p, params }) => {
+		const { record } = await instanceAccess(p, params[0]);
 		return oneAtATime(record.id, async () => {
 			const brief = await briefOf(record.id, p);
 			if (brief === undefined) throw new HttpError(404, "Nessun brief attivo");
@@ -1033,26 +1012,23 @@ export function createWebApp(options: WebAppOptions): Server {
 			return { ok: true };
 		});
 	});
-	route("DELETE", "/api/instances/:id/schedules/:sid", "person", async ({ person, params }) => {
-		const p = person as Person;
-		await instanceAccess(p, params[0] as string);
-		const store = runtime.schedules(tenantId, params[0] as string);
-		const schedule = await store.get(params[1] as string);
+	route("DELETE", "/api/instances/:id/schedules/:sid", "person", async ({ person: p, params }) => {
+		await instanceAccess(p, params[0]);
+		const store = runtime.schedules(tenantId, params[0]);
+		const schedule = await store.get(params[1]);
 		if (schedule === undefined || (p.role !== "owner" && !mine(schedule, p))) throw new HttpError(404, "No such task");
 		return { removed: await store.remove(schedule.id) };
 	});
 
 	// --- sentinelle (ADR 0018) ---
-	route("GET", "/api/instances/:id/watches", "person", async ({ person, params }) => {
-		const p = person as Person;
-		const { record } = await instanceAccess(p, params[0] as string);
+	route("GET", "/api/instances/:id/watches", "person", async ({ person: p, params }) => {
+		const { record } = await instanceAccess(p, params[0]);
 		const all = await runtime.watches(tenantId, record.id).list();
 		// Like tasks: a member sees the sentinelle that write to them; the owner sees all.
 		return { watches: (p.role === "owner" ? all : all.filter((w) => mineWatch(w, p))).map(publicWatch) };
 	});
-	route("POST", "/api/instances/:id/watches", "person", async ({ person, params, req }) => {
-		const p = person as Person;
-		const { record, member } = await instanceAccess(p, params[0] as string);
+	route("POST", "/api/instances/:id/watches", "person", async ({ person: p, params, req }) => {
+		const { record, member } = await instanceAccess(p, params[0]);
 		// It writes to the person by itself: only someone who may talk to the instance.
 		if (!member) throw new HttpError(403, "Non sei tra le persone che possono scrivere a questo agente");
 		const body = (await readJson(req)) as { url?: unknown; what?: unknown; below?: unknown; above?: unknown; everyMinutes?: unknown; threadId?: unknown };
@@ -1091,21 +1067,19 @@ export function createWebApp(options: WebAppOptions): Server {
 		}
 	});
 	// Again after it stopped: failures cleared, checked at the next pass.
-	route("POST", "/api/instances/:id/watches/:wid/resume", "person", async ({ person, params }) => {
-		const p = person as Person;
-		const { record } = await instanceAccess(p, params[0] as string);
+	route("POST", "/api/instances/:id/watches/:wid/resume", "person", async ({ person: p, params }) => {
+		const { record } = await instanceAccess(p, params[0]);
 		const store = runtime.watches(tenantId, record.id);
-		const watch = await store.get(params[1] as string);
+		const watch = await store.get(params[1]);
 		if (watch === undefined || (p.role !== "owner" && !mineWatch(watch, p))) throw new HttpError(404, "Nessuna sentinella così");
 		const { disabledReason: _r, lastError: _e, pending: _p, candidate: _c, ...rest } = watch;
 		await store.update({ ...rest, failures: 0, notifiedAt: [], nextCheckAt: new Date().toISOString() });
 		return { watch: publicWatch((await store.get(watch.id)) ?? watch) };
 	});
-	route("DELETE", "/api/instances/:id/watches/:wid", "person", async ({ person, params }) => {
-		const p = person as Person;
-		const { record } = await instanceAccess(p, params[0] as string);
+	route("DELETE", "/api/instances/:id/watches/:wid", "person", async ({ person: p, params }) => {
+		const { record } = await instanceAccess(p, params[0]);
 		const store = runtime.watches(tenantId, record.id);
-		const watch = await store.get(params[1] as string);
+		const watch = await store.get(params[1]);
 		if (watch === undefined || (p.role !== "owner" && !mineWatch(watch, p))) throw new HttpError(404, "Nessuna sentinella così");
 		const removed = await store.remove(watch.id);
 		if (removed) await runtime.audit(tenantId).append({ type: "watch.deleted", instanceId: record.id, personId: p.id, watchId: watch.id, host: new URL(watch.url).host });
@@ -1114,15 +1088,15 @@ export function createWebApp(options: WebAppOptions): Server {
 
 	// --- tools proposti ---
 	route("GET", "/api/instances/:id/proposals", "person", async ({ person, params }) => {
-		await instanceAccess(person as Person, params[0] as string);
-		return { proposals: await runtime.proposals(tenantId, params[0] as string).list() };
+		await instanceAccess(person, params[0]);
+		return { proposals: await runtime.proposals(tenantId, params[0]).list() };
 	});
 	route("POST", "/api/instances/:id/proposals/:pid/decision", "person", async ({ person, params, req }) => {
-		await instanceAccess(person as Person, params[0] as string);
+		await instanceAccess(person, params[0]);
 		const body = (await readJson(req)) as { decision?: string };
 		if (body.decision !== "approved" && body.decision !== "rejected") throw new HttpError(400, "decision: approved | rejected");
 		try {
-			return { proposal: await decideToolProposal(runtime, tenantId, params[0] as string, params[1] as string, body.decision, approverOf(person as Person)) };
+			return { proposal: await decideToolProposal(runtime, tenantId, params[0], params[1], body.decision, approverOf(person)) };
 		} catch (error) {
 			if (error instanceof NotAnApprover) throw new HttpError(403, "Non sei un approvatore di questo agente");
 			throw error;
@@ -1131,22 +1105,20 @@ export function createWebApp(options: WebAppOptions): Server {
 
 	// --- forms Owni asked to send (web_submit): the person who asked, or an approver, decides ---
 	const mayDecideAll = async (p: Person, instanceId: string) => isApprover(runtime, tenantId, instanceId, approverOf(p));
-	route("GET", "/api/instances/:id/web-actions", "person", async ({ person, params }) => {
-		const p = person as Person;
-		await instanceAccess(p, params[0] as string);
-		const all = await runtime.webActions(tenantId, params[0] as string).list();
-		const everyone = await mayDecideAll(p, params[0] as string);
+	route("GET", "/api/instances/:id/web-actions", "person", async ({ person: p, params }) => {
+		await instanceAccess(p, params[0]);
+		const all = await runtime.webActions(tenantId, params[0]).list();
+		const everyone = await mayDecideAll(p, params[0]);
 		return { actions: everyone ? all : all.filter((a) => a.requester === `web:${p.id}`) };
 	});
-	route("POST", "/api/instances/:id/web-actions/:aid/decision", "person", async ({ person, params, req }) => {
-		const p = person as Person;
-		await instanceAccess(p, params[0] as string);
+	route("POST", "/api/instances/:id/web-actions/:aid/decision", "person", async ({ person: p, params, req }) => {
+		await instanceAccess(p, params[0]);
 		const body = (await readJson(req)) as { decision?: string };
 		if (body.decision !== "approved" && body.decision !== "rejected") throw new HttpError(400, "decision: approved | rejected");
 		if (options.sendWebAction === undefined) throw new HttpError(501, "Le azioni sul web non sono disponibili su questo server");
-		const by = (await mayDecideAll(p, params[0] as string)) ? approverOf(p) : { channel: "web", userId: p.id };
+		const by = (await mayDecideAll(p, params[0])) ? approverOf(p) : { channel: "web", userId: p.id };
 		try {
-			return { action: await decideWebAction(runtime, tenantId, params[0] as string, params[1] as string, body.decision, by, options.sendWebAction(params[0] as string)) };
+			return { action: await decideWebAction(runtime, tenantId, params[0], params[1], body.decision, by, options.sendWebAction(params[0])) };
 		} catch (error) {
 			if (error instanceof NotAnApprover) throw new HttpError(403, "Questa richiesta la decide chi l'ha fatta o un approvatore");
 			if (error instanceof WebActionError) throw new HttpError(404, "Richiesta inesistente");
@@ -1154,22 +1126,20 @@ export function createWebApp(options: WebAppOptions): Server {
 		}
 	});
 	// --- connector calls that change something (ADR 0025): the person who asked, or an approver, decides ---
-	route("GET", "/api/instances/:id/connector-actions", "person", async ({ person, params }) => {
-		const p = person as Person;
-		await instanceAccess(p, params[0] as string);
-		const all = await runtime.connectorActions(tenantId, params[0] as string).list();
-		const everyone = await mayDecideAll(p, params[0] as string);
+	route("GET", "/api/instances/:id/connector-actions", "person", async ({ person: p, params }) => {
+		await instanceAccess(p, params[0]);
+		const all = await runtime.connectorActions(tenantId, params[0]).list();
+		const everyone = await mayDecideAll(p, params[0]);
 		return { actions: everyone ? all : all.filter((a) => a.requester === `web:${p.id}`) };
 	});
-	route("POST", "/api/instances/:id/connector-actions/:aid/decision", "person", async ({ person, params, req }) => {
-		const p = person as Person;
-		await instanceAccess(p, params[0] as string);
+	route("POST", "/api/instances/:id/connector-actions/:aid/decision", "person", async ({ person: p, params, req }) => {
+		await instanceAccess(p, params[0]);
 		const body = (await readJson(req)) as { decision?: string };
 		if (body.decision !== "approved" && body.decision !== "rejected") throw new HttpError(400, "decision: approved | rejected");
 		if (options.runConnectorAction === undefined) throw new HttpError(501, "Le azioni dei connettori non sono disponibili su questo server");
-		const by = (await mayDecideAll(p, params[0] as string)) ? approverOf(p) : { channel: "web", userId: p.id };
+		const by = (await mayDecideAll(p, params[0])) ? approverOf(p) : { channel: "web", userId: p.id };
 		try {
-			return { action: await decideConnectorAction(runtime, tenantId, params[0] as string, params[1] as string, body.decision, by, options.runConnectorAction(params[0] as string)) };
+			return { action: await decideConnectorAction(runtime, tenantId, params[0], params[1], body.decision, by, options.runConnectorAction(params[0])) };
 		} catch (error) {
 			if (error instanceof NotAnApprover) throw new HttpError(403, "Questa richiesta la decide chi l'ha fatta o un approvatore");
 			if (error instanceof ConnectorActionError) throw new HttpError(404, "Richiesta inesistente");
@@ -1177,10 +1147,8 @@ export function createWebApp(options: WebAppOptions): Server {
 		}
 	});
 	route("PUT", "/api/instances/:id/web-actions-allowed", "owner", async ({ params, req }) => {
-		const id = params[0] as string;
-		const record = await runtime.registry.getInstance(tenantId, id).catch(() => {
-			throw new HttpError(404, "Agente inesistente");
-		});
+		const id = params[0];
+		const record = await knownInstance(id);
 		const body = (await readJson(req)) as { allowed?: unknown };
 		if (typeof body.allowed !== "boolean") throw new HttpError(400, "allowed: true o false");
 		await runtime.registry.setEgress(tenantId, id, (egress) => withConnector(egress, WEB_ACTIONS_CONNECTOR, body.allowed === true));
@@ -1196,10 +1164,8 @@ export function createWebApp(options: WebAppOptions): Server {
 	});
 	route("PUT", "/api/instances/:id/computer-allowed", "owner", async ({ params, req }) => {
 		if (options.computer === undefined) throw new HttpError(501, "Il computer non è disponibile su questo server");
-		const id = params[0] as string;
-		const record = await runtime.registry.getInstance(tenantId, id).catch(() => {
-			throw new HttpError(404, "Agente inesistente");
-		});
+		const id = params[0];
+		const record = await knownInstance(id);
 		const body = (await readJson(req)) as { allowed?: unknown };
 		if (typeof body.allowed !== "boolean") throw new HttpError(400, "allowed: true o false");
 		await runtime.registry.setEgress(tenantId, id, (egress) => withConnector(egress, COMPUTER_CONNECTOR, body.allowed === true));
@@ -1208,10 +1174,8 @@ export function createWebApp(options: WebAppOptions): Server {
 	});
 	route("DELETE", "/api/instances/:id/computer", "owner", async ({ params }) => {
 		if (options.computer === undefined) throw new HttpError(501, "Il computer non è disponibile su questo server");
-		const id = params[0] as string;
-		await runtime.registry.getInstance(tenantId, id).catch(() => {
-			throw new HttpError(404, "Agente inesistente");
-		});
+		const id = params[0];
+		await knownInstance(id);
 		await options.computer.reset(id);
 		await runtime.audit(tenantId).append({ type: "computer.reset", instanceId: id });
 		return { ok: true };
@@ -1242,10 +1206,8 @@ export function createWebApp(options: WebAppOptions): Server {
 	});
 	route("PUT", "/api/instances/:id/desktop-allowed", "owner", async ({ params, req }) => {
 		if (options.desktop === undefined) throw new HttpError(501, "Lo schermo non è disponibile su questo server");
-		const id = params[0] as string;
-		const record = await runtime.registry.getInstance(tenantId, id).catch(() => {
-			throw new HttpError(404, "Agente inesistente");
-		});
+		const id = params[0];
+		const record = await knownInstance(id);
 		const body = (await readJson(req)) as { allowed?: unknown };
 		if (typeof body.allowed !== "boolean") throw new HttpError(400, "allowed: true o false");
 		if (body.allowed && options.desktop.kind === "local") {
@@ -1262,10 +1224,8 @@ export function createWebApp(options: WebAppOptions): Server {
 	route("DELETE", "/api/instances/:id/desktop", "owner", async ({ params }) => {
 		if (options.desktop === undefined) throw new HttpError(501, "Lo schermo non è disponibile su questo server");
 		if (options.desktop.shared) throw new HttpError(501, "Lo schermo è condiviso: si riavvia da dove gira");
-		const id = params[0] as string;
-		await runtime.registry.getInstance(tenantId, id).catch(() => {
-			throw new HttpError(404, "Agente inesistente");
-		});
+		const id = params[0];
+		await knownInstance(id);
 		await options.desktop.reset(id);
 		await runtime.audit(tenantId).append({ type: "desktop.reset", instanceId: id });
 		return { ok: true };
@@ -1274,21 +1234,20 @@ export function createWebApp(options: WebAppOptions): Server {
 	// --- segreteria ---
 	const publicPractices = (all: readonly Pratica[]) => [...all].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).map(({ mail: _mail, ...p }) => p);
 	route("GET", "/api/instances/:id/pratiche", "person", async ({ person, params }) => {
-		await instanceAccess(person as Person, params[0] as string);
-		const service = options.segreterie?.get(params[0] as string);
+		await instanceAccess(person, params[0]);
+		const service = options.segreterie?.get(params[0]);
 		if (service === undefined) throw new HttpError(404, "Questo agente non è una segreteria");
 		const all = await service.practices.list();
 		return { pratiche: publicPractices(all) };
 	});
-	route("POST", "/api/instances/:id/pratiche/:pid/action", "person", async ({ person, params, req }) => {
-		const p = person as Person;
-		await instanceAccess(p, params[0] as string);
-		const service = options.segreterie?.get(params[0] as string);
+	route("POST", "/api/instances/:id/pratiche/:pid/action", "person", async ({ person: p, params, req }) => {
+		await instanceAccess(p, params[0]);
+		const service = options.segreterie?.get(params[0]);
 		if (service === undefined) throw new HttpError(404, "Questo agente non è una segreteria");
-		if (!(await isApprover(runtime, tenantId, params[0] as string, approverOf(p)))) throw new HttpError(403, "Non sei un approvatore di questo agente");
+		if (!(await isApprover(runtime, tenantId, params[0], approverOf(p)))) throw new HttpError(403, "Non sei un approvatore di questo agente");
 		const body = (await readJson(req)) as { action?: string; text?: string; requestId?: string; draftVersion?: number };
 		if (body.action !== "approve" && body.action !== "edit" && body.action !== "discard") throw new HttpError(400, "action: approve | edit | discard");
-		const result = await service.act({ userId: `web:${p.id}` }, params[1] as string, body.action, {
+		const result = await service.act({ userId: `web:${p.id}` }, params[1], body.action, {
 			...(typeof body.text === "string" ? { text: body.text } : {}),
 			...(typeof body.draftVersion === "number" ? { draftVersion: body.draftVersion } : {}),
 			actionId: typeof body.requestId === "string" ? body.requestId.slice(0, 80) : randomUUID(),
@@ -1298,15 +1257,15 @@ export function createWebApp(options: WebAppOptions): Server {
 
 	// --- owner: connectors, settings, people, audit ---
 	route("GET", "/api/instances/:id/connectors", "owner", async ({ params }) => {
-		const list = await options.connectors(params[0] as string).list();
-		const status = options.connectorStatus(params[0] as string);
-		const record = await runtime.registry.getInstance(tenantId, params[0] as string);
+		const list = await options.connectors(params[0]).list();
+		const status = options.connectorStatus(params[0]);
+		const record = await runtime.registry.getInstance(tenantId, params[0]);
 		return { connectors: list.map((c) => ({ ...c, allowed: (record.egress.connectors ?? []).includes(connectorEgressName(c.id)), status: status.find((s) => s.id === c.id) })) };
 	});
 	route("PUT", "/api/instances/:id/connectors/:cid", "owner", async ({ params, req }) => {
-		const instance = params[0] as string;
+		const instance = params[0];
 		const body = (await readJson(req)) as Partial<McpConnector> & { allowed?: boolean };
-		const id = params[1] as string;
+		const id = params[1];
 		if (!CONNECTOR_ID.test(id)) throw new HttpError(400, "ID: lettere minuscole, cifre e trattini");
 		let transport = body.transport as McpConnector["transport"];
 		if (transport?.type !== "http" && transport?.type !== "stdio" && transport?.type !== "api") throw new HttpError(400, "transport: http | stdio | api");
@@ -1374,7 +1333,7 @@ export function createWebApp(options: WebAppOptions): Server {
 	const catalog = options.catalog ?? CONNECTOR_CATALOG;
 	route("GET", "/api/connector-catalog", "owner", async () => ({ catalog, oauth: options.mcpOAuth !== undefined, redirectUrl: options.mcpOAuth?.redirectUrl ?? null }));
 	route("POST", "/api/instances/:id/connectors/catalog/:entry", "owner", async ({ params, req, person }) => {
-		const instance = params[0] as string;
+		const instance = params[0];
 		const entry = catalog.find((e) => e.id === params[1]);
 		if (entry === undefined) throw new HttpError(404, "Connettore non in catalogo");
 		await runtime.registry.getInstance(tenantId, instance);
@@ -1406,7 +1365,7 @@ export function createWebApp(options: WebAppOptions): Server {
 			// The sign-in starts before anything is saved: a service that refuses leaves nothing behind.
 			let url: string | undefined;
 			try {
-				url = await (options.mcpOAuth as McpOAuth).start((person as Person).id, instance, entry.id, entry.url);
+				url = await (options.mcpOAuth as McpOAuth).start(person.id, instance, entry.id, entry.url);
 			} catch (error) {
 				await options.mcpOAuth?.forget(instance, entry.id);
 				if (error instanceof McpOAuthError) throw new HttpError(502, `${entry.name}: ${error.message}`);
@@ -1432,14 +1391,14 @@ export function createWebApp(options: WebAppOptions): Server {
 		return { status: options.connectorStatus(instance).find((s) => s.id === entry.id) };
 	});
 	route("POST", "/api/instances/:id/connectors/:cid/sign-in", "owner", async ({ params, person }) => {
-		const instance = params[0] as string;
+		const instance = params[0];
 		const connector = (await options.connectors(instance).list()).find((c) => c.id === params[1]);
 		if (connector === undefined) throw new HttpError(404, "Connettore non trovato");
 		if (connector.transport.type !== "http" || connector.transport.auth !== "oauth") throw new HttpError(400, "Questo connettore non usa l'accesso con l'account");
 		const record = await runtime.registry.getInstance(tenantId, instance);
 		// A connector turned off or not allowed reaches nothing, not even to sign in.
 		if (!connector.enabled || !(record.egress.connectors ?? []).includes(connectorEgressName(connector.id))) throw new HttpError(400, `${connector.name} è spento o non consentito: accendilo prima`);
-		return signIn((person as Person).id, instance, connector);
+		return signIn(person.id, instance, connector);
 	});
 	route("POST", "/api/connectors/oauth/finish", "owner", async ({ req, person }) => {
 		const body = (await readJson(req)) as { state?: unknown; code?: unknown; error?: unknown };
@@ -1449,7 +1408,7 @@ export function createWebApp(options: WebAppOptions): Server {
 		let done: { instanceId: string; connectorId: string };
 		const cancelled = typeof body.code !== "string";
 		try {
-			done = await oauth.finish((person as Person).id, body.state, cancelled ? undefined : (body.code as string));
+			done = await oauth.finish(person.id, body.state, cancelled ? undefined : (body.code as string));
 		} catch (error) {
 			if (error instanceof McpOAuthError) throw new HttpError(400, error.message);
 			throw error;
@@ -1463,8 +1422,8 @@ export function createWebApp(options: WebAppOptions): Server {
 		return { ...done, status: options.connectorStatus(done.instanceId).find((s) => s.id === done.connectorId) };
 	});
 	route("DELETE", "/api/instances/:id/connectors/:cid", "owner", async ({ params }) => {
-		const instance = params[0] as string;
-		const id = params[1] as string;
+		const instance = params[0];
+		const id = params[1];
 		const store = options.connectors(instance);
 		const gone = (await store.list()).find((c) => c.id === id);
 		const removed = await store.remove(id);
@@ -1484,7 +1443,7 @@ export function createWebApp(options: WebAppOptions): Server {
 		return { removed };
 	});
 	route("PUT", "/api/instances/:id/secrets/:name", "owner", async ({ params, req }) => {
-		const name = params[1] as string;
+		const name = params[1];
 		// Only this instance's own (ADR 0116): two agenti with a connector of the same ID never share a secret.
 		const own = /^connector\.([a-z0-9-]{1,24})\.([^.]+)\.[a-zA-Z0-9_-]{1,40}$/.exec(name);
 		if (own === null || own[2] !== params[0]) throw new HttpError(400, "Nome segreto: connector.<connettore>.<agente>.<nome>");
@@ -1507,12 +1466,12 @@ export function createWebApp(options: WebAppOptions): Server {
 		return from;
 	};
 	route("GET", "/api/instances/:id/settings", "owner", async ({ params }) => {
-		const r = await runtime.registry.getInstance(tenantId, params[0] as string);
+		const r = await runtime.registry.getInstance(tenantId, params[0]);
 		return { settings: { name: r.name, instructions: r.instructions ?? "", persona: r.persona ?? {}, model: r.model, egress: r.egress, allowedUsers: r.allowedUsers, approvers: r.approvers ?? {}, deletable: deletable(r.id) } };
 	});
 	route("PUT", "/api/instances/:id/settings", "owner", async ({ params, req }) => {
 		const body = (await readJson(req)) as { name?: string; instructions?: string; persona?: unknown; about?: unknown; webPeople?: string[]; webApprovers?: string[] };
-		const id = params[0] as string;
+		const id = params[0];
 		const persona = body.persona === undefined ? undefined : personaOf(body.persona);
 		const people = new Set((await options.people.list()).map((p) => p.id));
 		const pick = (list: unknown) => (Array.isArray(list) ? list.map(String).filter((x) => people.has(x)) : undefined);
@@ -1561,13 +1520,13 @@ export function createWebApp(options: WebAppOptions): Server {
 		return providerStatus();
 	});
 	route("POST", "/api/providers/:provider/connect", "owner", async ({ params }) => {
-		const id = params[0] as string;
+		const id = params[0];
 		if (localProviders === undefined || subscriptionProvider(id) === undefined) throw new HttpError(404, "Provider locale non disponibile");
 		try { return { provider: await localProviders.connect(id) }; }
 		catch (error) { if (error instanceof LocalProviderError) throw new HttpError(409, error.message); throw error; }
 	});
 	route("DELETE", "/api/providers/:provider", "owner", async ({ params }) => {
-		const id = params[0] as string;
+		const id = params[0];
 		if (localProviders === undefined || subscriptionProvider(id) === undefined) throw new HttpError(404, "Provider locale non disponibile");
 		const users = (await runtime.registry.listInstances(tenantId)).filter((r) => r.model.provider === id);
 		if (users.length > 0) throw new HttpError(409, `Lo usa ${users.map((r) => r.name).join(", ")}: prima scegli un altro modello`);
@@ -1648,17 +1607,13 @@ export function createWebApp(options: WebAppOptions): Server {
 			throw error instanceof EgressDenied ? new HttpError(409, "Questo provider non è più disponibile per le chat") : error;
 		});
 	route("GET", "/api/instances/:id/model", "owner", async ({ params }) => {
-		const record = await runtime.registry.getInstance(tenantId, params[0] as string).catch(() => {
-			throw new HttpError(404, "Agente inesistente");
-		});
+		const record = await knownInstance(params[0]);
 		return { model: record.model, providers: [...(localProviders?.list() ?? []), ...(await Promise.all(MODEL_PROVIDERS.map(async (p) => ({ ...p, key: await keyOf(p.id) }))))] };
 	});
-	route("GET", "/api/models/:provider", "owner", async ({ params }) => ({ models: offeredModels(params[0] as string) }));
+	route("GET", "/api/models/:provider", "owner", async ({ params }) => ({ models: offeredModels(params[0]) }));
 	route("PUT", "/api/instances/:id/model", "owner", async ({ params, req }) => {
-		const id = params[0] as string;
-		await runtime.registry.getInstance(tenantId, id).catch(() => {
-			throw new HttpError(404, "Agente inesistente");
-		});
+		const id = params[0];
+		await knownInstance(id);
 		const body = (await readJson(req)) as { provider?: unknown; modelId?: unknown; apiKey?: unknown };
 		const provider = typeof body.provider === "string" ? modelProvider(body.provider) : undefined;
 		if (provider === undefined || (subscriptionProvider(provider.id) !== undefined && localProviders === undefined)) throw new HttpError(400, "Scegli un provider dall'elenco");
@@ -1683,7 +1638,7 @@ export function createWebApp(options: WebAppOptions): Server {
 		return { model: record.model };
 	});
 	route("DELETE", "/api/model-keys/:provider", "owner", async ({ params }) => {
-		const provider = modelProvider(params[0] as string);
+		const provider = modelProvider(params[0]);
 		const key = provider === undefined ? "missing" : await keyOf(provider.id);
 		if (provider === undefined || key === "missing") throw new HttpError(404, "Nessuna chiave salvata per questo provider");
 		if (key === "server") throw new HttpError(409, `La chiave di ${provider.label} è del server: la toglie chi lo gestisce`);
@@ -1695,8 +1650,8 @@ export function createWebApp(options: WebAppOptions): Server {
 	});
 	// --- primo avvio: what is left to make the instance useful, checked from the real settings ---
 	route("GET", "/api/instances/:id/setup", "owner", async ({ person, params }) => {
-		const me = person as Person;
-		const { record } = await instanceAccess(me, params[0] as string);
+		const me = person;
+		const { record } = await instanceAccess(me, params[0]);
 		// Cheap on purpose: the console asks on every open. No network, at most a few transcripts.
 		let tried = false;
 		if (record.egress.channels.includes("web")) {
@@ -1731,18 +1686,17 @@ export function createWebApp(options: WebAppOptions): Server {
 	// --- memoria: each person sees what the instance remembers about them, and the shared facts ---
 	const subjectOfPerson = (p: Person) => subjectOf("web", p.id);
 	route("GET", "/api/instances/:id/memory", "person", async ({ person, params }) => {
-		await instanceAccess(person as Person, params[0] as string);
-		const all = runtime.memory(tenantId, params[0] as string).list();
-		return { mine: all.filter((m) => m.about === subjectOfPerson(person as Person)), shared: all.filter((m) => m.about === SHARED), canEditShared: (person as Person).role === "owner" };
+		await instanceAccess(person, params[0]);
+		const all = runtime.memory(tenantId, params[0]).list();
+		return { mine: all.filter((m) => m.about === subjectOfPerson(person)), shared: all.filter((m) => m.about === SHARED), canEditShared: person.role === "owner" };
 	});
-	route("POST", "/api/instances/:id/memory", "person", async ({ person, params, req }) => {
-		const p = person as Person;
-		await instanceAccess(p, params[0] as string);
+	route("POST", "/api/instances/:id/memory", "person", async ({ person: p, params, req }) => {
+		await instanceAccess(p, params[0]);
 		const body = (await readJson(req)) as { text?: unknown; shared?: unknown; archived?: unknown };
 		const shared = body.shared === true;
 		if (shared && p.role !== "owner") throw new HttpError(403, "Solo l'owner aggiunge memorie condivise");
 		try {
-			const memory = runtime.memory(tenantId, params[0] as string).add({ about: shared ? SHARED : subjectOfPerson(p), text: String(body.text ?? ""), source: "person", archived: body.archived === true });
+			const memory = runtime.memory(tenantId, params[0]).add({ about: shared ? SHARED : subjectOfPerson(p), text: String(body.text ?? ""), source: "person", archived: body.archived === true });
 			await runtime.audit(tenantId).append({ type: "memory.saved", instanceId: params[0], personId: p.id, memoryId: memory.id, shared });
 			return { memory };
 		} catch (error) {
@@ -1750,10 +1704,9 @@ export function createWebApp(options: WebAppOptions): Server {
 			throw error;
 		}
 	});
-	route("DELETE", "/api/instances/:id/memory/:mid", "person", async ({ person, params }) => {
-		const p = person as Person;
-		await instanceAccess(p, params[0] as string);
-		const removed = runtime.memory(tenantId, params[0] as string).remove(params[1] as string, (m) => m.about === subjectOfPerson(p) || (m.about === SHARED && p.role === "owner"));
+	route("DELETE", "/api/instances/:id/memory/:mid", "person", async ({ person: p, params }) => {
+		await instanceAccess(p, params[0]);
+		const removed = runtime.memory(tenantId, params[0]).remove(params[1], (m) => m.about === subjectOfPerson(p) || (m.about === SHARED && p.role === "owner"));
 		if (removed === undefined) throw new HttpError(404, "Memoria non trovata");
 		await runtime.audit(tenantId).append({ type: "memory.forgotten", instanceId: params[0], personId: p.id, memoryId: removed.id });
 		return { ok: true };
@@ -1788,8 +1741,7 @@ export function createWebApp(options: WebAppOptions): Server {
 		if (error instanceof EgressDenied) throw new HttpError(403, "Uno di questi agenti non accetta messaggi dal web");
 		throw error;
 	};
-	route("GET", "/api/rooms", "person", async ({ person }) => {
-		const p = person as Person;
+	route("GET", "/api/rooms", "person", async ({ person: p }) => {
 		return {
 			rooms: await Promise.all(
 				(await roomsOf().list(p.id)).map(async (r) => {
@@ -1803,8 +1755,7 @@ export function createWebApp(options: WebAppOptions): Server {
 			),
 		};
 	});
-	route("POST", "/api/rooms", "person", async ({ person, req }) => {
-		const p = person as Person;
+	route("POST", "/api/rooms", "person", async ({ person: p, req }) => {
 		const body = (await readJson(req)) as { title?: unknown; agents?: unknown };
 		const agents = Array.isArray(body.agents) ? body.agents.filter((a): a is string => typeof a === "string") : [];
 		try {
@@ -1815,9 +1766,8 @@ export function createWebApp(options: WebAppOptions): Server {
 			return roomError(error);
 		}
 	});
-	route("GET", "/api/rooms/:room", "person", async ({ person, params }) => {
-		const p = person as Person;
-		const opened = await roomsOf().open(p.id, params[0] as string);
+	route("GET", "/api/rooms/:room", "person", async ({ person: p, params }) => {
+		const opened = await roomsOf().open(p.id, params[0]);
 		if (opened === undefined) throw new HttpError(404, "Canale non trovato");
 		// Each message of a canale with the thread under it (ADR 0113).
 		const under = new Map((await roomsOf().children(p.id, opened.room.id)).map((t) => [t.parent?.entryId, t] as const));
@@ -1829,11 +1779,10 @@ export function createWebApp(options: WebAppOptions): Server {
 		);
 		return { room: await roomView(opened.room, p), entries };
 	});
-	route("PATCH", "/api/rooms/:room", "person", async ({ person, params, req }) => {
-		const p = person as Person;
+	route("PATCH", "/api/rooms/:room", "person", async ({ person: p, params, req }) => {
 		const body = (await readJson(req)) as { title?: unknown; agents?: unknown };
 		try {
-			const room = await roomsOf().update(p.id, params[0] as string, {
+			const room = await roomsOf().update(p.id, params[0], {
 				...(typeof body.title === "string" ? { title: body.title } : {}),
 				...(Array.isArray(body.agents) ? { instanceIds: body.agents.filter((a): a is string => typeof a === "string") } : {}),
 			});
@@ -1845,34 +1794,31 @@ export function createWebApp(options: WebAppOptions): Server {
 		}
 	});
 	// The thread under a message of a canale, made on first use (ADR 0113).
-	route("POST", "/api/rooms/:room/threads", "person", async ({ person, params, req }) => {
-		const p = person as Person;
+	route("POST", "/api/rooms/:room/threads", "person", async ({ person: p, params, req }) => {
 		const body = (await readJson(req)) as { parent?: unknown };
 		if (typeof body.parent !== "string") throw new HttpError(400, "Serve il messaggio a cui risponde il thread");
 		try {
-			const thread = await roomsOf().thread(p.id, params[0] as string, body.parent);
+			const thread = await roomsOf().thread(p.id, params[0], body.parent);
 			if (thread === undefined) throw new HttpError(404, "Messaggio non trovato");
 			return { room: await roomView(thread, p) };
 		} catch (error) {
 			return roomError(error);
 		}
 	});
-	route("POST", "/api/rooms/:room/messages", "person", async ({ person, params, req }) => {
-		const p = person as Person;
+	route("POST", "/api/rooms/:room/messages", "person", async ({ person: p, params, req }) => {
 		const body = (await readJson(req)) as { text?: unknown };
 		try {
-			return { entry: await roomsOf().post(p.id, params[0] as string, String(body.text ?? "")) };
+			return { entry: await roomsOf().post(p.id, params[0], String(body.text ?? "")) };
 		} catch (error) {
 			return roomError(error);
 		}
 	});
 	route("POST", "/api/rooms/:room/read", "person", async ({ person, params }) => {
-		if (!(await roomsOf().markRead((person as Person).id, params[0] as string))) throw new HttpError(404, "Canale non trovato");
+		if (!(await roomsOf().markRead(person.id, params[0]))) throw new HttpError(404, "Canale non trovato");
 		return { ok: true };
 	});
 	// The console's rail (ADR 0113): a direct conversation for each agente the person can write to, the general one first, and their canali.
-	route("GET", "/api/conversations", "person", async ({ person }) => {
-		const p = person as Person;
+	route("GET", "/api/conversations", "person", async ({ person: p }) => {
 		const instances = await runtime.registry.listInstances(tenantId);
 		const agents = instances.filter((r) => canChatWith(r, p));
 		agents.sort((a, b) => Number(b.id === options.main) - Number(a.id === options.main));
@@ -1890,29 +1836,26 @@ export function createWebApp(options: WebAppOptions): Server {
 		const channels = await Promise.all(rooms.map(async ({ room, threads }) => ({ ...(await roomView(room, p, records)), unread: unread(room) || threads.some(unread) })));
 		return { direct, channels: channels.sort((a, b) => a.title.localeCompare(b.title, "it")) };
 	});
-	route("DELETE", "/api/rooms/:room", "person", async ({ person, params }) => {
-		const p = person as Person;
-		if (!(await roomsOf().remove(p.id, params[0] as string))) throw new HttpError(404, "Canale non trovato");
+	route("DELETE", "/api/rooms/:room", "person", async ({ person: p, params }) => {
+		if (!(await roomsOf().remove(p.id, params[0]))) throw new HttpError(404, "Canale non trovato");
 		await runtime.audit(tenantId).append({ type: "room.deleted", personId: p.id, roomId: params[0] });
 		return { ok: true };
 	});
 
 	// --- skill (ADR 0059): everyone who talks to an agente sees its skills; each saves and deletes their own, the owner all ---
-	route("GET", "/api/instances/:id/skills", "person", async ({ person, params }) => {
-		const p = person as Person;
-		await instanceAccess(p, params[0] as string);
-		const store = runtime.skills(tenantId, params[0] as string);
+	route("GET", "/api/instances/:id/skills", "person", async ({ person: p, params }) => {
+		await instanceAccess(p, params[0]);
+		const store = runtime.skills(tenantId, params[0]);
 		// Who saved it only to the owner: from a chat it is a phone number or a Telegram ID.
 		const shown = ({ createdBy, ...s }: Skill) => ({ ...s, ...(p.role === "owner" ? { createdBy } : {}), mine: createdBy === subjectOfPerson(p), canEdit: p.role === "owner" || createdBy === subjectOfPerson(p), skillMd: toSkillMd(s) });
 		return { skills: store.list().map(shown), drafts: store.drafts().filter((d) => d.createdBy === subjectOfPerson(p)).map(shown) };
 	});
-	route("PUT", "/api/instances/:id/skills", "person", async ({ person, params, req }) => {
-		const p = person as Person;
-		await instanceAccess(p, params[0] as string);
+	route("PUT", "/api/instances/:id/skills", "person", async ({ person: p, params, req }) => {
+		await instanceAccess(p, params[0]);
 		const body = (await readJson(req)) as { name?: unknown; description?: unknown; body?: unknown; skillMd?: unknown };
 		try {
 			const input = typeof body.skillMd === "string" ? parseSkillMd(body.skillMd) : { name: String(body.name ?? ""), description: String(body.description ?? ""), body: String(body.body ?? "") };
-			const { skill, replaced } = runtime.skills(tenantId, params[0] as string).save({ ...input, by: subjectOfPerson(p) }, (existing) => p.role === "owner" || existing.createdBy === subjectOfPerson(p));
+			const { skill, replaced } = runtime.skills(tenantId, params[0]).save({ ...input, by: subjectOfPerson(p) }, (existing) => p.role === "owner" || existing.createdBy === subjectOfPerson(p));
 			await runtime.audit(tenantId).append({ type: "skill.saved", instanceId: params[0], personId: p.id, skill: skill.name, replaced, source: "person" });
 			return { skill, replaced };
 		} catch (error) {
@@ -1920,10 +1863,9 @@ export function createWebApp(options: WebAppOptions): Server {
 			throw error;
 		}
 	});
-	route("DELETE", "/api/instances/:id/skills/:name", "person", async ({ person, params }) => {
-		const p = person as Person;
-		await instanceAccess(p, params[0] as string);
-		const removed = runtime.skills(tenantId, params[0] as string).remove(params[1] as string, (s) => p.role === "owner" || s.createdBy === subjectOfPerson(p));
+	route("DELETE", "/api/instances/:id/skills/:name", "person", async ({ person: p, params }) => {
+		await instanceAccess(p, params[0]);
+		const removed = runtime.skills(tenantId, params[0]).remove(params[1], (s) => p.role === "owner" || s.createdBy === subjectOfPerson(p));
 		if (removed === undefined) throw new HttpError(404, "Skill non trovata, o salvata da un'altra persona");
 		await runtime.audit(tenantId).append({ type: "skill.deleted", instanceId: params[0], personId: p.id, skill: removed.name, source: "person" });
 		return { ok: true };
@@ -1934,8 +1876,7 @@ export function createWebApp(options: WebAppOptions): Server {
 		if (options.google === undefined) throw new HttpError(501, "Google non è configurato su questo server");
 		return options.google;
 	};
-	route("GET", "/api/google", "person", async ({ person }) => {
-		const p = person as Person;
+	route("GET", "/api/google", "person", async ({ person: p }) => {
 		const account = options.google?.accounts.get(p.id);
 		return {
 			available: options.google !== undefined,
@@ -1944,9 +1885,8 @@ export function createWebApp(options: WebAppOptions): Server {
 			account: account === undefined ? null : { ...account, canWrite: options.google?.canWrite?.(p.id) ?? false },
 		};
 	});
-	route("POST", "/api/google/start", "person", async ({ person }) => ({ url: googleOf().oauth.start((person as Person).id) }));
-	route("POST", "/api/google/finish", "person", async ({ person, req }) => {
-		const p = person as Person;
+	route("POST", "/api/google/start", "person", async ({ person }) => ({ url: googleOf().oauth.start(person.id) }));
+	route("POST", "/api/google/finish", "person", async ({ person: p, req }) => {
 		const google = googleOf();
 		const body = (await readJson(req)) as { state?: unknown; code?: unknown };
 		if (typeof body.state !== "string" || typeof body.code !== "string") throw new HttpError(400, "Collegamento incompleto: riprova");
@@ -1964,8 +1904,7 @@ export function createWebApp(options: WebAppOptions): Server {
 		await runtime.audit(tenantId).append({ type: "google.connected", personId: p.id });
 		return { account: connected.account };
 	});
-	route("DELETE", "/api/google", "person", async ({ person }) => {
-		const p = person as Person;
+	route("DELETE", "/api/google", "person", async ({ person: p }) => {
 		const google = googleOf();
 		const account = google.accounts.get(p.id);
 		const token = await google.accounts.disconnect(p.id);
@@ -1976,10 +1915,8 @@ export function createWebApp(options: WebAppOptions): Server {
 		return { ok: true };
 	});
 	route("PUT", "/api/instances/:id/google", "owner", async ({ params, req }) => {
-		const id = params[0] as string;
-		const record = await runtime.registry.getInstance(tenantId, id).catch(() => {
-			throw new HttpError(404, "Agente inesistente");
-		});
+		const id = params[0];
+		const record = await knownInstance(id);
 		const body = (await readJson(req)) as { allowed?: unknown };
 		if (typeof body.allowed !== "boolean") throw new HttpError(400, "allowed: true o false");
 		await runtime.registry.setEgress(tenantId, id, (egress) => withConnector(egress, GOOGLE_CONNECTOR, body.allowed === true));
@@ -1988,20 +1925,18 @@ export function createWebApp(options: WebAppOptions): Server {
 	});
 
 	// --- writes to a person's Google account (ADR 0021): only that person sees and decides them ---
-	route("GET", "/api/instances/:id/google-actions", "person", async ({ person, params }) => {
-		const p = person as Person;
-		await instanceAccess(p, params[0] as string);
-		return { actions: (await runtime.googleActions(tenantId, params[0] as string).list()).filter((a) => a.personId === p.id).map(cardView) };
+	route("GET", "/api/instances/:id/google-actions", "person", async ({ person: p, params }) => {
+		await instanceAccess(p, params[0]);
+		return { actions: (await runtime.googleActions(tenantId, params[0]).list()).filter((a) => a.personId === p.id).map(cardView) };
 	});
-	route("POST", "/api/instances/:id/google-actions/:aid/decision", "person", async ({ person, params, req }) => {
-		const p = person as Person;
-		await instanceAccess(p, params[0] as string);
+	route("POST", "/api/instances/:id/google-actions/:aid/decision", "person", async ({ person: p, params, req }) => {
+		await instanceAccess(p, params[0]);
 		const body = (await readJson(req)) as { decision?: string };
 		if (body.decision !== "approved" && body.decision !== "rejected") throw new HttpError(400, "decision: approved | rejected");
 		const run = options.google?.runAction;
 		if (run === undefined) throw new HttpError(501, "Google non può scrivere su questo server");
 		try {
-			return { action: cardView(await decideGoogleAction(runtime, tenantId, params[0] as string, params[1] as string, body.decision, p.id, run(params[0] as string), options.log)) };
+			return { action: cardView(await decideGoogleAction(runtime, tenantId, params[0], params[1], body.decision, p.id, run(params[0]), options.log)) };
 		} catch (error) {
 			// Someone else's request is, for this person, one that does not exist.
 			if (error instanceof GoogleActionError) throw new HttpError(404, "Richiesta inesistente");
@@ -2013,10 +1948,8 @@ export function createWebApp(options: WebAppOptions): Server {
 	route("GET", "/api/voice", "owner", async () => (options.voice === undefined ? { available: false } : { available: true, host: options.voice.host }));
 	route("PUT", "/api/instances/:id/voice", "owner", async ({ params, req }) => {
 		if (options.voice === undefined) throw new HttpError(501, "La trascrizione dei vocali non è configurata su questo server");
-		const id = params[0] as string;
-		const record = await runtime.registry.getInstance(tenantId, id).catch(() => {
-			throw new HttpError(404, "Agente inesistente");
-		});
+		const id = params[0];
+		const record = await knownInstance(id);
 		const body = (await readJson(req)) as { allowed?: unknown };
 		if (typeof body.allowed !== "boolean") throw new HttpError(400, "allowed: true o false");
 		await runtime.registry.setEgress(tenantId, id, (egress) => withConnector(egress, VOICE_CONNECTOR, body.allowed === true));
@@ -2028,10 +1961,8 @@ export function createWebApp(options: WebAppOptions): Server {
 	route("GET", "/api/speech", "owner", async () => (options.speech === undefined ? { available: false } : { available: true, host: options.speech.host, voice: options.speech.voice }));
 	route("PUT", "/api/instances/:id/speech", "owner", async ({ params, req }) => {
 		if (options.speech === undefined) throw new HttpError(501, "Le risposte a voce non sono configurate su questo server");
-		const id = params[0] as string;
-		const record = await runtime.registry.getInstance(tenantId, id).catch(() => {
-			throw new HttpError(404, "Agente inesistente");
-		});
+		const id = params[0];
+		const record = await knownInstance(id);
 		const body = (await readJson(req)) as { allowed?: unknown };
 		if (typeof body.allowed !== "boolean") throw new HttpError(400, "allowed: true o false");
 		await runtime.registry.setEgress(tenantId, id, (egress) => withConnector(egress, SPEECH_CONNECTOR, body.allowed === true));
@@ -2043,10 +1974,8 @@ export function createWebApp(options: WebAppOptions): Server {
 	route("GET", "/api/images", "owner", async () => (options.images === undefined ? { available: false } : { available: true, host: options.images.host, maxPerDay: options.images.maxPerDay }));
 	route("PUT", "/api/instances/:id/images", "owner", async ({ params, req }) => {
 		if (options.images === undefined) throw new HttpError(501, "La generazione di immagini non è configurata su questo server");
-		const id = params[0] as string;
-		const record = await runtime.registry.getInstance(tenantId, id).catch(() => {
-			throw new HttpError(404, "Agente inesistente");
-		});
+		const id = params[0];
+		const record = await knownInstance(id);
 		const body = (await readJson(req)) as { allowed?: unknown };
 		if (typeof body.allowed !== "boolean") throw new HttpError(400, "allowed: true o false");
 		await runtime.registry.setEgress(tenantId, id, (egress) => withConnector(egress, IMAGE_CONNECTOR, body.allowed === true));
@@ -2058,10 +1987,8 @@ export function createWebApp(options: WebAppOptions): Server {
 	route("GET", "/api/search", "owner", async () => (options.search === undefined ? { available: false } : { available: true, host: options.search.host }));
 	route("PUT", "/api/instances/:id/search", "owner", async ({ params, req }) => {
 		if (options.search === undefined) throw new HttpError(501, "La ricerca sul web non è configurata su questo server");
-		const id = params[0] as string;
-		const record = await runtime.registry.getInstance(tenantId, id).catch(() => {
-			throw new HttpError(404, "Agente inesistente");
-		});
+		const id = params[0];
+		const record = await knownInstance(id);
 		const body = (await readJson(req)) as { allowed?: unknown };
 		if (typeof body.allowed !== "boolean") throw new HttpError(400, "allowed: true o false");
 		await runtime.registry.setEgress(tenantId, id, (egress) => withConnector(egress, WEB_SEARCH_CONNECTOR, body.allowed === true));
@@ -2071,10 +1998,8 @@ export function createWebApp(options: WebAppOptions): Server {
 
 	// --- owner: the sites an instance may read with its web tools ---
 	route("PUT", "/api/instances/:id/web", "owner", async ({ params, req }) => {
-		const id = params[0] as string;
-		const record = await runtime.registry.getInstance(tenantId, id).catch(() => {
-			throw new HttpError(404, "Agente inesistente");
-		});
+		const id = params[0];
+		const record = await knownInstance(id);
 		const body = (await readJson(req)) as { hosts?: unknown };
 		if (!Array.isArray(body.hosts) || body.hosts.length > 200) throw new HttpError(400, "hosts: un elenco di domini (al massimo 200)");
 		const hosts = [...new Set(body.hosts.map((h) => String(h).trim().toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, "")).filter((h) => h !== ""))];
@@ -2091,13 +2016,11 @@ export function createWebApp(options: WebAppOptions): Server {
 		return options.telegram;
 	};
 	route("GET", "/api/instances/:id/telegram", "owner", async ({ params }) => {
-		await runtime.registry.getInstance(tenantId, params[0] as string).catch(() => {
-			throw new HttpError(404, "Agente inesistente");
-		});
-		return { telegram: await telegramOf().status(params[0] as string) };
+		await knownInstance(params[0]);
+		return { telegram: await telegramOf().status(params[0]) };
 	});
 	route("PUT", "/api/instances/:id/telegram", "owner", async ({ params, req }) => {
-		const id = params[0] as string;
+		const id = params[0];
 		const body = (await readJson(req)) as { token?: unknown; allowedUsers?: unknown; approvers?: unknown };
 		const ids = (list: unknown, what: string): string[] | undefined => {
 			if (list === undefined) return undefined;
@@ -2106,9 +2029,7 @@ export function createWebApp(options: WebAppOptions): Server {
 		};
 		const allowed = ids(body.allowedUsers, "Persone ammesse");
 		const approvers = ids(body.approvers, "Approvatori");
-		const record = await runtime.registry.getInstance(tenantId, id).catch(() => {
-			throw new HttpError(404, "Agente inesistente");
-		});
+		const record = await knownInstance(id);
 		if (typeof body.token === "string" && body.token.trim() !== "") {
 			try {
 				await telegramOf().connect(id, body.token.trim());
@@ -2125,7 +2046,7 @@ export function createWebApp(options: WebAppOptions): Server {
 		return { telegram: await telegramOf().status(id) };
 	});
 	route("DELETE", "/api/instances/:id/telegram", "owner", async ({ params }) => {
-		await telegramOf().disconnect(params[0] as string);
+		await telegramOf().disconnect(params[0]);
 		await runtime.audit(tenantId).append({ type: "telegram.disconnected", instanceId: params[0] });
 		return { ok: true };
 	});
@@ -2136,13 +2057,11 @@ export function createWebApp(options: WebAppOptions): Server {
 		return options.whatsapp;
 	};
 	route("GET", "/api/instances/:id/whatsapp", "owner", async ({ params }) => {
-		await runtime.registry.getInstance(tenantId, params[0] as string).catch(() => {
-			throw new HttpError(404, "Agente inesistente");
-		});
-		return { whatsapp: await whatsappOf().status(params[0] as string) };
+		await knownInstance(params[0]);
+		return { whatsapp: await whatsappOf().status(params[0]) };
 	});
 	route("PUT", "/api/instances/:id/whatsapp", "owner", async ({ params, req }) => {
-		const id = params[0] as string;
+		const id = params[0];
 		const body = (await readJson(req)) as { accessToken?: unknown; phoneNumberId?: unknown; appSecret?: unknown; allowedUsers?: unknown; approvers?: unknown; templateName?: unknown; templateLanguage?: unknown };
 		// Numbers as WhatsApp writes them: international, digits only (393331234567).
 		const numbers = (list: unknown, what: string): string[] | undefined => {
@@ -2171,9 +2090,7 @@ export function createWebApp(options: WebAppOptions): Server {
 			else if (TEMPLATE_NAME.test(name) && TEMPLATE_LANGUAGE.test(language)) template = { name, language };
 			else throw new HttpError(400, "Template: il nome come in Meta (minuscole, cifre e _) e la lingua come it o en_US");
 		}
-		const record = await runtime.registry.getInstance(tenantId, id).catch(() => {
-			throw new HttpError(404, "Agente inesistente");
-		});
+		const record = await knownInstance(id);
 		if (Object.values(given).some((v) => v !== undefined) || template !== undefined) {
 			try {
 				await whatsappOf().connect(id, { ...Object.fromEntries(Object.entries(given).filter(([, v]) => v !== undefined)), ...(template === undefined ? {} : { template }) });
@@ -2190,7 +2107,7 @@ export function createWebApp(options: WebAppOptions): Server {
 		return { whatsapp: await whatsappOf().status(id) };
 	});
 	route("DELETE", "/api/instances/:id/whatsapp", "owner", async ({ params }) => {
-		await whatsappOf().disconnect(params[0] as string);
+		await whatsappOf().disconnect(params[0]);
 		await runtime.audit(tenantId).append({ type: "whatsapp.disconnected", instanceId: params[0] });
 		return { ok: true };
 	});
@@ -2201,16 +2118,12 @@ export function createWebApp(options: WebAppOptions): Server {
 		return options.phone;
 	};
 	route("GET", "/api/instances/:id/phone", "owner", async ({ params }) => {
-		await runtime.registry.getInstance(tenantId, params[0] as string).catch(() => {
-			throw new HttpError(404, "Agente inesistente");
-		});
-		return { phone: await phoneOf().status(params[0] as string) };
+		await knownInstance(params[0]);
+		return { phone: await phoneOf().status(params[0]) };
 	});
 	route("PUT", "/api/instances/:id/phone", "owner", async ({ params, req }) => {
-		const id = params[0] as string;
-		await runtime.registry.getInstance(tenantId, id).catch(() => {
-			throw new HttpError(404, "Agente inesistente");
-		});
+		const id = params[0];
+		await knownInstance(id);
 		const body = (await readJson(req)) as { accountSid?: unknown; authToken?: unknown; number?: unknown; pin?: unknown; allowedUsers?: unknown };
 		const text = (value: unknown, pattern: RegExp, what: string): string | undefined => {
 			if (value === undefined || (typeof value === "string" && value.trim() === "")) return undefined;
@@ -2240,10 +2153,8 @@ export function createWebApp(options: WebAppOptions): Server {
 		return { phone: await phoneOf().status(id) };
 	});
 	route("DELETE", "/api/instances/:id/phone", "owner", async ({ params }) => {
-		await runtime.registry.getInstance(tenantId, params[0] as string).catch(() => {
-			throw new HttpError(404, "Agente inesistente");
-		});
-		await phoneOf().disconnect(params[0] as string);
+		await knownInstance(params[0]);
+		await phoneOf().disconnect(params[0]);
 		await runtime.audit(tenantId).append({ type: "phone.disconnected", instanceId: params[0] });
 		return { ok: true };
 	});
@@ -2260,29 +2171,29 @@ export function createWebApp(options: WebAppOptions): Server {
 		}
 	});
 	route("POST", "/api/people/:pid/2fa/reset", "owner", async ({ params }) => {
-		await options.people.clearTotp(params[0] as string).catch(() => {
+		await options.people.clearTotp(params[0]).catch(() => {
 			throw new HttpError(404, "No such person");
 		});
 		// Whoever holds the link must log in again, now with the link alone.
-		await options.sessions.endAllOf(params[0] as string);
+		await options.sessions.endAllOf(params[0]);
 		await runtime.audit(tenantId).append({ type: "web.2fa_reset", personId: params[0] });
 		return { ok: true };
 	});
 	route("POST", "/api/people/:pid/link", "owner", async ({ params, url }) => {
-		const token = await options.people.rotate(params[0] as string).catch(() => {
+		const token = await options.people.rotate(params[0]).catch(() => {
 			throw new HttpError(404, "No such person");
 		});
-		await options.sessions.endAllOf(params[0] as string);
+		await options.sessions.endAllOf(params[0]);
 		await runtime.audit(tenantId).append({ type: "person.link_rotated", personId: params[0] });
 		return { link: loginLink(url, token) };
 	});
 	route("DELETE", "/api/people/:pid", "owner", async ({ params, person }) => {
-		if (params[0] === (person as Person).id) throw new HttpError(400, "Non puoi eliminare te stesso");
-		const removed = await options.people.remove(params[0] as string);
-		await options.sessions.endAllOf(params[0] as string);
-		for (const record of await runtime.registry.listInstances(tenantId)) await options.browser?.clearProfile(record.id, params[0] as string);
+		if (params[0] === person.id) throw new HttpError(400, "Non puoi eliminare te stesso");
+		const removed = await options.people.remove(params[0]);
+		await options.sessions.endAllOf(params[0]);
+		for (const record of await runtime.registry.listInstances(tenantId)) await options.browser?.clearProfile(record.id, params[0]);
 		// What they set to come back on the board stops: nobody would work it with them (ADR 0069).
-		options.board?.routines?.pausePerson(params[0] as string);
+		options.board?.routines?.pausePerson(params[0]);
 		await runtime.audit(tenantId).append({ type: "person.removed", personId: params[0] });
 		return { removed };
 	});
@@ -2322,9 +2233,8 @@ export function createWebApp(options: WebAppOptions): Server {
 		}
 		return { groups, pendingApprovals };
 	};
-	route("GET", "/api/approvals", "person", async ({ person }) => collectApprovals(person as Person, true));
-	route("GET", "/api/console-summary", "person", async ({ person }) => {
-		const p = person as Person;
+	route("GET", "/api/approvals", "person", async ({ person }) => collectApprovals(person, true));
+	route("GET", "/api/console-summary", "person", async ({ person: p }) => {
 		const { pendingApprovals } = await collectApprovals(p, false);
 		let boardReview = 0;
 		if (options.board !== undefined) {
