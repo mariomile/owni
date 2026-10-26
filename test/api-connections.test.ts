@@ -27,6 +27,12 @@ async function service() {
 			res.setHeader("content-type", "application/json");
 			return res.end(JSON.stringify({ authorization: req.headers.authorization ?? null, url: req.url }));
 		}
+		if (path === "/v1/links") {
+			// What a paginated API sends back: its own address, key included, and the key inside JSON.
+			const key = new URL(req.url as string, "http://x").searchParams.get("api_key") ?? "";
+			res.setHeader("content-type", "application/json");
+			return res.end(`{"next":"http://x${(req.url as string).replace(/\?.*/, "")}?page=2&${new URLSearchParams({ api_key: key })}","raw":${JSON.stringify(key)},"u":"${[...key].map((c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, "0")}`).join("")}"}`);
+		}
 		if (path === "/v1/denied") {
 			res.statusCode = 401;
 			return res.end("bad key");
@@ -83,7 +89,8 @@ describe("the address of a request stays under the base (ADR 0116)", () => {
 	});
 
 	it("refuses a path that leaves it, and the key's own parameter", () => {
-		for (const path of ["../admin", "/v1/../../admin", "%2e%2e/admin", "//evil.example/x", "https://evil.example/x", "a?b=1", "a#b", "a b", "a\\b", "./x"]) expect(() => apiUrl(t, path, undefined), path).toThrow();
+		for (const path of ["../admin", "/v1/../../admin", "%2e%2e/admin", "//evil.example/x", "https://evil.example/x", "a?b=1", "a#b", "a b", "a\\b", "./x", "..;/other", "..%3b/other", "..%5c..%5cadmin", "%252e%252e/admin", "x/..%00/y", "a%2f..%2f..%2fadmin"]) expect(() => apiUrl(t, path, undefined), path).toThrow();
+		expect(apiUrl(t, "/clienti/caff%C3%A8", undefined).pathname).toBe("/v1/clienti/caff%C3%A8");
 		expect(() => apiUrl(t, "/x", { API_KEY: "mine" })).toThrow(/lo mette Owni/);
 		expect(() => apiUrl(t, "/x", { deep: { a: 1 } })).toThrow(/solo testo/);
 		expect(() => apiUrl(t, "/x", Object.fromEntries(Array.from({ length: 31 }, (_, i) => [`p${i}`, i])))).toThrow(/al massimo/);
@@ -107,6 +114,13 @@ describe("the address of a request stays under the base (ADR 0116)", () => {
 		expect(s.seen[0]?.url).toBe(`/v1/echo?q=x&api_key=${KEY}`);
 		expect(echoed.text).not.toContain(KEY);
 		expect(echoed.text).toContain("[chiave]");
+		const odd = "ab+/c\"d=";
+		const encoded = apiCaller({ id: "crm", transport: { type: "api", baseUrl: s.base, auth: { kind: "query", name: "api_key" } } }, "mcp:crm", odd, allow);
+		const links = await encoded.send({ method: "GET", path: "/links" });
+		expect(s.seen.at(-1)?.url).toContain(new URLSearchParams({ api_key: odd }).toString());
+		expect(links.text.match(/\[chiave\]/g)).toHaveLength(3);
+		for (const form of [odd, encodeURIComponent(odd), new URLSearchParams({ k: odd }).toString().slice(2), JSON.stringify(odd).slice(1, -1)]) expect(links.text).not.toContain(form);
+		s.seen.splice(1);
 		const header = apiCaller({ id: "crm", transport: { type: "api", baseUrl: s.base, auth: { kind: "header", name: "X-API-Key" } } }, "mcp:crm", KEY, allow);
 		await header.send({ method: "POST", path: "/clienti", body: { nome: "Rossi" } });
 		expect(s.seen[1]).toMatchObject({ method: "POST", url: "/v1/clienti", body: '{"nome":"Rossi"}' });
@@ -194,6 +208,10 @@ describe("a collegamento API of an agente (ADR 0116)", () => {
 		expect(other.seen.at(-1)?.headers.authorization).toBe("Bearer sk-other-key");
 		// Without a way in, there is no key to keep.
 		await api("/api/instances/owni/connectors/crm", { name: "CRM", transport: { type: "api", baseUrl: other.base } }, "PUT");
+		expect(await secrets.get("connector.crm.owni.authorization")).toBeUndefined();
+		// Nor once the collegamento becomes another kind of connector.
+		await save(api, other.base);
+		await api("/api/instances/owni/connectors/crm", { name: "CRM", transport: { type: "http", url: "https://mcp.example.com/mcp", headerSecrets: { authorization: "connector.crm.owni.authorization" } } }, "PUT");
 		expect(await secrets.get("connector.crm.owni.authorization")).toBeUndefined();
 		await save(api, other.base);
 		expect((await api("/api/instances/owni/connectors/crm", undefined, "DELETE")).removed).toBe(true);

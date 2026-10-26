@@ -1329,7 +1329,6 @@ export function createWebApp(options: WebAppOptions): Server {
 		// An API's key (ADR 0116): given here, kept by the server, never sent back. The connector names it.
 		const keySecret = catalogTokenSecret(instance, id);
 		let newKey: string | undefined;
-		let dropKey = false;
 		if (transport.type === "api") {
 			const t = transport;
 			const auth = t.auth?.kind === "bearer" ? { kind: "bearer" as const } : t.auth?.kind === "header" || t.auth?.kind === "query" ? { kind: t.auth.kind, name: String(t.auth.name ?? "").trim() } : undefined;
@@ -1338,7 +1337,7 @@ export function createWebApp(options: WebAppOptions): Server {
 			const problem = apiTransportProblem(transport);
 			if (problem !== undefined) throw new HttpError(400, problem[0]?.toUpperCase() + problem.slice(1));
 			const key = (body as { key?: unknown }).key;
-			if (typeof key === "string" && key.trim() !== "") {
+			if (auth !== undefined && typeof key === "string" && key.trim() !== "") {
 				newKey = key.trim().replace(auth?.kind === "bearer" ? /^Bearer\s+/i : /^$/, "");
 				if (!/^[\x21-\x7e]{4,4096}$/.test(newKey)) throw new HttpError(400, "La chiave va incollata senza spazi né a capo");
 			}
@@ -1346,10 +1345,12 @@ export function createWebApp(options: WebAppOptions): Server {
 			// A key given for one address never goes to another: a new host asks for the key again.
 			const sameHost = b?.type === "api" && new URL(b.baseUrl).origin === new URL(transport.baseUrl).origin;
 			const kept = b?.type === "api" && b.secret === keySecret && sameHost && newKey === undefined;
-			if (auth === undefined) dropKey = true;
-			else if (newKey !== undefined || kept) transport = { ...transport, secret: keySecret };
-			else if (b?.type === "api" && b.secret !== undefined && !sameHost) throw new HttpError(400, "Il servizio ha un indirizzo nuovo: rimetti la chiave");
-			else throw new HttpError(400, "Manca la chiave");
+			// Without a way in there is no key: an old one is deleted below.
+			if (auth !== undefined) {
+				if (newKey !== undefined || kept) transport = { ...transport, secret: keySecret };
+				else if (b?.type === "api" && b.secret !== undefined && !sameHost) throw new HttpError(400, "Il servizio ha un indirizzo nuovo: rimetti la chiave");
+				else throw new HttpError(400, "Manca la chiave");
+			}
 		}
 		const connector: McpConnector = { id, name: String(body.name ?? id), transport, enabled: body.enabled !== false, ...(body.approval === "none" ? { approval: "none" as const } : {}) };
 		try {
@@ -1360,7 +1361,8 @@ export function createWebApp(options: WebAppOptions): Server {
 		if (newKey !== undefined) {
 			await runtime.secrets(tenantId).set(keySecret, newKey);
 			await runtime.audit(tenantId).append({ type: "secret.set", instanceId: instance, name: keySecret });
-		} else if (dropKey && before?.transport.type === "api" && before.transport.secret !== undefined) {
+		} else if (before?.transport.type === "api" && before.transport.secret !== undefined && (transport.type !== "api" || transport.secret === undefined)) {
+			// An API's key with no API to go to (no way in, or now another kind of connector) is not kept for anything else.
 			await runtime.secrets(tenantId).delete(before.transport.secret);
 			await runtime.audit(tenantId).append({ type: "secret.deleted", instanceId: instance, name: before.transport.secret });
 		}

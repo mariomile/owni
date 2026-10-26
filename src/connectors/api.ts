@@ -71,14 +71,15 @@ export function apiUrl(t: Pick<ApiTransport, "baseUrl" | "auth">, path: unknown,
 	const p = (path ?? "").trim();
 	if (p.length > API_LIMITS.maxPathChars) throw new ApiRequestRefused(`path oltre ${API_LIMITS.maxPathChars} caratteri`);
 	// Only a path: no other host, no way up, no query or fragment smuggled in.
-	if (/[\s\p{Cc}\\?#]/u.test(p) || p.startsWith("//") || /^[a-z][a-z0-9+.-]*:/i.test(p)) throw new ApiRequestRefused("path deve essere un percorso relativo all'indirizzo base, senza parametri (vanno in query)");
+	if (/[\s\p{Cc}\\?#;]/u.test(p) || p.startsWith("//") || /^[a-z][a-z0-9+.-]*:/i.test(p)) throw new ApiRequestRefused("path deve essere un percorso relativo all'indirizzo base, senza parametri (vanno in query)");
 	let decoded: string;
 	try {
 		decoded = decodeURIComponent(p);
 	} catch {
 		throw new ApiRequestRefused("path con caratteri codificati male");
 	}
-	if (decoded.split("/").some((segment) => segment === ".." || segment === ".")) throw new ApiRequestRefused("path non può risalire fuori dall'indirizzo base");
+	// What some servers still read as a way up once decoded: a backslash, a ";" or a second encoding.
+	if (/[\p{Cc}\\;%]/u.test(decoded) || decoded.split("/").some((segment) => segment === ".." || segment === ".")) throw new ApiRequestRefused("path non può risalire fuori dall'indirizzo base");
 	const base = new URL(t.baseUrl);
 	const root = base.pathname.replace(/\/+$/, "");
 	const url = new URL(base.origin);
@@ -116,7 +117,9 @@ export function apiCaller(connector: { readonly id: string; readonly transport: 
 	const t = connector.transport;
 	const host = new URL(t.baseUrl).hostname;
 	const fetchFn = egressFetch(egressName, [host], policy, base);
-	const hide = (text: string) => (key !== undefined && key.length >= 4 ? text.split(key).join("[chiave]") : text);
+	// The key as it was sent, and as a service may write it back: encoded in an address or inside JSON.
+	const forms = key !== undefined && key.length >= 4 ? [...new Set([key, encodeURIComponent(key), new URLSearchParams({ k: key }).toString().slice(2), JSON.stringify(key).slice(1, -1)])] : [];
+	const hide = (text: string) => forms.reduce((out, form) => out.split(form).join("[chiave]"), text);
 	return {
 		async send(call, signal) {
 			const url = apiUrl(t, call.path, call.query);
@@ -136,24 +139,24 @@ export function apiCaller(connector: { readonly id: string; readonly transport: 
 			}
 			const timeout = AbortSignal.timeout(API_LIMITS.timeoutMs);
 			const response = await fetchFn(url, { method: call.method, headers, ...(body === undefined ? {} : { body }), signal: signal === undefined ? timeout : AbortSignal.any([signal, timeout]) });
-			return { status: response.status, ok: response.ok, text: hide(await responseText(response)) };
+			return { status: response.status, ok: response.ok, text: await responseText(response, hide) };
 		},
 	};
 }
 
-/** The body as the model reads it: text and JSON as they are (pretty JSON), anything else described. */
-async function responseText(response: Response): Promise<string> {
+/** The body as the model reads it: text and JSON as they are (pretty JSON), anything else described; the key hidden before anything is cut. */
+async function responseText(response: Response, hide: (text: string) => string): Promise<string> {
 	const type = (response.headers.get("content-type") ?? "").toLowerCase();
 	const textual = type === "" || type.startsWith("text/") || /json|xml|javascript|x-www-form-urlencoded/.test(type);
 	if (!textual) {
 		const size = (await response.arrayBuffer()).byteLength;
 		return `[contenuto non testuale: ${type.split(";")[0]}, ${size} byte]`;
 	}
-	const raw = await response.text();
-	let text = raw;
+	let text = hide(await response.text());
 	if (type.includes("json")) {
 		try {
-			text = JSON.stringify(JSON.parse(raw), null, 1);
+			// Parsing undoes escapes like \u0041: hidden again once written back.
+			text = hide(JSON.stringify(JSON.parse(text), null, 1));
 		} catch {}
 	}
 	return text.length > API_LIMITS.maxResultChars ? `${text.slice(0, API_LIMITS.maxResultChars)}\n[... troncato]` : text;
