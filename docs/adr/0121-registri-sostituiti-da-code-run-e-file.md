@@ -14,7 +14,7 @@ I 25 registri e tutto quello che esisteva solo per loro non ci sono più.
 
 - **Il lavoro sui dati si fa con i file del workspace e con `code_run`.** Fatture, spese, ore e il resto sono file (CSV, Excel, XML) che la persona manda o che l'agente crea; i conti li fa `code_run`.
 - **Le procedure per ogni cliente sono skill dell'agente** ([ADR 0059](0059-skill.md)). Nessuna skill è pronta: si creano per cliente, quando serve.
-- **Gli strumenti non si caricano più su richiesta.** `tool_search` è tolto: ogni agente riceve i suoi strumenti, tutti insieme.
+- **Gli strumenti di Owni non si caricano più su richiesta.** Ogni agente li riceve tutti insieme. Restano caricati su richiesta, con `tool_search`, solo gli strumenti dei connettori ([ADR 0122](0122-strumenti-dei-connettori-caricati-su-richiesta.md)).
 - **Il registro di chi segue cosa e le richieste tra agenti da approvare non ci sono più.** Le facevano e le usavano solo i registri.
 - **Il controllo sull'origine del turno per le conferme non c'è più.** Resta il tipo di origine (persona, agente, avviso, attività programmata) sui turni.
 - **Il riepilogo delle fatture elettroniche (FatturaPA) non c'è più.** Un file XML FatturaPA nel workspace si legge come testo, o con `code_run`.
@@ -43,7 +43,7 @@ Le istruzioni salvate dagli agenti non vengono toccate: possono nominare strumen
 ## Conseguenze
 
 - Circa 58 mila righe di codice in meno in `src`, e una pagina di istruzioni e di strumenti più corta per ogni turno.
-- Niente strumenti caricati su richiesta: tutti gli strumenti di un agente sono sempre lì.
+- Gli strumenti di Owni sono sempre lì; quelli dei connettori si caricano con `tool_search` ([ADR 0122](0122-strumenti-dei-connettori-caricati-su-richiesta.md)).
 - Una fattura elettronica firmata si apre come testo del file; i conti sulle fatture si fanno con `code_run` su un export.
 - Una richiesta tra agenti da approvare lasciata in attesa non compare più da nessuna parte.
 - Un agente il cui prompt nomina `quotes`, `invoices` e gli altri strumenti tolti riceve un errore se prova a chiamarli; va riscritto il prompt.

@@ -33,7 +33,7 @@ export function scoreRouting(c: RoutingCase, turn: RoutingObservation): RoutingR
 	if (!Array.isArray(turn.tools) || turn.tools.some((t) => typeof t !== "string") || !Number.isFinite(turn.costUsd) || turn.costUsd < 0 || !Number.isInteger(turn.modelCalls) || turn.modelCalls < 1) {
 		return routingError(c, "Invalid or missing turn usage");
 	}
-	const firstTool = turn.tools[0] ?? null;
+	const firstTool = turn.tools.find((t) => t !== "tool_search") ?? turn.tools[0] ?? null;
 	const ok = c.expect.length === 0 ? firstTool === null : firstTool !== null && c.expect.includes(firstTool);
 	return { id: c.id, expect: c.expect, status: ok ? "passed" : "failed", tools: [...turn.tools], firstTool, model: { provider: turn.provider, model: turn.model }, costUsd: turn.costUsd, modelCalls: turn.modelCalls, reason: ok ? null : `Expected ${c.expect.join(" or ") || "no tool"}; got ${firstTool ?? "no tool"}` };
 }

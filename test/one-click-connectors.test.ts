@@ -37,6 +37,17 @@ async function boot(catalog: CatalogEntry[], env: Record<string, string> = { OWN
 	return { owni, base, api };
 }
 
+/** Connector tools are deferred (ADR 0122): load one with tool_search, as the model does, and wait for the answer. */
+// biome-ignore lint: test
+async function load(api: (path: string, method?: string, body?: unknown) => Promise<any>, threadId: string, tool: string): Promise<void> {
+	await api(`/api/instances/owni/threads/${threadId}/messages`, "POST", { text: `/tool tool_search ${JSON.stringify({ query: tool })}` });
+	for (let i = 0; i < 300; i++) {
+		if (JSON.stringify((await api(`/api/instances/owni/threads/${threadId}`)).entries ?? []).includes(`Caricati: ${tool}`)) return;
+		await new Promise((r) => setTimeout(r, 30));
+	}
+	throw new Error(`${tool} not loaded`);
+}
+
 async function fake(): Promise<OAuthMcp> {
 	const f = await oauthMcp();
 	fakes.push(f);
@@ -97,9 +108,10 @@ describe("one-click connectors with OAuth", () => {
 		expect(after.connectors[0].status).toEqual({ id: "demo", connected: true, tools: ["demo__add", "demo__whoami"] });
 		// The tool call carries the token got at sign-in.
 		const thread = (await api("/api/instances/owni/dm", "POST", {})).thread;
+		await load(api, thread.id, "demo__whoami");
 		await api(`/api/instances/owni/threads/${thread.id}/messages`, "POST", { text: "/tool demo__whoami {}" });
 		let said = "";
-		for (let i = 0; i < 300 && !said.includes("Fatto."); i++) {
+		for (let i = 0; i < 300 && !said.includes("token:"); i++) {
 			said = JSON.stringify((await api(`/api/instances/owni/threads/${thread.id}`)).entries ?? []);
 			await new Promise((r) => setTimeout(r, 30));
 		}
@@ -240,9 +252,10 @@ describe("one-click connectors with OAuth", () => {
 		expect(started.url).toBeDefined();
 		await owni.runtime.reopen("default", "owni");
 		const thread = (await api("/api/instances/owni/dm", "POST", {})).thread;
+		// The placeholder is never deferred: the model calls it without tool_search (ADR 0122).
 		await api(`/api/instances/owni/threads/${thread.id}/messages`, "POST", { text: "/tool demo__non_collegato {}" });
 		let said = "";
-		for (let i = 0; i < 300 && !said.includes("Fatto."); i++) {
+		for (let i = 0; i < 300 && !said.includes("Collega"); i++) {
 			said = JSON.stringify((await api(`/api/instances/owni/threads/${thread.id}`)).entries ?? []);
 			await new Promise((r) => setTimeout(r, 30));
 		}

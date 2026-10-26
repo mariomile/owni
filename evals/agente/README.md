@@ -14,7 +14,7 @@ pnpm eval:agente:conti                    # sei domande di conti a un modello ve
 
 Il routing reale scrive sempre, salvo interruzioni forzate o errori di scrittura, `last-report/agente.json` e `agente.md`: stato `passed|failed|skipped|error`, casi selezionati e misurati, motivi, modello selezionato e provider/modello effettivi dal ledger per ogni turno. Senza chiave: `skipped`, zero misure, accuratezza `null`, nessun modello dichiarato come eseguito. Errori di avvio, turno o chiusura: `error`. `failed` indica accuratezza sotto l'80%; `failed` ed `error` escono con codice 1. `skipped` esce con 0 ma compare separatamente nel riepilogo e negli artifact nightly; un report mancante fa fallire il controllo.
 
-`OWNI_MODEL_ID` sceglie il modello Anthropic da misurare. L'accuratezza riguarda solo i turni misurati; un errore impedisce comunque `passed`. **Primo tool corretto non significa compito riuscito**: il routing non misura l'esito (`outcomeSuccess: null`).
+`OWNI_MODEL_ID` sceglie il modello Anthropic da misurare. `tool_search`, che carica gli strumenti dei connettori, non conta come primo tool se segue un tool operativo; un turno che chiama solo `tool_search` non equivale a nessun tool. L'accuratezza riguarda solo i turni misurati; un errore impedisce comunque `passed`. **Primo tool corretto non significa compito riuscito**: il routing non misura l'esito (`outcomeSuccess: null`).
 
 Gli **integration/outcome-contract checks** in `outcomes.ts` usano il runtime durevole e il modello `faux` esistenti, comandati con `/tool`, directory temporanee rimosse a fine scenario e il client Google con trasporto stub senza rete:
 
