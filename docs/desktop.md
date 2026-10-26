@@ -45,7 +45,7 @@ Per ricostruire il componente senza dipendenze aggiuntive: `bash desktop/scripts
 3. Chiudere la finestra la nasconde: Owni resta nella barra. Dall'icona: Apri Owni, Nuova chat, Cambia server, Esci. Sul Mac la riapre anche l'icona nel Dock.
 4. I link che portano fuori da Owni si aprono nel browser. Una pagina di Owni aperta "in una nuova scheda" (un file, un documento) si apre in una seconda finestra dell'app.
 5. I file scaricati vanno nella cartella Download, con un numero in fondo al nome se ce n'è già uno uguale.
-6. Sul Mac la finestra non ha la barra del titolo: i tre pulsanti della finestra stanno nell'angolo in alto della barra laterale, come nelle app del Mac, e la prima riga lascia loro spazio. A tutto schermo spariscono, e lo spazio con loro. La finestra si sposta trascinando la riga in alto della barra laterale o l'intestazione della pagina; un doppio clic lì la ingrandisce. Le pagine del server possono chiedere all'app solo questo, spostare e ingrandire la finestra, e nient'altro.
+6. Sul Mac la finestra non ha la barra del titolo: i tre pulsanti della finestra stanno nell'angolo in alto della barra laterale, come nelle app del Mac, sulla stessa linea del logo, e la prima riga lascia loro spazio. A tutto schermo spariscono, e lo spazio con loro. La finestra si sposta trascinando la riga in alto della barra laterale o l'intestazione della pagina; un doppio clic lì la ingrandisce. Le pagine del server possono chiedere all'app solo questo, spostare e ingrandire la finestra, e nient'altro.
 
 ## Svilupparla
 

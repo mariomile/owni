@@ -59,6 +59,8 @@ describe("interactive answers in the chat (ADR 0118)", () => {
 		expect(OPENUI_GUIDE).toMatch(/^# Interactive answers in the console/);
 		expect(OPENUI_GUIDE).toContain("Never invent data");
 		expect(OPENUI_GUIDE).not.toContain("picsum.photos");
+		// The registries are gone (ADR 0121): no example offers a quote.
+		expect(OPENUI_GUIDE).not.toMatch(/preventiv/i);
 	});
 
 	it("a click writes the action's words, then the form's values, then the context: only strings, at most 4000 characters", () => {

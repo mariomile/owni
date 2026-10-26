@@ -8,7 +8,7 @@ import { rmSync } from "node:fs";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
 import { afterEach, describe, expect, it } from "vitest";
-import type { OwniRuntime, OwniTool, ToolContext } from "../src/core/index.ts";
+import type { OwniRuntime, OwniTool } from "../src/core/index.ts";
 import { inputsOrigin } from "../src/core/adapters/pi-durable.ts";
 import type { TurnOrigin } from "../src/core/turn-origin.ts";
 import { runtimeWithInstance, tempDataDir, waitFor } from "./helpers.ts";

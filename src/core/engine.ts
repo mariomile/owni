@@ -132,6 +132,8 @@ export type OwniTool = {
 	 * stored result instead of running again. false: the model gets an "interrupted" result.
 	 */
 	readonly replaySafe: boolean;
+	/** true: not offered to the model until it loads it with tool_search (ADR 0122). */
+	readonly deferred?: true;
 	execute(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult>;
 };
 
