@@ -520,6 +520,7 @@ export async function startOwni(config: OwniConfig, options: OwniOptions = {}): 
 				log,
 				oauth: mcpOAuth(),
 				payments: (options.connectorCatalog ?? CONNECTOR_CATALOG).filter((e) => e.category === "pagamenti").map((e) => e.url),
+				noStdio: config.cell.secret !== undefined,
 				actions: { propose: (input) => proposeConnectorAction(record.id, input) },
 			});
 			connections.set(record.id, mcp);

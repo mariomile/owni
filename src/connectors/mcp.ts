@@ -103,6 +103,8 @@ export type McpConnectionsOptions = {
 	readonly oauth?: McpOAuth;
 	/** Addresses of payment services (catalog category "pagamenti"): their writes always wait, whatever the connector says (ADR 0120). */
 	readonly payments?: readonly string[];
+	/** No program started on this machine (Owni Cloud): a stdio connector does not connect. */
+	readonly noStdio?: boolean;
 	/** Calls that change something wait here for a person; without it they are refused. */
 	readonly actions?: {
 		propose(input: { connector: McpConnector; server: string; tool: string; toolTitle: string; args: Record<string, unknown>; reason: string; destructive: boolean; thread?: { channel: string; threadId: string }; inputs?: () => Promise<readonly string[]>; callId: string }): Promise<string>;
@@ -305,6 +307,7 @@ export class McpConnections {
 			});
 		}
 		if (connector.transport.type === "api") throw new Error("an API collegamento has no MCP session");
+		if (this.options.noStdio === true) throw new Error("un programma locale non si avvia su Owni Cloud");
 		// Only what the connector names (the SDK adds a fixed set of basics: HOME, PATH, USER,
 		// SHELL, TERM, LOGNAME), never the rest of Owni's environment, where keys live.
 		const env: Record<string, string> = { PATH: process.env.PATH ?? "/usr/bin:/bin" };

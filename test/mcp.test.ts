@@ -1,4 +1,5 @@
 import { createServer, type Server as HttpServer } from "node:http";
+import { existsSync } from "node:fs";
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
@@ -86,6 +87,18 @@ describe("MCP connectors", () => {
 		await waitFor(() => h.replies.length === 1, 20_000);
 		// The SDK passes a fixed set of basics (HOME, PATH, USER, ...); nothing else of Owni's.
 		expect(text(h.replies[0])).toBe("Fatto. env:tok-1 leak:none");
+		await h.runtime.close();
+	});
+
+	it("on Owni Cloud a stdio connector starts no program", async () => {
+		const h = await setup([], [connectorEgressName("local")]);
+		const marker = join(h.dataDir, "ran");
+		const c = new McpConnections({ instanceId: "ops", secrets: h.runtime.secrets("acme"), policy: async () => (await h.runtime.registry.getInstance("acme", "ops")).egress, audit: h.runtime.audit("acme"), noStdio: true });
+		const tools = await c.connect([{ id: "local", name: "Local", transport: { type: "stdio", command: "/usr/bin/touch", args: [marker] }, enabled: true }]);
+		expect(tools).toEqual([]);
+		expect(c.status()[0]?.connected).toBe(false);
+		expect(existsSync(marker)).toBe(false);
+		await c.close();
 		await h.runtime.close();
 	});
 
