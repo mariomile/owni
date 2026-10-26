@@ -1,3 +1,5 @@
+import { type Static, Type } from "typebox";
+import { StringEnum } from "../tool-schema.ts";
 import {
 	addMonths,
 	addTo,
@@ -24,7 +26,7 @@ import {
 	type Unit,
 	workingDaysIn,
 } from "../dates.ts";
-import type { OwniTool } from "../engine.ts";
+import { defineOwniTool, type OwniTool } from "../engine.ts";
 import { daysBetween, daysInMonth, type Holiday, HOLIDAYS_SINCE, holidayOn, isoDate, italianHolidays, leapYear, MONTH_NAMES, realDate, todayIn, weekdayOf, type WorkingWeek, workingDay } from "../italian-calendar.ts";
 import { capitalized, italianDate, italianWeekday } from "../italian-format.ts";
 
@@ -55,6 +57,36 @@ const DAYS: readonly [string, string] = ["giorno", "giorni"];
 /** The years 4 October is named as just restored. */
 const SAN_FRANCESCO_NEWS = new Set([2026, 2027]);
 
+const dateCalcParameters = Type.Object(
+	{
+		op: StringEnum([...OPS]),
+		date: Type.Optional(Type.String({ minLength: 1, maxLength: MAX_TEXT, description: "The date: 15/03/2027, «15 marzo», oggi, Natale…" })),
+		to: Type.Optional(Type.String({ minLength: 1, maxLength: MAX_TEXT, description: "between and working_days: the end; age: the day of the age" })),
+		amount: Type.Optional(Type.Integer({ minimum: -MAX_AMOUNT, maximum: MAX_AMOUNT })),
+		unit: Type.Optional(StringEnum([...UNITS], { description: "add: days if absent" })),
+		days: Type.Optional(
+			Type.Union(
+				[
+					Type.Integer({ minimum: 0, maximum: MAX_DUE_DAYS }),
+					Type.String({ minLength: 1, maxLength: MAX_TEXT }),
+					Type.Array(Type.Integer({ minimum: 0, maximum: MAX_DUE_DAYS }), { minItems: 1, maxItems: MAX_INSTALMENTS }),
+				],
+				{ description: "due: 60, «30-60-90 dffm», [30, 60, 90]" },
+			),
+		),
+		end_of_month: Type.Optional(Type.Boolean({ description: "due: true for fine mese (f.m.)" })),
+		fixed_day: Type.Optional(Type.Integer({ minimum: 1, maximum: 31, description: "due: giorno fisso" })),
+		month: Type.Optional(Type.String({ minLength: 1, maxLength: 40 })),
+		year: Type.Optional(Type.Integer({ minimum: HOLIDAYS_SINCE, maximum: LAST_YEAR })),
+		inclusive: Type.Optional(Type.Boolean({ description: "between: count the first day too" })),
+		patrono: Type.Optional(Type.String({ minLength: 1, maxLength: 30, description: "29/06, «7 dicembre» or Milano" })),
+		saturday_working: Type.Optional(Type.Boolean()),
+	},
+	{ additionalProperties: false },
+);
+type DateCalcArgs = Static<typeof dateCalcParameters>;
+type TextArg = "date" | "to" | "month" | "patrono";
+
 /**
  * Calendar arithmetic, which language models get wrong: what day a date falls on, days and
  * working days between dates, adding to a date, invoice due dates, Italian holidays, ages. Pure
@@ -64,7 +96,7 @@ const SAN_FRANCESCO_NEWS = new Set([2026, 2027]);
 export function createDateTools(options: DateToolsOptions): OwniTool[] {
 	const now = options.now ?? (() => new Date());
 	return [
-		{
+		defineOwniTool({
 			name: "date_calc",
 			description:
 				"Exact date arithmetic with the Italian calendar: use it for dates, days, deadlines and working days, never work them out in your head, and give the dates with their weekday. " +
@@ -76,33 +108,7 @@ export function createDateTools(options: DateToolsOptions): OwniTool[] {
 				`holidays: national holidays of year (from ${HOLIDAYS_SINCE}). age: birth date → age and next birthday. ` +
 				"Working days are Monday to Friday minus holidays; Saturday only with saturday_working. patrono is the patron saint's day or a capoluogo's name: use it when the city is known or said; don't ask just for this. " +
 				"A date without a year is the next one (for due and age the latest past one). Today is the server's date.",
-			parameters: {
-				type: "object",
-				properties: {
-					op: { type: "string", enum: [...OPS] },
-					date: { type: "string", minLength: 1, maxLength: MAX_TEXT, description: "The date: 15/03/2027, «15 marzo», oggi, Natale…" },
-					to: { type: "string", minLength: 1, maxLength: MAX_TEXT, description: "between and working_days: the end; age: the day of the age" },
-					amount: { type: "integer", minimum: -MAX_AMOUNT, maximum: MAX_AMOUNT },
-					unit: { type: "string", enum: [...UNITS], description: "add: days if absent" },
-					days: {
-						anyOf: [
-							{ type: "integer", minimum: 0, maximum: MAX_DUE_DAYS },
-							{ type: "string", minLength: 1, maxLength: MAX_TEXT },
-							{ type: "array", minItems: 1, maxItems: MAX_INSTALMENTS, items: { type: "integer", minimum: 0, maximum: MAX_DUE_DAYS } },
-						],
-						description: "due: 60, «30-60-90 dffm», [30, 60, 90]",
-					},
-					end_of_month: { type: "boolean", description: "due: true for fine mese (f.m.)" },
-					fixed_day: { type: "integer", minimum: 1, maximum: 31, description: "due: giorno fisso" },
-					month: { type: "string", minLength: 1, maxLength: 40 },
-					year: { type: "integer", minimum: HOLIDAYS_SINCE, maximum: LAST_YEAR },
-					inclusive: { type: "boolean", description: "between: count the first day too" },
-					patrono: { type: "string", minLength: 1, maxLength: 30, description: "29/06, «7 dicembre» or Milano" },
-					saturday_working: { type: "boolean" },
-				},
-				required: ["op"],
-				additionalProperties: false,
-			},
+			parameters: dateCalcParameters,
 			replaySafe: true,
 			async execute(args) {
 				const problem = argsProblem(args);
@@ -114,12 +120,12 @@ export function createDateTools(options: DateToolsOptions): OwniTool[] {
 					throw error;
 				}
 			},
-		},
+		}),
 	];
 }
 
 /** Arguments of the wrong type, the way the other tools answer them. */
-function argsProblem(args: Record<string, unknown>): string | undefined {
+function argsProblem(args: DateCalcArgs): string | undefined {
 	if (!OPS.includes(args.op as Op)) return `op è una di queste: ${OPS.join(", ")}`;
 	for (const name of ["date", "to", "month", "patrono"] as const) {
 		if (args[name] !== undefined && typeof args[name] !== "string") return `${name} è un testo`;
@@ -137,8 +143,8 @@ function argsProblem(args: Record<string, unknown>): string | undefined {
 	return undefined;
 }
 
-function answer(args: Record<string, unknown>, today: string): string {
-	const text = (name: string) => (typeof args[name] === "string" && (args[name] as string).trim() !== "" ? (args[name] as string) : undefined);
+function answer(args: DateCalcArgs, today: string): string {
+	const text = (name: TextArg) => (args[name]?.trim() === "" ? undefined : args[name]);
 	const patrono = text("patrono") === undefined ? undefined : parsePatrono(text("patrono") as string);
 	const week: WorkingWeek = { ...(patrono === undefined ? {} : { patrono: patrono.day }), ...(args.saturday_working === true ? { saturdayWorking: true } : {}) };
 	const warnings: string[] = [];
@@ -151,11 +157,11 @@ function answer(args: Record<string, unknown>, today: string): string {
 	return result.startsWith("Errore:") ? result : [result, ...warnings.map((w) => `Attenzione: ${w}.`)].join("\n");
 }
 
-function respond(args: Record<string, unknown>, today: string, text: (name: string) => string | undefined, read: (value: string, reading?: DateReading) => ReadDate, week: WorkingWeek, patrono: Patrono | undefined): string {
+function respond(args: DateCalcArgs, today: string, text: (name: TextArg) => string | undefined, read: (value: string, reading?: DateReading) => ReadDate, week: WorkingWeek, patrono: Patrono | undefined): string {
 	const date = text("date");
 	const to = text("to");
 	const names = holidayNames(patrono);
-	switch (args.op as Op) {
+	switch (args.op) {
 		case "info":
 			if (date === undefined) return "Errore: manca date, la data da guardare.";
 			return infoAnswer(read(date).date, today, week, names);
@@ -167,15 +173,15 @@ function respond(args: Record<string, unknown>, today: string, text: (name: stri
 		}
 		case "add": {
 			if (args.amount === undefined) return "Errore: manca amount, quanto aggiungere (negativo per andare indietro).";
-			return addAnswer(read(date ?? "oggi").date, args.amount as number, (args.unit as Unit | undefined) ?? "days", today, week, names);
+			return addAnswer(read(date ?? "oggi").date, args.amount, args.unit ?? "days", today, week, names);
 		}
 		case "due": {
 			if (date === undefined) return "Errore: manca date, la data della fattura.";
 			const spec = dueSpecOf(args.days);
 			if (typeof spec === "string") return `Errore: ${spec}.`;
-			const asked = typeof args.end_of_month === "boolean" ? args.end_of_month : undefined;
+			const asked = args.end_of_month;
 			if (asked !== undefined && spec.endOfMonth !== undefined && asked !== spec.endOfMonth) return `Errore: days dice ${spec.endOfMonth ? "fine mese" : "data fattura"} ma end_of_month è ${asked}.`;
-			const fixed = typeof args.fixed_day === "number" ? args.fixed_day : undefined;
+			const fixed = args.fixed_day;
 			if (fixed !== undefined && spec.fixedDay !== undefined && fixed !== spec.fixedDay) return `Errore: days dice giorno fisso ${spec.fixedDay} ma fixed_day è ${fixed}.`;
 			return dueAnswer(read(date, { rule: "past" }).date, spec.days, asked ?? spec.endOfMonth ?? false, fixed ?? spec.fixedDay, patrono?.day, names);
 		}
@@ -191,7 +197,7 @@ function respond(args: Record<string, unknown>, today: string, text: (name: stri
 			return workingAnswer(`da ${dayText(range.from)} a ${dayText(range.to)}, compresi`, range.from, range.to, week, names);
 		}
 		case "holidays":
-			return holidaysAnswer(typeof args.year === "number" ? args.year : Number(today.slice(0, 4)), patrono, names);
+			return holidaysAnswer(args.year ?? Number(today.slice(0, 4)), patrono, names);
 		case "age": {
 			if (date === undefined) return "Errore: manca date, la data di nascita.";
 			const on = to === undefined ? today : read(to).date;

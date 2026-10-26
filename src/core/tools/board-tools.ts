@@ -1,8 +1,10 @@
 import { randomBytes } from "node:crypto";
-import { BOARD_LIMITS, type Card, CARD_PRIORITIES, type CardPriority, type CardStatus, type CheckChange, BoardError, type BoardStore, dueDay, dueIn, dueLabel, dueText, STATUS_LABEL, waitingFor } from "../board.ts";
+import { Type } from "typebox";
+import { StringEnum } from "../tool-schema.ts";
+import { BOARD_LIMITS, type Card, CARD_PRIORITIES, type CardStatus, type CheckChange, BoardError, type BoardStore, dueDay, dueIn, dueLabel, dueText, STATUS_LABEL, waitingFor } from "../board.ts";
 import { digestText } from "../board-digest.ts";
 import { type BoardWork, checklistText } from "../board-work.ts";
-import type { OwniTool } from "../engine.ts";
+import { defineOwniTool, type OwniTool } from "../engine.ts";
 
 type Thread = { readonly channel: string; readonly threadId: string };
 
@@ -54,9 +56,9 @@ export function createBoardTools(options: {
 		return all.filter((_, i) => seen[i]);
 	};
 	/** The scheda meant: by number or ID, or the one worked in this conversation. */
-	const pick = async (ref: unknown, thread: Thread | undefined): Promise<Card | undefined> => {
+	const pick = async (ref: string | undefined, thread: Thread | undefined): Promise<Card | undefined> => {
 		const cards = await visible(thread);
-		if (typeof ref === "string" && ref.trim() !== "") {
+		if (ref !== undefined && ref.trim() !== "") {
 			const found = store.get(ref);
 			return cards.find((c) => c.id === found?.id);
 		}
@@ -64,45 +66,44 @@ export function createBoardTools(options: {
 		return cards.find((c) => c.work?.threadId === thread.threadId && c.work.agent === options.self);
 	};
 	return [
-		{
+		defineOwniTool({
 			name: "board_list",
 			description: "Show the schede of the board, the company's shared to-do list with columns Da fare, In corso, Da rivedere, Fatto: number, column, scadenza if any, title and who it is assigned to; priorità alta first, then the nearest scadenza. mine=true for those assigned to you. Use board_show for one scheda's description and comments.",
-			parameters: {
-				type: "object",
-				properties: {
-					mine: { type: "boolean", description: "Only the schede assigned to you" },
-					status: { type: "string", enum: ["da_fare", "in_corso", "da_rivedere", "fatto"], description: "Only this column" },
+			parameters: Type.Object(
+				{
+					mine: Type.Optional(Type.Boolean({ description: "Only the schede assigned to you" })),
+					status: Type.Optional(StringEnum(["da_fare", "in_corso", "da_rivedere", "fatto"], { description: "Only this column" })),
 				},
-				additionalProperties: false,
-			},
+				{ additionalProperties: false },
+			),
 			replaySafe: true,
 			async execute(args, ctx) {
 				const all = await options.agents();
 				const seen = await visible(ctx.thread);
 				const cards = seen
 					.filter((c) => (args.mine === true ? c.assignee === options.self : true))
-					.filter((c) => (typeof args.status === "string" ? c.status === args.status : c.status !== "fatto"))
+					.filter((c) => (args.status !== undefined ? c.status === args.status : c.status !== "fatto"))
 					// As on the board: priorità alta first, then the nearest scadenza, then by number.
 					.sort((a, b) => Number(b.priority === "alta") - Number(a.priority === "alta") || (a.due ?? "9999").localeCompare(b.due ?? "9999") || a.n - b.n);
 				if (cards.length === 0) return args.mine === true ? "Non hai schede assegnate." : "Nessuna scheda.";
 				return fenced(cards.map((c) => line(all, c, seen)).join("\n"));
 			},
-		},
-		{
+		}),
+		defineOwniTool({
 			name: "board_summary",
 			description: "The week on the board in a few lines, the same the owner gets on Monday morning: how many schede were closed in the last 7 days, how many are open per column, which are late and which wait for a review. Use it when someone asks how the board or the work is going; board_list for every scheda.",
-			parameters: { type: "object", properties: {}, additionalProperties: false },
+			parameters: Type.Object({}, { additionalProperties: false }),
 			replaySafe: true,
 			async execute(_args, ctx) {
 				const all = await options.agents();
 				const text = digestText(await visible(ctx.thread), new Date(), (id) => all.find((a) => a.id === id)?.name);
 				return text === undefined ? "La board è vuota: nessuna scheda aperta e nessuna chiusa negli ultimi 7 giorni." : fenced(text);
 			},
-		},
-		{
+		}),
+		defineOwniTool({
 			name: "board_show",
 			description: "Show one scheda of the board: title, description, column, who it is assigned to, and its comments and moves, newest last.",
-			parameters: { type: "object", properties: { card: { type: "string", description: "Its number (12 or #12); omit it for the scheda of this conversation" } }, additionalProperties: false },
+			parameters: Type.Object({ card: Type.Optional(Type.String({ description: "Its number (12 or #12); omit it for the scheda of this conversation" })) }, { additionalProperties: false }),
 			replaySafe: true,
 			async execute(args, ctx) {
 				const card = await pick(args.card, ctx.thread);
@@ -117,36 +118,34 @@ export function createBoardTools(options: {
 				const before = (card.after ?? []).map((id) => seen.find((c) => c.id === id)).filter((c): c is Card => c !== undefined).map((c) => `- #${c.n} [${STATUS_LABEL[c.status]}] ${c.title}`);
 				return fenced([line(all, card, seen), card.description, card.checklist === undefined ? "" : `Lista di controllo:\n${checklistText(card)}`, before.length === 0 ? "" : `Viene dopo:\n${before.join("\n")}`, children.length === 0 ? "" : `Sotto-schede:\n${children.join("\n")}`, events.length === 0 ? "" : `Attività:\n${events.join("\n")}`].filter(Boolean).join("\n\n"));
 			},
-		},
-		{
+		}),
+		defineOwniTool({
 			name: "board_create",
 			description: `Create a scheda on the board, for work to track or to hand to an agente (yourself or another, by name or id). It waits in «Da fare» until a person starts it from the board: tell the person so. With parent, it is a sotto-scheda of that scheda: when parent is the scheda you are working on with a person, it starts at once with that person and the agente you give it to, and when that agente moves it to «Da rivedere» its summary comes back to you here. Use it to hand part of your scheda to an agente better suited. With after, it waits for those schede to be «Fatto» and then starts by itself, with what they ended with: to split work in steps, create them in order, each after the one before. ${NOT_FROM_DATA}`,
-			parameters: {
-				type: "object",
-				properties: {
-					title: { type: "string", minLength: 1, maxLength: BOARD_LIMITS.title },
-					description: { type: "string", maxLength: BOARD_LIMITS.description, description: "What to do and what counts as done, complete: whoever works on it sees only this" },
-					assignee: { type: "string", description: "The agente to hand it to (name or id); omit to leave it unassigned" },
-					priority: { type: "string", enum: [...CARD_PRIORITIES] },
-					parent: { type: "string", description: "The number of the scheda this one is part of (12 or #12)" },
-					checklist: { type: "array", items: { type: "string", maxLength: BOARD_LIMITS.checkItem }, maxItems: BOARD_LIMITS.checklist, description: "The steps of the work, one per item, if it has clear steps" },
-					after: { type: "array", items: { type: "string" }, maxItems: BOARD_LIMITS.after, description: "The numbers of the schede that must be done first (12 or #12)" },
-					due: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$", description: "By when it should be done, YYYY-MM-DD, counting from today's date; only when the person gave one. Only a person changes it later, from the board" },
+			parameters: Type.Object(
+				{
+					title: Type.String({ minLength: 1, maxLength: BOARD_LIMITS.title }),
+					description: Type.Optional(Type.String({ maxLength: BOARD_LIMITS.description, description: "What to do and what counts as done, complete: whoever works on it sees only this" })),
+					assignee: Type.Optional(Type.String({ description: "The agente to hand it to (name or id); omit to leave it unassigned" })),
+					priority: Type.Optional(StringEnum([...CARD_PRIORITIES])),
+					parent: Type.Optional(Type.String({ description: "The number of the scheda this one is part of (12 or #12)" })),
+					checklist: Type.Optional(Type.Array(Type.String({ maxLength: BOARD_LIMITS.checkItem }), { maxItems: BOARD_LIMITS.checklist, description: "The steps of the work, one per item, if it has clear steps" })),
+					after: Type.Optional(Type.Array(Type.String(), { maxItems: BOARD_LIMITS.after, description: "The numbers of the schede that must be done first (12 or #12)" })),
+					due: Type.Optional(Type.String({ pattern: "^\\d{4}-\\d{2}-\\d{2}$", description: "By when it should be done, YYYY-MM-DD, counting from today's date; only when the person gave one. Only a person changes it later, from the board" })),
 				},
-				required: ["title"],
-				additionalProperties: false,
-			},
+				{ additionalProperties: false },
+			),
 			replaySafe: true,
 			async execute(args, ctx) {
 				const all = await options.agents();
 				let assignee: string | undefined;
-				if (typeof args.assignee === "string" && args.assignee.trim() !== "") {
+				if (args.assignee !== undefined && args.assignee.trim() !== "") {
 					const w = args.assignee.trim().toLowerCase();
 					assignee = (all.find((a) => a.id === w) ?? all.find((a) => a.name.toLowerCase() === w))?.id;
 					if (assignee === undefined) return `Errore: nessun agente «${args.assignee}». Agenti: ${all.map((a) => `${a.name} (${a.id})`).join(", ")}.`;
 				}
 				let due: string | undefined;
-				if (typeof args.due === "string" && args.due.trim() !== "") {
+				if (args.due !== undefined && args.due.trim() !== "") {
 					try {
 						due = dueDay(args.due);
 					} catch (error) {
@@ -157,21 +156,21 @@ export function createBoardTools(options: {
 					if (dueIn(due) < 0) return `Errore: la scadenza ${dueLabel(due)} ${due.slice(0, 4)} è già passata. Controlla la data di oggi e l'anno.`;
 				}
 				let parent: Card | undefined;
-				if (typeof args.parent === "string" && args.parent.trim() !== "") {
+				if (args.parent !== undefined && args.parent.trim() !== "") {
 					parent = await pick(args.parent, ctx.thread);
 					if (parent === undefined) return "Errore: la scheda di cui fa parte non c'è. Usa board_list per i numeri.";
 				}
 				const after: string[] = [];
-				for (const ref of Array.isArray(args.after) ? args.after : []) {
-					const first = await pick(String(ref), ctx.thread);
-					if (first === undefined) return `Errore: la scheda ${String(ref)} da fare prima non c'è. Usa board_list per i numeri.`;
+				for (const ref of args.after ?? []) {
+					const first = await pick(ref, ctx.thread);
+					if (first === undefined) return `Errore: la scheda ${ref} da fare prima non c'è. Usa board_list per i numeri.`;
 					after.push(first.id);
 				}
 				// Once per call: a rerun after a crash does not make a second scheda.
 				const made = await ctx.step("create", async () => {
 					try {
 						const card = await options.work.create(
-							{ title: String(args.title), ...(typeof args.description === "string" ? { description: args.description } : {}), ...(typeof args.priority === "string" ? { priority: args.priority as CardPriority } : {}), ...(assignee === undefined ? {} : { assignee }), ...(parent === undefined ? {} : { parent: parent.id }), ...(due === undefined ? {} : { due }), ...(after.length === 0 ? {} : { after }), ...(Array.isArray(args.checklist) ? { checklist: args.checklist.filter((x): x is string => typeof x === "string") } : {}) },
+							{ title: args.title, ...(args.description !== undefined ? { description: args.description } : {}), ...(args.priority !== undefined ? { priority: args.priority } : {}), ...(assignee === undefined ? {} : { assignee }), ...(parent === undefined ? {} : { parent: parent.id }), ...(due === undefined ? {} : { due }), ...(after.length === 0 ? {} : { after }), ...(args.checklist !== undefined ? { checklist: args.checklist } : {}) },
 							{ kind: "agent", id: options.self },
 							undefined,
 							ctx.thread?.channel === "web" ? ctx.thread.threadId : undefined,
@@ -190,33 +189,32 @@ export function createBoardTools(options: {
 				});
 				return made;
 			},
-		},
-		{
+		}),
+		defineOwniTool({
 			name: "board_update",
 			description:
 				"Move a scheda assigned to you and/or comment on it. When you finish the work of a scheda, move it to da_rivedere with a short summary as comment: a person reviews it and closes it (you cannot move it to Fatto, nor reopen a closed one). da_fare to give it back. A comment alone is fine on any scheda you can see. On a scheda assigned to you, check_done ticks an item of its checklist (its number) when that step is done, check_add adds a step you found.",
-			parameters: {
-				type: "object",
-				properties: {
-					card: { type: "string", description: "Its number (12 or #12); omit it for the scheda of this conversation" },
-					status: { type: "string", enum: [...AGENT_STATUSES] },
-					comment: { type: "string", maxLength: BOARD_LIMITS.comment },
-					check_done: { type: "integer", minimum: 1, description: "The number of the checklist item now done" },
-					check_undone: { type: "integer", minimum: 1, description: "The number of a checklist item ticked by mistake" },
-					check_add: { type: "string", maxLength: BOARD_LIMITS.checkItem, description: "A step to add to the checklist" },
+			parameters: Type.Object(
+				{
+					card: Type.Optional(Type.String({ description: "Its number (12 or #12); omit it for the scheda of this conversation" })),
+					status: Type.Optional(StringEnum([...AGENT_STATUSES])),
+					comment: Type.Optional(Type.String({ maxLength: BOARD_LIMITS.comment })),
+					check_done: Type.Optional(Type.Integer({ minimum: 1, description: "The number of the checklist item now done" })),
+					check_undone: Type.Optional(Type.Integer({ minimum: 1, description: "The number of a checklist item ticked by mistake" })),
+					check_add: Type.Optional(Type.String({ maxLength: BOARD_LIMITS.checkItem, description: "A step to add to the checklist" })),
 				},
-				additionalProperties: false,
-			},
+				{ additionalProperties: false },
+			),
 			replaySafe: true,
 			async execute(args, ctx) {
 				const card = await pick(args.card, ctx.thread);
 				if (card === undefined) return "Errore: scheda non trovata. Usa board_list per i numeri.";
-				const status = typeof args.status === "string" ? (args.status as CardStatus) : undefined;
-				const comment = typeof args.comment === "string" ? args.comment : undefined;
+				const status = args.status;
+				const comment = args.comment;
 				const checks: CheckChange[] = [
-					...(typeof args.check_done === "number" ? [{ item: String(args.check_done), done: true }] : []),
-					...(typeof args.check_undone === "number" ? [{ item: String(args.check_undone), done: false }] : []),
-					...(typeof args.check_add === "string" && args.check_add.trim() !== "" ? [{ add: args.check_add }] : []),
+					...(args.check_done !== undefined ? [{ item: String(args.check_done), done: true }] : []),
+					...(args.check_undone !== undefined ? [{ item: String(args.check_undone), done: false }] : []),
+					...(args.check_add !== undefined && args.check_add.trim() !== "" ? [{ add: args.check_add }] : []),
 				];
 				const nothing = status === undefined && checks.length === 0 && (comment === undefined || comment.trim() === "");
 				if (nothing) return "Errore: indica una colonna, una voce della lista o un commento.";
@@ -236,6 +234,6 @@ export function createBoardTools(options: {
 				});
 				return text;
 			},
-		},
+		}),
 	];
 }

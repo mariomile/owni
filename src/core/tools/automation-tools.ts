@@ -1,6 +1,7 @@
 import { type Automation, AutomationError, AUTOMATION_LIMITS, type AutomationStore } from "../automations.ts";
 import { AGENT_CHANNEL } from "../agent-messages.ts";
-import type { OwniTool } from "../engine.ts";
+import { Type } from "typebox";
+import { defineOwniTool, type OwniTool } from "../engine.ts";
 
 type Thread = { readonly channel: string; readonly threadId: string };
 
@@ -31,22 +32,20 @@ export function createAutomationTools(options: {
 	const theirs = (a: Automation, p: { channel: string; userId: string }) => a.person.channel === p.channel && a.person.userId === p.userId;
 	const address = (a: Automation) => `${options.baseUrl ?? ""}/hooks/automazione/${options.instance}/${a.id}`;
 	return [
-		{
+		defineOwniTool({
 			name: "automation_create",
 			description:
 				"Create an automazione for the person you are talking to: a secret web address another service (a form on their site, Stripe, Zapier, Make, a shop) calls with a POST, " +
 				"and every call makes you run `instruction` with the data it sends, answering in this conversation. Use it when they want something to happen whenever an event occurs elsewhere " +
 				"(«quando arriva un ordine...», «ogni volta che qualcuno compila il modulo...»); for something at a time of day use schedule_create. " +
 				`The address goes to the person in a separate message, not to you. At most ${AUTOMATION_LIMITS.perHour} calls an hour each.`,
-			parameters: {
-				type: "object",
-				properties: {
-					name: { type: "string", minLength: 1, maxLength: AUTOMATION_LIMITS.name, description: "Short name: «Nuovi ordini dal sito»" },
-					instruction: { type: "string", minLength: 1, maxLength: AUTOMATION_LIMITS.instruction, description: "What to do with each call's data, as the person said it" },
+			parameters: Type.Object(
+				{
+					name: Type.String({ minLength: 1, maxLength: AUTOMATION_LIMITS.name, description: "Short name: «Nuovi ordini dal sito»" }),
+					instruction: Type.String({ minLength: 1, maxLength: AUTOMATION_LIMITS.instruction, description: "What to do with each call's data, as the person said it" }),
 				},
-				required: ["name", "instruction"],
-				additionalProperties: false,
-			},
+				{ additionalProperties: false },
+			),
 			replaySafe: true,
 			async execute(args, ctx) {
 				const p = person(ctx.thread);
@@ -56,7 +55,7 @@ export function createAutomationTools(options: {
 				if (thread.channel === "phone" || thread.channel === AGENT_CHANNEL) return "Errore: un'automazione si crea in una chat scritta (console, Telegram, WhatsApp), dove arrivano l'indirizzo e le risposte; non durante una chiamata.";
 				return ctx.step("create", async () => {
 					try {
-						const { automation, token } = store.create({ name: String(args.name), instruction: String(args.instruction), channel: thread.channel, threadId: thread.threadId, person: p });
+						const { automation, token } = store.create({ name: args.name, instruction: args.instruction, channel: thread.channel, threadId: thread.threadId, person: p });
 						await options.record?.({ type: "automation.created", automationId: automation.id, ...p });
 						const url = address(automation);
 						try {
@@ -77,11 +76,11 @@ export function createAutomationTools(options: {
 					}
 				});
 			},
-		},
-		{
+		}),
+		defineOwniTool({
 			name: "automation_list",
 			description: "List the automazioni of the person you are talking to: name, id, what they do, how many calls, the last one.",
-			parameters: { type: "object", properties: {}, additionalProperties: false },
+			parameters: Type.Object({}, { additionalProperties: false }),
 			replaySafe: true,
 			async execute(_args, ctx) {
 				const p = person(ctx.thread);
@@ -90,22 +89,22 @@ export function createAutomationTools(options: {
 				if (mine.length === 0) return "Nessuna automazione.";
 				return mine.map((a) => `${a.id} «${a.name}»: ${a.instruction} (chiamate: ${a.runs}${a.lastRunAt === undefined ? "" : `, l'ultima ${a.lastRunAt}`})`).join("\n");
 			},
-		},
-		{
+		}),
+		defineOwniTool({
 			name: "automation_delete",
 			description: "Delete an automazione of the person you are talking to, by id: its address stops working at once. Also the way to get a new token: delete and create again.",
-			parameters: { type: "object", properties: { id: { type: "string", minLength: 1 } }, required: ["id"], additionalProperties: false },
+			parameters: Type.Object({ id: Type.String({ minLength: 1 }) }, { additionalProperties: false }),
 			replaySafe: true,
 			async execute(args, ctx) {
 				const p = person(ctx.thread);
 				if (p === undefined) return notPrivate;
 				return ctx.step("delete", async () => {
-					const removed = store.remove(String(args.id), (a) => theirs(a, p));
-					if (removed === undefined) return `Non trovo una tua automazione ${String(args.id)}.`;
+					const removed = store.remove(args.id, (a) => theirs(a, p));
+					if (removed === undefined) return `Non trovo una tua automazione ${args.id}.`;
 					await options.record?.({ type: "automation.deleted", automationId: removed.id, ...p });
 					return `Cancellata l'automazione «${removed.name}»: il suo indirizzo non funziona più.`;
 				});
 			},
-		},
+		}),
 	];
 }

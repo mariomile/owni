@@ -1,6 +1,8 @@
 import type { InstanceRecord } from "../core/registry.ts";
 import type { OwniRuntime } from "../core/runtime.ts";
-import { type BrowserState, MAX_TYPED, PRESS_KEYS, type PressKey } from "../core/web-session.ts";
+import { MAX_TYPED } from "../core/web-page-scripts.ts";
+import { PRESS_KEYS, type PressKey } from "../core/web-person-control.ts";
+import type { BrowserState } from "../core/web-session.ts";
 import type { Person } from "./auth.ts";
 import type { WebChannel } from "./channel.ts";
 import { type AddRoute, HttpError, readJson, STREAMED } from "./http.ts";
