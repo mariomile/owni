@@ -48,6 +48,17 @@ describe("reading the documents people send", () => {
 		expect(doc.text).toContain("## Foglio «Nascosto» (1 riga, colonna A; nascosto)");
 	});
 
+	it("spreadsheetRows: numbers as plain decimals (dot, no unit, percentages as fractions), dates as ISO, text untouched", () => {
+		for (const name of ["vendite.xlsx", "vendite.ods"]) {
+			const rows = spreadsheetRows(name, fixture(name), 1000)?.[0]?.rows ?? [];
+			expect(rows[1]).toEqual(["Prodotto", "Prezzo", "Sconto", "Data", "Totale"]);
+			expect(rows[2]?.slice(0, 5)).toEqual(["Caffè", "12.5", "0.1", "2026-07-01", "11.25"]);
+			expect(rows[4]?.slice(0, 5)).toEqual(["Biscotti", "1234.567", "0.05", "2026-07-03", "1172.83865"]);
+			expect(rows[2]?.slice(6, 10)).toEqual(["0.123456", "0.333333333333333", "1e-7", "123456789012"]);
+		}
+		expect(spreadsheetRows("ordini.xlsx", fixture("ordini.xlsx"), 100)?.[0]?.rows).toEqual([["Cliente", "Importo", "Data"], ["Bianchi", "1250.5", "2026-10-01"], ["Verdi", "980", "2026-10-03"], ["", "2230.5"]]);
+	});
+
 	it("Word: letterhead, footer, footnotes, lists, headings and links", () => {
 		const doc = documentText("contratto.docx", fixture("contratto.docx"));
 		expect(doc.text).toMatch(/^\[Intestazione\] Rossi Srl/);
