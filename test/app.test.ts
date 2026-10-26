@@ -189,12 +189,17 @@ describe("pnpm start (startOwni)", () => {
 		await until(async () => (await entries()).some((e) => e.text?.includes("Nessun altro agente accetta i tuoi messaggi")));
 		await say('/tool agent_message {"agent":"ricerca","message":"Trova tre fornitori di carta"}');
 		await until(async () => (await entries()).some((e) => e.text?.includes("Errore: nessun altro agente accetta")));
-		const put = (path: string, body: unknown) => fetch(`${base}${path}`, { method: "PUT", headers: { "x-owni": "1", "content-type": "application/json", cookie: api.cookie }, body: JSON.stringify(body) }).then((r) => r.json() as Promise<{ from?: string[] }>);
-		expect((await put("/api/instances/ricerca/agents", { from: ["owni", "ricerca", "ignoto"] })).from).toEqual(["owni"]);
+		// biome-ignore lint: test
+		const put = (path: string, body: unknown) => fetch(`${base}${path}`, { method: "PUT", headers: { "x-owni": "1", "content-type": "application/json", cookie: api.cookie }, body: JSON.stringify(body) }).then(async (r) => ({ status: r.status, ...((await r.json()) as any) }));
+		// The organigramma decides it (ADR 0117): Ricercatore answers to Owni, so they write to each other.
+		expect((await put("/api/org", { org: { teams: [], agents: { ignoto: { role: "X" } } }, version: (await api("/api/org")).version })).error).toBe("Agente sconosciuto: ignoto");
+		const saved = await put("/api/org", { org: { teams: [], agents: { ricerca: { role: "Ricerca fornitori", reportsTo: "owni", owns: ["Fornitori e prezzi"] } } }, version: (await api("/api/org")).version });
+		expect(saved.accepts).toEqual({ owni: ["ricerca"], ricerca: ["owni"] });
+		expect(saved.saved).toBe(true);
 		expect((await owni.runtime.registry.getInstance("default", "ricerca")).egress.channels).toContain("agente");
 		expect((await api("/api/agents")).agents[1].acceptsFrom).toEqual(["owni"]);
 		await say("/tool agent_list {}");
-		await until(async () => (await entries()).some((e) => e.text?.includes("- Ricercatore (ricerca): Cerca fornitori")));
+		await until(async () => (await entries()).some((e) => e.text?.includes("- Ricercatore (ricerca): Cerca fornitori [Ricerca fornitori. Responsabile di: Fornitori e prezzi]")));
 		await say('/tool agent_message {"agent":"Ricercatore","message":"Trova tre fornitori di carta"}');
 		await until(async () => (await entries()).some((e) => e.text?.includes("Messaggio mandato a «Ricercatore»")));
 		// Ricercatore got it in a conversation of its own, and its answer came back here as a notice.
@@ -203,7 +208,7 @@ describe("pnpm start (startOwni)", () => {
 		expect(audit.some((e) => e.type === "message.received" && e.instanceId === "ricerca" && e.channel === "agente" && e.userId === "owni")).toBe(true);
 		expect(audit.some((e) => e.type === "notice.submitted" && e.instanceId === "owni" && e.source === "agent" && e.from === "ricerca")).toBe(true);
 		// Taken back: the next message is refused, and nothing reaches Ricercatore.
-		await put("/api/instances/ricerca/agents", { from: [] });
+		await put("/api/org", { org: { teams: [], agents: {} }, version: (await api("/api/org")).version });
 		expect((await owni.runtime.registry.getInstance("default", "ricerca")).egress.channels).not.toContain("agente");
 		await say('/tool agent_message {"agent":"ricerca","message":"Ancora"}');
 		await until(async () => (await entries()).filter((e) => e.text?.includes("Errore: nessun altro agente accetta")).length === 2);
@@ -248,7 +253,7 @@ describe("pnpm start (startOwni)", () => {
 			fetch(`${base}${path}`, { method, headers: { "x-owni": "1", "content-type": "application/json", cookie }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) }).then(async (r) => ({ status: r.status, ...((await r.json()) as { error?: string; deletable?: boolean }) }));
 		expect((await send("PUT", "/api/instances/vendite/telegram", { token: "2:V", allowedUsers: ["8"] })).status).toBe(200);
 		// Owni accepts messages from Vendite: that permission must not outlive Vendite.
-		await send("PUT", "/api/instances/owni/agents", { from: ["vendite"] });
+		await send("PUT", "/api/org", { org: { teams: [{ id: "commerciale", name: "Commerciale", purpose: "", lead: "vendite" }], agents: { vendite: { team: "commerciale", reportsTo: "owni", owns: ["Offerte"] } } }, version: (await api("/api/org")).version });
 		const thread = (await api("/api/instances/vendite/dm", {})).thread;
 		await api("/api/instances/vendite/schedules", { instruction: "Controlla le offerte", at: new Date(Date.now() + 60_000).toISOString(), threadId: thread.id });
 		const secrets = owni.runtime.secrets("default");
@@ -273,6 +278,8 @@ describe("pnpm start (startOwni)", () => {
 		for (const gone of ["telegram.botToken.vendite", "mcp-oauth.vendite.github", "connector.github.vendite.authorization"]) expect(left).not.toContain(gone);
 		expect(left).toEqual(expect.arrayContaining(["telegram.botToken.owni", "connector.github.owni.authorization", "mcp-oauth.vendite2.github"]));
 		expect((await owni.runtime.registry.getInstance("default", "owni")).allowedUsers.agente).toEqual([]);
+		// And it left the organigramma: its squadra stays, with nobody coordinating it.
+		expect((await api("/api/org")).org).toEqual({ teams: [{ id: "commerciale", name: "Commerciale", purpose: "" }], agents: {} });
 		// The bot stopped asking Telegram, and its automations are no longer run.
 		const polls = telegram.calls.filter((c) => c.token === "2:V" && c.method === "getUpdates").length;
 		await new Promise((r) => setTimeout(r, 200));

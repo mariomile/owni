@@ -1,7 +1,8 @@
 import type { AuditEvent } from "../core/audit.ts";
-import { TEAMS, type Team, team, teamJob } from "../core/teams.ts";
+import { TEAMS, type Team, team, withTeam } from "../core/teams.ts";
 import type { Person } from "./auth.ts";
 import { type AddRoute, HttpError, readJson } from "./http.ts";
+import type { SaveOrg } from "./org-routes.ts";
 
 export type TeamRoutesDeps = {
 	/** This installation makes agenti from the console. */
@@ -9,8 +10,8 @@ export type TeamRoutesDeps = {
 	readonly exists: (id: string) => Promise<boolean>;
 	/** One agente, as the form «Nuovo agente» makes it; `persona` is checked like the form's. */
 	readonly make: (person: Person, input: { id: string; name: string; instructions: string; persona: unknown }) => Promise<void>;
-	/** The agenti that may write to `id` (ADR 0042). */
-	readonly allow: (person: Person, id: string, from: readonly string[]) => Promise<unknown>;
+	/** Change the organigramma (ADR 0117): the squadra goes in it, and with it who writes to whom. */
+	readonly place: SaveOrg;
 	/** A room of the person with these agenti (ADR 0063), its ID; undefined without rooms on this server. An HttpError says why not. */
 	readonly room: (person: Person, title: string, agents: readonly string[]) => Promise<string | undefined>;
 	readonly audit: (event: AuditEvent) => Promise<void>;
@@ -22,8 +23,8 @@ export type TeamRoutesDeps = {
 const TRIES = 9;
 
 /**
- * Ready-made squadre (ADR 0068): the owner picks one and gets its agenti, each allowed to ask the
- * others, and a room with all of them. Nothing more than what the console does by hand, in one go.
+ * Ready-made squadre (ADR 0068): the owner picks one and gets its agenti, a squadra in the
+ * organigramma (ADR 0117) and a room with all of them. Nothing more than what the console does by hand, in one go.
  */
 export function teamRoutes(route: AddRoute, deps: TeamRoutesDeps): void {
 	route("GET", "/api/teams", "owner", async () => ({
@@ -64,11 +65,11 @@ export function teamRoutes(route: AddRoute, deps: TeamRoutesDeps): void {
 		try {
 			for (const [i, m] of chosen.members.entries()) {
 				const { id, name } = members[i] as { id: string; name: string };
-				await deps.make(p, { id, name, instructions: teamJob(chosen, i, members), persona: { emoji: m.emoji, tagline: m.tagline, tone: m.tone } });
+				await deps.make(p, { id, name, instructions: m.job, persona: { emoji: m.emoji, tagline: m.tagline, tone: m.tone } });
 				made.push(name);
 			}
-			// Each may ask the others of the squadra, nobody else: the owner widens it in Impostazioni.
-			for (const m of members) await deps.allow(p, m.id, members.filter((x) => x.id !== m.id).map((x) => x.id));
+			// Roles, who coordinates and who writes to whom: the owner changes them in the organigramma.
+			await deps.place(p, (org) => withTeam(org, chosen, members));
 		} catch (error) {
 			halfway(error);
 		}

@@ -52,6 +52,7 @@ import { DEV_PROVIDER } from "./model-providers.ts";
 import { subscriptionProvider } from "./model-providers.ts";
 import type { LocalProviders } from "./local-providers.ts";
 import { AGENT_CHANNEL } from "./agent-messages.ts";
+import { OrgStore, orgNote } from "./org.ts";
 import { withPersona } from "./persona.ts";
 import { activateCommand, SkillError, SkillStore, skillCatalog, skillCommand, withSkill } from "./skills.ts";
 import { type InstanceRecord, type ModelSelection, TenantRegistry } from "./registry.ts";
@@ -208,6 +209,11 @@ export class OwniRuntime {
 	 */
 	async sendMessage(tenant: string, instance: string, message: { channel: string; threadId: string; text: string; key: string; secret?: boolean }): Promise<void> {
 		await (await this.openInstance(tenant, instance)).sendMessage(message);
+	}
+
+	/** The organigramma of a tenant (ADR 0117): squadre, roles and who answers to whom. */
+	org(tenant: string): OrgStore {
+		return new OrgStore(tenantDir(this.options.dataDir, tenantId(tenant)));
 	}
 
 	/** The memoria of an instance: what it remembers about each person, and shared facts. */
@@ -602,10 +608,20 @@ export class OwniRuntime {
 		let session: EngineSession;
 		let toolSet: ToolSet = [];
 		const runs = this.runStore(record.tenantId, record.id);
-		// Its own instructions, then who it is (ADR 0041), then its skills as they are now (ADR 0059).
+		// Its own instructions, then who it is (ADR 0041), its place in the company (ADR 0117), then its skills as they are now (ADR 0059).
 		const own = withPersona(record.instructions, record.name, record.persona);
 		const skills = this.skills(record.tenantId, record.id);
-		const instructions = () => `${own === undefined || own === "" ? "" : `${own}\n\n`}${skillCatalog(skills.list())}`;
+		const org = this.org(record.tenantId);
+		const place = () => {
+			try {
+				return orgNote(org.read(), record.id, this.registry.instanceNamesSync(record.tenantId));
+			} catch (error) {
+				// An organigramma that cannot be read leaves the agente as it is, not without answers.
+				console.error(`owni: organigramma unreadable: ${String(error)}`);
+				return undefined;
+			}
+		};
+		const instructions = () => [own, place(), skillCatalog(skills.list())].filter((part) => part !== undefined && part !== "").join("\n\n");
 		const memory = this.memory(record.tenantId, record.id);
 		const participants = this.participants(record.tenantId, record.id);
 		const lists = this.lists(record.tenantId, record.id);

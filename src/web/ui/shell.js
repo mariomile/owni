@@ -5,6 +5,7 @@ import { renderLogin } from "./login.js";
 import { viewActivity } from "./pages/activity.js";
 import { agentForm, viewAgents } from "./pages/agents.js";
 import { viewApprovals } from "./pages/approvals.js";
+import { viewOrg } from "./pages/org.js";
 import { viewAutomations } from "./pages/automations.js";
 import { viewBoard } from "./pages/board.js";
 import { closeModelMenu, viewDm } from "./pages/chat.js";
@@ -36,6 +37,7 @@ export const PAGES = [
 	{ id: "task", label: "Orari e pagine da controllare", group: "Lavoro", workspace: "work", view: viewTasks },
 	{ id: "automazioni", label: "Eventi esterni", group: "Lavoro", workspace: "work", view: viewAutomations },
 	{ id: "agenti", label: "Agenti", group: "Gestione", workspace: "agents", view: viewAgents },
+	{ id: "organigramma", label: "Organigramma", group: "Gestione", workspace: "agents", owner: true, view: viewOrg },
 	{ id: "impostazioni", label: "Configurazione dell'agente", group: "Gestione", workspace: "agents", owner: true, view: viewSettings },
 	{ id: "inizia", label: "Primi passi", group: "Gestione", workspace: "agents", owner: true, view: viewStart },
 	{ id: "gestione", label: "Gestione", group: "Gestione", workspace: "management", view: viewManagement },
@@ -53,6 +55,10 @@ function workspaceNav(item) {
 		link("Incarichi", "#/board", view === "board"),
 		link("Automazioni", "#/programmi", ["programmi", "task", "automazioni"].includes(view)),
 		state.instances.some((i) => i.hasSegreteria) ? link("Pratiche", instanceHref("segreteria", [], state.instances.find((i) => i.hasSegreteria)?.id), view === "segreteria") : null,
+	);
+	if ((item.id === "agenti" || item.id === "organigramma") && state.me.role === "owner") return h("nav.workspace-nav", { "aria-label": "Agenti", ...windowDrag() },
+		link("Agenti", "#/agenti", view === "agenti"),
+		link("Organigramma", "#/organigramma", view === "organigramma"),
 	);
 	if (item.id === "dm") {
 		const inst = state.instance;

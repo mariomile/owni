@@ -62,6 +62,7 @@ import { type BrowserState, MAX_TYPED, PRESS_KEYS, type PressKey } from "../core
 import { type PeopleStore, type Person, publicPerson, type SessionStore } from "./auth.ts";
 import { WebChannel, type WebEntry, type WebEvent, type WebThread } from "./channel.ts";
 import { type BoardSubjects, boardRoutes } from "./board-routes.ts";
+import { orgRoutes } from "./org-routes.ts";
 import { teamRoutes } from "./team-routes.ts";
 import { type Ctx, type Handler, HttpError, MAX_JSON, type Route, readBody, readJson, STREAMED } from "./http.ts";
 import { screenRoutes } from "./screen-routes.ts";
@@ -475,12 +476,23 @@ export function createWebApp(options: WebAppOptions): Server {
 	// --- the board (ADR 0050) ---
 	boardRoutes(route, { runtime, tenantId, people: options.people, board: options.board, segreterie: options.segreterie });
 
+	// --- the organigramma (ADR 0117): who does what, and who writes to whom ---
+	const saveOrg = orgRoutes(route, {
+		store: runtime.org(tenantId),
+		agents: async () =>
+			(await runtime.registry.listInstances(tenantId))
+				.filter((r) => !options.segreterie?.has(r.id))
+				.map((r) => ({ id: r.id, name: r.name, accepts: r.egress.channels.includes(AGENT_CHANNEL) ? (r.allowedUsers[AGENT_CHANNEL] ?? []) : [] })),
+		allow: (person, id, from) => allowAgents(person, id, from),
+		audit: (event) => runtime.audit(tenantId).append(event),
+	});
+
 	// --- ready-made squadre (ADR 0068) ---
 	teamRoutes(route, {
 		canCreate: options.createInstance !== undefined,
 		exists: agentExists,
 		make: (person, input) => makeAgent(person, { ...input, persona: personaOf(input.persona) }),
-		allow: (person, id, from) => allowAgents(person, id, from),
+		place: saveOrg,
 		room: async (person, title, agents) => {
 			if (options.rooms === undefined) return undefined;
 			const room = await options.rooms.create(person.id, title, agents).catch(roomError);
@@ -1504,8 +1516,7 @@ export function createWebApp(options: WebAppOptions): Server {
 		await runtime.audit(tenantId).append({ type: "secret.set", instanceId: params[0], name });
 		return { ok: true };
 	});
-	// --- agenti that write to each other (ADR 0042): who may write to this one ---
-	/** The agenti that may write to this one (ADR 0042): the ones known, never itself nor a segreteria. */
+	/** The agenti that may write to this one (ADR 0042), as the organigramma says (ADR 0117): never itself nor a segreteria. */
 	const allowAgents = async (person: Person, id: string, asked: readonly string[]): Promise<string[]> => {
 		// A segreteria has no conversations of its own: it can neither ask nor be asked.
 		if (options.segreterie?.has(id)) throw new HttpError(400, "La segreteria non scrive agli altri agenti");
@@ -1518,15 +1529,6 @@ export function createWebApp(options: WebAppOptions): Server {
 		await runtime.audit(tenantId).append({ type: "agents.allowed", instanceId: id, personId: person.id, allowed: from.length, from: from.join(",") });
 		return from;
 	};
-	route("PUT", "/api/instances/:id/agents", "owner", async ({ person, params, req }) => {
-		const id = params[0] as string;
-		const record = await runtime.registry.getInstance(tenantId, id).catch(() => {
-			throw new HttpError(404, "Agente inesistente");
-		});
-		const body = (await readJson(req)) as { from?: unknown };
-		if (!Array.isArray(body.from)) throw new HttpError(400, "Serve l'elenco degli agenti");
-		return { from: await allowAgents(person as Person, record.id, body.from.map(String)) };
-	});
 	route("GET", "/api/instances/:id/settings", "owner", async ({ params }) => {
 		const r = await runtime.registry.getInstance(tenantId, params[0] as string);
 		return { settings: { name: r.name, instructions: r.instructions ?? "", persona: r.persona ?? {}, model: r.model, egress: r.egress, allowedUsers: r.allowedUsers, approvers: r.approvers ?? {}, deletable: deletable(r.id) } };

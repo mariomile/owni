@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { readdirSync, readFileSync } from "node:fs";
 import { mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { AuditLog } from "./audit.ts";
@@ -257,6 +258,30 @@ export class TenantRegistry {
 		// A folder without its record (being deleted, or put back by a late write) is not an instance.
 		const records = await Promise.all(ids.map((id) => this.getInstance(t, id).catch((error: unknown) => (error instanceof NotFound ? undefined : Promise.reject(error)))));
 		return records.filter((r) => r !== undefined);
+	}
+
+	/**
+	 * Each instance's ID and name, read at once: for an agente's instructions, built on every
+	 * request without waiting (ADR 0117). A folder without a readable record is skipped.
+	 */
+	instanceNamesSync(tenant: string): Map<string, string> {
+		const t = tenantId(tenant);
+		const names = new Map<string, string>();
+		let ids: string[];
+		try {
+			ids = readdirSync(join(tenantDir(this.dataDir, t), "instances"), { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name);
+		} catch {
+			return names;
+		}
+		for (const id of ids) {
+			try {
+				const record = JSON.parse(readFileSync(instanceFile(this.dataDir, t, instanceId(id)), "utf8")) as InstanceRecord;
+				names.set(record.id, record.name);
+			} catch {
+				// Being made or deleted: not an instance now.
+			}
+		}
+		return names;
 	}
 }
 

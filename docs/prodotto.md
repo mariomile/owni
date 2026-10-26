@@ -2,6 +2,8 @@
 
 Stato al 15 ottobre 2026: tutte le voci sono fatte sul branch `week-5`, con le riserve indicate. Restano le verifiche che richiedono i segreti di Mario (vedi [`stato-e-todo.md`](stato-e-todo.md)).
 
+Owni è un'azienda di agenti AI: ogni agente è un collega a sé, con il suo modello, la sua memoria, i suoi strumenti, il suo ruolo e le sue responsabilità, e l'organigramma dice come lavorano insieme. Si comincia da un assistente solo e si aggiunge una squadra quando serve.
+
 Owni è «pronta al 100%» quando ognuna di queste voci è vera e verificata da un test o da una prova documentata. Vocabolario: [`GLOSSARY.md`](../GLOSSARY.md). Decisioni: [`adr/`](adr/).
 
 ## 1. Un solo processo
@@ -19,6 +21,7 @@ Owni è «pronta al 100%» quando ognuna di queste voci è vera e verificata da 
 - [x] **Task programmati**: una volta o a ripetizione, creati dalle persone o dall'istanza stessa; eseguiti anche dopo un riavvio; risultato consegnato al thread.
 - [x] **Tool proposti**: l'istanza scrive un tool, un approvatore lo approva su Telegram o web, gira in sandbox con egress dichiarato (ADR 0002).
 - [x] **Approvazioni** in un unico posto, visibili su Telegram (pulsanti) e web.
+- [x] **Organigramma**: squadre con chi le coordina e, per ogni agente, ruolo, a chi risponde e responsabilità. Decide chi può scrivere a chi; ogni agente legge il suo posto prima di ogni richiesta e `agent_list` dice chi è responsabile di cosa. Le squadre pronte ci entrano da sole (ADR 0117).
 - [x] **Il modello di ogni chat**: dalla pillola nel box della console, e su Telegram e WhatsApp con `/modello` (per esempio `/modello google`, `/modello istanza`), fra i provider che l'owner ha permesso (ADR 0036, ADR 0037).
 
 ## 3. Interfaccia web

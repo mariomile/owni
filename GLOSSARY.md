@@ -78,8 +78,16 @@ _Avoid_: deadline, due date (nel testo per le persone)
 Il registro del tenant che dice quale agente ha quale record (cliente, fornitore, preventivo, ordine, appuntamento, fattura, DDT), con ID, tipo, scheda collegata e ultima modifica. Partita IVA, codice fiscale e nome sono pseudonimizzati (HMAC con una chiave del tenant): nessun nome né contenuto in chiaro. Serve ad avvisare quando due agenti seguono lo stesso cliente o fornitore. Non è un'anagrafica comune: i record restano nei registri di ogni agente. Vedi ADR 0110.
 _Avoid_: anagrafica unica, CRM condiviso, subject ledger (nel testo per le persone)
 
+**Organigramma**:
+Come sono organizzati gli agenti dell'installazione, deciso dall'owner nella pagina Organigramma: le squadre con chi le coordina e, per ogni agente, il ruolo, la squadra, a chi risponde, le sue responsabilità e se è a disposizione di tutti. Decide chi può scrivere a chi: la stessa squadra, chi sta sopra e sotto, i coordinatori fra loro. Ogni agente legge il suo posto prima di ogni richiesta. Le persone non ci sono. Vedi ADR 0117.
+_Avoid_: org chart, gerarchia, team (nel testo per le persone)
+
+**Responsabilità (di un agente)**:
+Una riga breve nell'organigramma che dice cosa è di quell'agente («Preventivi in attesa»). Gli altri agenti la vedono con `agent_list` e gli passano quello che è suo. Al più 10 per agente. Vedi ADR 0117.
+_Avoid_: ownership, compito (che è la riga dell'agente)
+
 **Messaggio tra agenti**:
-Una richiesta che un agente manda a un altro con `agent_message`, solo se l'owner ha permesso al secondo di ricevere messaggi dal primo. La risposta torna dopo, nella conversazione da cui era partita la domanda. Al più tre agenti in fila, senza giri. Se il collega è occupato, il risultato lo dice e la risposta può metterci di più. Vedi ADR 0042 e 0109.
+Una richiesta che un agente manda a un altro con `agent_message`, solo se l'organigramma permette al secondo di ricevere messaggi dal primo. La risposta torna dopo, nella conversazione da cui era partita la domanda. Al più tre agenti in fila, senza giri. Se il collega è occupato, il risultato lo dice e la risposta può metterci di più. Vedi ADR 0042 e 0109.
 _Avoid_: chat tra bot, handoff, delega
 
 **Richiesta tra agenti da approvare**:
@@ -159,7 +167,7 @@ Una conversazione su un canale: una chat Telegram, una chat nell'interfaccia web
 _Avoid_: sessione, chat (nel codice)
 
 **Squadra pronta**:
-Tre agenti creati insieme dalla pagina Agenti, ciascuno con un compito (per esempio Caporedattore, Ricercatore, Scrittore): si scrivono solo fra loro, il primo coordina e divide il lavoro, e hanno una stanza. Dopo sono agenti come gli altri. Vedi ADR 0068.
+Tre agenti creati insieme dalla pagina Agenti, ciascuno con un compito (per esempio Caporedattore, Ricercatore, Scrittore): entrano nell'organigramma come una squadra, il primo la coordina e divide il lavoro, e hanno una stanza. Dopo sono agenti come gli altri. Vedi ADR 0068 e 0117.
 _Avoid_: team, modello di agenti
 
 **Stanza**:

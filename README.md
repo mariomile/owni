@@ -1,6 +1,6 @@
 # Owni
 
-Piattaforma agenti open source di Buildrs: un agente sempre attivo per aziende attente a privacy e controllo dei processi. Self-host/on-prem, un tenant per installazione, egress default deny, nessuna azione irreversibile senza approvazione. Nucleo durevole: Pi Durable (`@earendil-works/pi-durable` 1.3.0, sperimentale), dietro un'interfaccia nostra.
+Piattaforma agenti open source di Buildrs: un'azienda di agenti AI, sempre attivi, per aziende attente a privacy e controllo dei processi. Si parte da un assistente; quando serve, ogni agente diventa un collega con il suo ruolo, le sue responsabilità e il suo posto nell'organigramma. Self-host/on-prem, un tenant per installazione, egress default deny, nessuna azione irreversibile senza approvazione. Nucleo durevole: Pi Durable (`@earendil-works/pi-durable` 1.3.0, sperimentale), dietro un'interfaccia nostra.
 
 Cosa fa:
 
@@ -11,6 +11,7 @@ Cosa fa:
 - **Mostra il lavoro in corso**: progressi e Stop nella chat, con storico persistente di conversazioni, task e automazioni. Stop non annulla azioni già completate.
 - **Riprende il browser dopo il tuo accesso**: nelle chat private puoi prendere il controllo, compilare un modulo semplice e restituirlo a Owni. I cookie restano separati per persona e agente, e puoi cancellarli dal pannello ([limiti](docs/adr/0106-browser-personale-e-controllo-umano.md)).
 - **Si estende da sola**: scrive nuovi tool, che girano isolati in sandbox e solo dopo l'approvazione di una persona.
+- **Lavora come un'azienda**: l'organigramma dice chi coordina, chi risponde a chi e chi è responsabile di cosa. Ogni agente lo sa e passa al collega giusto quello che non è suo ([ADR 0117](docs/adr/0117-organigramma-degli-agenti.md)).
 - **Segreteria commerciale**: legge le richieste di preventivo da Gmail, aggiorna HubSpot, prepara la bozza e la invia solo dopo Approva.
 
 Documenti: [prodotto e checklist](docs/prodotto.md) · [runbook](docs/runbook.md) · [architettura](docs/architettura.md) · [glossario](GLOSSARY.md) · [decisioni](docs/adr/) · [stato e cose da fare](docs/stato-e-todo.md) · settimane [1](docs/week1.md), [2](docs/week2.md), [3](docs/week3.md), [4](docs/week4.md), [5](docs/week5.md) · [come contribuire](docs/contributing.md) · [piano iniziale](docs/piano-iniziale.md)

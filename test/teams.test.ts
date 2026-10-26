@@ -1,7 +1,8 @@
 import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
 import { type RunningOwni, startOwni } from "../src/app.ts";
-import { TEAMS, team, teamJob } from "../src/core/teams.ts";
+import { EMPTY_ORG, orgNote } from "../src/core/org.ts";
+import { TEAMS, team, withTeam } from "../src/core/teams.ts";
 import { loadOwniConfig } from "../src/main/config.ts";
 import { tempDataDir } from "./helpers.ts";
 
@@ -28,27 +29,44 @@ async function boot() {
 }
 
 describe("ready-made squadre", () => {
-	it("each member knows its job, the others by name and ID, and who leads", () => {
+	it("a squadra goes in the organigramma: the first coordinates, the others answer to it, each with its role and responsabilità", () => {
 		const contenuti = team("contenuti");
 		if (contenuti === undefined) throw new Error("no team");
-		const ids = [
-			{ id: "caporedattore", name: "Caporedattore" },
-			{ id: "ricercatore-2", name: "Ricercatore" },
-			{ id: "scrittore", name: "Scrittore" },
-		];
-		const lead = teamJob(contenuti, 0, ids);
-		expect(lead).toContain("Fai parte della squadra «Contenuti» con Ricercatore (ricercatore-2: cerca, confronta e cita le fonti) e Scrittore (scrittore:");
-		expect(lead).toContain("Sei tu a coordinarla");
+		const ids = [{ id: "caporedattore" }, { id: "ricercatore-2" }, { id: "scrittore" }];
+		const org = withTeam(EMPTY_ORG, contenuti, ids);
+		expect(org.teams).toEqual([{ id: "contenuti", name: "Contenuti", purpose: contenuti.summary, lead: "caporedattore" }]);
+		expect(org.agents.caporedattore).toEqual({ role: "Caporedattore", team: "contenuti", owns: ["Piano editoriale", "Revisione dei testi prima della consegna"] });
+		expect(org.agents["ricercatore-2"]).toMatchObject({ role: "Ricercatore", team: "contenuti", reportsTo: "caporedattore" });
+		// The same squadra again gets its own ID and name.
+		const again = withTeam(org, contenuti, [{ id: "caporedattore-2" }, { id: "ricercatore-3" }, { id: "scrittore-2" }]);
+		expect(again.teams.map((t) => [t.id, t.name, t.lead])).toEqual([
+			["contenuti", "Contenuti", "caporedattore"],
+			["contenuti-2", "Contenuti 2", "caporedattore-2"],
+		]);
+		expect(again.agents["scrittore-2"]?.reportsTo).toBe("caporedattore-2");
+		// What each is told comes from there.
+		const names = new Map([
+			["caporedattore", "Caporedattore"],
+			["ricercatore-2", "Ricercatore"],
+			["scrittore", "Scrittore"],
+		]);
+		const lead = orgNote(org, "caporedattore", names) as string;
+		expect(lead).toContain("- Squadra «Contenuti» (Post, articoli e newsletter: uno pianifica, uno cerca le fonti, uno scrive.): la coordini tu. Con te: Ricercatore (ricercatore-2), Ricercatore e Scrittore (scrittore), Scrittore.");
+		expect(lead).toContain("Coordini «Contenuti»");
 		expect(lead).toContain("board_create con parent");
-		const writer = teamJob(contenuti, 2, ids);
-		expect(writer).toContain("con Caporedattore (caporedattore:");
+		const writer = orgNote(org, "scrittore", names) as string;
+		expect(writer).toContain("- Rispondi a Caporedattore (caporedattore).");
 		expect(writer).toContain("te lo passa chi coordina, Caporedattore (caporedattore)");
-		expect(writer).not.toContain("Sei tu a coordinarla");
-		// Every squadra fits in a room, and every job in the form's limit.
+		expect(writer).not.toContain("Coordini «Contenuti»");
+		// Every squadra fits in a room, and every job in the form's limit; the responsabilità in the organigramma's.
 		for (const t of TEAMS) {
 			expect(t.members.length).toBeGreaterThanOrEqual(2);
 			expect(t.members.length).toBeLessThanOrEqual(5);
-			for (const [i] of t.members.entries()) expect(teamJob(t, i, t.members).length).toBeLessThan(2000);
+			for (const m of t.members) {
+				expect(m.job.length).toBeLessThan(2000);
+				expect(m.owns.length).toBeGreaterThan(0);
+				for (const o of m.owns) expect(o.length).toBeLessThanOrEqual(80);
+			}
 		}
 	});
 
@@ -72,15 +90,18 @@ describe("ready-made squadre", () => {
 		expect(of("owni")?.acceptsFrom).toEqual([]);
 		const settings = (await api("/api/instances/caporedattore/settings")).settings;
 		expect(settings.persona).toMatchObject({ emoji: "🗂️", named: true });
-		expect(settings.instructions).toContain("Fai parte della squadra «Contenuti»");
-		// After the default instructions, like the form's: what Owni can do stays said.
-		expect(settings.instructions.indexOf("Fai parte")).toBeGreaterThan(100);
+		// Only its job, after the default instructions like the form's: the squadra is in the organigramma.
+		expect(settings.instructions.indexOf("Pianifica post, articoli e newsletter")).toBeGreaterThan(100);
+		expect(settings.instructions).not.toContain("squadra");
+		const org = (await api("/api/org")).org;
+		expect(org.teams).toEqual([expect.objectContaining({ id: "contenuti", lead: "caporedattore" })]);
+		expect(org.agents.scrittore).toMatchObject({ role: "Scrittore", reportsTo: "caporedattore" });
 		const room = await api(`/api/rooms/${made.room}`);
 		expect(room.room.title).toBe("Squadra Contenuti");
 		expect(room.room.agents.map((a: { instanceId: string }) => a.instanceId)).toEqual(["caporedattore", "ricercatore", "scrittore"]);
 		const again = await api("/api/teams", { team: "contenuti" });
 		expect(again.agents.map((a: { id: string }) => a.id)).toEqual(["caporedattore-2", "ricercatore-2", "scrittore-2"]);
-		expect((await api("/api/instances/scrittore-2/settings")).settings.instructions).toContain("Caporedattore (caporedattore-2:");
+		expect((await api("/api/org")).org.agents["scrittore-2"]).toMatchObject({ team: "contenuti-2", reportsTo: "caporedattore-2" });
 		expect((await api("/api/agents")).agents.find((a: { id: string }) => a.id === "scrittore-2").acceptsFrom.sort()).toEqual(["caporedattore-2", "ricercatore-2"]);
 		expect((await api("/api/teams", { team: "nessuna" })).status).toBe(400);
 		// Only the owner makes agenti.
@@ -108,7 +129,7 @@ describe("the squadre's routes, alone", () => {
 				taken.add(input.id);
 				made.push(input.id);
 			},
-			allow: async () => {},
+			place: async (_p, change) => change({ teams: [], agents: {} }),
 			room: async () => "r1",
 			audit: async (e) => void audit.push(e),
 			log: (m) => void logs.push(m),
