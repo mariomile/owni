@@ -17,9 +17,6 @@ import { linkPreviews, sources } from "../sources.js";
 import { artifactCard, artifactPanel, isHtml } from "../artifacts.js";
 import { agentPanel } from "../agent-panel.js";
 
-// shell.js closes the model list when the view changes.
-export { closeModelMenu } from "../models.js";
-
 // ---------- chat ----------
 /** A workspace picture shown in the page (not downloaded). */
 const pictureUrl = (inst, path) => `/api/instances/${inst.id}/files/raw?path=${encodeURIComponent(path)}&inline=1`;
