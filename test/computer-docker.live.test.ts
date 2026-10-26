@@ -17,6 +17,14 @@ for h in ['169.254.169.254', '10.0.0.1', '172.17.0.1', '192.168.0.1']:
         print(h, e.errno)
 "`;
 
+/** io_uring, a user namespace, clone3: each with the errno it gets, or "open" (Docker's seccomp profile refuses all three). */
+const KERNEL = `python3 -c "
+import ctypes
+libc = ctypes.CDLL(None, use_errno=True)
+for name, r in [('io_uring', lambda: libc.syscall(425, 1, ctypes.create_string_buffer(120))), ('userns', lambda: libc.unshare(0x10000000)), ('clone3', lambda: libc.syscall(435, None, 0))]:
+    print(name, ctypes.get_errno() if r() < 0 else 'open')
+"`;
+
 describe.skipIf(image === undefined)("the computer on a real Docker host", () => {
 	const computer = new DockerComputerProvider({ image: image as string, ...(process.env.OWNI_TEST_COMPUTER_RUNTIME ? { runtime: process.env.OWNI_TEST_COMPUTER_RUNTIME } : {}) });
 	afterAll(() => computer.reset(key));
@@ -40,6 +48,7 @@ describe.skipIf(image === undefined)("the computer on a real Docker host", () =>
 		expect(caps.stdout).toBe("CapPrm: 0000000000000000\nCapEff: 0000000000000000\nCapAmb: 0000000000000000\n");
 		expect((await computer.run(key, "/usr/sbin/iptables-nft -F OUTPUT || /usr/sbin/iptables-legacy -F OUTPUT", { timeoutS: 10 })).exitCode).not.toBe(0);
 		expect((await computer.run(key, PRIVATE, { timeoutS: 60 })).stdout).toBe(inside.stdout);
+		expect((await computer.run(key, KERNEL, { timeoutS: 30 })).stdout).toBe("io_uring 1\nuserns 1\nclone3 38\n");
 		// Nothing of Owni's in its environment: no key, no token.
 		expect((await computer.run(key, "env | cut -d= -f1 | sort | tr '\\n' ' '", { timeoutS: 10 })).stdout).not.toMatch(/OWNI|KEY|TOKEN|SECRET/);
 		expect((await computer.run(key, "touch /etc/owni", { timeoutS: 10 })).exitCode).not.toBe(0);

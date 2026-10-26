@@ -237,12 +237,20 @@ export class DockerComputerProvider implements ComputerProvider {
 				if (/HTTP (404|409)/.test(message(error))) return undefined;
 				throw error;
 			});
-			if (out?.exitCode === 0) return;
+			if (out?.exitCode === 0) return this.noCapabilities(key);
 			if (out === undefined) break;
 			await new Promise((resolve) => setTimeout(resolve, 200));
 		}
 		const gvisor = this.gvisor() ? " (con gVisor serve runsc con --net-raw, vedi il runbook)" : "";
 		throw new ComputerError(`il computer non è partito: non ha potuto chiudere la strada verso gli indirizzi privati${gvisor}. L'operatore controlla il log di Docker del container ${name(key)}`);
+	}
+
+	/** Commands hold none of the first process's NET_ADMIN, or the rules would be theirs to remove: checked, not assumed. */
+	private async noCapabilities(key: string): Promise<void> {
+		const out = await this.exec(key, ["grep", "-E", "^Cap(Prm|Eff|Amb):", "/proc/self/status"], API_TIMEOUT_MS);
+		const sets = out.stdout.trim().split("\n").map((line) => line.split(/\s+/)[1]);
+		if (out.exitCode === 0 && sets.length === 3 && sets.every((set) => set !== undefined && /^0+$/.test(set))) return;
+		throw new ComputerError(`il computer non è partito: i comandi avrebbero delle capability e potrebbero togliere le regole di rete. L'operatore controlla il runtime di Docker e l'immagine ${this.options.image}`);
 	}
 
 	/** gVisor implements only the legacy iptables interface, through raw sockets. */

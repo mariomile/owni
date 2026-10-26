@@ -26,6 +26,20 @@ for h in ['169.254.169.254', '10.0.0.1', '172.16.0.1', '192.168.0.1']:
         print(h, e.errno)
 "`;
 
+/** io_uring, a user namespace, clone3: each with the errno it gets (EPERM, EPERM, ENOSYS), or "open". */
+const KERNEL = `python3 -c "
+import ctypes
+libc = ctypes.CDLL(None, use_errno=True)
+for name, r in [('io_uring', lambda: libc.syscall(425, 1, ctypes.create_string_buffer(120))), ('userns', lambda: libc.unshare(0x10000000)), ('clone3', lambda: libc.syscall(435, None, 0))]:
+    print(name, ctypes.get_errno() if r() < 0 else 'open')
+"`;
+/** What ordinary work needs, under that filter: threads, subprocesses, git and curl over the internet. */
+const WORKLOAD = `python3 -c "
+import subprocess, threading
+t = threading.Thread(target=print, args=('thread',)); t.start(); t.join()
+print(subprocess.run(['echo', 'sub'], capture_output=True, text=True).stdout.strip())
+" && git ls-remote https://github.com/octocat/Hello-World HEAD | wc -l && curl -sS -o /dev/null -w '%{http_code}\\n' https://pypi.org/simple/`;
+
 function checks(computer: () => FlyComputerProvider) {
 	it("runs as uid 1000 in /work, reaches the internet, and not Fly's API, the host or raw packets", async () => {
 		const who = await computer().run(key, "id -u; pwd", { timeoutS: 60 });
@@ -46,6 +60,11 @@ function checks(computer: () => FlyComputerProvider) {
 			const side = await computer().run(key, `python3 -c "import socket; socket.socket(socket.${family})"`, { timeoutS: 30 });
 			expect(side.stderr).toContain("Errno 97");
 		}
+		// No io_uring (its socket and connect would pass the filter above) and no user namespace (the
+		// kernel's widest surface, nf_tables among it); clone3 says ENOSYS so libc falls back to clone.
+		expect((await computer().run(key, KERNEL, { timeoutS: 30 })).stdout).toBe("io_uring 1\nuserns 1\nclone3 38\n");
+		const work = await computer().run(key, WORKLOAD, { timeoutS: 120 });
+		expect(work).toMatchObject({ exitCode: 0, stdout: "thread\nsub\n1\n200\n" });
 		// What the commands below rely on is in the image.
 		expect((await computer().run(key, "command -v ps", { timeoutS: 30 })).exitCode).toBe(0);
 	}, 240_000);
@@ -74,8 +93,9 @@ function containers(caps = true): Backend {
 		async boot(app, config) {
 			const env = (config.env ?? {}) as Record<string, string>;
 			await docker(["rm", "-f", name(app)]);
-			// What Fly's root in a VM has: SYS_ADMIN (and no AppArmor profile) for its mounts, NET_ADMIN for the egress rules.
-			const privileges = caps ? ["--cap-add", "SYS_ADMIN", "--cap-add", "NET_ADMIN", "--security-opt", "apparmor=unconfined"] : [];
+			// What Fly's root in a VM has: SYS_ADMIN (and no AppArmor profile) for its mounts, NET_ADMIN for the
+			// egress rules, and no seccomp profile of Docker's, so the checks above test owni-run's own filter.
+			const privileges = caps ? ["--cap-add", "SYS_ADMIN", "--cap-add", "NET_ADMIN", "--security-opt", "apparmor=unconfined", "--security-opt", "seccomp=unconfined"] : [];
 			// Fly's API folder, open to all as on a machine before owni-fly-init closes it.
 			const fly = ["--mount", "type=tmpfs,destination=/.fly,tmpfs-mode=0755"];
 			const out = await docker(["run", "-d", "--name", name(app), ...privileges, ...fly, "-v", `${name(app)}:/work`, ...Object.entries(env).flatMap(([k, v]) => ["-e", `${k}=${v}`]), String(config.image)]);

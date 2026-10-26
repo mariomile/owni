@@ -234,9 +234,22 @@ describe("the computer on a Fly machine", () => {
 			"-A OUTPUT -o lo -j ACCEPT",
 			// The private resolver on port 53 only; the public one needs no rule.
 			...dns("10.0.0.2/32"),
-			...["0.0.0.0/8", "10.0.0.0/8", "100.64.0.0/10", "168.63.129.16/32", "169.254.0.0/16", "172.16.0.0/12", "192.168.0.0/16", "224.0.0.0/4", "240.0.0.0/4"].map(deny),
+			...[
+				"0.0.0.0/8", "10.0.0.0/8", "100.64.0.0/10", "168.63.129.16/32", "169.254.0.0/16", "172.16.0.0/12",
+				"192.0.0.0/24", "192.0.2.0/24", "192.168.0.0/16", "198.18.0.0/15", "198.51.100.0/24", "203.0.113.0/24",
+				"224.0.0.0/4", "240.0.0.0/4",
+			].map(deny),
 		]);
-		expect(rules.ip6tables?.OUTPUT).toEqual(["-P OUTPUT ACCEPT", "-A OUTPUT -o lo -j ACCEPT", ...dns("fdaa::3/128"), ...dns("fe80::1/128"), ...["fe80::/10", "fc00::/7", "ff00::/8"].map(deny)]);
+		// Neighbor Discovery and its errors, to link-local and the link's multicast only.
+		const ndp = ["fe80::/10", "ff02::/16"].flatMap((net) => [1, 2, 3, 4, 133, 134, 135, 136].map((kind) => `-A OUTPUT -d ${net} -p ipv6-icmp -m icmp6 --icmpv6-type ${kind} -j ACCEPT`));
+		expect(rules.ip6tables?.OUTPUT).toEqual([
+			"-P OUTPUT ACCEPT",
+			"-A OUTPUT -o lo -j ACCEPT",
+			...dns("fdaa::3/128"),
+			...dns("fe80::1/128"),
+			...ndp,
+			...["64:ff9b::/96", "64:ff9b:1::/48", "2001::/32", "2002::/16", "fc00::/7", "fe80::/10", "fec0::/10", "ff00::/8"].map(deny),
+		]);
 		// TCP refused at once with a reset (gVisor hangs on an ICMP reject), the rest dropped.
 		for (const table of ["iptables", "ip6tables"]) expect(rules[table]?.["OWNI-DENY"]).toEqual(["-N OWNI-DENY", "-A OWNI-DENY -p tcp -j REJECT --reject-with tcp-reset", "-A OWNI-DENY -j DROP"]);
 		// No resolver at all: no hole for one.

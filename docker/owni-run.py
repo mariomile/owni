@@ -22,13 +22,15 @@ following links. A command starts only once the machine's first process has clos
 inside it and put the egress rules in place: the file `ready`, written by owni-fly-init. The
 machine reaches the internet (ADR 0124), not the network around it: on a machine ("machine" in
 `ready`) the rules are checked again before each command, and a command gets no vsock socket,
-which talks to the host, and no packet socket, which ordinary internet use never needs.
+which talks to the host, no packet socket, which ordinary internet use never needs, no io_uring
+and no user namespace (no_side_sockets).
 
 The egress rules are the same for both providers: out to anything but loopback, link-local
 (the cloud's metadata endpoint, 169.254.169.254, hands out the host's credentials), private and
 CGNAT ranges (Alibaba's metadata is 100.100.100.200), Azure's host endpoint 168.63.129.16, "this
-network", multicast and reserved addresses, IPv6 unique-local (Fly's private network, AWS's
-metadata at fd00:ec2::254). A resolver in /etc/resolv.conf at one of those addresses (Fly's fdaa::3, a cloud's
+network", benchmarking, documentation, multicast and reserved addresses, IPv6 unique-local (Fly's
+private network, AWS's metadata at fd00:ec2::254), site-local, and the IPv6 prefixes that wrap an
+IPv4 address (NAT64, 6to4, Teredo). IPv6 Neighbor Discovery stays allowed on the link. A resolver in /etc/resolv.conf at one of those addresses (Fly's fdaa::3, a cloud's
 VPC resolver) stays reachable on port 53 only. TCP is refused with a reset, which gVisor handles
 (its ICMP reject can hang a connect); the rest is dropped.
 """
@@ -61,12 +63,23 @@ MAX_PROCESSES = 128
 # As the image's ENV (docker/computer.Dockerfile): pip install goes to /work/.local.
 ENV = {"HOME": "/tmp", "MPLCONFIGDIR": "/tmp", "MPLBACKEND": "Agg", "LANG": "C.UTF-8", "PYTHONUSERBASE": WORK + "/.local", "PATH": WORK + "/.local/bin:/usr/local/bin:/usr/bin:/bin"}
 AF_PACKET, AF_VSOCK = 17, 40
+CLONE_NEWUSER = 0x10000000
 RESOLV = os.environ.get("OWNI_RUN_RESOLV", "/etc/resolv.conf")
 DENY = "OWNI-DENY"
 DENIED = {
-    "iptables": ["0.0.0.0/8", "10.0.0.0/8", "100.64.0.0/10", "168.63.129.16/32", "169.254.0.0/16", "172.16.0.0/12", "192.168.0.0/16", "224.0.0.0/4", "240.0.0.0/4"],
-    "ip6tables": ["fe80::/10", "fc00::/7", "ff00::/8"],
+    "iptables": [
+        "0.0.0.0/8", "10.0.0.0/8", "100.64.0.0/10", "168.63.129.16/32", "169.254.0.0/16", "172.16.0.0/12",
+        "192.0.0.0/24", "192.0.2.0/24", "192.168.0.0/16", "198.18.0.0/15", "198.51.100.0/24", "203.0.113.0/24",
+        "224.0.0.0/4", "240.0.0.0/4",
+    ],
+    # NAT64, 6to4 and Teredo carry an IPv4 address inside an IPv6 one: a way around the IPv4 list.
+    "ip6tables": ["64:ff9b::/96", "64:ff9b:1::/48", "2001::/32", "2002::/16", "fc00::/7", "fe80::/10", "fec0::/10", "ff00::/8"],
 }
+# IPv6 needs Neighbor Discovery (router and neighbor solicitations and advertisements) and the
+# errors that go with it, link-local and to the link's multicast only; without it a machine
+# loses its neighbors, and Fly's resolver with them, when the cache expires.
+NDP_TYPES = (1, 2, 3, 4, 133, 134, 135, 136)
+NDP_TO = ("fe80::/10", "ff02::/16")
 BACKENDS = ("nft", "legacy")
 
 
@@ -166,12 +179,24 @@ def drop():
 
 
 def no_side_sockets():
-    """No vsock (it talks to the host, not the internet) and no raw packets (spoofing and sniffing, never needed to use the internet)."""
+    """
+    No vsock (it talks to the host, not the internet) and no raw packets (spoofing and sniffing,
+    never needed to use the internet). No io_uring either: its own socket and connect operations
+    would open those sockets past this filter. And no user namespaces, the way into most of the
+    kernel's attack surface (nf_tables among it), whose bugs would let a command take the egress
+    rules or Fly's API: clone3 says ENOSYS, its flags being out of a filter's reach, and libc
+    falls back to clone, where CLONE_NEWUSER is refused.
+    """
     import seccomp  # python3-seccomp, in the fly image
 
     f = seccomp.SyscallFilter(defaction=seccomp.ALLOW)
     for family in (AF_VSOCK, AF_PACKET):
         f.add_rule(seccomp.ERRNO(97), "socket", seccomp.Arg(0, seccomp.EQ, family))  # EAFNOSUPPORT
+    for call in ("io_uring_setup", "io_uring_enter", "io_uring_register"):
+        f.add_rule(seccomp.ERRNO(1), call)  # EPERM
+    for call in ("unshare", "clone"):
+        f.add_rule(seccomp.ERRNO(1), call, seccomp.Arg(0, seccomp.MASKED_EQ, CLONE_NEWUSER, CLONE_NEWUSER))
+    f.add_rule(seccomp.ERRNO(38), "clone3")  # ENOSYS
     f.load()
 
 
@@ -238,7 +263,9 @@ def egress_rules(servers):
             if server.version == version and any(server in net for net in nets):
                 for proto in ("udp", "tcp"):
                     output.append(f"-A OUTPUT -d {server}/{server.max_prefixlen} -p {proto} -m {proto} --dport 53 -j ACCEPT")
-        output += [f"-A OUTPUT -d {net} -j {DENY}" for net in denied]
+        if version == 6:
+            output += [f"-A OUTPUT -d {net} -p ipv6-icmp -m icmp6 --icmpv6-type {kind} -j ACCEPT" for net in NDP_TO for kind in NDP_TYPES]
+        output +=[f"-A OUTPUT -d {net} -j {DENY}" for net in denied]
         deny = [f"-N {DENY}", f"-A {DENY} -p tcp -j REJECT --reject-with tcp-reset", f"-A {DENY} -j DROP"]
         rules[table] = {"OUTPUT": output, DENY: deny}
     return rules

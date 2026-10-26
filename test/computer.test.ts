@@ -23,7 +23,7 @@ afterEach(async () => {
  * Docker's API as the computer uses it, on a unix socket. Commands really run, with sh, in a
  * folder that stands for the container's /work: exec, archive in and out, stat, stop, remove.
  */
-async function fakeDocker(options: { stopsBehindOurBack?: boolean; garbage?: boolean; image?: string; egressFails?: boolean } = {}) {
+async function fakeDocker(options: { stopsBehindOurBack?: boolean; garbage?: boolean; image?: string; egressFails?: boolean; capsHeld?: boolean } = {}) {
 	const root = mkdtempSync(join(tmpdir(), "computer-"));
 	const socketPath = join(root, "docker.sock");
 	const calls: { method: string; path: string; body?: any }[] = [];
@@ -134,6 +134,13 @@ async function fakeDocker(options: { stopsBehindOurBack?: boolean; garbage?: boo
 				header.writeUInt32BE(data.length, 4);
 				res.write(Buffer.concat([header, data]));
 			};
+			// A command's capability sets, read once per launch: none (or, capsHeld, NET_ADMIN effective).
+			if (e.cmd[0] === "grep" && e.cmd.includes("/proc/self/status")) {
+				const eff = options.capsHeld === true ? "0000000000001000" : "0000000000000000";
+				frame(1, Buffer.from(`CapPrm:\t${eff}\nCapEff:\t${eff}\nCapAmb:\t0000000000000000\n`));
+				e.exitCode = 0;
+				return res.end();
+			}
 			// Here the computer is this machine: `kill -9 -1` would end the tests, and /work is a folder.
 			const cmd = e.cmd[0] === "sh" && e.cmd[1] === "-c" ? ["sh", "-c", `kill() { echo "kill $*" >> "${root}/kills"; }; ${(e.cmd[2] as string).replaceAll("/work", c.work)}`, ...e.cmd.slice(3)] : e.cmd;
 			const child = spawn(cmd[0] as string, cmd.slice(1), { cwd: c.work, env: { PATH: process.env.PATH, HOME: c.work } });
@@ -249,7 +256,9 @@ describe("Docker computer", () => {
 		// Before the first command, the rules are read back as root (uid 1000 has no NET_ADMIN to do it).
 		const execs = docker.calls.filter((c) => c.path.endsWith("/exec")).map((c) => c.body);
 		expect(execs[0]).toMatchObject({ User: "0:0", Cmd: ["/usr/local/bin/owni-run", "egress", "check"] });
-		const exec = execs.find((body) => body.User === "1000:1000");
+		// Then, once, that uid 1000 holds no capability.
+		expect(execs[1]).toMatchObject({ User: "1000:1000", Cmd: ["grep", "-E", "^Cap(Prm|Eff|Amb):", "/proc/self/status"] });
+		const exec = execs.find((body) => body.User === "1000:1000" && (body.Cmd as string[])[0] === "sh");
 		expect(execs.filter((body) => body.User !== "1000:1000")).toHaveLength(1);
 		expect(exec).toMatchObject({ User: "1000:1000", WorkingDir: "/work", Cmd: ["sh", "-c", 'timeout -s KILL 10 sh -c "$1"; s=$?; kill -9 -1 2>/dev/null; exit $s', "owni", "echo ciao"] });
 		expect(exec?.Env).toEqual(["HOME=/tmp", "MPLCONFIGDIR=/tmp", "LANG=C.UTF-8"]);
@@ -268,6 +277,15 @@ describe("Docker computer", () => {
 		expect(create).toMatchObject({ User: "0:0", Cmd: ["/usr/local/bin/owni-run", "guard", "nft"], HostConfig: { CapDrop: ["ALL"], CapAdd: ["NET_ADMIN"] } });
 		// Only the root check was tried (once more, on a container gone by then): never the command.
 		expect(new Set(docker.calls.filter((c) => c.path.endsWith("/exec")).map((c) => c.body.User))).toEqual(new Set(["0:0"]));
+	});
+
+	it("runs no command when uid 1000 would hold a capability", async () => {
+		const docker = await fakeDocker({ capsHeld: true });
+		const computer = provider(docker.socketPath);
+		closers.push(() => computer.close());
+		await expect(computer.run("k", "echo fuori", { timeoutS: 5 })).rejects.toThrow(/capability/);
+		const cmds = docker.calls.filter((c) => c.path.endsWith("/exec")).map((c) => (c.body.Cmd as string[])[0]);
+		expect(cmds).toEqual(["/usr/local/bin/owni-run", "grep"]);
 	});
 
 	it("exit codes, stderr, a command killed at its time, output kept to 64 KB", async () => {
