@@ -4,42 +4,27 @@
  * channels, the scheduler, and the segreteria when configured. `src/main/owni.ts` reads the
  * environment and calls startOwni; tests call it directly.
  */
-import { randomBytes } from "node:crypto";
-import { renameSync, rmSync } from "node:fs";
 import type { Server } from "node:http";
 import { join } from "node:path";
 import { writeFileAtomic } from "./core/atomic-file.ts";
-import { TelegramAdapter, type TelegramUpdate } from "./channels/telegram.ts";
 import { type InstanceVoice, SPEECH_CONNECTOR, speaker, VoicePreferences } from "./channels/speech.ts";
 import { imageGenerator } from "./core/image-generation.ts";
-import { createVoiceTools } from "./core/tools/voice-tools.ts";
 import { pieceTranscriber, type Transcribe, TranscriptionOff, transcriber, VOICE_CONNECTOR } from "./channels/voice.ts";
-import { MissingWhatsAppField, parseCredentials, type WhatsAppCredentials, WhatsAppAdapter, type WhatsAppWindow, type WindowState, windowStore } from "./channels/whatsapp.ts";
 import type { ChannelAdapter, InboundAction } from "./channels/types.ts";
-import { connectTwilioNumber, MissingPhoneField, type PendingReplies, PhoneAdapter, type PhoneCredentials, parsePhoneCredentials } from "./channels/phone.ts";
 import { GOOGLE_CONNECTOR, GOOGLE_HOSTS, GOOGLE_WRITE_SCOPE, GoogleAccounts, GoogleClient, GoogleNotConnected, GoogleOAuth, type GoogleService, GoogleUncertain } from "./connectors/google.ts";
 import { ConnectorHttpError, egressFetch } from "./connectors/http.ts";
 import { ConnectorStore, connectorEgressName, McpConnections, type McpConnectionsOptions } from "./connectors/mcp.ts";
 import { McpOAuth, mcpOAuthSecret } from "./connectors/mcp-oauth.ts";
-import { CONNECTOR_CATALOG, type CatalogEntry } from "./connectors/catalog.ts";
-import { readOnlyInBriefs } from "./core/brief.ts";
+import type { CatalogEntry } from "./connectors/catalog.ts";
 import { type ComputerProvider, computerKey } from "./core/computer.ts";
-import { createComputerTools } from "./core/tools/computer-tools.ts";
 import { computerLabel, createComputerProvider } from "./computer/create.ts";
 import { DockerComputerProvider } from "./computer/docker-computer.ts";
-import { desktopConnector, type DesktopProvider } from "./core/desktop.ts";
-import { createDesktopTools } from "./core/tools/desktop-tools.ts";
+import type { DesktopProvider } from "./core/desktop.ts";
 import { ScreenViews } from "./core/screen-views.ts";
 import { createDesktopProvider, desktopLabel } from "./desktop/create.ts";
 import { DockerDesktopProvider } from "./desktop/docker-desktop.ts";
 import { createGoogleTools } from "./core/tools/google-tools.ts";
-import { createImageTools } from "./core/tools/image-tools.ts";
-import { createResearchTools } from "./core/tools/research-tools.ts";
-import { createExchangeTools } from "./core/tools/exchange-tools.ts";
-import { createNewsTools } from "./core/tools/news-tools.ts";
-import { createVatTools } from "./core/tools/vat-tools.ts";
-import { createWeatherTools } from "./core/tools/weather-tools.ts";
-import { createWebTools, webGuard } from "./core/tools/web-tools.ts";
+import { webGuard } from "./core/tools/web-tools.ts";
 import { ecbRates } from "./core/exchange-rates.ts";
 import { feedNews } from "./core/news.ts";
 import { viesClient } from "./core/vies.ts";
@@ -51,7 +36,6 @@ import { piDurableEngine } from "./core/adapters/pi-durable.ts";
 import { providerModels } from "./core/adapters/pi-durable-models.ts";
 import { ChatModels } from "./core/chat-models.ts";
 import { LocalProviders, type CliRunner } from "./core/local-providers.ts";
-import { MODEL_COMMAND } from "./model-command.ts";
 import { decideConnectorAction, decideToolProposal, decideWebAction, isApprover, NotAnApprover, webActionReport } from "./core/approvals.ts";
 import { CONNECTOR_ACTION_LIMITS, type ConnectorAction, ConnectorActionError, connectorActionReport, fitsInChat } from "./core/connector-actions.ts";
 import { sendWebAction, type WebAction, WEB_ACTIONS_CONNECTOR } from "./core/web-actions.ts";
@@ -61,48 +45,32 @@ import { readAttachments } from "./core/mail-attachments.ts";
 import { attachmentSlots } from "./core/attachment-slots.ts";
 import { checkedUrl, publicAddress, WebFetchRefused } from "./core/web-fetch.ts";
 import { readPage } from "./core/watches.ts";
-import { skillMenuEntry } from "./core/skills.ts";
 import { webHostAllowed, withChannel } from "./core/policy.ts";
-import type { DurableEngine, OwniTool } from "./core/engine.ts";
-import { EgressDenied, NotFound, UserNotAllowed } from "./core/errors.ts";
+import type { DurableEngine } from "./core/engine.ts";
+import { EgressDenied, NotFound } from "./core/errors.ts";
 import { instanceId as toInstanceId, tenantId as toTenantId } from "./core/ids.ts";
-import { readJsonFile, updateJsonFile } from "./core/locked-json.ts";
 import { instanceDir, tenantDir } from "./core/paths.ts";
 import { customToolName, type ToolProposal } from "./core/proposals.ts";
 import type { InstanceRecord } from "./core/registry.ts";
-import { OwniRuntime, type ToolSet } from "./core/runtime.ts";
+import { OwniRuntime } from "./core/runtime.ts";
 import { Scheduler } from "./core/scheduler.ts";
 import { syncServerModelKeys, TenantSecrets } from "./core/secrets.ts";
-import { createCustomTools } from "./core/tools/custom-tools.ts";
-import { createChartTools } from "./core/tools/chart-tools.ts";
-import { createArtifactTools } from "./core/tools/artifact-tools.ts";
-import { createOpenuiTools } from "./core/tools/openui-tools.ts";
-import { TranscriptionNotAllowed } from "./core/recordings.ts";
-import { createCodeTools } from "./core/tools/code-tools.ts";
-import { createDateTools } from "./core/tools/date-tools.ts";
-import { createRecordingTools } from "./core/tools/recording-tools.ts";
-import { createDocumentTools } from "./core/tools/document-tools.ts";
-import { createListTools } from "./core/tools/list-tools.ts";
-import { createAgentTools } from "./core/tools/agent-tools.ts";
-import { AGENT_CHANNEL, AGENT_LIMITS, AgentRate, agentThreadId, relayAgentAnswer } from "./core/agent-messages.ts";
+import { AGENT_CHANNEL, AGENT_LIMITS, AgentRate, relayAgentAnswer } from "./core/agent-messages.ts";
 import { placeLine, withoutAgent } from "./core/org.ts";
 import { askedByIn, askedByLines } from "./core/agent-asks.ts";
 import { AgentChannel } from "./channels/agents.ts";
-import { runtimeActivity, viewerOf } from "./core/agent-activity.ts";
-import { createMemoryTools } from "./core/tools/memory-tools.ts";
-import { createAutomationTools } from "./core/tools/automation-tools.ts";
-import { createSkillTools } from "./core/tools/skill-tools.ts";
-import { createScheduleTools } from "./core/tools/schedule-tools.ts";
-import { createWatchTools } from "./core/tools/watch-tools.ts";
-import { createWorkspaceTools } from "./core/tools/workspace-tools.ts";
+import { runtimeActivity } from "./core/agent-activity.ts";
 import { romeDayKey, UsageLedger } from "./core/usage.ts";
 import { connectChannel } from "./gateway.ts";
 import type { OwniConfig } from "./main/config.ts";
 import { type RunningSegreteria, startSegreteria } from "./segreteria/boot.ts";
 import { BoardStore } from "./core/board.ts";
 import { RoutineStore, runRoutines } from "./core/board-routines.ts";
-import { createBoardTools } from "./core/tools/board-tools.ts";
 import { approveFromChat, startBoard } from "./app/board.ts";
+import { phoneSecret, startPhone } from "./app/phone.ts";
+import { startTelegram, telegramTokenSecret } from "./app/telegram.ts";
+import { assembleTools } from "./app/tools.ts";
+import { startWhatsApp, whatsappSecret } from "./app/whatsapp.ts";
 import { PeopleStore, SessionStore } from "./web/auth.ts";
 import { WebChannel } from "./web/channel.ts";
 import { RoomStore, Rooms } from "./web/rooms.ts";
@@ -193,8 +161,6 @@ export async function startOwni(config: OwniConfig, options: OwniOptions = {}): 
 		if (rates === undefined) agentRates.set(id, (rates = { rate: new AgentRate(), total: new AgentRate(AGENT_LIMITS.perAgentHour) }));
 		return rates;
 	};
-	const telegrams = new Map<string, TelegramAdapter>();
-	const whatsapps = new Map<string, WhatsAppAdapter>();
 	// Voice messages of every chat channel go to the one service the operator chose, or nowhere,
 	// and only from instances whose owner allowed it (connector "voice" in the egress policy).
 	const transcribe = config.transcription === undefined ? undefined : transcriber(config.transcription, options.transcribeFetch);
@@ -258,15 +224,6 @@ export async function startOwni(config: OwniConfig, options: OwniOptions = {}): 
 	// Pictures on request (ADR 0023): one service for the whole server, a daily count per account.
 	const generateImage = config.images === undefined ? undefined : imageGenerator(config.images, options.imageFetch);
 	const imagesLeft = dailyCounter(config.images?.maxPerDay ?? 0);
-	/** The search service as an instance's tools use it: the tenant's daily count, an audit line per search. */
-	const searchFor = (record: InstanceRecord) => ({
-		run: search as NonNullable<typeof search>,
-		record: async (results: number) => {
-			await runtime.audit(record.tenantId).append({ type: "web_search.ran", instanceId: record.id, results });
-		},
-		allow: () => searchesLeft(record.tenantId),
-		today: () => new Date().toLocaleString("it-IT", { timeZone: config.timeZone, dateStyle: "full", timeStyle: "short" }),
-	});
 	const segreteriaId = config.segreteria?.instanceId;
 	/** The other agenti as `self` sees them for agent_list (ADR 0042, 0117): whether each accepts its messages, and its place in the organigramma. */
 	const company = async (self: InstanceRecord) => {
@@ -511,238 +468,55 @@ export async function startOwni(config: OwniConfig, options: OwniOptions = {}): 
 		dataDir: config.dataDir,
 		engine: options.engine ?? piDurableEngine,
 		localProviders,
-		tools: async (record): Promise<ToolSet> => {
-			const mcp = new McpConnections({
-				instanceId: record.id,
-				secrets: runtime.secrets(record.tenantId),
-				policy: policyOf(record),
-				audit: runtime.audit(record.tenantId),
-				log,
-				oauth: mcpOAuth(),
-				payments: (options.connectorCatalog ?? CONNECTOR_CATALOG).filter((e) => e.category === "pagamenti").map((e) => e.url),
-				actions: { propose: (input) => proposeConnectorAction(record.id, input) },
-			});
-			connections.set(record.id, mcp);
-			// The brief's thread: read-only tools only, and vat_check on paper (its numbers would come from mail).
-			const briefs = runtime.schedules(record.tenantId, record.id);
-			const isBriefThread = async (thread: { channel: string; threadId: string }) => thread.channel === "web" && (await briefs.list()).some((s) => s.kind === "brief" && s.threadId === thread.threadId);
-			const tools = [
-				...createWorkspaceTools({ workspace: runtime.workspace(record.tenantId, record.id), sendFile: (f) => runtime.sendFile(record.tenantId, record.id, f) }),
-				...createDocumentTools({ workspace: runtime.workspace(record.tenantId, record.id) }),
-				...createChartTools({ workspace: runtime.workspace(record.tenantId, record.id), sendFile: (f) => runtime.sendFile(record.tenantId, record.id, f) }),
-				...createArtifactTools({
-					artifacts: () => {
-						const channel = webChannels.get(record.id);
-						return channel === undefined
-							? undefined
-							: {
-									create: (threadId, input) => channel.artifacts.create(threadId, input),
-									update: (threadId, id, input) => channel.artifacts.update(threadId, id, input),
-									show: (threadId, artifact, key) => channel.sendArtifact(threadId, artifact, key),
-								};
-					},
-				}),
-				...createOpenuiTools(),
-				...createCodeTools({ workspace: runtime.workspace(record.tenantId, record.id) }),
-				...createDateTools({ timeZone: config.timeZone }),
-				...(transcribePiece === undefined || config.transcription === undefined
-					? []
-					: createRecordingTools({
-							workspace: runtime.workspace(record.tenantId, record.id),
-							transcribe: async (piece, opts) => {
-								if (!((await runtime.registry.getInstance(record.tenantId, record.id)).egress.connectors ?? []).includes(VOICE_CONNECTOR)) throw new TranscriptionNotAllowed();
-								return transcribePiece(piece, opts);
-							},
-							abilities: { timestamps: config.transcription.timestamps !== "none", speakers: config.transcription.speakers },
-							maxMinutes: config.transcription.maxMinutes,
-							budget: { left: () => recordingSeconds.left(record.tenantId), spend: (seconds) => recordingSeconds.spend(record.tenantId, seconds) },
-							record: async (event) => {
-								await runtime.audit(record.tenantId).append({ ...event, instanceId: record.id });
-							},
-						})),
-				...createScheduleTools({ store: runtime.schedules(record.tenantId, record.id), defaultTimeZone: config.timeZone }),
-				...createAutomationTools({
-					store: runtime.automations(record.tenantId, record.id),
-					instance: record.id,
-					whoIs: (thread) => runtime.participant(record.tenantId, record.id, thread),
-					...(config.web.publicUrl === undefined ? {} : { baseUrl: config.web.publicUrl }),
-					tell: (thread, text, key) => runtime.sendMessage(record.tenantId, record.id, { ...thread, text, key, secret: true }),
-					record: async (event) => {
-						await runtime.audit(record.tenantId).append({ ...event, instanceId: record.id, source: "owni" });
-					},
-				}),
-				...createWatchTools({
-					store: runtime.watches(record.tenantId, record.id),
-					read: watchReader(record.id),
-					record: async (event) => {
-						await runtime.audit(record.tenantId).append({ ...event, instanceId: record.id });
-					},
-				}),
-				...(speak === undefined
-					? []
-					: createVoiceTools({
-							get: (key) => voicePrefsOf(record.id).get(key),
-							set: (key, mode) => voicePrefsOf(record.id).set(key, mode),
-							whoIs: (thread) => runtime.participant(record.tenantId, record.id, thread),
-							on: () => speaksNow(record.id),
-						})),
-				...createListTools({
-					store: runtime.lists(record.tenantId, record.id),
-					whoIs: (thread) => runtime.participant(record.tenantId, record.id, thread),
-					record: async (event) => {
-						await runtime.audit(record.tenantId).append({ ...event, instanceId: record.id, source: "owni" });
-					},
-				}),
-				...createBoardTools({
-					self: record.id,
-					store: board,
-					work: boardWork,
-					agents: async () => (await runtime.registry.listInstances(record.tenantId)).filter((r) => r.id !== segreteriaId).map((r) => ({ id: r.id, name: r.name })),
-					personOf: (thread) => (thread.channel === "web" ? WebChannel.ownerOf(thread.threadId) : undefined),
-				}),
-				...createAgentTools({
-					self: record.id,
-					...agentRatesOf(record.id),
-					activity: (agent, thread) => liveActivity(record.tenantId)(agent, viewerOf(record.id, thread, WebChannel.ownerOf)),
-					colleagues: async () => (await company(record)).filter((c) => c.accepts).map((c) => c.colleague),
-					company: async () => (await company(record)).filter((c) => !c.accepts && c.colleague.place !== undefined).map((c) => c.colleague),
-					post: async ({ to, origin, text, key }) => {
-						const channel = agentChannels.get(to);
-						if (channel === undefined) throw new Error("non è attivo");
-						const me = await runtime.registry.getInstance(record.tenantId, record.id);
-						// Who asked and in which words, by this message's id: the card of a step that needs a yes shows it (ADR 0108).
-						// Kept before the message goes (its turn may need it at once), taken back if it is not taken.
-						const asks = runtime.agentAsks(record.tenantId, to);
-						asks.record(agentThreadId(me.id, origin), key, { id: me.id, name: me.name }, text);
-						await channel.ask({ from: { id: me.id, name: me.name }, origin, text, messageId: key }).catch((error: unknown) => {
-							asks.forget(key);
-							// Its owner took the permission back since agent_list: say it plainly, the audit has the details.
-							throw error instanceof UserNotAllowed || error instanceof EgressDenied ? new Error("non accetta più messaggi da te") : error;
-						});
-					},
-					record: async (event) => {
-						await runtime.audit(record.tenantId).append({ ...event, instanceId: record.id });
-					},
-				}),
-				...createMemoryTools({
-					store: runtime.memory(record.tenantId, record.id),
-					whoIs: (thread) => runtime.participant(record.tenantId, record.id, thread),
-					record: async (event) => {
-						await runtime.audit(record.tenantId).append({ ...event, instanceId: record.id, source: "owni" });
-					},
-				}),
-				...createSkillTools({
-					store: runtime.skills(record.tenantId, record.id),
-					workspace: runtime.workspace(record.tenantId, record.id),
-					whoIs: (thread) => runtime.participant(record.tenantId, record.id, thread),
-					record: async (event) => {
-						await runtime.audit(record.tenantId).append({ ...event, instanceId: record.id, source: "owni" });
-					},
-				}),
-				...googleTools(record),
-				...createWebTools({
-					desktop: desktop !== undefined && (record.egress.connectors ?? []).includes(desktopConnector(desktop)),
-					policy: policyOf(record),
-					workspace: runtime.workspace(record.tenantId, record.id),
+		tools: (record) =>
+			assembleTools(
+				{
+					runtime,
+					config,
+					log,
+					webAddressAllowed: options.webAddressAllowed,
+					connectorCatalog: options.connectorCatalog,
+					connections,
+					mcpOAuth,
+					connectorStore,
+					proposeConnectorAction,
+					policyOf,
+					segreteriaId,
+					board,
+					boardWork,
+					webChannels,
+					agentChannels,
+					agentRatesOf,
+					company,
+					liveActivity,
+					googleTools,
+					watchReader,
+					notifyWebAction,
+					notifyApprovers,
 					chromium,
-					sessions: browseSessions,
-					scope: `${record.tenantId}/${record.id}`,
-					...(options.webAddressAllowed === undefined ? {} : { addressAllowed: options.webAddressAllowed }),
-					...(search === undefined
-						? {}
-						: { search: searchFor(record) }),
-					recordDownload: async (file) => {
-						await runtime.audit(record.tenantId).append({ type: "web.download", instanceId: record.id, path: file.path, bytes: file.bytes });
-					},
-					actions: {
-						store: runtime.webActions(record.tenantId, record.id),
-						requester: (thread) => runtime.participant(record.tenantId, record.id, thread),
-						askedBy: (thread, inputs) => askedByIn(runtime.agentAsks(record.tenantId, record.id), thread, inputs),
-						onProposed: (action) => notifyWebAction(record.id, action),
-					},
-				}),
-				...(search === undefined
-					? []
-					: createResearchTools({
-							policy: policyOf(record),
-							workspace: runtime.workspace(record.tenantId, record.id),
-							search: searchFor(record),
-							sendFile: (f) => runtime.sendFile(record.tenantId, record.id, f),
-							record: async (event) => {
-								await runtime.audit(record.tenantId).append({ ...event, instanceId: record.id });
-							},
-							...(options.webAddressAllowed === undefined ? {} : { addressAllowed: options.webAddressAllowed }),
-						})),
-				...(weather === undefined
-					? []
-					: createWeatherTools({
-							weather,
-							left: () => weatherLeft.left(record.tenantId),
-							attempt: () => weatherTries(record.tenantId),
-							spend: () => weatherLeft.spend(record.tenantId, 1),
-							record: async (days) => {
-								await runtime.audit(record.tenantId).append({ type: "weather.ran", instanceId: record.id, days });
-							},
-						})),
-				...(exchangeRates === undefined ? [] : createExchangeTools({ rates: exchangeRates })),
-				...(news === undefined ? [] : createNewsTools({ news, timeZone: config.timeZone })),
-				// Always offered: without the VIES it checks on paper, which needs nothing from outside.
-				...createVatTools({ ...(vies === undefined ? {} : { vies }), tenant: record.tenantId, allow: () => vatChecksLeft(record.tenantId), offlineIn: isBriefThread, timeZone: config.timeZone }),
-				...(generateImage === undefined
-					? []
-					: createImageTools({
-							policy: policyOf(record),
-							workspace: runtime.workspace(record.tenantId, record.id),
-							generate: generateImage,
-							left: () => imagesLeft.left(record.tenantId),
-							spend: (n) => imagesLeft.spend(record.tenantId, n),
-							sendFile: (f) => runtime.sendFile(record.tenantId, record.id, f),
-							record: async (event) => {
-								await runtime.audit(record.tenantId).append({ ...event, instanceId: record.id });
-							},
-						})),
-				...(computer === undefined
-					? []
-					: createComputerTools({
-							computer,
-							key: computerKey(record.tenantId, record.id),
-							policy: policyOf(record),
-							workspace: runtime.workspace(record.tenantId, record.id),
-							record: async (event) => {
-								await runtime.audit(record.tenantId).append({ ...event, instanceId: record.id });
-							},
-							log,
-						})),
-				// Offered only where the owner turned the screen on (the switch reopens the agente).
-				...(desktop === undefined || !(record.egress.connectors ?? []).includes(desktopConnector(desktop))
-					? []
-					: createDesktopTools({
-							desktop,
-							key: computerKey(record.tenantId, record.id),
-							policy: policyOf(record),
-							// Only the console's conversations: nobody watches the others there.
-							seen: (thread, png, action, askedAt) => {
-								if (thread.channel === "web") screens.set(record.id, thread, png, action, askedAt);
-							},
-							record: async (event) => {
-								await runtime.audit(record.tenantId).append({ ...event, instanceId: record.id });
-							},
-							log,
-						})),
-				...(await createCustomTools({
-					store: runtime.proposals(record.tenantId, record.id),
-					toolsDir: runtime.customToolsDir(record.tenantId, record.id),
-					policy: policyOf(record),
-					onProposed: (proposal) => notifyApprovers(record.id, proposal),
-				})),
-				// Connector tools reach the model only once it loads them with tool_search (ADR 0122).
-				// The not-connected placeholder stays in sight, so the model can say a sign-in is needed.
-				...(await mcp.connect(await connectorStore(record.id).list())).map(
-					(tool): OwniTool => (tool.name.endsWith("__non_collegato") ? tool : { ...tool, deferred: true }),
-				),
-			];
-			return { tools: readOnlyInBriefs(tools, isBriefThread), close: () => mcp.close() };
-		},
+					browseSessions,
+					computer,
+					desktop,
+					screens,
+					transcribePiece,
+					recordingSeconds,
+					speak,
+					voicePrefsOf,
+					speaksNow,
+					search,
+					searchesLeft,
+					weather,
+					weatherLeft,
+					weatherTries,
+					exchangeRates,
+					news,
+					vies,
+					vatChecksLeft,
+					generateImage,
+					imagesLeft,
+				},
+				record,
+			),
 	});
 
 	// --- bootstrap: tenant, general instance, owner ---
@@ -841,66 +615,19 @@ export async function startOwni(config: OwniConfig, options: OwniOptions = {}): 
 		agentName: async (agent) => (agent === segreteriaId ? undefined : (await runtime.registry.getInstance(tenant, agent).catch(() => undefined))?.name),
 		canChat: async (agent, personId) => (await consoleAgentName(agent, personId)) !== undefined,
 		webChannel: (agent) => webChannels.get(agent),
-		ownerChats: () => [telegrams.get(config.instanceId), whatsapps.get(config.instanceId)],
+		ownerChats: () => [telegram.bots.get(config.instanceId), whatsapp.adapters.get(config.instanceId)],
 		log,
 	});
 	// Who is doing what (ADR 0109), for agent_list and the page Agenti.
 	const liveActivity = (tenantId: string) => runtimeActivity({ runtime, tenant: tenantId, board: { store: board, work: boardWork }, channel: (agent) => webChannels.get(agent) });
 	// --- Telegram: at most one bot per instance ---
-	const telegramHooks = new Map<string, { secret: string; handle: (update: unknown) => Promise<void> }>();
-	const telegramUnsubscribes = new Map<string, () => void>();
-
-	/** Webhook when Telegram can reach us over https (a cell), long polling otherwise. */
-	async function webhookSecretFor(instance: string): Promise<string | undefined> {
-		if (instance === config.instanceId && config.telegram?.webhookSecret !== undefined) return config.telegram.webhookSecret;
-		if (!(config.web.publicUrl?.startsWith("https://") ?? false)) return undefined;
-		const name = `telegram.webhookSecret.${instance}`;
-		const known = await runtime.secrets(tenant).get(name);
-		if (known !== undefined) return known;
-		const fresh = randomBytes(24).toString("base64url");
-		await runtime.secrets(tenant).set(name, fresh);
-		return fresh;
-	}
-
-	async function attachTelegram(instance: string, token: string): Promise<TelegramAdapter> {
-		const webhookSecret = await webhookSecretFor(instance);
-		const bot = new TelegramAdapter({
-			token,
-			tenantId: tenant,
-			instanceId: instance,
-			log,
-			// Files from strangers are never downloaded.
-			mayDownload: async (userId) => ((await runtime.registry.getInstance(tenant, instance)).allowedUsers.telegram ?? []).includes(userId),
-			...voiceFor(instance),
-			...(options.telegramFetch === undefined ? {} : { fetch: options.telegramFetch }),
-			...(webhookSecret === undefined ? {} : { webhook: { url: `${config.web.publicUrl}/hooks/telegram/${instance}`, secretToken: webhookSecret } }),
-			// The skills as they are now: the menu is set once, when the bot is connected (ADR 0104).
-			commands: [MODEL_COMMAND, ...runtime.skills(tenant, instance).list().map(skillMenuEntry)],
-		});
-		telegramUnsubscribes.set(instance, connectChannel(runtime, bot, { tenantId: tenant, instanceId: instance }, log, { onAction: (action) => onApprovalTap(instance, bot, action), voice: voiceOf(instance), models: chatModels }));
-		telegrams.set(instance, bot);
-		if (webhookSecret !== undefined) telegramHooks.set(instance, { secret: webhookSecret, handle: (update) => bot.handleUpdate(update as TelegramUpdate) });
-		return bot;
-	}
-
-	async function detachTelegram(instance: string): Promise<void> {
-		const bot = telegrams.get(instance);
-		telegrams.delete(instance);
-		telegramHooks.delete(instance);
-		telegramUnsubscribes.get(instance)?.();
-		telegramUnsubscribes.delete(instance);
-		await bot?.stop();
-	}
-
-	for (const record of conversational) {
-		const token = await runtime.secrets(tenant).get(telegramTokenSecret(record.id));
-		if (token !== undefined) await attachTelegram(record.id, token);
-	}
+	const telegram = startTelegram({ runtime, tenant, config, chatModels, fetch: options.telegramFetch, voiceFor, voiceOf, onAction: onApprovalTap, log });
+	await telegram.restore(conversational.map((r) => r.id));
 
 	/** Approval cards go to the approvers of each chat channel the instance has (Telegram, WhatsApp). */
 	async function notifyApprovers(instance: string, proposal: ToolProposal): Promise<void> {
 		const record = await runtime.registry.getInstance(tenant, instance);
-		for (const adapter of [telegrams.get(instance), whatsapps.get(instance)]) {
+		for (const adapter of [telegram.bots.get(instance), whatsapp.adapters.get(instance)]) {
 			if (adapter === undefined) continue;
 			for (const chat of record.approvers?.[adapter.name] ?? []) {
 				if ((proposal.notified ?? []).includes(`${adapter.name}:${chat}`)) continue;
@@ -943,7 +670,7 @@ export async function startOwni(config: OwniConfig, options: OwniOptions = {}): 
 					{ label: "Invia", data: `web:${action.id}:approved` },
 					{ label: "Rifiuta", data: `web:${action.id}:rejected` },
 				];
-		for (const adapter of [telegrams.get(instance), whatsapps.get(instance)]) {
+		for (const adapter of [telegram.bots.get(instance), whatsapp.adapters.get(instance)]) {
 			if (adapter === undefined) continue;
 			const chats = new Set(record.approvers?.[adapter.name] ?? []);
 			if (action.thread?.channel === adapter.name && action.requester !== undefined) chats.add(action.thread.threadId);
@@ -1008,7 +735,7 @@ export async function startOwni(config: OwniConfig, options: OwniOptions = {}): 
 					{ label: "Rifiuta", data: `mcp:${action.id}:rejected` },
 				]
 			: [{ label: "Rifiuta", data: `mcp:${action.id}:rejected` }];
-		for (const adapter of [telegrams.get(instance), whatsapps.get(instance)]) {
+		for (const adapter of [telegram.bots.get(instance), whatsapp.adapters.get(instance)]) {
 			if (adapter === undefined) continue;
 			const chats = new Set(record.approvers?.[adapter.name] ?? []);
 			if (action.thread?.channel === adapter.name && action.requester !== undefined) chats.add(action.thread.threadId);
@@ -1110,80 +837,12 @@ export async function startOwni(config: OwniConfig, options: OwniOptions = {}): 
 	}
 
 	// --- WhatsApp: at most one business number per instance, by webhook only ---
-	const whatsappUnsubscribes = new Map<string, () => void>();
-
-	function attachWhatsApp(instance: string, credentials: WhatsAppCredentials): WhatsAppAdapter {
-		const adapter = new WhatsAppAdapter({
-			...credentials,
-			window: whatsappWindow(join(instanceDir(config.dataDir, toTenantId(tenant), toInstanceId(instance)), "whatsapp-window.json"), log),
-			tenantId: tenant,
-			instanceId: instance,
-			log,
-			// Files from strangers are never downloaded.
-			mayDownload: async (userId) => ((await runtime.registry.getInstance(tenant, instance)).allowedUsers.whatsapp ?? []).includes(userId),
-			...voiceFor(instance),
-			...(options.whatsappApiBase === undefined ? {} : { apiBase: options.whatsappApiBase }),
-		});
-		whatsappUnsubscribes.set(instance, connectChannel(runtime, adapter, { tenantId: tenant, instanceId: instance }, log, { onAction: (action) => onApprovalTap(instance, adapter, action), voice: voiceOf(instance), models: chatModels }));
-		whatsapps.set(instance, adapter);
-		return adapter;
-	}
-
-	function detachWhatsApp(instance: string): void {
-		whatsapps.delete(instance);
-		whatsappUnsubscribes.get(instance)?.();
-		whatsappUnsubscribes.delete(instance);
-	}
-
-	for (const record of conversational) {
-		const saved = await runtime.secrets(tenant).get(whatsappSecret(record.id));
-		const credentials = saved === undefined ? undefined : parseCredentials(saved);
-		if (credentials !== undefined) attachWhatsApp(record.id, credentials);
-		else if (saved !== undefined) log(`whatsapp: saved credentials of ${record.id} unreadable; connect it again from the console`);
-	}
+	const whatsapp = startWhatsApp({ runtime, tenant, config, chatModels, apiBase: options.whatsappApiBase, voiceFor, voiceOf, onAction: onApprovalTap, log });
+	await whatsapp.restore(conversational.map((r) => r.id));
 
 	// --- Phone: at most one Twilio number per instance, by webhook only (ADR 0012) ---
-	const phones = new Map<string, PhoneAdapter>();
-	const phoneUnsubscribes = new Map<string, () => void>();
-
-	const phonePendingFile = (instance: string) => join(instanceDir(config.dataDir, toTenantId(tenant), toInstanceId(instance)), "phone-pending.json");
-
-	function attachPhone(instance: string, credentials: PhoneCredentials): PhoneAdapter | undefined {
-		if (!(config.web.publicUrl?.startsWith("https://") ?? false)) return undefined;
-		const adapter = new PhoneAdapter({
-			credentials,
-			tenantId: tenant,
-			instanceId: instance,
-			publicUrl: config.web.publicUrl as string,
-			pending: pendingReplies(phonePendingFile(instance), log),
-			mayCall: async (number) => ((await runtime.registry.getInstance(tenant, instance)).allowedUsers.phone ?? []).includes(number),
-			voice: config.phone.voice,
-			log,
-			...(options.phoneWait === undefined ? {} : { waitMs: options.phoneWait.ms, maxWaits: options.phoneWait.max }),
-		});
-		phoneUnsubscribes.set(instance, connectChannel(runtime, adapter, { tenantId: tenant, instanceId: instance }, log));
-		phones.set(instance, adapter);
-		return adapter;
-	}
-
-	function detachPhone(instance: string): void {
-		void phones.get(instance)?.stop();
-		phones.delete(instance);
-		phoneUnsubscribes.get(instance)?.();
-		phoneUnsubscribes.delete(instance);
-	}
-
-	for (const record of conversational) {
-		const saved = await runtime.secrets(tenant).get(phoneSecret(record.id));
-		const credentials = saved === undefined ? undefined : parsePhoneCredentials(saved);
-		if (credentials !== undefined && attachPhone(record.id, credentials) === undefined) log(`phone: ${record.id} has a number but this server has no public https address; calls are off`);
-		// The public address may have changed since the number was connected: point it here again.
-		else if (credentials !== undefined)
-			void connectTwilioNumber({ ...credentials, voiceUrl: `${config.web.publicUrl}/hooks/phone/${record.id}`, apiBase: config.phone.apiBase, ...(options.phoneFetch === undefined ? {} : { fetch: options.phoneFetch }) }).catch((error: unknown) =>
-				log(`phone: could not point the number of ${record.id} here: ${error instanceof Error ? error.message : String(error)}`),
-			);
-		else if (saved !== undefined && credentials === undefined) log(`phone: saved credentials of ${record.id} unreadable; connect it again from the console`);
-	}
+	const phone = startPhone({ runtime, tenant, config, fetch: options.phoneFetch, wait: options.phoneWait, log });
+	await phone.restore(conversational.map((r) => r.id));
 
 	// --- resume, scheduler, segreteria, web ---
 	for (const record of conversational) await runtime.resume(tenant, record.id);
@@ -1293,7 +952,7 @@ export async function startOwni(config: OwniConfig, options: OwniOptions = {}): 
 	scheduler.start(options.schedulerIntervalMs ?? 30_000);
 	const segreteria = config.segreteria === undefined ? undefined : await startSegreteria(runtime, config.segreteria, log);
 	// A bot Telegram does not accept (wrong token, webhook on http) must not keep Owni down.
-	for (const bot of telegrams.values()) await bot.start().catch((error: unknown) => log(`telegram: not started: ${error instanceof Error ? error.message : String(error)}`));
+	for (const bot of telegram.bots.values()) await bot.start().catch((error: unknown) => log(`telegram: not started: ${error instanceof Error ? error.message : String(error)}`));
 
 	const ledger = new UsageLedger(tenantDir(config.dataDir, toTenantId(tenant)));
 	// The browser panel of a console conversation (ADR 0044): the conversation's own web_browse browser.
@@ -1367,12 +1026,12 @@ export async function startOwni(config: OwniConfig, options: OwniOptions = {}): 
 	};
 	async function deleteNow(id: string): Promise<void> {
 		const record = await runtime.registry.getInstance(tenant, id);
-		const hooked = telegramHooks.has(id);
-		const bot = telegrams.get(id);
-		await detachTelegram(id);
+		const hooked = telegram.hooks.has(id);
+		const bot = telegram.bots.get(id);
+		await telegram.detach(id);
 		if (hooked) await bot?.unhook();
-		detachWhatsApp(id);
-		detachPhone(id);
+		whatsapp.detach(id);
+		phone.detach(id);
 		webUnsubscribes.get(id)?.();
 		webUnsubscribes.delete(id);
 		webChannels.delete(id);
@@ -1435,53 +1094,11 @@ export async function startOwni(config: OwniConfig, options: OwniOptions = {}): 
 		defaultTimeZone: config.timeZone,
 		watchRead: (instance, url) => watchReader(instance)(url),
 		defaultInstructions: DEFAULT_INSTRUCTIONS,
-		connectedChannels: (id) => [...(telegrams.has(id) ? ["telegram"] : []), ...(whatsapps.has(id) ? ["whatsapp"] : []), ...(phones.has(id) ? ["phone"] : [])],
-		telegramHooks,
-		whatsappHooks: whatsapps,
-		phoneHooks: phones,
-		phone: {
-			status: async (id) => {
-				const record = await runtime.registry.getInstance(tenant, id);
-				const saved = await runtime.secrets(tenant).get(phoneSecret(id));
-				const credentials = saved === undefined ? undefined : parsePhoneCredentials(saved);
-				return {
-					connected: phones.has(id),
-					https: config.web.publicUrl?.startsWith("https://") ?? false,
-					...(credentials === undefined ? {} : { number: credentials.number, accountSid: credentials.accountSid }),
-					allowedUsers: record.allowedUsers.phone ?? [],
-				};
-			},
-			// Checked with Twilio, and the number pointed at this cell, before anything changes.
-			connect: async (id, given) => {
-				const publicUrl = config.web.publicUrl;
-				if (!(publicUrl?.startsWith("https://") ?? false)) throw new MissingPhoneField("https");
-				const saved = await runtime.secrets(tenant).get(phoneSecret(id));
-				const old = saved === undefined ? undefined : parsePhoneCredentials(saved);
-				const accountSid = given.accountSid ?? old?.accountSid;
-				const authToken = given.authToken ?? old?.authToken;
-				const number = given.number ?? old?.number;
-				const pin = given.pin ?? old?.pin;
-				if (accountSid === undefined || authToken === undefined || number === undefined || pin === undefined) throw new MissingPhoneField("fields");
-				const twilio = { apiBase: config.phone.apiBase, ...(options.phoneFetch === undefined ? {} : { fetch: options.phoneFetch }) };
-				// Only the code changed: nothing to ask Twilio.
-				const same = old !== undefined && old.accountSid === accountSid && old.authToken === authToken && old.number === number;
-				const { numberSid } = same ? { numberSid: old.numberSid } : await connectTwilioNumber({ accountSid, authToken, number, voiceUrl: `${publicUrl}/hooks/phone/${id}`, ...twilio });
-				// A number replaced still points here: the adapter refuses calls to any other number.
-				const credentials: PhoneCredentials = { accountSid, authToken, number, numberSid, pin };
-				detachPhone(id);
-				await runtime.secrets(tenant).set(phoneSecret(id), JSON.stringify(credentials));
-				attachPhone(id, credentials);
-				const record = await runtime.registry.getInstance(tenant, id);
-				await runtime.registry.setEgress(tenant, id, (egress) => withChannel(egress, "phone", true));
-				return { number };
-			},
-			disconnect: async (id) => {
-				detachPhone(id);
-				// The number keeps pointing here, and its calls are refused before they are answered (no cost).
-				await runtime.secrets(tenant).delete(phoneSecret(id));
-				rmSync(phonePendingFile(id), { force: true });
-			},
-		},
+		connectedChannels: (id) => [...(telegram.bots.has(id) ? ["telegram"] : []), ...(whatsapp.adapters.has(id) ? ["whatsapp"] : []), ...(phone.adapters.has(id) ? ["phone"] : [])],
+		telegramHooks: telegram.hooks,
+		whatsappHooks: whatsapp.adapters,
+		phoneHooks: phone.adapters,
+			phone: { status: phone.status, connect: phone.connect, disconnect: phone.disconnect },
 		...(config.transcription === undefined ? {} : { voice: { host: new URL(config.transcription.url).host } }),
 		...(config.speech === undefined ? {} : { speech: { host: new URL(config.speech.url).host, voice: config.speech.voice } }),
 		...(config.webSearch === undefined ? {} : { search: { host: new URL(config.webSearch.url).host } }),
@@ -1521,78 +1138,8 @@ export async function startOwni(config: OwniConfig, options: OwniOptions = {}): 
 						},
 					},
 				}),
-		telegram: {
-			status: async (id) => {
-				const bot = telegrams.get(id);
-				const record = await runtime.registry.getInstance(tenant, id);
-				const username = bot === undefined ? undefined : (await bot.me().catch(() => ({ username: undefined }))).username;
-				return {
-					connected: bot !== undefined,
-					...(username === undefined ? {} : { username }),
-					mode: telegramHooks.has(id) ? "webhook" : "polling",
-					allowedUsers: record.allowedUsers.telegram ?? [],
-					approvers: record.approvers?.telegram ?? [],
-				};
-			},
-			// The token is checked with Telegram before anything changes.
-			connect: async (id, token) => {
-				const probe = new TelegramAdapter({ token, tenantId: tenant, instanceId: id, ...(options.telegramFetch === undefined ? {} : { fetch: options.telegramFetch }) });
-				const me = await probe.me();
-				await detachTelegram(id);
-				await runtime.secrets(tenant).set(telegramTokenSecret(id), token);
-				const bot = await attachTelegram(id, token);
-				await bot.start();
-				const record = await runtime.registry.getInstance(tenant, id);
-				await runtime.registry.setEgress(tenant, id, (egress) => withChannel(egress, "telegram", true));
-				return me;
-			},
-			disconnect: async (id) => {
-				await detachTelegram(id);
-				await runtime.secrets(tenant).delete(telegramTokenSecret(id));
-			},
-		},
-		whatsapp: {
-			status: async (id) => {
-				const adapter = whatsapps.get(id);
-				const record = await runtime.registry.getInstance(tenant, id);
-				const saved = await runtime.secrets(tenant).get(whatsappSecret(id));
-				const credentials = saved === undefined ? undefined : parseCredentials(saved);
-				const me = adapter === undefined ? undefined : await adapter.me().catch(() => undefined);
-				return {
-					connected: adapter !== undefined,
-					...(me?.number === undefined ? {} : { number: me.number }),
-					...(me?.name === undefined ? {} : { name: me.name }),
-					// What the owner pastes into the Meta app: the address and the token Meta sends back to check it.
-					webhookUrl: config.web.publicUrl?.startsWith("https://") ? `${config.web.publicUrl}/hooks/whatsapp/${id}` : null,
-					...(credentials === undefined ? {} : { verifyToken: credentials.verifyToken }),
-					allowedUsers: record.allowedUsers.whatsapp ?? [],
-					approvers: record.approvers?.whatsapp ?? [],
-					template: credentials?.template ?? null,
-				};
-			},
-			// Checked with Meta before anything changes; a value left out keeps the one saved.
-			connect: async (id, given) => {
-				const saved = await runtime.secrets(tenant).get(whatsappSecret(id));
-				const old = saved === undefined ? undefined : parseCredentials(saved);
-				const accessToken = given.accessToken ?? old?.accessToken;
-				const phoneNumberId = given.phoneNumberId ?? old?.phoneNumberId;
-				const appSecret = given.appSecret ?? old?.appSecret;
-				if (accessToken === undefined || phoneNumberId === undefined || appSecret === undefined) throw new MissingWhatsAppField();
-				const template = given.template === null ? undefined : (given.template ?? old?.template);
-				const credentials: WhatsAppCredentials = { accessToken, phoneNumberId, appSecret, verifyToken: old?.verifyToken ?? randomBytes(18).toString("base64url"), ...(template === undefined ? {} : { template }) };
-				const me = await new WhatsAppAdapter({ ...credentials, tenantId: tenant, instanceId: id, ...(options.whatsappApiBase === undefined ? {} : { apiBase: options.whatsappApiBase }) }).me();
-				detachWhatsApp(id);
-				await runtime.secrets(tenant).set(whatsappSecret(id), JSON.stringify(credentials));
-				attachWhatsApp(id, credentials);
-				const record = await runtime.registry.getInstance(tenant, id);
-				await runtime.registry.setEgress(tenant, id, (egress) => withChannel(egress, "whatsapp", true));
-				return me;
-			},
-			disconnect: async (id) => {
-				detachWhatsApp(id);
-				await runtime.secrets(tenant).delete(whatsappSecret(id));
-			},
-		},
+			telegram: { status: telegram.status, connect: telegram.connect, disconnect: telegram.disconnect },
+			whatsapp: { status: whatsapp.status, connect: whatsapp.connect, disconnect: whatsapp.disconnect },
 		...(config.cell.secret === undefined
 			? {}
 			: {
@@ -1650,8 +1197,8 @@ export async function startOwni(config: OwniConfig, options: OwniOptions = {}): 
 			server.closeAllConnections();
 			await new Promise((resolve) => server.close(resolve));
 			await scheduler.stop();
-			for (const bot of telegrams.values()) await bot.stop();
-			for (const phone of phones.values()) await phone.stop();
+			for (const bot of telegram.bots.values()) await bot.stop();
+			for (const adapter of phone.adapters.values()) await adapter.stop();
 			await browseSessions.closeAll();
 			await computer?.close().catch((error: unknown) => log(`computer: not stopped: ${error instanceof Error ? error.message : String(error)}`));
 			await desktop?.close().catch((error: unknown) => log(`desktop: not stopped: ${error instanceof Error ? error.message : String(error)}`));
@@ -1673,88 +1220,3 @@ function ownSecret(name: string, instance: string): boolean {
 		(name.startsWith("connector.") && name.split(".")[2] === instance)
 	);
 }
-
-function telegramTokenSecret(instance: string): string {
-	return `telegram.botToken.${instance}`;
-}
-
-/** The WhatsApp window store of an instance, in a locked JSON file. A damaged file is set aside, not left to block the channel. */
-function whatsappWindow(file: string, log: (message: string) => void): WhatsAppWindow {
-	const aside = (error: unknown) => {
-		if (!(error instanceof SyntaxError)) throw error;
-		log(`whatsapp: ${file} unreadable, set aside as .damaged`);
-		renameSync(file, `${file}.damaged`);
-	};
-	return windowStore({
-		read: () => {
-			try {
-				return readJsonFile<WindowState>(file, {});
-			} catch (error) {
-				aside(error);
-				return {};
-			}
-		},
-		update: (change) => {
-			try {
-				updateJsonFile<WindowState>(file, {}, change);
-			} catch (error) {
-				aside(error);
-				updateJsonFile<WindowState>(file, {}, change);
-			}
-		},
-	});
-}
-
-/** The Twilio credentials of an instance, as one JSON value in its secret store. */
-function phoneSecret(instance: string): string {
-	return `phone.credentials.${instance}`;
-}
-
-/** Replies waiting for a caller, on disk: at most 5 per number, none older than 7 days. */
-function pendingReplies(file: string, log: (message: string) => void): PendingReplies {
-	type State = Record<string, { text: string; at: string; key?: string }[]>;
-	const fresh = (list: State[string] | undefined) => (list ?? []).filter((r) => Date.now() - Date.parse(r.at) < 7 * 24 * 3600_000);
-	// Every write also drops what is too old, for every number.
-	const prune = (s: State): State => Object.fromEntries(Object.entries(s).map(([n, list]) => [n, fresh(list)] as const).filter(([, list]) => list.length > 0));
-	const update = (change: (s: State) => State) => {
-		try {
-			return updateJsonFile<State>(file, {}, (s) => change(prune(s)));
-		} catch (error) {
-			if (!(error instanceof SyntaxError)) throw error;
-			log(`phone: ${file} unreadable, set aside as .damaged`);
-			renameSync(file, `${file}.damaged`);
-			return updateJsonFile<State>(file, {}, (s) => change(prune(s)));
-		}
-	};
-	return {
-		take: (number) => {
-			// Read first: most waits find nothing, and need no write.
-			try {
-				if (readJsonFile<State>(file, {})[number] === undefined) return [];
-			} catch {
-				/* damaged: update() sets it aside */
-			}
-			let taken: string[] = [];
-			update((s) => {
-				taken = fresh(s[number]).map((r) => r.text);
-				const { [number]: _, ...rest } = s;
-				return rest;
-			});
-			return taken;
-		},
-		put: (number, text, key) => {
-			update((s) => {
-				const list = fresh(s[number]);
-				if (list.some((r) => r.key === key)) return s;
-				return { ...s, [number]: [...list, { text, at: new Date().toISOString(), key }].slice(-5) };
-			});
-		},
-	};
-}
-
-/** The WhatsApp credentials of an instance, as one JSON value in its secret store. */
-function whatsappSecret(instance: string): string {
-	return `whatsapp.credentials.${instance}`;
-}
-
-

@@ -1269,6 +1269,8 @@ export function createWebApp(options: WebAppOptions): Server {
 		if (!CONNECTOR_ID.test(id)) throw new HttpError(400, "ID: lettere minuscole, cifre e trattini");
 		let transport = body.transport as McpConnector["transport"];
 		if (transport?.type !== "http" && transport?.type !== "stdio" && transport?.type !== "api") throw new HttpError(400, "transport: http | stdio | api");
+		// A cell runs no program of its customers: a command would run on Owni Cloud's machine.
+		if (transport.type === "stdio" && options.cell !== undefined) throw new HttpError(400, "Su Owni Cloud i collegamenti sono a un indirizzo web, non a un programma locale");
 		// With OAuth the sign-in is the only credential: a secret header would also reach the authorization server.
 		if (transport.type === "http" && transport.auth === "oauth") transport = { type: "http", url: transport.url, auth: "oauth" };
 		const store = options.connectors(instance);

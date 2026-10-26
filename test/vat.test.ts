@@ -632,7 +632,7 @@ describe("vat_check", () => {
 	it("the instructions name it, with the VIES nuance and web_search out of it", () => {
 		const app = readFileSync("src/app.ts", "utf8");
 		expect(app).toContain("controllare partite IVA, numeri IVA europei e codici fiscali (vat_check: mai a occhio; per partite IVA e codici fiscali usa vat_check, non web_search; senza VIES non cercare il titolare sul web; «non attiva nel VIES» non vuol dire inesistente");
-		expect(app).toContain("offlineIn: isBriefThread");
+		expect(readFileSync("src/app/tools.ts", "utf8")).toContain("offlineIn: isBriefThread");
 	});
 });
 

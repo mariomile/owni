@@ -114,6 +114,17 @@ describe("Phone adapter", () => {
 		expect(pending.all.get(CALLER)).toHaveLength(1);
 	});
 
+	it("ten wrong codes in an hour, over several calls, and the number takes no calls, not even with the right code", async () => {
+		const phone = adapter();
+		for (let n = 0; n < 4; n++) {
+			const sid = `CA${String(n + 1).repeat(32)}`;
+			await phone.handle(q(""), call({ CallSid: sid }));
+			for (let t = 0; t < (n < 3 ? 3 : 1); t++) await phone.handle(q("step=code"), call({ CallSid: sid, Digits: "0000" }));
+		}
+		expect(await phone.handle(q(""), call({ CallSid: SID2 }))).toContain("<Reject/>");
+		expect(await answered(phone)).toContain("<Reject/>");
+	});
+
 	it("with the code: the reply kept for the caller, then a phrase goes to Owni and her reply is spoken", async () => {
 		const pending = memoryPending();
 		pending.put(CALLER, "Ecco il riassunto.", "p");
