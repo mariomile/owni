@@ -1,5 +1,7 @@
 # Solleciti di pagamento
 
+> Sostituito dall'[ADR 0121](0121-registri-sostituiti-da-code-run-e-file.md): lo strumento `invoices` non c'è più, i conti e i dati stanno nei file del workspace e li fa `code_run`. I solleciti si scrivono con le mail e le bozze di sempre.
+
 Dalla settimana 48 Owni sa quali fatture emesse sono scadute. Il passo dopo è riscuoterle: «chi non mi ha ancora pagato?», «prepara un sollecito per Gamma», «manda i solleciti a tutti i clienti in ritardo».
 
 ## Decisione

@@ -1,5 +1,7 @@
 # Schede dei fornitori
 
+> Sostituito dall'[ADR 0121](0121-registri-sostituiti-da-code-run-e-file.md): lo strumento `suppliers` non c'è più, i conti e i dati stanno nei file del workspace e li fa `code_run`.
+
 Con la settimana 57 Owni sapeva tutto dei clienti, ma dei fornitori sapeva solo quello che stava sparso fra fatture ricevute, spese, rinnovi ed estratto conto. «Quanto ho speso con Aruba quest'anno?», «chi sono i miei fornitori principali?», «pago in ritardo qualcuno?» non avevano una risposta sola. E l'IBAN di un fornitore che cambia su una fattura, il segnale più comune di una truffa sui pagamenti, non lo notava nessuno.
 
 ## Decisione

@@ -1,6 +1,6 @@
 // Richiede te: the decisions and results that wait for the person, with the connector and Google action cards.
 import { api, emptyNote, fmt, h, head, icon, instanceHref, mount, route, state, toast } from "../common.js";
-import { agentRequestCard, askedByNote, connectorActionCard, decideWith, decisionCard, googleActionCard } from "../cards.js";
+import { askedByNote, connectorActionCard, decideWith, decisionCard, googleActionCard } from "../cards.js";
 import { refreshCounters } from "../session.js";
 import { render, renderRail } from "../shell.js";
 
@@ -138,9 +138,6 @@ function approvalGroup(group) {
 	const afterConnector = redraw;
 	const pendingConnector = connectorActions.filter((a) => a.status === "pending").map((a) => mark("connector", a, connectorActionCard(inst, a, afterConnector)));
 	const decidedConnector = connectorActions.filter((a) => a.status !== "pending").reverse().slice(0, 20).map((a) => mark("connector", a, connectorActionCard(inst, a, afterConnector)));
-	const agentRequests = group.agentRequests;
-	const pendingAgent = agentRequests.filter((a) => a.status === "pending").map((a) => mark("agent", a, agentRequestCard(inst, a, afterConnector)));
-	const decidedAgent = agentRequests.filter((a) => a.status !== "pending").reverse().slice(0, 20).map((a) => mark("agent", a, agentRequestCard(inst, a, afterConnector)));
 	const googleActions = group.googleActions;
 	const afterGoogle = redraw;
 	const pendingGoogle = googleActions.filter((a) => a.status === "pending").map((a) => mark("google", a, googleActionCard(inst, a, afterGoogle)));
@@ -151,7 +148,7 @@ function approvalGroup(group) {
 		h("a.btn", { href: instanceHref("segreteria", [practice.praticaId], inst.id) }, "Apri la pratica e controlla la bozza"),
 	)));
 	return {
-		pending: [...practices, ...pendingGoogle, ...pendingConnector, ...pendingAgent, ...pendingActions.map((a) => mark("web", a, actionCard(a))), ...pending.map((p) => mark("proposal", p, card(p)))],
-		decided: [...decidedGoogle, ...decidedConnector, ...decidedAgent, ...decidedActions.slice(0, 20).map((a) => mark("web", a, actionCard(a))), ...decided.map((p) => mark("proposal", p, card(p)))],
+		pending: [...practices, ...pendingGoogle, ...pendingConnector, ...pendingActions.map((a) => mark("web", a, actionCard(a))), ...pending.map((p) => mark("proposal", p, card(p)))],
+		decided: [...decidedGoogle, ...decidedConnector, ...decidedActions.slice(0, 20).map((a) => mark("web", a, actionCard(a))), ...decided.map((p) => mark("proposal", p, card(p)))],
 	};
 }

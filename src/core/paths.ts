@@ -62,11 +62,6 @@ export function connectorActionsDir(dataDir: string, tenant: TenantId, instance:
 	return join(instanceDir(dataDir, tenant, instance), "connector-actions");
 }
 
-/** Actions another agente's request led to, waiting for one of this agente's approvers (ADR 0108). */
-export function agentRequestsDir(dataDir: string, tenant: TenantId, instance: InstanceId): string {
-	return join(instanceDir(dataDir, tenant, instance), "agent-requests");
-}
-
 /** What each agente that wrote to this one last asked, per conversation (ADR 0108). */
 export function agentAsksFile(dataDir: string, tenant: TenantId, instance: InstanceId): string {
 	return join(instanceDir(dataDir, tenant, instance), "agent-asks.json");

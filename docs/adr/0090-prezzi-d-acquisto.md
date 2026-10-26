@@ -1,5 +1,7 @@
 # Prezzi d'acquisto
 
+> Sostituito dall'[ADR 0121](0121-registri-sostituiti-da-code-run-e-file.md): lo strumento `purchase_prices` non c'è più, i conti e i dati stanno nei file del workspace e li fa `code_run`.
+
 Le fatture dei fornitori arrivano con le righe (DettaglioLinee), ma Owni ne leggeva solo il testo: «quanto pago la carta A4 da Beta?», «chi me la vende meno cara?», «quali prezzi sono aumentati?» non avevano risposta, e la merce di una fattura andava caricata in magazzino a mano (la settimana 69 lo aveva lasciato aperto).
 
 ## Decisione

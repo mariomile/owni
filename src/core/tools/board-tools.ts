@@ -3,20 +3,6 @@ import { BOARD_LIMITS, type Card, CARD_PRIORITIES, CARD_STATUSES, type CardPrior
 import { digestText } from "../board-digest.ts";
 import { type BoardWork, checklistText } from "../board-work.ts";
 import type { OwniTool } from "../engine.ts";
-import type { CardSubjects } from "../subjects.ts";
-
-/** The most records a scheda is linked to in one call. */
-const SUBJECTS_MAX = 10;
-
-const SUBJECTS_PARAM = {
-	type: "array",
-	items: { type: "string", maxLength: 40 },
-	maxItems: SUBJECTS_MAX,
-	description: "The ids of your own records this scheda is about (CL-0012, OR-0003, 2026-004, AP-0007, BZ-0002, DT-0004): someone who opens it sees which ones, and you are told if another agente has the same client or supplier",
-} as const;
-
-/** The ids given, each once and at most SUBJECTS_MAX: the schema is not enforced on every model. */
-const subjectIds = (value: unknown): string[] | undefined => (Array.isArray(value) ? [...new Set(value.filter((x): x is string => typeof x === "string").map((x) => x.trim()).filter((x) => x !== ""))].slice(0, SUBJECTS_MAX) : undefined);
 
 type Thread = { readonly channel: string; readonly threadId: string };
 
@@ -39,8 +25,6 @@ export function createBoardTools(options: {
 	readonly agents: () => Promise<readonly { readonly id: string; readonly name: string }[]>;
 	/** The console person a conversation is with, when it is a console conversation. */
 	readonly personOf: (thread: Thread) => string | undefined;
-	/** The agente's records a scheda is about (ADR 0110). */
-	readonly subjects: CardSubjects;
 }): OwniTool[] {
 	const { store } = options;
 	const name = (all: readonly { id: string; name: string }[], id: string | undefined) => (id === undefined ? "nessuno" : (all.find((a) => a.id === id)?.name ?? id));
@@ -148,7 +132,6 @@ export function createBoardTools(options: {
 					checklist: { type: "array", items: { type: "string", maxLength: BOARD_LIMITS.checkItem }, maxItems: BOARD_LIMITS.checklist, description: "The steps of the work, one per item, if it has clear steps" },
 					after: { type: "array", items: { type: "string" }, maxItems: BOARD_LIMITS.after, description: "The numbers of the schede that must be done first (12 or #12)" },
 					due: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$", description: "By when it should be done, YYYY-MM-DD, counting from today's date; only when the person gave one. Only a person changes it later, from the board" },
-					subjects: SUBJECTS_PARAM,
 				},
 				required: ["title"],
 				additionalProperties: false,
@@ -184,11 +167,8 @@ export function createBoardTools(options: {
 					if (first === undefined) return `Errore: la scheda ${String(ref)} da fare prima non c'è. Usa board_list per i numeri.`;
 					after.push(first.id);
 				}
-				const subjects = subjectIds(args.subjects) ?? [];
-				const missing = subjects.length === 0 ? [] : options.subjects.missing(subjects);
-				if (missing.length > 0) return `Errore: nei tuoi registri non c'è ${missing.join(", ")}. Usa gli ID dei tuoi record (CL-0012, OR-0003...).`;
 				// Once per call: a rerun after a crash does not make a second scheda.
-				const made = await ctx.step<{ text: string; card: { id: string; n: number } | null }>("create", async () => {
+				const made = await ctx.step("create", async () => {
 					try {
 						const card = await options.work.create(
 							{ title: String(args.title), ...(typeof args.description === "string" ? { description: args.description } : {}), ...(typeof args.priority === "string" ? { priority: args.priority as CardPriority } : {}), ...(assignee === undefined ? {} : { assignee }), ...(parent === undefined ? {} : { parent: parent.id }), ...(due === undefined ? {} : { due }), ...(after.length === 0 ? {} : { after }), ...(Array.isArray(args.checklist) ? { checklist: args.checklist.filter((x): x is string => typeof x === "string") } : {}) },
@@ -196,24 +176,19 @@ export function createBoardTools(options: {
 							undefined,
 							ctx.thread?.channel === "web" ? ctx.thread.threadId : undefined,
 						);
-						const linkTo = { card: { id: card.id, n: card.n } };
 						const sub = `${parent === undefined ? `Scheda #${card.n}` : `Sotto-scheda #${card.n} (parte di #${parent.n})`}${card.due === undefined ? "" : `, scadenza ${dueLabel(card.due)} ${card.due.slice(0, 4)},`}`;
-						if (card.assignee === undefined) return { ...linkTo, text: `${sub} creata in «Da fare».` };
+						if (card.assignee === undefined) return `${sub} creata in «Da fare».`;
 						const first = waitingFor(card, store.list()).map((b) => `#${b.n}`);
-						if (card.queued !== undefined) return { ...linkTo, text: `${sub} affidata a ${name(all, card.assignee)}: parte da sola quando ${first.join(", ")} ${first.length === 1 ? "è fatta" : "sono fatte"}; quando la mette in «Da rivedere» te lo dico qui.` };
-						if (card.status === "in_corso") return { ...linkTo, text: `${sub} affidata a ${name(all, card.assignee)}, che ci sta lavorando: quando la mette in «Da rivedere» te lo dico qui.` };
+						if (card.queued !== undefined) return `${sub} affidata a ${name(all, card.assignee)}: parte da sola quando ${first.join(", ")} ${first.length === 1 ? "è fatta" : "sono fatte"}; quando la mette in «Da rivedere» te lo dico qui.`;
+						if (card.status === "in_corso") return `${sub} affidata a ${name(all, card.assignee)}, che ci sta lavorando: quando la mette in «Da rivedere» te lo dico qui.`;
 						const why = card.events.at(-1)?.kind === "comment" ? ` ${card.events.at(-1)?.text}` : "";
-						return { ...linkTo, text: `${sub} creata e assegnata a ${name(all, card.assignee)}: parte quando una persona la avvia dalla board.${why}` };
+						return `${sub} creata e assegnata a ${name(all, card.assignee)}: parte quando una persona la avvia dalla board.${why}`;
 					} catch (error) {
-						if (error instanceof BoardError) return { text: `Errore: ${error.message}.`, card: null };
+						if (error instanceof BoardError) return `Errore: ${error.message}.`;
 						throw error;
 					}
 				});
-				// Linking again after a rerun changes nothing.
-				if (made.card === null || subjects.length === 0) return made.text;
-				const warning = await options.subjects.link(made.card, subjects, ctx.thread);
-				if (warning === undefined) return made.text;
-				return [made.text, `Collegata a ${subjects.join(", ")}.`, warning].filter(Boolean).join(" ");
+				return made;
 			},
 		},
 		{
@@ -229,7 +204,6 @@ export function createBoardTools(options: {
 					check_done: { type: "integer", minimum: 1, description: "The number of the checklist item now done" },
 					check_undone: { type: "integer", minimum: 1, description: "The number of a checklist item ticked by mistake" },
 					check_add: { type: "string", maxLength: BOARD_LIMITS.checkItem, description: "A step to add to the checklist" },
-					subjects: { ...SUBJECTS_PARAM, description: `${SUBJECTS_PARAM.description}. They replace the ones linked before; [] unlinks them. Only on a scheda assigned to you or created by you` },
 				},
 				additionalProperties: false,
 			},
@@ -244,21 +218,8 @@ export function createBoardTools(options: {
 					...(typeof args.check_undone === "number" ? [{ item: String(args.check_undone), done: false }] : []),
 					...(typeof args.check_add === "string" && args.check_add.trim() !== "" ? [{ add: args.check_add }] : []),
 				];
-				const subjects = subjectIds(args.subjects);
-				if (subjects !== undefined) {
-					if (!mine(card)) return `Errore: la scheda #${card.n} non è tua: collega i tuoi record solo alle schede assegnate a te o che hai creato tu.`;
-					const missing = options.subjects.missing(subjects);
-					if (missing.length > 0) return `Errore: nei tuoi registri non c'è ${missing.join(", ")}. Usa gli ID dei tuoi record (CL-0012, OR-0003...).`;
-				}
-				const linked = async () => {
-					if (subjects === undefined) return "";
-					const warning = await options.subjects.link(card, subjects, ctx.thread);
-					if (warning === undefined) return "";
-					return [subjects.length === 0 ? `Scheda #${card.n}: non più collegata ai tuoi record.` : `Scheda #${card.n} collegata a ${subjects.join(", ")}.`, warning].filter(Boolean).join(" ");
-				};
 				const nothing = status === undefined && checks.length === 0 && (comment === undefined || comment.trim() === "");
-				if (nothing && subjects !== undefined) return (await linked()) || `Errore: non sono riuscita a collegare la scheda #${card.n} ai tuoi record, riprova più tardi.`;
-				if (nothing) return "Errore: indica una colonna, una voce della lista, un commento o i record collegati.";
+				if (nothing) return "Errore: indica una colonna, una voce della lista o un commento.";
 				if ((status !== undefined || checks.length > 0) && card.assignee !== options.self) return `Errore: la scheda #${card.n} non è assegnata a te: puoi solo commentarla.`;
 				const text = await ctx.step("update", async () => {
 					try {
@@ -273,7 +234,7 @@ export function createBoardTools(options: {
 						throw error;
 					}
 				});
-				return text.startsWith("Errore:") ? text : [text, await linked()].filter(Boolean).join(" ");
+				return text;
 			},
 		},
 	];

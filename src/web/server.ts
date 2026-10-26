@@ -20,9 +20,7 @@ import { apiTransportProblem } from "../connectors/api.ts";
 import { type ConnectorStatus, CONNECTOR_ID, type ConnectorStore, connectorEgressName, type McpConnector } from "../connectors/mcp.ts";
 import { type McpOAuth, McpOAuthError } from "../connectors/mcp-oauth.ts";
 import { attachmentNote } from "../core/attachment-note.ts";
-import { decideAgentRequest, decideConnectorAction, decideToolProposal, decideWebAction, isApprover, NotAnApprover, OWNER, type Approver } from "../core/approvals.ts";
-import { AgentRequestError } from "../core/agent-requests.ts";
-import type { OwniTool } from "../core/engine.ts";
+import { decideConnectorAction, decideToolProposal, decideWebAction, isApprover, NotAnApprover, OWNER, type Approver } from "../core/approvals.ts";
 import { type ConnectorAction, ConnectorActionError, type ConnectorActionResult } from "../core/connector-actions.ts";
 import { documentKind, documentLabel } from "../core/documents.ts";
 import { recordingLabel } from "../core/recordings.ts";
@@ -61,7 +59,7 @@ import type { SegreteriaService } from "../segreteria/service.ts";
 import { type BrowserState, MAX_TYPED, PRESS_KEYS, type PressKey } from "../core/web-session.ts";
 import { type PeopleStore, type Person, publicPerson, type SessionStore } from "./auth.ts";
 import { WebChannel, type WebEntry, type WebEvent, type WebThread } from "./channel.ts";
-import { type BoardSubjects, boardRoutes } from "./board-routes.ts";
+import { boardRoutes } from "./board-routes.ts";
 import { orgRoutes } from "./org-routes.ts";
 import { teamRoutes } from "./team-routes.ts";
 import { type Ctx, type Handler, HttpError, MAX_JSON, type Route, readBody, readJson, STREAMED } from "./http.ts";
@@ -204,8 +202,6 @@ export type WebAppOptions = {
 	readonly sendWebAction?: (instanceId: string) => (action: WebAction) => Promise<WebActionResult>;
 	/** Runs an approved connector call on the instance's live connection (ADR 0025). */
 	readonly runConnectorAction?: (instanceId: string) => (action: ConnectorAction) => Promise<ConnectorActionResult>;
-	/** The instance's own tools, opening it when needed: another agente's request an approver approved runs with them (ADR 0108). */
-	readonly agentRequestTools?: (instanceId: string) => () => Promise<readonly OwniTool[] | undefined>;
 	/** The WhatsApp number of each instance that has one: its webhook. */
 	readonly whatsappHooks?: ReadonlyMap<string, WhatsAppAdapter>;
 	/** The phone number of each instance that has one: its webhook (ADR 0012). */
@@ -245,7 +241,7 @@ export type WebAppOptions = {
 	/** Delete an agente for good (ADR 0046); never the general one, nor a segreteria. */
 	readonly deleteInstance?: { readonly main: string; readonly run: (id: string) => Promise<void> };
 	/** The board (ADR 0050). */
-	readonly board?: { readonly store: BoardStore; readonly work: BoardWork; readonly routines?: RoutineStore; readonly subjects: BoardSubjects };
+	readonly board?: { readonly store: BoardStore; readonly work: BoardWork; readonly routines?: RoutineStore };
 	readonly log?: (message: string) => void;
 };
 
@@ -1176,27 +1172,6 @@ export function createWebApp(options: WebAppOptions): Server {
 		} catch (error) {
 			if (error instanceof NotAnApprover) throw new HttpError(403, "Questa richiesta la decide chi l'ha fatta o un approvatore");
 			if (error instanceof ConnectorActionError) throw new HttpError(404, "Richiesta inesistente");
-			throw error;
-		}
-	});
-	// --- steps other agenti asked for (ADR 0108): only this agente's approvers see and decide them ---
-	route("GET", "/api/instances/:id/agent-requests", "person", async ({ person, params }) => {
-		const p = person as Person;
-		await instanceAccess(p, params[0] as string);
-		if (!(await mayDecideAll(p, params[0] as string))) return { requests: [] };
-		return { requests: await runtime.agentRequests(tenantId, params[0] as string).list() };
-	});
-	route("POST", "/api/instances/:id/agent-requests/:rid/decision", "person", async ({ person, params, req }) => {
-		const p = person as Person;
-		await instanceAccess(p, params[0] as string);
-		const body = (await readJson(req)) as { decision?: string };
-		if (body.decision !== "approved" && body.decision !== "rejected") throw new HttpError(400, "decision: approved | rejected");
-		if (options.agentRequestTools === undefined) throw new HttpError(501, "Le richieste tra agenti non sono disponibili su questo server");
-		try {
-			return { request: await decideAgentRequest(runtime, tenantId, params[0] as string, params[1] as string, body.decision, approverOf(p), options.agentRequestTools(params[0] as string)) };
-		} catch (error) {
-			if (error instanceof NotAnApprover) throw new HttpError(403, "Questa richiesta la decide solo chi approva per questo agente");
-			if (error instanceof AgentRequestError) throw new HttpError(404, "Richiesta inesistente");
 			throw error;
 		}
 	});
@@ -2327,18 +2302,17 @@ export function createWebApp(options: WebAppOptions): Server {
 		const now = new Date();
 		for (const r of visible) {
 			const approver = await mayDecideAll(p, r.id);
-			const [allWeb, allConnectors, allGoogle, proposals, practices, agentRequests] = await Promise.all([
+			const [allWeb, allConnectors, allGoogle, proposals, practices] = await Promise.all([
 				runtime.webActions(tenantId, r.id).list(now),
 				runtime.connectorActions(tenantId, r.id).list(now),
 				runtime.googleActions(tenantId, r.id).list(now),
 				approver ? runtime.proposals(tenantId, r.id).list() : [],
 				approver ? (options.segreterie?.get(r.id)?.practices.list() ?? []) : [],
-				approver ? runtime.agentRequests(tenantId, r.id).list(now) : [],
 			]);
 			const webActions = approver ? allWeb : allWeb.filter((a) => a.requester === `web:${p.id}`);
 			const connectorActions = approver ? allConnectors : allConnectors.filter((a) => a.requester === `web:${p.id}`);
 			const googleActions = allGoogle.filter((a) => a.personId === p.id);
-			for (const items of [proposals, webActions, connectorActions, agentRequests, googleActions]) {
+			for (const items of [proposals, webActions, connectorActions, googleActions]) {
 				pendingApprovals += items.filter((a) => a.status === "pending").length;
 			}
 			pendingApprovals += practices.filter((a) => a.status === "draft_ready").length;
@@ -2347,7 +2321,6 @@ export function createWebApp(options: WebAppOptions): Server {
 				proposals,
 				webActions,
 				connectorActions,
-				agentRequests,
 				googleActions: googleActions.map(cardView),
 				pratiche: publicPractices(practices),
 			});

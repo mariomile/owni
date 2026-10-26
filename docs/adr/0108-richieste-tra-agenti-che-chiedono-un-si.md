@@ -1,5 +1,7 @@
 # 0108: Richieste tra agenti che chiedono un sì
 
+> Sostituito dall'[ADR 0121](0121-registri-sostituiti-da-code-run-e-file.md): le richieste tra agenti da approvare non ci sono più: le facevano gli strumenti dei registri.
+
 Un agente A scrive a un agente B con `agent_message` ([ADR 0042](0042-agenti-che-si-scrivono.md)). B lavora in una conversazione sul canale `agente` (`<A>~<canale>~<conversazione>`), con origine `agent` ([ADR 0088](0088-conferme-solo-dalla-persona.md)). Quando uno strumento di B arriva a un passo che `requirePersonFor` tiene per una persona (emettere, confermare, cambiare qualcosa che non si disfa), la risposta finora era un rifiuto secco: «lo conferma solo chi ti scrive». A non poteva confermare, giustamente, ma nemmeno nessun altro: la richiesta moriva lì. Le azioni dei connettori ([ADR 0025](0025-azioni-dei-connettori-con-approvazione.md)) e i moduli web ([ADR 0011](0011-moduli-web-con-approvazione.md)) chiesti in quella conversazione andavano già agli approvatori di B, ma la scheda non diceva che li aveva chiesti un altro agente.
 
 ## Decisione

@@ -66,28 +66,6 @@ export function askedByNote(askedBy) {
 	return h("div", h("p", h("b", "La chiede l'agente "), `«${askedBy.name}»`, askedBy.request ? ", con le sue parole:" : "."), askedBy.request ? h("blockquote", h("pre.code", askedBy.request)) : null);
 }
 
-/** A step another agente asked for, waiting for one of this agente's approvers: approve runs exactly that call, once. */
-export function agentRequestCard(inst, a, after) {
-	const el = h(
-		"article.card.pad.dossier",
-		h("header", h("div", h("h2", `Richiesta dell'agente «${a.askedBy.name}»`), h("small.dossier-meta", `${inst.name} · ${fmt.time(a.proposedAt)}`)), a.status === "pending" ? h("span.chip.accent", "In attesa") : null),
-		askedByNote(a.askedBy),
-		h("p", h("b", "Azione: "), a.what, " ", h("span.mono.muted", a.tool)),
-		a.shown.length ? h("table.ledger", h("tbody", a.shown.map(([k, v]) => h("tr", h("td.mono", k), h("td", h("pre.code", v)))))) : h("p.muted", "Nessun dato."),
-		a.preview ? h("div", h("p", h("b", "Cosa scriverei:")), h("pre.code", a.preview)) : null,
-		a.result ? h("details", h("summary", "Dettagli"), h("pre.code", a.result.error ?? a.result.text)) : null,
-		a.status !== "pending" && CONNECTOR_STAMP[a.status] ? h(`div.stamp.${CONNECTOR_STAMP[a.status][0]}`, CONNECTOR_STAMP[a.status][1]) : null,
-	);
-	if (a.status === "pending") {
-		const decide = (decision, event) => decideWith(el, event.currentTarget, async () => {
-			const { request } = await api(`/api/instances/${inst.id}/agent-requests/${a.id}/decision`, { method: "POST", body: { decision } });
-			toast(request.status === "done" ? "Fatto" : request.status === "rejected" ? "Richiesta rifiutata" : request.status === "failed" ? "Non è stata fatta: vedi i dettagli" : request.status === "uncertain" ? "Esito incerto: controlla prima di rifarla" : request.status === "expired" ? "La richiesta era scaduta" : `Richiesta ${request.status}`, request.status !== "done" && request.status !== "rejected");
-		}, after);
-		el.append(h("div.actions", h("button.btn.accent", { onclick: (e) => decide("approved", e) }, icon("check"), "Approva"), h("button.btn.danger", { onclick: (e) => decide("rejected", e) }, "Rifiuta"), h("span.muted", `Se la approvi, ${inst.name} la fa una volta sola, con questi valori; l'esito torna a «${a.askedBy.name}».`)));
-	}
-	return decisionCard(el, inst, a.status === "pending");
-}
-
 // ---------- Google: scrivere con approvazione ----------
 const GOOGLE_KIND = {
 	"mail.send": ["Mail", "Invia la mail", "Mail inviata"],

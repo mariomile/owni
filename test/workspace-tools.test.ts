@@ -164,7 +164,7 @@ describe("file_read on documents", () => {
 		await workspace.write("rotto.docx", pdf.subarray(0, 4));
 		await workspace.write("cifrato.pdf", Buffer.from("%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\ntrailer\n<< /Root 1 0 R /Encrypt << /V 2 >> >>\n%%EOF\n"));
 		await workspace.write("dati.bin", Buffer.from([1, 0, 2, 0]));
-		expect(await call({ path: "rotto.docx" })).toBe("Errore: non riesco a leggere rotto.docx: il file è rovinato o non è un documento che so leggere (PDF, Word, Excel, PowerPoint, OpenDocument, fatture elettroniche XML o .p7m).");
+		expect(await call({ path: "rotto.docx" })).toBe("Errore: non riesco a leggere rotto.docx: il file è rovinato o non è un documento che so leggere (PDF, Word, Excel, PowerPoint, OpenDocument o .p7m).");
 		expect(await call({ path: "cifrato.pdf" })).toMatch(/^Errore: non riesco a leggere cifrato\.pdf: il PDF è protetto da una password/);
 		await workspace.write("vecchio.xls", readFileSync(new URL("./fixtures/docs/vecchio.xls", import.meta.url)));
 		expect(await call({ path: "vecchio.xls" })).toBe("vecchio.xls è un foglio Excel nel vecchio formato .xls: non lo leggo direttamente. Se hai il computer, leggilo con python e xlrd; altrimenti chiedi di salvarlo come .xlsx o PDF.");

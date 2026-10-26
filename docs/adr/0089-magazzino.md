@@ -1,5 +1,7 @@
 # Magazzino
 
+> Sostituito dall'[ADR 0121](0121-registri-sostituiti-da-code-run-e-file.md): lo strumento `stock` non c'è più, i conti e i dati stanno nei file del workspace e li fa `code_run`.
+
 Un negozio o un artigiano vuole sapere quanta merce ha, cosa sta finendo e quanto vale. Il listino (settimana 64) diceva i prezzi, ma non le quantità, e una fattura emessa non toglieva niente da nessuna parte.
 
 ## Decisione

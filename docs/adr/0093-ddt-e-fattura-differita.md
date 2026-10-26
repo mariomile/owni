@@ -1,5 +1,7 @@
 # DDT e fattura differita
 
+> Sostituito dall'[ADR 0121](0121-registri-sostituiti-da-code-run-e-file.md): lo strumento `ddt` non c'è più, i conti e i dati stanno nei file del workspace e li fa `code_run`.
+
 Chi spedisce merce ai clienti fa un documento di trasporto (DDT) a ogni consegna e, a fine mese, una fattura differita che raccoglie i DDT del cliente. Owni faceva le fatture e scaricava il magazzino quando erano emesse, ma «fammi il DDT per Rossi», «quali DDT non ho ancora fatturato?», «fai la fattura differita di ottobre» non avevano risposta, e la merce uscita con un DDT non si scaricava finché non arrivava la fattura.
 
 ## Decisione

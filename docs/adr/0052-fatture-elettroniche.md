@@ -1,5 +1,7 @@
 # Fatture elettroniche (FatturaPA)
 
+> Sostituito dall'[ADR 0121](0121-registri-sostituiti-da-code-run-e-file.md): il riepilogo delle fatture elettroniche non c'è più: un file FatturaPA si legge come testo o con `code_run`. I file firmati `.p7m` si aprono ancora.
+
 Le imprese italiane ricevono le fatture dallo SdI come file XML FatturaPA (`IT01234567890_00001.xml`), spesso firmati come `.xml.p7m`. Fino alla settimana 46 Owni li leggeva come testo grezzo o non li leggeva affatto: tag, codici come TD04, MP05, N6.3, e niente che dicesse a chi paga l'IVA o quando scade.
 
 ## Decisione

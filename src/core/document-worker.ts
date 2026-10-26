@@ -1,6 +1,6 @@
 import { parentPort, workerData } from "node:worker_threads";
 import { ChartError, type ChartSpec, drawChart } from "./charts.ts";
-import { DocumentError, documentFattura, documentText, unsignedData } from "./documents.ts";
+import { DocumentError, documentText, unsignedData } from "./documents.ts";
 import { MakeError, type MakeInput, makeDocument } from "./make-document.ts";
 import { P7mError } from "./p7m.ts";
 import { PdfError, pdfPageImage } from "./pdf-text.ts";
@@ -8,14 +8,11 @@ import { PdfError, pdfPageImage } from "./pdf-text.ts";
 /**
  * Runs one extraction for document-reader.ts, away from the event loop that serves everyone:
  * a document's text, with `page` the picture on that page of a PDF (ADR 0028), or with `make`
- * a Word, Excel or PDF file to write (ADR 0029), with `chart` a chart to draw (ADR 0030),
- * with `fattura` an invoice's structured content
- * for the scadenzario (invoices.ts).
+ * a Word, Excel or PDF file to write (ADR 0029), with `chart` a chart to draw (ADR 0030).
  */
-const { name, data, page, make, chart, fattura } = workerData as { name: string; data: Uint8Array; page?: number; make?: MakeInput; chart?: ChartSpec; fattura?: boolean };
+const { name, data, page, make, chart } = workerData as { name: string; data: Uint8Array; page?: number; make?: MakeInput; chart?: ChartSpec };
 try {
-	if (fattura === true) parentPort?.postMessage({ fattura: documentFattura(data) });
-	else if (chart !== undefined) parentPort?.postMessage({ made: drawChart(chart) });
+	if (chart !== undefined) parentPort?.postMessage({ made: drawChart(chart) });
 	else if (make !== undefined) parentPort?.postMessage({ made: makeDocument(make) });
 	else if (page !== undefined) {
 		// A signed PDF (.pdf.p7m): the pages of what was signed.

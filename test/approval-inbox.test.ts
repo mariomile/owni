@@ -7,7 +7,6 @@ import { FakeCrmAdapter } from "../src/connectors/crm-fake.ts";
 import { FakeMailAdapter } from "../src/connectors/mail-fake.ts";
 import { ConnectorStore } from "../src/connectors/mcp.ts";
 import { piDurableEngine } from "../src/core/adapters/pi-durable.ts";
-import { AgentRequestStore } from "../src/core/agent-requests.ts";
 import { ConnectorActionStore } from "../src/core/connector-actions.ts";
 import { GoogleActionStore } from "../src/core/google-actions.ts";
 import { instanceId, tenantId } from "../src/core/ids.ts";
@@ -86,7 +85,6 @@ async function setup() {
 		const proposals = await runtime.proposals("acme", id).propose({ name: "quote_tool", description: "Prepare quote", code: "export default () => 'quote'", parameters: { type: "object" }, hosts: [] });
 		const webActions = await runtime.webActions("acme", id).propose({ pageUrl: "https://example.test", form: 0, action: "https://example.test/send", values: { text: "Quote" }, button: 0, shown: [["text", "Quote"]], fingerprint: "form", reason: "Send quote", requester: `web:${personId}` });
 		const connectorActions = await runtime.connectorActions("acme", id).propose({ connectorId: "crm", connectorName: "CRM", server: "https://example.test", tool: "write", toolTitle: "Write", args: { text: "Quote" }, reason: "Save quote", destructive: false, requester: `web:${personId}` });
-		const agentRequests = await runtime.agentRequests("acme", id).propose({ tool: "quote_send", args: { confirm: true }, what: "Send quote", askedBy: { id: "assistant", name: "Assistant" }, thread: { channel: "agente", threadId: "agent-thread" }, origin: { channel: "web", threadId: "private-origin" } });
 		const googleActions = await runtime.googleActions("acme", id).propose({ kind: "mail.send", personId, account: `${personId}@example.test`, reason: "Send quote", mail: { to: ["customer@example.test"], cc: [], subject: "Quote", body: "Draft" } });
 		const now = new Date().toISOString();
 		const pratiche: Pratica = {
@@ -96,12 +94,12 @@ async function setup() {
 			mail: { messageId: "mail-1", from: "customer@example.test", subject: "Raw private mail", bodyText: "Raw private body", receivedAt: now },
 		};
 		await segreterie.get(id)!.practices.save(pratiche);
-		return { proposals, webActions, connectorActions, agentRequests, googleActions, pratiche };
+		return { proposals, webActions, connectorActions, googleActions, pratiche };
 	};
 	return { runtime, owner, anna, luca, outsider, dir, channels, segreterie, base, as, seed };
 }
 
-const actionSources = ["proposals", "webActions", "connectorActions", "agentRequests", "googleActions"] as const;
+const actionSources = ["proposals", "webActions", "connectorActions", "googleActions"] as const;
 type Inbox = { groups: { instance: { id: string; name: string; isApprover: boolean }; pratiche: { praticaId: string; status: string }[] }[]; pendingApprovals: number };
 const pendingKeys = (inbox: Inbox) => inbox.groups.flatMap((group) => [
 	...actionSources.flatMap((source) => (group as any)[source].filter((item: any) => item.status === "pending").map((item: any) => `${group.instance.id}/${source}/${item.id}`)),
@@ -134,7 +132,7 @@ describe("personal approval inbox", () => {
 			expect(group.instance).toEqual({ id: group.instance.id, name: group.instance.id.toUpperCase(), isApprover: true });
 			for (const [source, route, key] of [
 				["proposals", "proposals", "proposals"], ["webActions", "web-actions", "actions"],
-				["connectorActions", "connector-actions", "actions"], ["agentRequests", "agent-requests", "requests"],
+				["connectorActions", "connector-actions", "actions"],
 				["googleActions", "google-actions", "actions"], ["pratiche", "pratiche", "pratiche"],
 			] as const) {
 				const direct = (await anna(`/api/instances/${group.instance.id}/${route}`)).body[key];
@@ -145,7 +143,7 @@ describe("personal approval inbox", () => {
 			expect(group.pratiche[0]).not.toHaveProperty("mail");
 		}
 		expect(pendingKeys(response.body).sort()).toEqual(expected.sort());
-		expect(response.body.pendingApprovals).toBe(12);
+		expect(response.body.pendingApprovals).toBe(10);
 		expect((await anna("/api/console-summary")).body.pendingApprovals).toBe(pendingKeys(response.body).length);
 		for (const selected of ["ops", "sales", "hidden", "missing"]) {
 			expect((await anna(`/api/approvals?instance=${selected}`)).body).toEqual(response.body);
@@ -167,7 +165,7 @@ describe("personal approval inbox", () => {
 		expect(inbox.groups.map((g: any) => g.instance.id).sort()).toEqual(["ops", "sales"]);
 		for (const group of inbox.groups) {
 			expect(group.instance.isApprover).toBe(false);
-			expect([group.proposals, group.agentRequests, group.pratiche]).toEqual([[], [], []]);
+			expect([group.proposals, group.pratiche]).toEqual([[], []]);
 			expect([...group.webActions, ...group.connectorActions].every((a: any) => a.requester === `web:${h.luca.person.id}`)).toBe(true);
 			expect(group.googleActions.every((a: any) => a.personId === h.luca.person.id)).toBe(true);
 		}
@@ -191,7 +189,7 @@ describe("personal approval inbox", () => {
 		const inbox = (await owner("/api/approvals")).body;
 		expect(inbox.groups.map((g: any) => g.instance.id).sort()).toEqual(["hidden", "ops", "sales"]);
 		expect(inbox.groups.flatMap((g: any) => g.googleActions).map((a: any) => a.personId)).toEqual([h.owner.person.id]);
-		expect(inbox.pendingApprovals).toBe(16);
+		expect(inbox.pendingApprovals).toBe(13);
 		expect((await owner("/api/console-summary")).body.pendingApprovals).toBe(pendingKeys(inbox).length);
 		expect((await owner(`/api/instances/ops/threads/${thread.id}`)).status).toBe(404);
 		expect((await owner("/api/instances/ops/threads")).body.threads).toEqual([]);
@@ -203,7 +201,7 @@ describe("personal approval inbox", () => {
 		const sharedId = "012345abcdef";
 		for (const id of ["ops", "sales"]) {
 			const seeded = await h.seed(id);
-			for (const [source, folder] of [["proposals", "proposals"], ["webActions", "web-actions"], ["connectorActions", "connector-actions"], ["agentRequests", "agent-requests"], ["googleActions", "google-actions"]] as const) {
+			for (const [source, folder] of [["proposals", "proposals"], ["webActions", "web-actions"], ["connectorActions", "connector-actions"], ["googleActions", "google-actions"]] as const) {
 				const item = { ...seeded[source], id: sharedId };
 				await writeFile(join(h.dir(id), folder, `${item.id}.json`), JSON.stringify(item));
 				await rm(join(h.dir(id), folder, `${seeded[source].id}.json`));
@@ -211,10 +209,10 @@ describe("personal approval inbox", () => {
 		}
 		const anna = await h.as(h.anna.token);
 		const inbox = (await anna("/api/approvals")).body;
-		expect(pendingKeys(inbox)).toHaveLength(12);
-		expect(new Set(pendingKeys(inbox)).size).toBe(12);
+		expect(pendingKeys(inbox)).toHaveLength(10);
+		expect(new Set(pendingKeys(inbox)).size).toBe(10);
 		for (const group of inbox.groups) for (const source of actionSources) expect(group[source][0].id).toBe(sharedId);
-		expect((await anna("/api/console-summary")).body.pendingApprovals).toBe(12);
+		expect((await anna("/api/console-summary")).body.pendingApprovals).toBe(10);
 	});
 
 	it("retains expired and rejected history without counting it, and counts only draft_ready practices", async () => {
@@ -230,11 +228,11 @@ describe("personal approval inbox", () => {
 		expect(ops.proposals[0].status).toBe("rejected");
 		expect(ops.googleActions.map((a: any) => a.status).sort()).toEqual(["expired", "pending"]);
 		expect(ops.pratiche[0].status).toBe("awaiting_edit");
-		expect(inbox.pendingApprovals).toBe(4);
+		expect(inbox.pendingApprovals).toBe(3);
 		expect((await anna("/api/console-summary")).body.pendingApprovals).toBe(pendingKeys(inbox).length);
 	});
 
-	for (const [source, store] of [["proposals", ProposalStore], ["web", WebActionStore], ["MCP", ConnectorActionStore], ["agent requests", AgentRequestStore], ["Google", GoogleActionStore], ["practices", PracticeStore]] as const) {
+	for (const [source, store] of [["proposals", ProposalStore], ["web", WebActionStore], ["MCP", ConnectorActionStore], ["Google", GoogleActionStore], ["practices", PracticeStore]] as const) {
 		it(`fails the whole inbox and summary explicitly when ${source} cannot load`, async () => {
 			const h = await setup();
 			await h.seed("ops");
@@ -254,8 +252,8 @@ describe("personal approval inbox", () => {
 		await mkdir(join(h.dir("hidden"), "google-actions"), { recursive: true });
 		await writeFile(join(h.dir("hidden"), "google-actions", "012345abcdef.json"), "invalid JSON");
 		const anna = await h.as(h.anna.token);
-		expect((await anna("/api/approvals")).body.pendingApprovals).toBe(6);
-		expect((await anna("/api/console-summary")).body.pendingApprovals).toBe(6);
+		expect((await anna("/api/approvals")).body.pendingApprovals).toBe(5);
+		expect((await anna("/api/console-summary")).body.pendingApprovals).toBe(5);
 		const owner = await h.as(h.owner.token);
 		expect((await owner("/api/approvals")).status).toBe(500);
 		await rename(join(h.dir("hidden"), "google-actions", "012345abcdef.json"), join(h.dir("hidden"), "google-actions", ".ignored"));

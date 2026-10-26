@@ -93,7 +93,7 @@ export function createGoogleTools(options: {
 			name: "google_calendar_events",
 			description:
 				"List the events in the primary Google Calendar of the person you are talking to, read only. " +
-				`For «cosa ho domani?» also read the clients' appointments with appointments agenda. from and to are ISO 8601 date-times; by default the next 48 hours. Times are shown as Google gives them; the person's time zone is ${options.timeZone}.`,
+				`from and to are ISO 8601 date-times; by default the next 48 hours. Times are shown as Google gives them; the person's time zone is ${options.timeZone}.`,
 			parameters: {
 				type: "object",
 				properties: { from: { type: "string" }, to: { type: "string" }, max: { type: "integer", minimum: 1, maximum: 50, description: "Default 20" } },
@@ -236,7 +236,7 @@ function writeTools(write: WriteOptions, withClient: WithClient, timeZone: strin
 			name: "google_mail_send",
 			description:
 				`Send a mail from the Gmail of the person you are talking to, or save it as a draft (draft: true). A draft is saved at once in the person's Gmail drafts and nothing leaves. Sending or replying waits: ${ASK} ` +
-				"Plain text, signed as the person. A quote to a customer goes with quotes op send and a payment reminder with invoices op reminder (they check and record it), not with this. To answer a mail give reply_to (its id from google_mail_search): it goes to the sender, in the same thread, with the same subject (subject is ignored); reply_all: true also to everyone else on it. " +
+				"Plain text, signed as the person. To answer a mail give reply_to (its id from google_mail_search): it goes to the sender, in the same thread, with the same subject (subject is ignored); reply_all: true also to everyone else on it. " +
 				'To the person themselves («mandami per mail…»): to ["me"], their own account. ' +
 					`attachments: workspace paths of files to attach, at most ${ATTACHMENT_LIMITS.maxFiles}: PDF, Office, OpenDocument, RTF, CSV, text, PNG, JPG, XML and p7m; the card shows them with their sizes, and a file changed before approval is not sent. ` +
 					'To find the file the person names ("il contratto di Marco", "l\'ultimo report") use file_search first (file_list for the newest); if more than one fits, ask which, naming them.',
@@ -309,7 +309,7 @@ function writeTools(write: WriteOptions, withClient: WithClient, timeZone: strin
 		{
 			service: "calendar",
 			name: "google_calendar_create",
-			description: `Create an event in the primary Google Calendar of the person you are talking to, with guests if given (they get an invitation). Without guests it is created at once in the person's calendar and nobody is told. With guests it waits: ${ASK} Several fiscal deadlines at once are fiscal_agenda export_ics, not many events.`,
+			description: `Create an event in the primary Google Calendar of the person you are talking to, with guests if given (they get an invitation). Without guests it is created at once in the person's calendar and nobody is told. With guests it waits: ${ASK}`,
 			parameters: {
 				type: "object",
 				properties: { summary: { type: "string", minLength: 1, maxLength: GOOGLE_ACTION_LIMITS.maxSubject }, start: when, end: when, location: { type: "string", maxLength: GOOGLE_ACTION_LIMITS.maxLocation }, description: { type: "string", maxLength: GOOGLE_ACTION_LIMITS.maxText }, attendees: addresses, notify, reason },

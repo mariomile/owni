@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { piDurableEngine } from "../src/core/adapters/pi-durable.ts";
+import { BRIEF_INSTRUCTION } from "../src/core/brief.ts";
 import { OwniRuntime, type Reply } from "../src/core/index.ts";
 import { Scheduler } from "../src/core/scheduler.ts";
-import { ScheduleError, ScheduleStore } from "../src/core/schedules.ts";
+import { SCHEDULE_LIMITS, ScheduleError, ScheduleStore } from "../src/core/schedules.ts";
 import { createScheduleTools } from "../src/core/tools/schedule-tools.ts";
 import { FAUX_MODEL, tempDataDir, waitFor } from "./helpers.ts";
 
@@ -39,6 +40,16 @@ describe("tasks programmati", () => {
 		expect((await h.store.get(s.id))?.nextRunAt).toBeNull();
 		const audit = await h.runtime.audit("acme").read();
 		expect(audit).toContainEqual(expect.objectContaining({ type: "schedule.fired", scheduleId: s.id }));
+		await h.runtime.close();
+	});
+
+	it("a saved brief always sends the current brief instruction, not the text it was saved with", async () => {
+		const h = await setup();
+		const s = await h.store.create({ instruction: "Brief vecchio con le righe dei registri", kind: "brief", channel: "test", threadId: "t1", when: { at: "2026-10-15T09:00:00Z" }, createdBy: { kind: "person", channel: "test", userId: "u" } }, h.clock.now);
+		expect(await h.scheduler.tick(new Date("2026-10-15T09:00:10Z"))).toBe(1);
+		await waitFor(() => h.replies.length === 1);
+		expect(text(h.replies[0]!)).toContain(`[Task programmato ${s.id}] ${BRIEF_INSTRUCTION}`);
+		expect(text(h.replies[0]!)).not.toContain("registri");
 		await h.runtime.close();
 	});
 
@@ -102,6 +113,20 @@ describe("tasks programmati", () => {
 		await expect(store.create({ ...base, instruction: " ", when: { at: "2026-10-16T08:00:00Z" } }, now)).rejects.toThrow("Empty");
 		await expect(store.create({ ...base, when: { cron: "0 0 31 2 *", timeZone: "UTC" } }, now)).rejects.toThrow(ScheduleError);
 		await expect(store.create({ ...base, when: { cron: "0,59 0,23 * * *", timeZone: "UTC" } }, now)).rejects.toThrow("more often than every 5 minutes");
+	});
+
+	it("the cap counts the tasks still to run, so ended ones never block a new one", async () => {
+		const store = new ScheduleStore(tempDataDir());
+		const base = { instruction: "x", channel: "test", threadId: "t", createdBy: { kind: "instance" } as const };
+		const now = new Date("2026-10-15T08:00:00Z");
+		const made = [];
+		for (let i = 0; i < SCHEDULE_LIMITS.maxPerInstance; i++) made.push(await store.create({ ...base, when: { at: "2026-10-16T08:00:00Z" } }, now));
+		await expect(store.create({ ...base, when: { at: "2026-10-16T08:00:00Z" } }, now)).rejects.toThrow(`At most ${SCHEDULE_LIMITS.maxPerInstance}`);
+		await store.advance(made[0]!, "2026-10-16T08:00:00Z", new Date("2026-10-16T08:00:01Z"));
+		await store.disable(made[1]!, "gone");
+		await store.create({ ...base, when: { at: "2026-10-17T08:00:00Z" } }, now);
+		await store.create({ ...base, when: { at: "2026-10-17T08:00:00Z" } }, now);
+		expect(await store.list()).toHaveLength(SCHEDULE_LIMITS.maxPerInstance + 2);
 	});
 
 	it("a daily 02:30 runs once on the night the clocks go back", async () => {

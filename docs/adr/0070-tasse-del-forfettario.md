@@ -1,5 +1,7 @@
 # Tasse del forfettario
 
+> Sostituito dall'[ADR 0121](0121-registri-sostituiti-da-code-run-e-file.md): lo strumento `taxes` non c'è più, i conti e i dati stanno nei file del workspace e li fa `code_run`.
+
 Chi è nel regime forfettario incassa senza IVA ma deve tenere da parte imposta sostitutiva e contributi, e scopre quanto solo a giugno, quando il commercialista manda l'F24 con saldo e primo acconto. Con lo scadenzario (ADR 0053) Owni sa cosa è stato incassato e quando; con la previsione di cassa (ADR 0065) sa quanti soldi ci saranno. Ora «quanto devo mettere da parte per le tasse?», «quando scade il prossimo F24 e quanto?», «se incasso altri 10.000 €?» e «quest'anno guadagno meno, posso pagare meno acconti?» hanno una risposta, sempre come stima da verificare con il commercialista.
 
 ## Decisione

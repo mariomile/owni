@@ -44,7 +44,7 @@ const mocks = vi.hoisted(() => {
 	};
 });
 vi.mock("../src/web/ui/common.js", () => mocks.common);
-vi.mock("../src/web/ui/cards.js", () => ({ agentRequestCard: vi.fn(), askedByNote: vi.fn(), connectorActionCard: vi.fn(), decideWith: vi.fn(), decisionCard: (el: unknown) => el, googleActionCard: vi.fn() }));
+vi.mock("../src/web/ui/cards.js", () => ({ askedByNote: vi.fn(), connectorActionCard: vi.fn(), decideWith: vi.fn(), decisionCard: (el: unknown) => el, googleActionCard: vi.fn() }));
 vi.mock("../src/web/ui/session.js", () => ({ refreshCounters: vi.fn(async () => {}) }));
 vi.mock("../src/web/ui/shell.js", () => ({ render: vi.fn(), renderRail: mocks.renderRail }));
 
@@ -88,7 +88,7 @@ describe("Richiede te", () => {
 
 	it("puts decisions and reviews on one page and counts them for the sidebar", async () => {
 		mocks.common.api.mockImplementation(async (url: string) => url === "/api/approvals"
-			? { groups: [{ instance: { id: "sales", name: "Vendite" }, proposals: [], webActions: [], connectorActions: [], agentRequests: [], googleActions: [], pratiche: [] }], pendingApprovals: 0 }
+			? { groups: [{ instance: { id: "sales", name: "Vendite" }, proposals: [], webActions: [], connectorActions: [], googleActions: [], pratiche: [] }], pendingApprovals: 0 }
 			: { agents, cards: [card("5", "da_rivedere")] });
 		const main = mocks.common.h("main");
 		await viewApprovals(main);

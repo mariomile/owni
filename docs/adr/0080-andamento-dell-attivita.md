@@ -1,5 +1,7 @@
 # Andamento dell'attività
 
+> Sostituito dall'[ADR 0121](0121-registri-sostituiti-da-code-run-e-file.md): lo strumento `business_report` non c'è più, i conti e i dati stanno nei file del workspace e li fa `code_run`.
+
 Con fatture (ADR 0053, 0072), spese (ADR 0057), ore, preventivi (ADR 0055), clienti (ADR 0071), tasse del forfettario (ADR 0070), liquidazione IVA (ADR 0077) ed estratto conto (ADR 0078) Owni aveva tutti i numeri di chi ha una partita IVA, ma sparsi in registri diversi. La domanda che li tiene insieme è una: «come sta andando l'attività?». Ora «quanto ho guadagnato quest'anno?», «ottobre rispetto a settembre?», «rispetto all'anno scorso?», «qual è il mio margine?», «quanto mi resta in tasca dopo le tasse?» e «mandami il report del mese per il commercialista» hanno una risposta.
 
 ## Decisione

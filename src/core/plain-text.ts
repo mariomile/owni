@@ -33,29 +33,3 @@ export function oneLine(text: string, max = Number.POSITIVE_INFINITY): string {
 	const chars = [...flat];
 	return chars.length > max ? `${chars.slice(0, max - 1).join("")}…` : flat;
 }
-
-const TYPOGRAPHIC: readonly (readonly [RegExp, string])[] = [
-	[/[\u2010-\u2015\u2212]/g, "-"],
-	[/[\u2018\u2019\u201a\u201b\u2032]/g, "'"],
-	[/[\u201c\u201d\u201e\u201f\u2033]/g, '"'],
-	[/\u2026/g, "..."],
-	[/\u20ac/g, "EUR"],
-	[/[\u2022\u2023\u25e6]/g, "-"],
-];
-
-/**
- * Text as FatturaPA's schema takes it (String…LatinType): one line, single spaces, no control or
- * format characters, and Latin-1 only: typographic marks become their plain forms, accented
- * letters outside Latin-1 lose the accent, anything else is «?».
- */
-export function latin1(text: string): string {
-	let out = withoutFormatChars(text);
-	for (const [from, to] of TYPOGRAPHIC) out = out.replace(from, to);
-	return [...out.replace(/[\s\p{Cc}\p{Zl}\p{Zp}]+/gu, " ").trim()].map(latinChar).join("");
-}
-
-function latinChar(c: string): string {
-	if ((c.codePointAt(0) as number) <= 0xff) return c;
-	const bare = c.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-	return [...bare].every((b) => (b.codePointAt(0) as number) <= 0xff) ? bare : "?";
-}

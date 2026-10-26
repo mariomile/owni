@@ -77,7 +77,7 @@ async function ask(c: Case): Promise<{ reply?: string; tools: readonly string[];
 			if (reply === undefined) await new Promise((r) => setTimeout(r, 1000));
 		}
 		const turn = (await ledger.records()).find((r) => r.role === "agent" && r.threadId === thread.id);
-		return { reply, tools: turn?.tools ?? [], offered: boot.tools.filter((t) => ["code_run", "table_query", "calculate"].includes(t)) };
+		return { reply, tools: turn?.tools ?? [], offered: boot.tools.filter((t) => t === "code_run") };
 	} finally {
 		await boot.close();
 	}

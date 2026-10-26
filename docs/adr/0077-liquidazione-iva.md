@@ -1,5 +1,7 @@
 # Liquidazione IVA
 
+> Sostituito dall'[ADR 0121](0121-registri-sostituiti-da-code-run-e-file.md): lo strumento `vat_settlement` non c'è più, i conti e i dati stanno nei file del workspace e li fa `code_run`.
+
 Le tasse del forfettario (ADR 0070) coprivano chi non addebita l'IVA. Chi è in regime ordinario la addebita in fattura, la detrae dagli acquisti e ogni mese o trimestre versa la differenza con l'F24: è il pagamento più frequente e più facile da dimenticare. Con le fatture emesse (ADR 0072) e quelle ricevute dello scadenzario (ADR 0053) Owni ha già i numeri. Ora «quanta IVA devo versare questo trimestre?», «quando scade il prossimo F24 dell'IVA?», «quanto acconto IVA a dicembre?», «se compro a novembre invece che a ottobre?» e «mandami il riepilogo IVA per il commercialista» hanno una risposta, sempre come stima da verificare con il commercialista.
 
 ## Decisione

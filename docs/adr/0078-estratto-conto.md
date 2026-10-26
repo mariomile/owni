@@ -1,5 +1,7 @@
 # Estratto conto
 
+> Sostituito dall'[ADR 0121](0121-registri-sostituiti-da-code-run-e-file.md): lo strumento `bank_statement` non c'è più, i conti e i dati stanno nei file del workspace e li fa `code_run`.
+
 Scadenzario (ADR 0053), spese (ADR 0057), rinnovi (ADR 0064) e previsione di cassa (ADR 0065) sapevano cosa doveva entrare e uscire, ma solo la persona sapeva cosa era successo davvero sul conto, e doveva dirlo fattura per fattura. La banca lo scrive già nell'estratto conto. Ora «ti mando l'estratto conto di ottobre», «quali movimenti non hanno una spiegazione?», «quanto è entrato a ottobre sul conto?» e «Rossi ha pagato?» hanno una risposta, e le fatture si segnano incassate con un sì.
 
 ## Decisione

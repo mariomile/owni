@@ -63,7 +63,7 @@ export function sizeText(bytes: number): string {
 	return mb >= 10 ? `${Math.round(mb)} MB` : `${mb.toFixed(1).replace(".", ",")} MB`;
 }
 
-/** The attachments in one line, for the card: «Allegati: preventivi/Preventivo.pdf (84 KB), fatture/B-70.xml (3 KB)». Paths whole, on one line, without invisible characters. */
+/** The attachments in one line, for the card: «Allegati: preventivi/Preventivo.pdf (84 KB), note/B-70.txt (3 KB)». Paths whole, on one line, without invisible characters. */
 export function attachmentsLine(list: readonly MailAttachment[]): string {
 	if (list.length === 0) return "";
 	return `${list.length === 1 ? "Allegato" : "Allegati"}: ${list.map((a) => `${oneLine(a.path)} (${sizeText(a.size)})`).join(", ")}`;

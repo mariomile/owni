@@ -1,5 +1,7 @@
 # Previsione di cassa
 
+> Sostituito dall'[ADR 0121](0121-registri-sostituiti-da-code-run-e-file.md): lo strumento `cashflow` non c'è più, i conti e i dati stanno nei file del workspace e li fa `code_run`.
+
 Con scadenzario (ADR 0053), preventivi (ADR 0055), spese (ADR 0057) e rinnovi (ADR 0064) Owni sapeva quali soldi devono entrare e uscire, ma nessuno li metteva in fila sul conto. La domanda di chi ha una partita IVA è una sola: «quanti soldi avrò a fine mese?». Ora «ho 8.400 euro sul conto», «quanti soldi avrò a fine mese?», «F24 a giugno 2.300», «se compro un computer da 2.000 € ce la faccio?», «se Rossi paga con 60 giorni di ritardo?» e «avvisami se vado sotto i 2.000» hanno una risposta.
 
 ## Decisione

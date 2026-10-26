@@ -14,13 +14,6 @@
 {"id":"controlla-pagina","text":"Avvisami quando cambia la pagina https://example.com","expect":["watch_create"]}
 {"id":"saluto","text":"Ciao! Come va?","expect":[]}
 {"id":"scrivi-mail","text":"Scrivimi due righe di ringraziamento per un cliente che ha pagato puntuale","expect":[]}
-{"id":"spesa","text":"Registra una spesa di 48 euro di carburante fatta oggi","expect":["expenses"]}
-{"id":"spese-mese","text":"Quanto ho speso questo mese?","expect":["expenses","business_report"]}
-{"id":"nuovo-cliente","text":"Aggiungi il cliente Rossi Srl, via Roma 1, Milano","expect":["clients"]}
-{"id":"fatture-da-incassare","text":"Quali fatture devo ancora incassare?","expect":["invoices","sales_invoices","cashflow"]}
-{"id":"preventivo","text":"Prepara un preventivo per Bianchi Snc: 10 ore di consulenza a 80 euro l'ora","expect":["quotes","clients"]}
-{"id":"ore","text":"Segna 3 ore di lavoro oggi sul progetto Alfa","expect":["timesheet"]}
-{"id":"scadenze-fiscali","text":"Quali sono le prossime scadenze fiscali?","expect":["fiscal_agenda"]}
 {"id":"documento","text":"Creami un documento Word con l'ordine del giorno della riunione di lunedì: budget, assunzioni, varie","expect":["document_create"]}
 {"id":"grafico","text":"Fammi un grafico a barre delle vendite: gennaio 10, febbraio 14, marzo 9","expect":["chart_create"]}
 {"id":"file","text":"Quali file ho salvato?","expect":["file_list","file_search"]}

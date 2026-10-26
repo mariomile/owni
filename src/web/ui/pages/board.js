@@ -400,21 +400,6 @@ export async function viewBoard(main) {
 		const canDelete = state.me.role === "owner" || (c.createdBy.kind === "person" && c.createdBy.id === state.me.id);
 		const parent = parentOf(c);
 		const children = childrenOf(c);
-		// Chi segue cosa (ADR 0110), for the owner: shown only when the scheda is linked to some record.
-		const subjectsBox = state.me.role === "owner" ? h("section.board-subjects") : null;
-		if (subjectsBox)
-			api(`/api/board/${c.id}/subjects`)
-				.then(({ linked, others }) => {
-					if (!linked.length) return;
-					const item = (e) => h("li", `${e.agent}: ${e.kind} ${e.id}`, e.card && e.card !== c.n ? h("span.muted.small", ` · scheda #${e.card}`) : null);
-					subjectsBox.append(
-						h("h3", "Chi segue cosa"),
-						h("ul", linked.map(item)),
-						others.length ? h("p.small", "Lo stesso cliente o fornitore lo segue anche:") : h("p.muted.small", "Nessun altro agente segue lo stesso cliente o fornitore."),
-						others.length ? h("ul", others.map(item)) : null,
-					);
-				})
-				.catch(() => {});
 		// Without what is not there: append would write «null».
 		const parts = [
 			h(
@@ -458,7 +443,6 @@ export async function viewBoard(main) {
 			moves.length ? h("div.actions", moves) : null,
 			startable || working ? aloneRow : null,
 			working && c.auto ? h("p.muted.small", `Risposte senza di te: ${c.auto.rounds} di ${data.auto.replies}.`) : null,
-			subjectsBox,
 			events.length ? h("section.board-history", h("h3", "Cronologia"), h("ul.board-events", events.map(line))) : null,
 			h("label.field", h("span", "Commento"), comment),
 			h(

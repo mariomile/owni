@@ -49,7 +49,7 @@ export function createWorkspaceTools(options: WorkspaceToolsOptions): OwniTool[]
 		{
 			name: "file_read",
 			description:
-				"Read a file from your workspace, including files people uploaded: text files, and the text of PDF, Word, Excel, PowerPoint and OpenDocument documents; for Italian electronic invoices (FatturaPA, .xml or signed .xml.p7m) a readable summary instead of the raw XML. " +
+				"Read a file from your workspace, including files people uploaded: text files, and the text of PDF, Word, Excel, PowerPoint and OpenDocument documents; a signed file (.p7m) is read as what it holds. " +
 				`Long files come back in pieces of ${MAX_READ} characters: pass offset to read on from where the last piece stopped.`,
 			parameters: {
 				type: "object",
@@ -80,7 +80,7 @@ export function createWorkspaceTools(options: WorkspaceToolsOptions): OwniTool[]
 			name: "file_search",
 			description:
 				"Search the words inside the files of your workspace and their names: notes, reports, transcripts, files people sent (PDF, Word, Excel, PowerPoint, text, CSV). " +
-				"For invoices to pay or collect, their due dates and the open ones with a supplier or a client use invoices, not this. Use it when the person asks where something is, what a document said about something, or for a file they name only in part («la fattura di Rossi», «cosa diceva il contratto sul recesso», «in quale riunione abbiamo parlato dello sconto»); file_list is for what files there are. " +
+				"Use it when the person asks where something is, what a document said about something, or for a file they name only in part («la fattura di Rossi», «cosa diceva il contratto sul recesso», «in quale riunione abbiamo parlato dello sconto»); file_list is for what files there are. " +
 				"Pass 1 to 4 key words (names, numbers, distinctive nouns: rossi fattura, contratto recesso), not the whole question: articles, prepositions and words like trova or diceva are ignored. " +
 				"Words match the start of words, without accents or case, and long words also their singular or plural (fatture finds fattura). Words in quotes match together as a phrase. " +
 				"Write numbers and amounts as the document would (42, 1.234,56). There is no OR: for alternatives (fattura, preventivo) search again. " +
@@ -114,7 +114,7 @@ export function createWorkspaceTools(options: WorkspaceToolsOptions): OwniTool[]
 			description:
 				"Look at an image in your workspace (JPEG, PNG, GIF or WebP): a photo someone sent earlier, a screenshot, a chart you made with the computer. " +
 				"Also a page of a scanned PDF: give the PDF's path and page, and read what the page says yourself. " +
-				"Photos sent with the current message you already see; use this for any other. A receipt (scontrino) seen in a photo is a spesa: expenses add.",
+				"Photos sent with the current message you already see; use this for any other.",
 			parameters: {
 				type: "object",
 				properties: { path: pathParam, page: { type: "integer", minimum: 1, maximum: 1000, description: "For a PDF: the page to look at (default 1)" } },
@@ -128,7 +128,7 @@ export function createWorkspaceTools(options: WorkspaceToolsOptions): OwniTool[]
 					const data = await workspace.read(path);
 					if (args.page !== undefined && !(typeof args.page === "number" && Number.isInteger(args.page) && args.page >= 1)) return "Errore: page è il numero di una pagina, da 1.";
 					if (documentKind(path, data) === "pdf") return await viewPdfPage(path, data, typeof args.page === "number" ? args.page : 1);
-					if (args.page !== undefined && documentKind(path, data) !== undefined) return `Errore: ${path} non è un PDF: per Word, Excel, PowerPoint e le fatture elettroniche il testo lo dà file_read.`;
+					if (args.page !== undefined && documentKind(path, data) !== undefined) return `Errore: ${path} non è un PDF: per Word, Excel, PowerPoint e i file firmati il testo lo dà file_read.`;
 					const problem = imageProblem(data);
 					if (problem !== undefined) return `Errore: ${path} ${problem}.`;
 					return { text: `Ecco ${path} (${imageType(data)}, ${data.length} byte).`, images: [{ mimeType: imageType(data) as string, data }] };

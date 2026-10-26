@@ -10,7 +10,6 @@ import { tenantId, instanceId } from "../src/core/ids.ts";
 import { UsageLedger } from "../src/core/usage.ts";
 import { BoardStore } from "../src/core/board.ts";
 import { BoardWork } from "../src/core/board-work.ts";
-import { SubjectLedger } from "../src/core/subjects.ts";
 import { connectChannel } from "../src/gateway.ts";
 import { PeopleStore, SessionStore } from "../src/web/auth.ts";
 import { WebChannel } from "../src/web/channel.ts";
@@ -66,7 +65,7 @@ async function setup(withBoard = false) {
 		uiDir: join(import.meta.dirname, "..", "src", "web", "ui"),
 		secureCookies: false,
 		defaultTimeZone: "Europe/Rome",
-		...(withBoard ? { board: { store: board, work, subjects: { ledger: new SubjectLedger(tenantDir, "test-key"), agentName: async (id: string) => id } } } : {}),
+		...(withBoard ? { board: { store: board, work } } : {}),
 	});
 	await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
 	const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;

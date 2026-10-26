@@ -1,5 +1,7 @@
 # Listino prezzi
 
+> Sostituito dall'[ADR 0121](0121-registri-sostituiti-da-code-run-e-file.md): lo strumento `price_list` non c'è più, i conti e i dati stanno nei file del workspace e li fa `code_run`.
+
 Preventivi, fatture in uscita e ore da fatturare chiedevano ogni volta il prezzo, o lo prendevano da quello che il modello ricordava. Chi vende sempre le stesse cose (una giornata di consulenza, un sito base, un'ora di sviluppo) doveva ripeterlo a ogni documento, e un prezzo detto male finiva in fattura. Ora «quanto faccio pagare una giornata?», «fammi un preventivo per Rossi: 3 giornate di consulenza e il sito base» e «fattura a Bianchi 10 ore di sviluppo» prendono il prezzo dal listino.
 
 ## Decisione

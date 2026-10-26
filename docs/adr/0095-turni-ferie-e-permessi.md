@@ -1,5 +1,7 @@
 # Turni, ferie e permessi del personale
 
+> Sostituito dall'[ADR 0121](0121-registri-sostituiti-da-code-run-e-file.md): lo strumento `staff` non c'è più, i conti e i dati stanno nei file del workspace e li fa `code_run`.
+
 Una piccola attività con due o tre dipendenti tiene i turni e le assenze su un foglio o a memoria: «Giulia è in ferie dal 3 al 14 agosto», «Marco domani ha un permesso dalle 15», «chi lavora sabato?», «quante ferie le restano a Giulia?», e a fine mese il riepilogo per la consulente del lavoro. Owni aveva gli appuntamenti con le loro risorse, ma nessuno sapeva che la risorsa «Marco» domani pomeriggio non c'è.
 
 ## Decisione

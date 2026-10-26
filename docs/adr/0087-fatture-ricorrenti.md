@@ -1,5 +1,7 @@
 # Fatture ricorrenti
 
+> Sostituito dall'[ADR 0121](0121-registri-sostituiti-da-code-run-e-file.md): lo strumento `recurring_invoices` non c'è più, i conti e i dati stanno nei file del workspace e li fa `code_run`.
+
 Chi lavora a canone (manutenzione mensile, hosting trimestrale, consulenza annuale) rifà ogni periodo la stessa fattura allo stesso cliente. Le fatture in uscita (settimana 58) la sapevano preparare, ma solo quando la persona se ne ricordava, e un mese dimenticato era un incasso perso.
 
 ## Decisione

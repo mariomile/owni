@@ -2,18 +2,14 @@ import { BOARD_LIMITS, BoardError, type BoardStore, CARD_PRIORITIES, CARD_STATUS
 import { describeWhen, nextTime, type Routine, routineWhen, type RoutineStore } from "../core/board-routines.ts";
 import type { BoardWork } from "../core/board-work.ts";
 import type { OwniRuntime } from "../core/runtime.ts";
-import type { SubjectLedger } from "../core/subjects.ts";
 import type { Person, PeopleStore } from "./auth.ts";
 import { type AddRoute, HttpError, readJson } from "./http.ts";
-
-/** Il registro di chi segue cosa (ADR 0110), with the agenti's names. */
-export type BoardSubjects = { readonly ledger: SubjectLedger; readonly agentName: (id: string) => Promise<string> };
 
 export type BoardRoutesDeps = {
 	readonly runtime: OwniRuntime;
 	readonly tenantId: string;
 	readonly people: PeopleStore;
-	readonly board: { readonly store: BoardStore; readonly work: BoardWork; readonly routines?: RoutineStore; readonly subjects: BoardSubjects } | undefined;
+	readonly board: { readonly store: BoardStore; readonly work: BoardWork; readonly routines?: RoutineStore } | undefined;
 	/** Segreterie take no schede. */
 	readonly segreterie: ReadonlyMap<string, unknown> | undefined;
 };
@@ -143,18 +139,6 @@ export function boardRoutes(route: AddRoute, { runtime, tenantId, people, board,
 		await runtime.audit(tenantId).append({ type: "board.card_changed", cardId: card.id, personId: p.id, fields: Object.keys(change).join(","), ...(status === undefined ? {} : { status }) });
 		return { card: changed };
 	});
-	// Chi segue cosa (ADR 0110), for the owner: the records linked to the scheda, and the other agenti's on the same subjects.
-	route("GET", "/api/board/:id/subjects", "person", async ({ person, params }) => {
-		const { subjects } = boardOf();
-		const p = person as Person;
-		if (p.role !== "owner") throw new HttpError(403, "Solo l'owner vede chi segue cosa");
-		const card = await visibleCard(params[0] as string, p);
-		const linked = subjects.ledger.list().filter((e) => e.card?.id === card.id);
-		const others = subjects.ledger.overlaps(linked).filter((e) => e.card?.id !== card.id);
-		const names = new Map(await Promise.all([...new Set([...linked, ...others].map((e) => e.agent))].map(async (id) => [id, await subjects.agentName(id)] as const)));
-		const shown = (e: (typeof linked)[number]) => ({ agent: names.get(e.agent) ?? e.agent, kind: e.kind, id: e.id, at: e.at, ...(e.card === undefined || boardOf().store.get(e.card.id) === undefined ? {} : { card: e.card.n }) });
-		return { linked: linked.map(shown), others: others.map(shown) };
-	});
 	// Avvia: the work on a scheda waiting in «Da fare» starts, with whoever presses it.
 	route("POST", "/api/board/:id/start", "person", async ({ person, params, req }) => {
 		const { work } = boardOf();
@@ -201,7 +185,7 @@ export function boardRoutes(route: AddRoute, { runtime, tenantId, people, board,
 		return { ok: true };
 	});
 	route("DELETE", "/api/board/:id", "person", async ({ person, params }) => {
-		const { store, work, subjects } = boardOf();
+		const { store, work } = boardOf();
 		const p = person as Person;
 		const card = await visibleCard(params[0] as string, p);
 		if (p.role !== "owner" && !(card.createdBy.kind === "person" && card.createdBy.id === p.id)) throw new HttpError(403, "Solo chi l'ha creata o l'owner la elimina");
@@ -209,12 +193,6 @@ export function boardRoutes(route: AddRoute, { runtime, tenantId, people, board,
 			store.remove(card.id);
 		} catch (error) {
 			boardError(error);
-		}
-		// No record is linked to a scheda that is gone (ADR 0110).
-		try {
-			subjects.ledger.unlinkCard(card.id);
-		} catch {
-			// The scheda is gone already; a record still pointing at it is not shown (cardShown).
 		}
 		await runtime.audit(tenantId).append({ type: "board.card_deleted", cardId: card.id, personId: p.id });
 		// Who waited only for it starts now (ADR 0076).
