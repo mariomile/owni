@@ -7,6 +7,7 @@ import { googleReturnQuery } from "../connectors/google.ts";
 import { COMPUTER_LIMITS, ComputerError, type ComputerProvider, type ComputerRun, computerKey, workPath } from "../core/computer.ts";
 import { computerToken, proxyToken, sameSecret } from "../web/compare.ts";
 import { readJsonFile, updateJsonFile } from "../core/locked-json.ts";
+import { HttpError, pathPattern, readBody, readJson as readJsonBody, send } from "../web/http.ts";
 import type { CellState } from "../web/server.ts";
 import { type Access, type AccountBilling, accessOf, BillingRefused, live, mayCheckout, mayUse, type StripeBilling, type StripeEvent, type Subscription } from "./billing.ts";
 import type { Mailer } from "./mailer.ts";
@@ -469,16 +470,16 @@ export async function startControlPlane(options: ControlPlaneOptions): Promise<C
 
 	async function stripeWebhook(req: IncomingMessage, res: ServerResponse): Promise<void> {
 		if (billing === undefined) return send(res, 404, { error: "Not found" });
-		const chunks: Buffer[] = [];
-		let size = 0;
-		for await (const chunk of req as AsyncIterable<Buffer>) {
-			size += chunk.length;
-			if (size > MAX_WEBHOOK_BODY) return send(res, 413, { error: "Too large" });
-			chunks.push(chunk);
+		let body: Buffer;
+		try {
+			body = await readBody(req, MAX_WEBHOOK_BODY);
+		} catch (error) {
+			if (error instanceof HttpError) return send(res, 413, { error: "Too large" });
+			throw error;
 		}
 		let event: StripeEvent;
 		try {
-			event = billing.event(Buffer.concat(chunks), req.headers["stripe-signature"] as string | undefined);
+			event = billing.event(body, req.headers["stripe-signature"] as string | undefined);
 		} catch (error) {
 			if (error instanceof BillingRefused || error instanceof SyntaxError) return send(res, 400, { error: "Firma o evento non valido" });
 			throw error;
@@ -504,24 +505,37 @@ export async function startControlPlane(options: ControlPlaneOptions): Promise<C
 		send(res, 404, { error: "Not found" });
 	}
 
+	/** One answer of the sign-up host. `api`: a change only the sign-up page makes (POST with X-Owni), answered with 500 on a failure. */
+	type Route = { readonly method: string; readonly pattern: RegExp; readonly api: boolean; readonly handler: (req: IncomingMessage, res: ServerResponse, url: URL) => unknown };
+	const routes: Route[] = [];
+	const route = (method: string, path: string | RegExp, handler: Route["handler"], api = false) => routes.push({ method, pattern: typeof path === "string" ? pathPattern(path) : path, api, handler });
+	const here = (...parts: string[]) => join(import.meta.dirname, ...parts);
+	for (const [path, file] of Object.entries(UI)) route("GET", path, (_req, res) => serve(res, here("ui", file)));
+	for (const [path, file] of Object.entries(SHARED_UI)) route("GET", path, (_req, res) => serve(res, here("..", "web", "ui", file)));
+	route("GET", /^\/fonts\/[a-z0-9-]+\.woff2$/, (_req, res, url) => serve(res, here("..", "web", "ui", url.pathname)));
+	route("GET", "/healthz", (_req, res) => send(res, 200, { ok: true }));
+	route("GET", "/api/info", (_req, res) => send(res, 200, { billing: billing !== undefined, ...(billing === undefined ? {} : { trialDays: billing.trialDays }) }));
+	route("GET", "/oauth/google/callback", (_req, res, url) => googleCallback(res, url));
+	// Stripe signs its deliveries; that signature, not our header, is the check here.
+	route("POST", "/stripe/webhook", (req, res) => stripeWebhook(req, res));
+	route(
+		"POST",
+		"/api/signup",
+		async (req, res) => {
+			await signup(await readJson(req), clientAddress(req));
+			send(res, 200, { ok: true });
+		},
+		true,
+	);
+	route("POST", "/api/verify", async (req, res) => send(res, 200, await verify(await readJson(req))), true);
+
 	async function home(req: IncomingMessage, res: ServerResponse, url: URL): Promise<void> {
 		securityHeaders(res);
-		if (req.method === "GET" && url.pathname in UI) return serve(res, join(import.meta.dirname, "ui", UI[url.pathname] as string));
-		if (req.method === "GET" && url.pathname in SHARED_UI) return serve(res, join(import.meta.dirname, "..", "web", "ui", SHARED_UI[url.pathname] as string));
-		if (req.method === "GET" && /^\/fonts\/[a-z0-9-]+\.woff2$/.test(url.pathname)) return serve(res, join(import.meta.dirname, "..", "web", "ui", url.pathname));
-		if (req.method === "GET" && url.pathname === "/healthz") return send(res, 200, { ok: true });
-		if (req.method === "GET" && url.pathname === "/api/info") return send(res, 200, { billing: billing !== undefined, ...(billing === undefined ? {} : { trialDays: billing.trialDays }) });
-		if (req.method === "GET" && url.pathname === "/oauth/google/callback") return googleCallback(res, url);
-		// Stripe signs its deliveries; that signature, not our header, is the check here.
-		if (req.method === "POST" && url.pathname === "/stripe/webhook") return stripeWebhook(req, res);
-		if (req.method !== "POST" || req.headers["x-owni"] !== "1") return send(res, 404, { error: "Not found" });
+		const match = routes.find((r) => r.method === req.method && r.pattern.test(url.pathname));
+		if (match === undefined || (match.api && req.headers["x-owni"] !== "1")) return send(res, 404, { error: "Not found" });
+		if (!match.api) return void (await match.handler(req, res, url));
 		try {
-			if (url.pathname === "/api/signup") {
-				await signup(await readJson(req), clientAddress(req));
-				return send(res, 200, { ok: true });
-			}
-			if (url.pathname === "/api/verify") return send(res, 200, await verify(await readJson(req)));
-			send(res, 404, { error: "Not found" });
+			await match.handler(req, res, url);
 		} catch (error) {
 			if (error instanceof HttpError) return send(res, error.status, { error: error.message });
 			log(`cloud: ${error instanceof Error ? error.message : String(error)}`);
@@ -651,7 +665,7 @@ export async function startControlPlane(options: ControlPlaneOptions): Promise<C
 				computerBytes += size;
 				try {
 					if (req.method === "PUT") {
-						await computer.put(key, [{ path, data: await readBytes(req, size) }]);
+						await computer.put(key, [{ path, data: await readBody(req, size, "file troppo grande") }]);
 						return send(res, 200, { ok: true });
 					}
 					const data = await computer.get(key, path, max);
@@ -831,15 +845,6 @@ export async function cloudStatus(options: { readonly dataDir: string; readonly 
 	);
 }
 
-class HttpError extends Error {
-	constructor(
-		readonly status: number,
-		message: string,
-	) {
-		super(message);
-	}
-}
-
 /** A tenant id that is also a DNS label, random: the address of a cell does not show who it is. */
 function tenantFor(_email: string): string {
 	const letters = "abcdefghijkmnpqrstuvwxyz23456789";
@@ -855,45 +860,13 @@ function securityHeaders(res: ServerResponse): void {
 	res.setHeader("referrer-policy", "no-referrer");
 }
 
-function send(res: ServerResponse, status: number, body: unknown): void {
-	res.writeHead(status, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
-	res.end(JSON.stringify(body));
-}
-
 async function serve(res: ServerResponse, path: string): Promise<void> {
 	const data = await readFile(path);
 	res.writeHead(200, { "content-type": TYPES[extname(path)] ?? "application/octet-stream", "cache-control": "no-store" });
 	res.end(data);
 }
 
-/** A request's body as bytes, at most `max`. */
-async function readBytes(req: IncomingMessage, max: number): Promise<Buffer> {
-	const chunks: Buffer[] = [];
-	let size = 0;
-	for await (const chunk of req as AsyncIterable<Buffer>) {
-		size += chunk.length;
-		if (size > max) throw new HttpError(413, "file troppo grande");
-		chunks.push(chunk);
-	}
-	return Buffer.concat(chunks);
-}
-
-async function readJson(req: IncomingMessage): Promise<Record<string, unknown>> {
-	const chunks: Buffer[] = [];
-	let size = 0;
-	for await (const chunk of req as AsyncIterable<Buffer>) {
-		size += chunk.length;
-		if (size > MAX_BODY) throw new HttpError(413, "Richiesta troppo grande");
-		chunks.push(chunk);
-	}
-	try {
-		const value: unknown = JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}");
-		if (value === null || typeof value !== "object" || Array.isArray(value)) throw new Error();
-		return value as Record<string, unknown>;
-	} catch {
-		throw new HttpError(400, "JSON non valido");
-	}
-}
+const readJson = (req: IncomingMessage) => readJsonBody(req, MAX_BODY, "Richiesta troppo grande");
 
 /** The normalized path of an origin-form request target ("/a/b?c"), or undefined for any other form. */
 function cellPath(target: string): { pathname: string; search: string } | undefined {
