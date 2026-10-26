@@ -1,5 +1,6 @@
-// Organigramma page (ADR 0117): squadre, roles, responsabilità, and who writes to whom.
-import { agentHome, api, confirmDialog, emptyNote, face, faceColor, h, head, icon, mount, toast } from "../common.js";
+// Organigramma page (ADR 0117): squadre, roles, responsabilità, and who writes to whom;
+// at #/organigramma/albero the same agenti as a tree of who answers to whom.
+import { agentHome, api, confirmDialog, emptyNote, face, faceColor, h, head, icon, mount, route, toast } from "../common.js";
 import { render } from "../shell.js";
 import { teamsForm } from "../teams.js";
 
@@ -10,6 +11,9 @@ function teamId(name, teams) {
 	for (let n = 2; teams.some((t) => t.id === id); n += 1) id = `${base}-${n}`;
 	return id;
 }
+
+/** Set by a click on Squadre or Albero: the view drawn next gives the focus back to its button. */
+let viewFocus = false;
 
 const list = (names) => (names.length > 1 ? `${names.slice(0, -1).join(", ")} e ${names.at(-1)}` : names.join(""));
 
@@ -161,6 +165,51 @@ export async function viewOrg(main) {
 		return el;
 	};
 
+	/** A box of the tree: who, what they do, which squadra; a click opens their place. */
+	const node = (id) => {
+		const a = info(id);
+		const p = place(id);
+		const team = org.teams.find((t) => t.id === p.team);
+		const leads = team?.lead === id;
+		const role = p.role && p.role !== a.name ? p.role : "";
+		const where = [team ? (leads ? `Coordina ${team.name}` : team.name) : null, p.open ? "a disposizione di tutti" : null].filter(Boolean).join(" · ");
+		const el = h(
+			`button.org-node${leads ? ".lead" : ""}`,
+			{ type: "button", onclick: () => agentDialog(id), "aria-label": `${[a.name, role, where].filter(Boolean).join(", ")}: modifica il suo posto` },
+			face(a, 32),
+			h("span.org-node-text", h("b", a.name), role ? h("span", role) : null, where ? h("small", where) : null),
+		);
+		el.style.setProperty("--glow", faceColor(a));
+		return el;
+	};
+
+	/** Who answers to whom, from the people down. An agente above that is gone puts its own at the top. */
+	const tree = () => {
+		const known = new Set(agents.map((a) => a.id));
+		const above = (id) => (known.has(place(id).reportsTo) ? place(id).reportsTo : undefined);
+		const drawn = new Set();
+		const branch = (id) => {
+			drawn.add(id);
+			const below = agents.filter((a) => above(a.id) === id && !drawn.has(a.id));
+			return h("li", node(id), below.length ? h("ul", below.map((a) => branch(a.id))) : null);
+		};
+		const top = agents.filter((a) => above(a.id) === undefined);
+		return h(
+			"div.org-tree",
+			h("ul", h("li", h("div.org-node.people", icon("persone"), h("span.org-node-text", h("b", "Le persone"), h("span", "Usano gli agenti in cima"))), top.length ? h("ul", top.map((a) => branch(a.id))) : null)),
+		);
+	};
+
+	const asTree = route().rest[0] === "albero";
+	const views = h(
+		"div.seg.org-views",
+		{ role: "group", "aria-label": "Vista" },
+		[
+			["#/organigramma", "Squadre", !asTree],
+			["#/organigramma/albero", "Albero", asTree],
+		].map(([href, label, on]) => h("button", { type: "button", "aria-pressed": String(on), onclick: () => ((viewFocus = true), (location.hash = href)) }, label)),
+	);
+
 	const inTeam = (t) => agents.filter((a) => place(a.id).team === t.id).sort((x, y) => (x.id === t.lead ? -1 : y.id === t.lead ? 1 : 0));
 	const loose = agents.filter((a) => place(a.id).team === undefined || !org.teams.some((t) => t.id === place(a.id).team));
 	mount(
@@ -173,9 +222,12 @@ export async function viewOrg(main) {
 			h("button.btn.ghost", { onclick: () => teamsForm() }, "Squadre pronte"),
 		),
 		saved ? null : h("p.card.pad.org-first", "Finché non salvi l'organigramma, gli agenti si scrivono come deciso finora. Al primo salvataggio, anche creando una squadra pronta, vale solo l'organigramma."),
+		agents.length ? views : null,
 		agents.length === 0
 			? emptyNote("div.empty", "Nessun agente", "Crea un agente o una squadra pronta per cominciare.")
-			: h(
+			: asTree
+				? tree()
+				: h(
 					"div.org",
 					org.teams.map((t) =>
 						h(
@@ -193,4 +245,8 @@ export async function viewOrg(main) {
 						: null,
 				),
 	);
+	if (viewFocus) {
+		viewFocus = false;
+		views.querySelector('[aria-pressed="true"]')?.focus();
+	}
 }

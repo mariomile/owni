@@ -2,7 +2,7 @@
 // shell. Only the shell is kept (page, script, style, fonts, icons): never /api, never anything a
 // person wrote or received. Network first, so a new version is used as soon as it is online.
 // Bump CACHE when the shell list changes; the page itself is refreshed on every visit online.
-const CACHE = "owni-shell-v15";
+const CACHE = "owni-shell-v16";
 /** Addresses that are never the shell, also when opened as a page (a file link, a login with Google). */
 const NOT_SHELL = /^\/(api|oauth|hooks|login|openui)(\/|$)/;
 const SHELL = ["/", "/account.js", "/agent-materials.js", "/agent-panel.js", "/app.js", "/artifacts.js", "/cards.js", "/commands.js", "/common.js", "/connectors.js", "/google.js", "/listen.js", "/login.js", "/models.js", "/markdown.js", "/openui.js", "/sources.js", "/palette.js", "/pwa.js", "/runs.js", "/session.js", "/setup.js", "/shell.js", "/signin.js", "/teams.js", "/tones.js", "/pages/activity.js", "/pages/agents.js", "/pages/approvals.js", "/pages/automations.js", "/pages/board.js", "/pages/chat.js", "/pages/org.js", "/pages/people.js", "/pages/rooms.js", "/pages/segreteria.js", "/pages/settings.js", "/pages/start.js", "/pages/tasks.js", "/app.css", "/icon.svg", "/manifest.webmanifest", "/fonts/archivo-latin.woff2", "/fonts/monaspace-neon-latin-400.woff2", "/pages/work.js"];
