@@ -135,7 +135,8 @@ export function render() {
 	renderRail();
 	void refreshConversations().then(renderRail);
 	const place = `${view}/${current.rest[0] ?? ""}`;
-	document.title = `${pageName(item, current)} · Owni`;
+	const name = pageName(item, current);
+	document.title = name === "Owni" ? name : `${name} · Owni`;
 	state.onEntry = undefined;
 	state.onRoom = undefined;
 	state.onRun = undefined;
