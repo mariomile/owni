@@ -111,7 +111,6 @@ export async function viewPrograms(main) {
 	const agent = h("select", { "aria-label": "Filtra le automazioni per agente", onchange: () => draw() }, h("option", { value: "" }, "Tutti gli agenti"));
 	const counts = h("p.muted.small", { role: "status", "aria-live": "polite" }, "Caricamento delle automazioni…");
 	const content = h("div.stack");
-	const refresh = h("button.btn.ghost", { type: "button", onclick: () => void load() }, "Aggiorna");
 	function choose(choice) {
 		const [, title, description, view, rest] = choice;
 		const instances = sources.get("instances")?.data?.instances ?? [];
@@ -130,7 +129,7 @@ export async function viewPrograms(main) {
 		dialog.showModal();
 		select.focus();
 	}
-	mount(main, head(null, "Automazioni", "Quando deve partire il lavoro: per orario, cambiamento di una pagina, evento esterno o incarico ricorrente.", refresh),
+	mount(main, head(null, "Automazioni", "Quando deve partire il lavoro: per orario, cambiamento di una pagina, evento esterno o incarico ricorrente."),
 		h("section.card.pad", h("h2", "Quando deve partire?"), h("div.work-program-choices", PROGRAM_CHOICES.map((choice) => h("button.work-program-choice", { type: "button", onclick: () => choose(choice) }, icon(choice[5]), h("b", choice[1]), h("span.small.muted", choice[2]))))),
 		h("div.work-toolbar", h("h2", "Automazioni configurate"), h("label.field", h("span", "Agente"), agent)), counts, h("p.small.muted", "Le configurazioni rispettano gli accessi di ogni agente. Gli esiti delle esecuzioni riguardano solo le tue conversazioni. Mettere in pausa una configurazione riguarda i prossimi avvii; le esecuzioni in corso si controllano dal lavoro."), content);
 	function draw() {
@@ -139,12 +138,11 @@ export async function viewPrograms(main) {
 		const groups = instances.map((instance) => ({ instance, schedules: sources.get(`schedules:${instance.id}`)?.data?.schedules ?? [], watches: sources.get(`watches:${instance.id}`)?.data?.watches ?? [], automations: sources.get(`automations:${instance.id}`)?.data?.automations ?? [], runs: sources.get(`runs:${instance.id}`)?.data?.runs ?? [], runsAvailable: Boolean(sources.get(`runs:${instance.id}`)?.data) && !sources.get(`runs:${instance.id}`)?.error }));
 		const rows = programRows(sources.get("board")?.data ?? {}, groups, state.me).filter((row) => !agent.value || row.agentId === agent.value);
 		const partial = [...sources.values()].some((source) => source.error && (!agent.value || !source.agentId || source.agentId === agent.value));
-		counts.textContent = `${counted(rows.length, "automazione caricata", "automazioni caricate")}${agent.value ? ` · ${agent.selectedOptions[0]?.textContent ?? "Agente selezionato"}` : " · Tutti gli agenti"}${partial ? " · Dati parziali" : ""}${refreshing ? " · Aggiornamento…" : ""}`;
-		mount(content, sourceErrors(sources, agent.value, () => void load()), rows.length ? h("div.card", h("ul.task-list", rows.map(programRow))) : !refreshing ? emptyNote("div.card.empty", partial ? "Nessuna automazione caricata" : "Nessuna automazione per questo filtro", partial ? "Riprova le fonti per completare la vista." : "Scegli quando deve partire il lavoro, poi l'agente che se ne occupa.") : null);
+		counts.textContent = refreshing && sources.size === 0 ? "Caricamento delle automazioni…" : [rows.length ? counted(rows.length, "automazione", "automazioni") : "", rows.length && agent.value ? agent.selectedOptions[0]?.textContent : "", partial ? "Dati parziali" : ""].filter(Boolean).join(" · ");
+		mount(content, sourceErrors(sources, agent.value, () => void load()), rows.length ? h("div.card", h("ul.task-list", rows.map(programRow))) : !refreshing ? emptyNote("div.card.empty", partial ? "Nessuna automazione caricata" : agent.value ? "Nessuna automazione per questo agente" : "Nessuna automazione", partial ? "Riprova le fonti per completare la vista." : "Un'automazione fa partire un lavoro da sola: a un orario, quando una pagina cambia, quando arriva un evento o come incarico che si ripete.", partial ? null : h("div.empty-action", h("button.btn.accent", { type: "button", onclick: () => choose(PROGRAM_CHOICES[0]) }, "Crea un'automazione"))) : null);
 	}
 	async function load() {
 		if (refreshing) return refreshing;
-		refresh.disabled = true;
 		refreshing = (async () => {
 			const previousInstances = sources.get("instances")?.data?.instances;
 			await Promise.all([readSource(sources, "instances", "Elenco agenti", "/api/instances", ["instances"]), readSource(sources, "board", "Incarichi ricorrenti", "/api/board", ["cards", "agents"])]);
@@ -155,7 +153,7 @@ export async function viewPrograms(main) {
 			for (const instance of instances.filter((item) => item.hasSegreteria)) sources.delete(`runs:${instance.id}`);
 			await Promise.all(instances.flatMap((instance) => (instance.hasSegreteria ? ["schedules", "watches", "automations"] : ["schedules", "watches", "automations", "runs"]).map((name) => readSource(sources, `${name}:${instance.id}`, `${{ schedules: "Orari", watches: "Pagine", automations: "Eventi", runs: "Esiti" }[name]} · ${instance.name}`, `/api/instances/${encodeURIComponent(instance.id)}/${name}`, [name], instance.id))));
 			updateAgentOptions(agent, instances);
-		})().finally(() => { refreshing = undefined; refresh.disabled = false; draw(); });
+		})().finally(() => { refreshing = undefined; draw(); });
 		draw();
 		return refreshing;
 	}

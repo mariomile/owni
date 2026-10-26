@@ -19,6 +19,14 @@ describe("console modules", () => {
 		expect(missing).toEqual([]);
 	});
 
+	it("the service worker's shell lists every font the stylesheet loads (a missing one falls back to the system font offline)", () => {
+		const sw = readFileSync(join(ui, "sw.js"), "utf8");
+		const shell = JSON.parse((/const SHELL = (\[.*\]);/.exec(sw) as RegExpExecArray)[1] as string) as string[];
+		const fonts = [...readFileSync(join(ui, "app.css"), "utf8").matchAll(/url\("(\/fonts\/[^"]+)"\)/g)].map((m) => m[1] as string);
+		expect(fonts.length).toBeGreaterThan(0);
+		expect(fonts.filter((f) => !shell.includes(f))).toEqual([]);
+	});
+
 	it("pages never import each other, and only shell.js imports from pages/", () => {
 		const offenders: string[] = [];
 		for (const file of scripts) {
@@ -34,6 +42,33 @@ describe("console modules", () => {
 
 	it("common.js imports nothing", () => {
 		expect(readFileSync(join(ui, "common.js"), "utf8")).not.toMatch(/^import /m);
+	});
+});
+
+describe("console accessibility floor", () => {
+	const read = (f: string) => readFileSync(join(ui, f), "utf8");
+
+	it("does not announce the whole app as a live region, and offers a skip link", () => {
+		expect(read("index.html")).not.toMatch(/id="app"[^>]*aria-live/);
+		expect(read("shell.js")).toContain("Salta al contenuto");
+	});
+
+	it("the phone drawer makes the page behind inert and closes on Esc", () => {
+		const shell = read("shell.js");
+		expect(shell).toMatch(/"main, \.topbar"\)\) behind\.inert/);
+		expect(shell).toMatch(/e\.key !== "Escape"[^\n]*railPhone/);
+	});
+
+	it("form controls use the 3:1 edge, touch targets reach 44px, and motion keeps a still cue", () => {
+		const css = read("app.css");
+		expect(css).toMatch(/--control: color-mix\(in srgb, var\(--fg\) 50%, var\(--bg\)\)/);
+		expect(css).toMatch(/min-height: 34px; padding: 7px 11px; border: 1px solid var\(--control\)/);
+		expect(css).toMatch(/@media \(pointer: coarse\) \{\n\t\.icon-btn, \.icon-btn\.small \{ width: 44px; height: 44px; \}/);
+		expect(css).not.toMatch(/@keyframes (toast-in|chip-in)[^\n]*blur/);
+		expect(css).not.toMatch(/#toasts \{[^}]*transition: height/);
+		const reduced = css.slice(css.indexOf("@media (prefers-reduced-motion: reduce) {\n\t*"));
+		expect(reduced).not.toMatch(/transition: none/);
+		expect(reduced).toMatch(/\.board-dot \{ background: var\(--fg\)/);
 	});
 });
 

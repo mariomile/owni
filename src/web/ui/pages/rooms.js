@@ -10,6 +10,10 @@ import { agentPanel } from "../agent-panel.js";
 import { markRead, meAvatar, threadPanel, threadSummary } from "../threads.js";
 
 // ---------- canali (ADR 0063, 0113) ----------
+/** How many messages a canale draws at first; earlier ones are loaded on request. */
+const PAGE = 60;
+/** The browser sizes a textarea to its text by itself (CSS field-sizing); older WebKit needs the height measured. */
+const FIELD_SIZING = CSS.supports("field-sizing", "content");
 export async function viewRooms(main) {
 	const { rest } = route();
 	if (rest[0] && rest[0] !== "nuova") return viewRoom(main, rest[0], rest[1] === "t" ? rest[2] : undefined);
@@ -127,8 +131,10 @@ function roomBox(room, send) {
 	const input = h("textarea", { rows: 1, placeholder: `Scrivi, @${present[0]?.handle ?? "nome"} per chiamare un agente…`, "aria-label": "Messaggio", value: store(draftKey) ?? "" });
 	const button = h("button.send", { "aria-label": "Invia", disabled: true }, icon("send"));
 	const fit = () => {
-		input.style.height = "auto";
-		input.style.height = `${Math.min(input.scrollHeight, 220)}px`;
+		if (!FIELD_SIZING) {
+			input.style.height = "auto";
+			input.style.height = `${Math.min(input.scrollHeight, 220)}px`;
+		}
 		button.disabled = !input.value.trim();
 		store(draftKey, input.value.trim() ? input.value : null);
 	};
@@ -236,7 +242,19 @@ async function viewRoom(main, roomId, openId) {
 			mount(slot.el, summary(room, entry.thread, () => openThread(entry)));
 		}
 	});
-	for (const e of entries) show(e);
+	// The last PAGE messages; the earlier ones come on request, above, without moving what is being read.
+	let from = Math.max(0, entries.length - PAGE);
+	const older = h("button.btn.small.older", { type: "button", hidden: from === 0, onclick: () => {
+		const before = transcript.scrollHeight;
+		const anchor = older.nextSibling;
+		const start = Math.max(0, from - PAGE);
+		for (const e of entries.slice(start, from)) transcript.insertBefore(draw(e), anchor);
+		from = start;
+		older.hidden = from === 0;
+		transcript.scrollTo({ top: transcript.scrollTop + transcript.scrollHeight - before, behavior: "instant" });
+	} }, "Carica messaggi precedenti");
+	transcript.append(older);
+	for (const e of entries.slice(from)) show(e);
 	state.onRoom = (event) => {
 		if (event.roomId === roomId) {
 			if (event.entry.from === "person") return true;
