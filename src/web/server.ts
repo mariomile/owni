@@ -1773,10 +1773,11 @@ export function createWebApp(options: WebAppOptions): Server {
 		return options.rooms;
 	};
 	const shownInRoom = (entry: RoomEntry): RoomEntry => (entry.model === undefined ? entry : { ...entry, model: named(entry.model) });
-	const roomView = async (room: Room, p: Person) => {
+	/** `records`: the tenant's instances when the caller already read them, so each seat is not read again. */
+	const roomView = async (room: Room, p: Person, records?: ReadonlyMap<string, InstanceRecord>) => {
 		const agents = await Promise.all(
 			room.seats.map(async (s) => {
-				const record = await runtime.registry.getInstance(tenantId, s.instanceId).catch(() => undefined);
+				const record = records === undefined ? await runtime.registry.getInstance(tenantId, s.instanceId).catch(() => undefined) : records.get(s.instanceId);
 				return { instanceId: s.instanceId, name: record?.name ?? s.instanceId, ...(record?.persona?.emoji === undefined ? {} : { emoji: record.persona.emoji }), present: record !== undefined && canChatWith(record, p) };
 			}),
 		);
@@ -1880,7 +1881,8 @@ export function createWebApp(options: WebAppOptions): Server {
 	// The console's rail (ADR 0113): a direct conversation for each agente the person can write to, the general one first, and their canali.
 	route("GET", "/api/conversations", "person", async ({ person }) => {
 		const p = person as Person;
-		const agents = (await runtime.registry.listInstances(tenantId)).filter((r) => canChatWith(r, p));
+		const instances = await runtime.registry.listInstances(tenantId);
+		const agents = instances.filter((r) => canChatWith(r, p));
 		agents.sort((a, b) => Number(b.id === options.main) - Number(a.id === options.main));
 		const direct = await Promise.all(
 			agents.map(async (r) => {
@@ -1890,9 +1892,10 @@ export function createWebApp(options: WebAppOptions): Server {
 				return { instanceId: r.id, ...(dm === undefined ? {} : { threadId: dm.id }), ...(updatedAt === undefined ? {} : { updatedAt }), unread: threads.some(unread) };
 			}),
 		);
-		const rooms = options.rooms === undefined ? [] : await options.rooms.list(p.id);
+		const rooms = options.rooms === undefined ? [] : await options.rooms.listWithThreads(p.id);
+		const records = new Map(instances.map((r) => [String(r.id), r]));
 		// A canale is unread when it or a thread under it is.
-		const channels = await Promise.all(rooms.map(async (r) => ({ ...(await roomView(r, p)), unread: unread(r) || (await options.rooms?.children(p.id, r.id))?.some(unread) === true })));
+		const channels = await Promise.all(rooms.map(async ({ room, threads }) => ({ ...(await roomView(room, p, records)), unread: unread(room) || threads.some(unread) })));
 		return { direct, channels: channels.sort((a, b) => a.title.localeCompare(b.title, "it")) };
 	});
 	route("DELETE", "/api/rooms/:room", "person", async ({ person, params }) => {
