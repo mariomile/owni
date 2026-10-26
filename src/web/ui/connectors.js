@@ -106,13 +106,16 @@ export async function connectorsBody(inst) {
 		return h(
 			"div.card.pad.stack",
 			h("div.row-gap", h("h2", c.name), chip),
-			h("div.mono.muted", c.transport.type === "http" ? c.transport.url : `${c.transport.command} ${(c.transport.args ?? []).join(" ")}`),
+			h("div.mono.muted", c.transport.type === "http" ? c.transport.url : c.transport.type === "api" ? c.transport.baseUrl : `${c.transport.command} ${(c.transport.args ?? []).join(" ")}`),
+			c.transport.type === "api" ? h("p.muted", API_AUTH_WORDS[c.transport.auth?.kind ?? "none"]) : null,
 			st?.error ? h("p.chip.bad", st.error) : null,
 			st?.tools?.length ? h("p.mono", st.tools.join("  ")) : null,
 			!st?.connected
 				? null
 				: c.approval === "none"
 					? h("p.muted", "Approvazione spenta: Owni usa tutti gli strumenti senza chiedere.")
+					: c.transport.type === "api"
+						? h("p.muted", "Legge subito; prima di creare, modificare o cancellare chiede l'approvazione.")
 					: !st.approval?.length
 						? h("p.muted", "Tutti gli strumenti leggono soltanto: Owni li usa senza chiedere.")
 						: st.approval.length === st.tools.length
@@ -132,7 +135,7 @@ export async function connectorsBody(inst) {
 						onclick: () =>
 							confirmDialog(
 								`Rimuovere ${c.name}?`,
-								oauthConnector ? "Owni perde i suoi strumenti e il suo accesso al servizio viene cancellato." : tokenEntry ? "Owni perde i suoi strumenti e il token viene cancellato." : "Owni perde i suoi strumenti. I valori segreti restano salvati sul server.",
+								oauthConnector ? "Owni perde i suoi strumenti e il suo accesso al servizio viene cancellato." : tokenEntry ? "Owni perde i suoi strumenti e il token viene cancellato." : "Owni perde i suoi strumenti, e le chiavi salvate per questo agente vengono cancellate.",
 								"Rimuovi",
 								async () => {
 									await api(`/api/instances/${inst.id}/connectors/${c.id}`, { method: "DELETE" });
@@ -146,17 +149,43 @@ export async function connectorsBody(inst) {
 		);
 	});
 	return [
-		h("div.card.pad", h("h2", "Servizi collegati"), h("p.muted", `Collegano ${inst.name} agli strumenti che usate già. Ognuno raggiunge solo il suo servizio, e solo se consentito.`), h("div.actions", h("button.btn.accent", { onclick: () => connectorForm(inst) }, icon("plus"), "Nuovo connettore"))),
-		connectors.length ? h("div.grid-2", cards) : emptyNote("div.card.empty", "Nessun connettore", "Scegline uno qui sotto, oppure aggiungi un altro server MCP (HTTP o locale) con «Nuovo connettore»."),
+		h("div.card.pad", h("h2", "Servizi collegati"), h("p.muted", `Collegano ${inst.name} agli strumenti che usate già. Ognuno raggiunge solo il suo servizio, e solo se consentito. Le chiavi sono di ${inst.name}: un altro agente collegato allo stesso servizio ha le sue.`), h("div.actions", h("button.btn.accent", { onclick: () => connectorForm(inst) }, icon("plus"), "Nuovo connettore"))),
+		connectors.length ? h("div.grid-2", cards) : emptyNote("div.card.empty", "Nessun connettore", "Scegline uno qui sotto, oppure aggiungi con «Nuovo connettore» un server MCP o l'API di un servizio con la sua chiave."),
 		catalogGallery(inst, catalog, oauth, redirectUrl, new Set(connectors.map((c) => c.id))),
 	];
 }
+
+/** How an API's key goes, as the owner reads it. */
+const API_AUTH_WORDS = {
+	bearer: "Entra con un token (Authorization: Bearer).",
+	header: "Entra con una chiave in un header.",
+	query: "Entra con una chiave nell'indirizzo.",
+	none: "Senza chiave.",
+};
 
 function connectorForm(inst, existing) {
 	const t = existing?.transport;
 	const id = h("input", { type: "text", value: existing?.id ?? "", placeholder: "crm", class: "mono", disabled: existing ? true : undefined });
 	const name = h("input", { type: "text", value: existing?.name ?? "", placeholder: "CRM aziendale" });
-	const type = h("select", h("option", { value: "http" }, "HTTP (Streamable HTTP)"), h("option", { value: "stdio", selected: t?.type === "stdio" ? "selected" : undefined }, "Locale (stdio)"));
+	const type = h(
+		"select",
+		h("option", { value: "http" }, "Server MCP (HTTP)"),
+		h("option", { value: "stdio", selected: t?.type === "stdio" ? "selected" : undefined }, "Server MCP locale (stdio)"),
+		h("option", { value: "api", selected: t?.type === "api" ? "selected" : undefined }, "API con chiave (HTTP)"),
+	);
+	const baseUrl = h("input", { type: "url", value: t?.type === "api" ? t.baseUrl : "", placeholder: "https://api.example.com/v1" });
+	const authKind = h(
+		"select",
+		[
+			["bearer", "Token (Authorization: Bearer)"],
+			["header", "Chiave in un header"],
+			["query", "Chiave nell'indirizzo"],
+			["none", "Nessuna chiave"],
+		].map(([value, label]) => h("option", { value, selected: (t?.type === "api" ? (t.auth?.kind ?? "none") : "bearer") === value ? "selected" : undefined }, label)),
+	);
+	const authName = h("input", { type: "text", value: t?.type === "api" && t.auth && "name" in t.auth ? t.auth.name : "", placeholder: "X-API-Key", class: "mono" });
+	const key = h("input", { type: "password", autocomplete: "off", placeholder: t?.type === "api" && t.secret ? "Lascia vuoto per tenere quella salvata" : "Incolla qui la chiave" });
+	const notes = h("textarea", { rows: 4, maxlength: 2000, placeholder: "GET /clienti?q=… cerca un cliente; POST /fatture crea una fattura (campi: cliente, righe, data)…" }, t?.type === "api" ? (t.notes ?? "") : "");
 	const url = h("input", { type: "url", value: t?.type === "http" ? t.url : "", placeholder: "https://mcp.example.com/mcp" });
 	const command = h("input", { type: "text", value: t?.type === "stdio" ? [t.command, ...(t.args ?? [])].join(" ") : "", placeholder: "npx -y @modelcontextprotocol/server-filesystem /dati", class: "mono" });
 	const secretName = h("input", { type: "text", placeholder: t?.type === "stdio" ? "API_KEY" : "authorization", class: "mono" });
@@ -166,14 +195,32 @@ function connectorForm(inst, existing) {
 	const askBox = h("input", { type: "checkbox", checked: existing?.approval !== "none" });
 	const oauthBox = h("input", { type: "checkbox", checked: t?.type === "http" && t.auth === "oauth" });
 	const box = h("div");
-	const draw = () =>
+	const secretRow = h("div.field", h("span", "Header o variabile segreta (opzionale)"), h("div.row-gap", secretName, secretValue));
+	const apiFields = () => {
+		const named = authKind.value === "header" || authKind.value === "query";
+		authName.placeholder = authKind.value === "query" ? "api_key" : "X-API-Key";
+		return h(
+			"div.stack",
+			h("label.field", h("span", "Indirizzo base"), baseUrl, h("small", "Owni chiama solo indirizzi sotto questo, e solo questo servizio.")),
+			h("label.field", h("span", "Accesso"), authKind),
+			named ? h("label.field", h("span", authKind.value === "query" ? "Nome del parametro" : "Nome dell'header"), authName) : null,
+			authKind.value === "none" ? null : h("label.field", h("span", "Chiave"), key, h("small", `Resta sul server di Owni, non si vede più e non arriva mai al modello. È solo di ${inst.name}.`)),
+			h("label.field", h("span", "Cosa sa fare (per l'agente)"), notes, h("small", "Gli indirizzi principali e a cosa servono, come nella documentazione del servizio. Owni legge subito; per scrivere chiede l'approvazione.")),
+		);
+	};
+	const draw = () => {
 		mount(
 			box,
 			type.value === "http"
 				? h("div.stack", h("label.field", h("span", "URL"), url), h("label.row-gap", oauthBox, h("span", "Accesso con l'account del servizio (OAuth)")))
-				: h("label.field", h("span", "Comando"), command, h("small", "Gira sul server di Owni: solo comandi di cui ti fidi.")),
+				: type.value === "api"
+					? apiFields()
+					: h("label.field", h("span", "Comando"), command, h("small", "Gira sul server di Owni: solo comandi di cui ti fidi.")),
 		);
+		secretRow.hidden = type.value === "api";
+	};
 	type.addEventListener("change", draw);
+	authKind.addEventListener("change", draw);
 	draw();
 	const dialog = h(
 		"dialog",
@@ -182,11 +229,11 @@ function connectorForm(inst, existing) {
 		h("label.field", h("span", "Nome"), name),
 		h("label.field", h("span", "Tipo"), type),
 		box,
-		h("div.field", h("span", type.value === "stdio" ? "Variabile segreta (opzionale)" : "Header segreto (opzionale)"), h("div.row-gap", secretName, secretValue)),
+		secretRow,
 		h("label.row-gap", allowed, h("span", "Consenti nella egress policy")),
 		h("label.row-gap", enabled, h("span", "Acceso")),
 		h("label.row-gap", askBox, h("span", "Chiedi l'approvazione prima delle azioni che cambiano qualcosa")),
-		h("small.muted", "Consigliato. Per creare, modificare o cancellare, Owni chiede il via libera a chi ha fatto la richiesta o a un approvatore; gli strumenti che il servizio indica come di sola lettura li usa da sola. Se il servizio non lo indica, chiede per tutti. Spegnilo solo per un servizio di cui ti fidi del tutto."),
+		h("small.muted", "Consigliato. Per creare, modificare o cancellare, Owni chiede il via libera a chi ha fatto la richiesta o a un approvatore; gli strumenti che il servizio indica come di sola lettura li usa da sola (per un'API: le richieste GET). Se un server MCP non lo indica, chiede per tutti. Spegnilo solo per un servizio di cui ti fidi del tutto."),
 		h(
 			"div.actions",
 			h(
@@ -196,20 +243,23 @@ function connectorForm(inst, existing) {
 						const cid = id.value.trim();
 						try {
 							const secrets = {};
-							if (secretName.value.trim() && secretValue.value) {
-								const key = `connector.${cid}.${secretName.value.trim().replace(/[^a-zA-Z0-9_.-]/g, "_")}`;
-								await api(`/api/instances/${inst.id}/secrets/${encodeURIComponent(key)}`, { method: "PUT", body: { value: secretValue.value } });
-								secrets[secretName.value.trim()] = key;
+							if (type.value !== "api" && secretName.value.trim() && secretValue.value) {
+								// Named after this agente: another one with a connector of the same ID keeps its own.
+								const secret = `connector.${cid}.${inst.id}.${secretName.value.trim().replace(/[^a-zA-Z0-9_-]/g, "_")}`;
+								await api(`/api/instances/${inst.id}/secrets/${encodeURIComponent(secret)}`, { method: "PUT", body: { value: secretValue.value } });
+								secrets[secretName.value.trim()] = secret;
 							}
 							const prev = existing?.transport ?? {};
 							const transport =
 								type.value === "http"
 									? { type: "http", url: url.value.trim(), headerSecrets: { ...(prev.type === "http" ? prev.headerSecrets : {}), ...secrets }, ...(oauthBox.checked ? { auth: "oauth" } : {}) }
-									: (() => {
-											const [cmd, ...args] = command.value.trim().split(/\s+/);
-											return { type: "stdio", command: cmd, args, envSecrets: { ...(prev.type === "stdio" ? prev.envSecrets : {}), ...secrets } };
-										})();
-							const { status } = await api(`/api/instances/${inst.id}/connectors/${encodeURIComponent(cid)}`, { method: "PUT", body: { name: name.value.trim() || cid, transport, enabled: enabled.checked, allowed: allowed.checked, ...(askBox.checked ? {} : { approval: "none" }) } });
+									: type.value === "api"
+										? { type: "api", baseUrl: baseUrl.value.trim(), ...(authKind.value === "none" ? {} : { auth: { kind: authKind.value, ...(authKind.value === "bearer" ? {} : { name: authName.value.trim() }) } }), notes: notes.value }
+										: (() => {
+												const [cmd, ...args] = command.value.trim().split(/\s+/);
+												return { type: "stdio", command: cmd, args, envSecrets: { ...(prev.type === "stdio" ? prev.envSecrets : {}), ...secrets } };
+											})();
+							const { status } = await api(`/api/instances/${inst.id}/connectors/${encodeURIComponent(cid)}`, { method: "PUT", body: { name: name.value.trim() || cid, transport, ...(type.value === "api" && key.value.trim() ? { key: key.value.trim() } : {}), enabled: enabled.checked, allowed: allowed.checked, ...(askBox.checked ? {} : { approval: "none" }) } });
 							dialog.close();
 							if (type.value === "http" && oauthBox.checked && status?.signIn && allowed.checked && enabled.checked) return await signInConnector(`/api/instances/${inst.id}/connectors/${encodeURIComponent(cid)}/sign-in`, name.value.trim() || cid);
 							toast(status?.connected ? `Collegato: ${status.tools.length} tool` : `Salvato${status?.error ? `, ma non collegato: ${status.error}` : ""}`, !status?.connected);
