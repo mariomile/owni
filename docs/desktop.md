@@ -79,7 +79,7 @@ Il workflow **Desktop app** (a mano da GitHub Actions, o con un tag `desktop-v0.
 
 ### Aggiornamenti
 
-L'app si aggiorna da sola. All'avvio e ogni sei ore chiede all'ultima release pubblicata su GitHub (`latest.json`) se c'è una versione più nuova; se c'è, lo dice in una finestra con **Installa e riavvia** e **Più tardi**. Installando, scarica il pacchetto, ne controlla la firma, sostituisce l'app, ferma il server di questo computer e riapre Owni: i dati restano dove sono. **Cerca aggiornamenti…** nel menu dell'icona controlla subito e dice anche quando l'app è già aggiornata.
+L'app si aggiorna da sola. All'avvio e ogni sei ore chiede all'ultima release pubblicata su GitHub (`latest.json`) se c'è una versione più nuova; se c'è, lo dice in una finestra con **Installa e riavvia** e **Più tardi**. Installando, scarica il pacchetto, ne controlla la firma, sostituisce l'app, ferma il server di questo computer e riapre Owni: i dati restano dove sono. **Cerca aggiornamenti…**, nel menu Owni sotto **Informazioni su Owni** e nel menu dell'icona, controlla subito e dice anche quando l'app è già aggiornata.
 
 La firma degli aggiornamenti è separata da quella di Apple. Il workflow firma i pacchetti con la chiave privata nel segreto `TAURI_SIGNING_PRIVATE_KEY` (senza password) e l'app accetta solo pacchetti firmati con la chiave pubblica scritta in `tauri.conf.json`. Senza quella chiave privata non si possono più pubblicare aggiornamenti per le app già installate: chi la perde deve far reinstallare l'app a mano. Una copia sta in `~/.tauri/owni-updater.key` sul Mac di chi l'ha creata.
 

@@ -1,15 +1,35 @@
 //! Updates (docs/desktop.md, «Aggiornamenti»): at launch and every six hours the app asks the
 //! latest GitHub release whether a newer version exists. A newer one is offered in a dialog;
 //! accepted, it is downloaded, checked against the key in tauri.conf.json, installed, and the
-//! app restarts. «Cerca aggiornamenti…» in the tray asks now and also says when there is none.
+//! app restarts. «Cerca aggiornamenti…», in the app menu under «Informazioni su Owni» and in the
+//! tray, asks now and also says when there is none.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
-use tauri::{AppHandle, Manager};
+use tauri::menu::{Menu, MenuItem};
+use tauri::{AppHandle, Manager, Wry};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 use tauri_plugin_updater::UpdaterExt;
 
 const EVERY: Duration = Duration::from_secs(6 * 60 * 60);
+
+/// The id of «Cerca aggiornamenti…» in the app menu (the tray's has its own).
+pub const MENU_ID: &str = "app-update";
+
+/// The standard menu bar, with «Cerca aggiornamenti…» right under «Informazioni su Owni», where a
+/// Mac app keeps it.
+pub fn app_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
+    let menu = Menu::default(app)?;
+    if let Some(owni) = menu
+        .items()?
+        .first()
+        .and_then(|item| item.as_submenu().cloned())
+    {
+        let item = MenuItem::with_id(app, MENU_ID, "Cerca aggiornamenti…", true, None::<&str>)?;
+        owni.insert(&item, 1)?;
+    }
+    Ok(menu)
+}
 
 /// One check at a time: the timer and the tray never show two dialogs.
 static BUSY: AtomicBool = AtomicBool::new(false);
