@@ -1,6 +1,6 @@
 /**
  * DurableEngine implemented on @earendil-works/pi-durable 1.3.0 (experimental API).
- * This file and pi-durable-models.ts are the only places that import Pi packages.
+ * The pi-durable* adapter files are the only places that import Pi packages.
  */
 import { join } from "node:path";
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
@@ -10,21 +10,17 @@ import { createModels, type MutableModels } from "@earendil-works/pi-ai/models";
 import {
 	AgentDoc,
 	AssistantEntry,
-	CompactionEntry,
 	CompactionTask,
 	UserEntry,
-	UsageDoc,
 	configure,
 	type ConversationId,
 	type Cursor,
 	type DocumentReader,
 	type DocumentState,
 	createRegistry,
-	type EntryId,
 	type EntryRecord,
 	type Page,
 	defineDoc,
-	defineDocFamily,
 	defineExtension,
 	defineTask,
 	defineTool,
@@ -42,6 +38,7 @@ import {
 	type AgentEvent,
 	type AgentEventStream,
 	type SubmissionRecord,
+	type TaskRuntime,
 } from "@earendil-works/pi-durable";
 import { createNodePhotonImages } from "@earendil-works/pi-durable/images/node";
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
@@ -50,6 +47,7 @@ import { DEFAULT_IMAGE_LIMITS, type ImageProcessor } from "@earendil-works/pi-du
 import type { OwniTool, DurableEngine, EngineImage, EngineOpenOptions, EngineReply, EngineSession, EngineRunEvent, EngineRunState, JsonValue, TurnUsage } from "../engine.ts";
 import type { ModelSelection } from "../registry.ts";
 import { isTurnOrigin, type TurnOrigin } from "../turn-origin.ts";
+import { answered, BilledDoc, noSpend, startBilling, turnUsage } from "./pi-durable-billing.ts";
 import { createProvider } from "./pi-durable-models.ts";
 
 const context = BACKGROUND_CONTEXT;
@@ -67,33 +65,6 @@ const ThreadsDoc = defineDoc<{ threads: Record<string, number> }>({
  * where the turn comes from in its data, written in the same commit as the submission.
  */
 const INPUT_KIND = "owni.input";
-
-/**
- * How far this conversation is billed (ADR 0098): `answer` is the last answer billed, `spent` how
- * much of Pi's `pi.usage` had been spent at it. No `spent` until billing starts: when the
- * conversation is created, or for one created before, when this version first opens it.
- */
-type Spent = { input: number; output: number; cacheRead: number; cacheWrite: number; cost: number };
-const BilledDoc = defineDoc<{ answer?: number; spent?: Spent }>({
-	kind: "owni.billed-to",
-	version: 1,
-	scope: "conversation",
-	history: "latest",
-	fork: "initial",
-	initial: () => ({}),
-});
-
-/** What one answer was billed (ADR 0098), keyed by its entry: written once, given again whenever it is read again. */
-type Bill = { modelCalls: number; inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheWriteTokens: number; costUsd: number; tools: string[] };
-const BillDoc = defineDocFamily<{ bill?: Bill }, Bill | null>({
-	kind: "owni.bill",
-	version: 1,
-	family: true,
-	scope: "conversation",
-	history: "latest",
-	fork: "initial",
-	initial: (bill) => (bill === null ? {} : { bill }),
-});
 
 /** Thread key → the model that conversation answers with instead of the instance's (ADR 0036). */
 const ThreadModelsDoc = defineDoc<{ models: Record<string, ModelSelection> }>({
@@ -611,6 +582,17 @@ function currentRequestRegistry(registry: RegistryReader, models: MutableModels,
 		});
 	};
 	const targetFor = (runtime: DocumentReader & { conversationId: ConversationId }, ctx: OriginContext) => useTarget(runtime, ctx, (target) => target);
+	/** The model to move to when a checkpoint's own is missing from this process's catalog and is no longer the current one. */
+	const checkpointTarget = async (runtime: DocumentReader & { conversationId: ConversationId }, ctx: OriginContext, pinned: ModelSelection): Promise<RequestTarget | undefined> => {
+		// A checkpoint can refer to a provider absent from this process's catalog. Registration
+		// grants no credentials; the gate still chooses the currently usable model before sending.
+		registerModelProvider(models, options, pinned.provider);
+		if (models.getModel(pinned.provider, pinned.modelId) !== undefined) return undefined;
+		const target = await targetFor(runtime, ctx);
+		return target !== undefined && !sameModel(target.model, pinned) ? target : undefined;
+	};
+	/** The runtime with some of its models' calls replaced. Keep live getters (settings/registry), rather than freezing them with an object spread. */
+	const withModels = <R extends object>(runtime: R, patch: Partial<MutableModels>): R => Object.assign(Object.create(runtime), { models: Object.assign(Object.create(models), patch) });
 	const check = <T>(runtime: GenerationRuntime, checkpoint: RequestCheckpoint, messages: readonly Message[], ctx: OriginContext, send: () => T): Promise<Awaited<T>> => useTarget(runtime, ctx, (target) => {
 		if (target !== undefined) {
 			let shown: string | null | undefined;
@@ -628,15 +610,8 @@ function currentRequestRegistry(registry: RegistryReader, models: MutableModels,
 				await configure(tx, runtime.conversationId, { model: error.target.model, instructions: error.target.instructions ?? null });
 				return { status: "running", checkpoint: { phase: "prepare", attempt: checkpoint.attempt, ...(checkpoint.compacted === undefined ? {} : { compacted: checkpoint.compacted }) } };
 			}, ctx);
-		} else if (error instanceof AlignmentFailed) {
-			const retry = runtime.settings.retry;
-			if (!retry.enabled || checkpoint.attempt > retry.maxRetries) throw error.cause;
-			runtime.report(error);
-			// A lookup failure did not send a request. Retry this exact phase: in particular keep
-			// deferred handles and prepare's compaction guards, which Pi's model retry discards.
-			await runtime.sleep(runtime.now() + retryDelayMs(retry, checkpoint.attempt), ctx);
-			await runtime.commit(() => ({ status: "running", checkpoint: { ...checkpoint, attempt: checkpoint.attempt + 1 } }), ctx);
-		} else throw error;
+		} else if (error instanceof AlignmentFailed) await retryAlignment(error, runtime, checkpoint, ctx);
+		else throw error;
 	};
 	const generation: typeof GenerationTask = defineTask({
 		...GenerationTask.definition,
@@ -652,31 +627,22 @@ function currentRequestRegistry(registry: RegistryReader, models: MutableModels,
 			request: async (task, runtime, ctx) => {
 				const checkpoint = task.state.checkpoint;
 				try {
-					// A checkpoint can refer to a provider absent from this process's catalog. Registration
-					// grants no credentials; the gate still chooses the currently usable model before sending.
-					registerModelProvider(models, options, checkpoint.model.provider);
-					if (models.getModel(checkpoint.model.provider, checkpoint.model.modelId) === undefined) {
-						const target = await targetFor(runtime, ctx);
-						if (target !== undefined && !sameModel(target.model, checkpoint.model)) throw new PrepareRequest(target);
-					}
-					const requestModels = Object.create(models) as MutableModels;
-					requestModels.streamSimple = (model, transcript, streamOptions) => new GatedRequest(() => check(runtime, checkpoint, transcript.messages, ctx, () => models.streamSimple(model, transcript, streamOptions)));
-					// Keep live getters (settings/registry), rather than freezing them with an object spread.
-					await phases.request(task, Object.assign(Object.create(runtime), { models: requestModels }), ctx);
+					const target = await checkpointTarget(runtime, ctx, checkpoint.model);
+					if (target !== undefined) throw new PrepareRequest(target);
+					await phases.request(task, withModels(runtime, {
+						streamSimple: (model, transcript, streamOptions) => new GatedRequest(() => check(runtime, checkpoint, transcript.messages, ctx, () => models.streamSimple(model, transcript, streamOptions))),
+					}), ctx);
 				} catch (error) { await recover(error, runtime, checkpoint, ctx); }
 			},
 			poll: async (task, runtime, ctx) => {
 				const checkpoint = task.state.checkpoint;
 				try {
 					const view = await runtime.context(runtime.conversationId, ctx, { at: checkpoint.cutoff });
-					registerModelProvider(models, options, checkpoint.model.provider);
-					if (models.getModel(checkpoint.model.provider, checkpoint.model.modelId) === undefined) {
-						const target = await targetFor(runtime, ctx);
-						if (target !== undefined && !sameModel(target.model, checkpoint.model)) throw new PrepareRequest(target);
-					}
-					const requestModels = Object.create(models) as MutableModels;
-					requestModels.fetchDeferred = (model, handle, fetchOptions) => check(runtime, checkpoint, view.messages, ctx, () => models.fetchDeferred(model, handle, fetchOptions));
-					await phases.poll(task, Object.assign(Object.create(runtime), { models: requestModels }), ctx);
+					const target = await checkpointTarget(runtime, ctx, checkpoint.model);
+					if (target !== undefined) throw new PrepareRequest(target);
+					await phases.poll(task, withModels(runtime, {
+						fetchDeferred: (model, handle, fetchOptions) => check(runtime, checkpoint, view.messages, ctx, () => models.fetchDeferred(model, handle, fetchOptions)),
+					}), ctx);
 				} catch (error) {
 					if (error instanceof PrepareRequest) {
 						runtime.signal.throwIfAborted();
@@ -703,30 +669,23 @@ function currentRequestRegistry(registry: RegistryReader, models: MutableModels,
 			summarize: async (task, runtime, ctx) => {
 				const checkpoint = task.state.checkpoint;
 				try {
-					registerModelProvider(models, options, checkpoint.model.provider);
-					if (models.getModel(checkpoint.model.provider, checkpoint.model.modelId) === undefined) {
-						const target = await targetFor(runtime, ctx);
-						if (target !== undefined && !sameModel(target.model, checkpoint.model)) {
-							await runtime.commit(() => ({ status: "running", checkpoint: { ...checkpoint, model: target.model } }), ctx);
-							return;
-						}
+					const moved = await checkpointTarget(runtime, ctx, checkpoint.model);
+					if (moved !== undefined) {
+						await runtime.commit(() => ({ status: "running", checkpoint: { ...checkpoint, model: moved.model } }), ctx);
+						return;
 					}
-					const requestModels = Object.create(models) as MutableModels;
-					requestModels.completeSimple = (model, transcript, streamOptions) => useTarget(runtime, ctx, (target) => {
-						const selected = target === undefined ? model : models.getModel(target.model.provider, target.model.modelId);
-						if (selected === undefined) throw new Error(`Model ${target!.model.provider}/${target!.model.modelId} is not available`);
-						runtime.signal.throwIfAborted();
-						return models.completeSimple(selected, transcript, { ...streamOptions, maxTokens: Math.min(streamOptions?.maxTokens ?? Infinity, selected.maxTokens > 0 ? selected.maxTokens : Infinity) });
-					});
-					await CompactionTask.definition.phases.summarize(task, Object.assign(Object.create(runtime), { models: requestModels }), ctx);
+					await CompactionTask.definition.phases.summarize(task, withModels(runtime, {
+						completeSimple: (model, transcript, streamOptions) => useTarget(runtime, ctx, (target) => {
+							const selected = target === undefined ? model : models.getModel(target.model.provider, target.model.modelId);
+							if (selected === undefined) throw new Error(`Model ${target!.model.provider}/${target!.model.modelId} is not available`);
+							runtime.signal.throwIfAborted();
+							return models.completeSimple(selected, transcript, { ...streamOptions, maxTokens: Math.min(streamOptions?.maxTokens ?? Infinity, selected.maxTokens > 0 ? selected.maxTokens : Infinity) });
+						}),
+					}), ctx);
 				} catch (error) {
 					runtime.signal.throwIfAborted();
-					const retry = runtime.settings.retry;
 					if (!(error instanceof AlignmentFailed)) throw error;
-					if (!retry.enabled || checkpoint.attempt > retry.maxRetries) throw error.cause;
-					runtime.report(error);
-					await runtime.sleep(runtime.now() + retryDelayMs(retry, checkpoint.attempt), ctx);
-					await runtime.commit(() => ({ status: "running", checkpoint: { ...checkpoint, attempt: checkpoint.attempt + 1 } }), ctx);
+					await retryAlignment(error, runtime, checkpoint, ctx);
 				}
 			},
 		},
@@ -744,6 +703,18 @@ function currentRequestRegistry(registry: RegistryReader, models: MutableModels,
 			};
 		},
 	};
+}
+
+/**
+ * A lookup failure did not send a request. Retry this exact phase: in particular keep deferred
+ * handles and prepare's compaction guards, which Pi's model retry discards.
+ */
+async function retryAlignment<I, S, R, H extends object>(error: AlignmentFailed, runtime: TaskRuntime<I, S, R, H>, checkpoint: S & { attempt: number }, ctx: OriginContext): Promise<void> {
+	const retry = runtime.settings.retry;
+	if (!retry.enabled || checkpoint.attempt > retry.maxRetries) throw error.cause;
+	runtime.report(error);
+	await runtime.sleep(runtime.now() + retryDelayMs(retry, checkpoint.attempt), ctx);
+	await runtime.commit(() => ({ status: "running", checkpoint: { ...checkpoint, attempt: checkpoint.attempt + 1 } }), ctx);
 }
 
 function sameModel(a: ModelSelection | undefined, b: ModelSelection | undefined): boolean {
@@ -922,122 +893,6 @@ async function runEntries(tx: Pick<Tx, "scanEntries">, conversationId: Conversat
 		cursor = next;
 	}
 	return { entries, bounded: true };
-}
-
-/** An answer: an assistant message that completed without calling a tool. Failed and cut-short requests are not. */
-function answered(entry: EntryRecord): boolean {
-	return ((entry.model ?? []) as Message[]).some((m) => m.role === "assistant" && m.stopReason !== "error" && m.stopReason !== "aborted" && !m.content.some((c) => c.type === "toolCall"));
-}
-
-/** The assistant messages of `entries`: every model call Pi wrote down, answered, failed, retried or cut short. */
-function assistants(entries: readonly EntryRecord[]): (Message & { role: "assistant" })[] {
-	return entries.flatMap((entry) => ((entry.model ?? []) as Message[]).filter((m): m is Message & { role: "assistant" } => m.role === "assistant"));
-}
-
-function spentBy(messages: readonly (Message & { role: "assistant" })[]): Spent {
-	const spent = noSpend();
-	for (const m of messages) {
-		spent.input += m.usage?.input ?? 0;
-		spent.output += m.usage?.output ?? 0;
-		spent.cacheRead += m.usage?.cacheRead ?? 0;
-		spent.cacheWrite += m.usage?.cacheWrite ?? 0;
-		spent.cost += m.usage?.cost?.total ?? 0;
-	}
-	return spent;
-}
-
-function noSpend(): Spent {
-	return { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 };
-}
-
-/**
- * What the run that ended with `answer` took (ADR 0098), billed once. The answers not billed yet,
- * up to the newest, are billed in order in this commit, each in its own document, and an answer
- * read again gets its own bill back. Token and cost are Pi's own ledger of the conversation
- * (`pi.usage`, every provider call, summaries of a compaction included): at each answer the ledger
- * stood at today's total less the assistant messages written after it, and the bill is the growth
- * since the answer billed before. A call that left no message (a summary) goes to the first answer
- * billed after it was made. The tools are those the run called, in order; the model calls, its
- * assistant messages and compactions. Undefined for an answer from before billing started, and for
- * one that is not there.
- */
-export async function turnUsage(tx: Pick<Tx, "scanEntries" | "doc">, conversationId: ConversationId, answer: EntryId): Promise<TurnUsage | undefined> {
-	const billed = await tx.doc(BilledDoc, conversationId);
-	if (billed.spent === undefined) return undefined;
-	if (billed.answer === undefined || billed.answer < answer) await billAnswers(tx, conversationId, billed as { answer?: number; spent: Spent });
-	if (billed.answer === undefined || billed.answer < answer) return undefined;
-	const { bill } = await tx.doc(BillDoc, conversationId, String(answer), null);
-	return bill === undefined ? undefined : { ...bill, tools: [...bill.tools] };
-}
-
-/** Bill every answer after the last one billed, oldest first, from one complete scan of what came after it. */
-async function billAnswers(tx: Pick<Tx, "scanEntries" | "doc">, conversationId: ConversationId, billed: { answer?: number; spent: Spent }): Promise<void> {
-	const entries: EntryRecord[] = [];
-	let cursor: Cursor | undefined;
-	do {
-		const page: Page<EntryRecord, Cursor> = await tx.scanEntries({ conversationId, order: "ascending", ...(billed.answer === undefined ? {} : { minEntryId: (billed.answer + 1) as EntryId }) }, 50, cursor);
-		entries.push(...page.items);
-		cursor = page.next;
-	} while (cursor !== undefined);
-	const now = await ledgerSpent(tx, conversationId);
-	let later = spentBy(assistants(entries));
-	let run: EntryRecord[] = [];
-	for (const entry of entries) {
-		run.push(entry);
-		if (!answered(entry)) continue;
-		const calls = assistants(run);
-		later = since(later, spentBy(calls));
-		const at = since(now, later);
-		const spent = since(at, billed.spent);
-		const tools = calls.flatMap((m) => (m.stopReason === "toolUse" ? m.content.flatMap((c) => (c.type === "toolCall" ? [c.name] : [])) : []));
-		const modelCalls = calls.length + run.filter((e) => e.kind === CompactionEntry.kind).length;
-		// Never below zero: each difference is a sum of calls, only floating point can take it under.
-		const bill: Bill = { modelCalls, inputTokens: Math.max(0, spent.input), outputTokens: Math.max(0, spent.output), cacheReadTokens: Math.max(0, spent.cacheRead), cacheWriteTokens: Math.max(0, spent.cacheWrite), costUsd: Math.max(0, spent.cost), tools };
-		await tx.doc(BillDoc, conversationId, String(entry.id), bill);
-		billed.answer = entry.id;
-		billed.spent = at;
-		run = [];
-	}
-}
-
-/**
- * Billing starts for a conversation created before it existed: from its last answer, with the
- * ledger as it stood then (today's total less the assistant messages written after it).
- */
-export async function startBilling(tx: Pick<Tx, "scanEntries" | "doc">, conversationId: ConversationId): Promise<void> {
-	const billed = await tx.doc(BilledDoc, conversationId);
-	if (billed.spent !== undefined) return;
-	const after: EntryRecord[] = [];
-	let cursor: Cursor | undefined;
-	scan: do {
-		const page: Page<EntryRecord, Cursor> = await tx.scanEntries({ conversationId, order: "descending" }, 50, cursor);
-		for (const entry of page.items) {
-			if (answered(entry)) {
-				billed.answer = entry.id;
-				break scan;
-			}
-			after.push(entry);
-		}
-		cursor = page.next;
-	} while (cursor !== undefined);
-	billed.spent = since(await ledgerSpent(tx, conversationId), spentBy(assistants(after)));
-}
-
-/** Every model call of the conversation in Pi's ledger, summed across models. */
-async function ledgerSpent(tx: Pick<Tx, "doc">, conversationId: ConversationId): Promise<Spent> {
-	const spent = noSpend();
-	for (const usage of Object.values((await tx.doc(UsageDoc, conversationId)).models)) {
-		spent.input += usage.input;
-		spent.output += usage.output;
-		spent.cacheRead += usage.cacheRead;
-		spent.cacheWrite += usage.cacheWrite;
-		spent.cost += usage.cost.total;
-	}
-	return spent;
-}
-
-function since(now: Spent, before: Spent): Spent {
-	return { input: now.input - before.input, output: now.output - before.output, cacheRead: now.cacheRead - before.cacheRead, cacheWrite: now.cacheWrite - before.cacheWrite, cost: now.cost - before.cost };
 }
 
 /** The least trusted of the inputs: another agente, then a notice, then something scheduled (or not known). */
