@@ -10,9 +10,9 @@ use tauri::ipc::CapabilityBuilder;
 use tauri::{AppHandle, Manager, Runtime, WebviewWindow, WebviewWindowBuilder};
 use url::Url;
 
-/// Where the close button sits: level with the sidebar's first row.
+/// Where the close button sits: its centre on the line of the sidebar's logo, 27 points from the top.
 #[cfg(target_os = "macos")]
-const BUTTONS: tauri::LogicalPosition<f64> = tauri::LogicalPosition::new(18.0, 20.0);
+const BUTTONS: tauri::LogicalPosition<f64> = tauri::LogicalPosition::new(18.0, 29.0);
 
 /// Before the page's own scripts, so its first paint already leaves the room.
 #[cfg(target_os = "macos")]
