@@ -12,18 +12,30 @@ export class HttpError extends Error {
 	}
 }
 
-export type Ctx = {
+export type Auth = "none" | "person" | "owner";
+
+/** One string per `:name` of a path: "/a/:id/b/:cid" gives [string, string]. */
+export type Params<P extends string> = string extends P
+	? string[]
+	: P extends `${string}:${string}/${infer Rest}`
+		? [string, ...Params<Rest>]
+		: P extends `${string}:${string}`
+			? [string]
+			: [];
+
+/** What a handler is given; the person is there for every route that asks for one. */
+export type Ctx<A extends Auth = Auth, P extends string = string> = {
 	readonly req: IncomingMessage;
 	readonly res: ServerResponse;
 	readonly url: URL;
-	readonly params: string[];
-	readonly person: Person | undefined;
+	readonly params: Params<P>;
+	readonly person: A extends "none" ? Person | undefined : Person;
 };
 
 export type Handler = (ctx: Ctx) => Promise<unknown>;
-export type Route = { method: string; pattern: RegExp; auth: "none" | "person" | "owner"; handler: Handler };
+export type Route = { method: string; pattern: RegExp; auth: Auth; handler: Handler };
 /** How a group of routes is added to the console's server. */
-export type AddRoute = (method: string, path: string, auth: Route["auth"], handler: Handler) => void;
+export type AddRoute = <A extends Auth, P extends string>(method: string, path: P, auth: A, handler: (ctx: Ctx<A, P>) => Promise<unknown>) => void;
 
 export const MAX_JSON = 1024 * 1024;
 
