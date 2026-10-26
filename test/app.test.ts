@@ -569,7 +569,7 @@ describe("pnpm start (startOwni)", () => {
 		// A cell runs no program of its customers.
 		const local = await fetch(`${base}/api/instances/owni/connectors/local`, { method: "PUT", headers: { cookie: api.cookie, "x-owni": "1", "x-owni-proxy": proxyToken("cell-secret-xyz-0001") }, body: JSON.stringify({ name: "Local", transport: { type: "stdio", command: "/usr/bin/touch", args: ["/tmp/x"] } }) });
 		expect(local.status).toBe(400);
-		expect((await local.json()).error).toContain("Owni Cloud");
+		expect(((await local.json()) as { error: string }).error).toContain("Owni Cloud");
 	});
 
 	it("a cell gives the control plane a fresh owner link on request; the old link stops working", async () => {
