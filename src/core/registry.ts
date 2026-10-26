@@ -6,7 +6,7 @@ import { AuditLog } from "./audit.ts";
 import { NotFound } from "./errors.ts";
 import { type InstanceId, instanceId, type TenantId, tenantId } from "./ids.ts";
 import { instanceDir, instanceFile, removedDir, tenantDir, tenantFile } from "./paths.ts";
-import { writeFileAtomic } from "./atomic-file.ts";
+import { updateJsonFile } from "./locked-json.ts";
 import type { Persona } from "./persona.ts";
 import { type AllowedUsers, CHANNEL_PATTERN, DENY_ALL, type EgressPolicy } from "./policy.ts";
 
@@ -136,12 +136,22 @@ export class TenantRegistry {
 		return record;
 	}
 
+	/**
+	 * Read the record, change it, write it back, under the lock every process shares: two changes
+	 * at once both land (the CLI writes while Owni runs).
+	 */
+	private change(tenant: string, id: string, change: (current: InstanceRecord) => InstanceRecord): InstanceRecord {
+		const t = tenantId(tenant);
+		const i = instanceId(id);
+		const record = updateJsonFile<InstanceRecord | undefined>(instanceFile(this.dataDir, t, i), undefined, (current) => (current === undefined ? undefined : change(current)));
+		if (record === undefined) throw new NotFound(`Instance "${i}" not found in tenant "${t}"`);
+		return record;
+	}
+
 	/** Replace the users allowed on one channel. Takes effect the next time the instance is opened. */
 	async setAllowedUsers(tenant: string, id: string, channel: string, userIds: readonly string[]): Promise<InstanceRecord> {
 		if (!CHANNEL_PATTERN.test(channel)) throw new Error(`Invalid channel name "${channel}"`);
-		const current = await this.getInstance(tenant, id);
-		const record: InstanceRecord = { ...current, allowedUsers: { ...current.allowedUsers, [channel]: [...new Set(userIds)] } };
-		await writeFileAtomic(instanceFile(this.dataDir, record.tenantId, record.id), `${JSON.stringify(record, null, 2)}\n`);
+		const record = this.change(tenant, id, (current) => ({ ...current, allowedUsers: { ...current.allowedUsers, [channel]: [...new Set(userIds)] } }));
 		await new AuditLog(this.dataDir, record.tenantId).append({
 			type: "instance.allowlist.updated",
 			instanceId: record.id,
@@ -153,18 +163,18 @@ export class TenantRegistry {
 
 	/** Change name, instructions, persona or approvers. Takes effect the next time the instance is opened. */
 	async updateInstance(tenant: string, id: string, change: { name?: string; instructions?: string | null; persona?: Persona | null; approvers?: AllowedUsers }): Promise<InstanceRecord> {
-		const current = await this.getInstance(tenant, id);
-		const { instructions: _old, persona: _face, ...rest } = current;
-		const instructions = change.instructions === undefined ? current.instructions : change.instructions ?? undefined;
-		const persona = change.persona === undefined ? current.persona : change.persona === null || Object.keys(change.persona).length === 0 ? undefined : change.persona;
-		const record: InstanceRecord = {
-			...rest,
-			...(change.name === undefined ? {} : { name: change.name }),
-			...(change.approvers === undefined ? {} : { approvers: change.approvers }),
-			...(instructions === undefined ? {} : { instructions }),
-			...(persona === undefined ? {} : { persona }),
-		};
-		await writeFileAtomic(instanceFile(this.dataDir, record.tenantId, record.id), `${JSON.stringify(record, null, 2)}\n`);
+		const record = this.change(tenant, id, (current) => {
+			const { instructions: _old, persona: _face, ...rest } = current;
+			const instructions = change.instructions === undefined ? current.instructions : change.instructions ?? undefined;
+			const persona = change.persona === undefined ? current.persona : change.persona === null || Object.keys(change.persona).length === 0 ? undefined : change.persona;
+			return {
+				...rest,
+				...(change.name === undefined ? {} : { name: change.name }),
+				...(change.approvers === undefined ? {} : { approvers: change.approvers }),
+				...(instructions === undefined ? {} : { instructions }),
+				...(persona === undefined ? {} : { persona }),
+			};
+		});
 		this.names.get(record.tenantId)?.set(record.id, record.name);
 		await new AuditLog(this.dataDir, record.tenantId).append({ type: "instance.updated", instanceId: record.id, fields: Object.keys(change).join(",") });
 		return record;
@@ -176,9 +186,7 @@ export class TenantRegistry {
 	 * instance is opened; the provider's key is reachable at once (the engine reads the policy as stored).
 	 */
 	async setModel(tenant: string, id: string, model: ModelSelection): Promise<InstanceRecord> {
-		const current = await this.getInstance(tenant, id);
-		const record: InstanceRecord = { ...current, model: { provider: model.provider, modelId: model.modelId }, egress: withModelProvider(current.egress, model.provider) };
-		await writeFileAtomic(instanceFile(this.dataDir, record.tenantId, record.id), `${JSON.stringify(record, null, 2)}\n`);
+		const record = this.change(tenant, id, (current) => ({ ...current, model: { provider: model.provider, modelId: model.modelId }, egress: withModelProvider(current.egress, model.provider) }));
 		await new AuditLog(this.dataDir, record.tenantId).append({ type: "instance.model.updated", instanceId: record.id, modelProvider: model.provider, modelId: model.modelId });
 		return record;
 	}
@@ -188,22 +196,32 @@ export class TenantRegistry {
 	 * model (ADR 0036). Takes effect at once.
 	 */
 	async allowModelProvider(tenant: string, id: string, provider: string): Promise<InstanceRecord> {
-		const current = await this.getInstance(tenant, id);
-		if (current.egress.modelProviders.includes(provider)) return current;
-		const record: InstanceRecord = { ...current, egress: withModelProvider(current.egress, provider) };
-		await writeFileAtomic(instanceFile(this.dataDir, record.tenantId, record.id), `${JSON.stringify(record, null, 2)}\n`);
+		let added = false;
+		const record = this.change(tenant, id, (current) => {
+			if (current.egress.modelProviders.includes(provider)) return current;
+			added = true;
+			return { ...current, egress: withModelProvider(current.egress, provider) };
+		});
+		if (!added) return record;
 		await new AuditLog(this.dataDir, record.tenantId).append({ type: "instance.model_provider.allowed", instanceId: record.id, modelProvider: provider });
 		return record;
 	}
 
 	/**
-	 * Replace the egress policy. Model providers take effect at once (the engine reads the policy as
-	 * stored); channels, connectors and sites the next time the instance is opened.
+	 * Change the egress policy, from the one stored now. Model providers take effect at once (the
+	 * engine reads the policy as stored); channels, connectors and sites the next time the instance
+	 * is opened. Nothing changed: nothing written, nothing audited.
 	 */
-	async setEgress(tenant: string, id: string, egress: EgressPolicy): Promise<InstanceRecord> {
-		const current = await this.getInstance(tenant, id);
-		const record: InstanceRecord = { ...current, egress };
-		await writeFileAtomic(instanceFile(this.dataDir, record.tenantId, record.id), `${JSON.stringify(record, null, 2)}\n`);
+	async setEgress(tenant: string, id: string, change: (egress: EgressPolicy) => EgressPolicy): Promise<InstanceRecord> {
+		let changed = false;
+		const record = this.change(tenant, id, (current) => {
+			const egress = change(current.egress);
+			if (egress === current.egress) return current;
+			changed = true;
+			return { ...current, egress };
+		});
+		if (!changed) return record;
+		const { egress } = record;
 		await new AuditLog(this.dataDir, record.tenantId).append({
 			type: "instance.egress.updated",
 			instanceId: record.id,

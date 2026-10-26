@@ -128,6 +128,19 @@ export type TenantComputer = { readonly tenant: string; readonly key: string; re
 const EMPTY: State = { accounts: [], cells: [], links: [] };
 const LINK_TTL_MS = 30 * 60 * 1000;
 const LINKS_PER_IP_HOUR = 20;
+
+/**
+ * Who is asking. The control plane listens on 127.0.0.1 behind its https proxy (runbook 6c), so a
+ * loopback socket is that proxy, and the address it appended last to X-Forwarded-For is the client's.
+ * Earlier entries come from the client itself and are never trusted.
+ */
+function clientAddress(req: IncomingMessage): string {
+	const socket = req.socket.remoteAddress ?? "";
+	if (!["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(socket)) return socket;
+	const forwarded = req.headers["x-forwarded-for"];
+	const last = (Array.isArray(forwarded) ? forwarded.join(",") : (forwarded ?? "")).split(",").at(-1)?.trim();
+	return last === undefined || last === "" ? socket : last;
+}
 const SLEEPING = { error: "Owni dorme: entra dal link di accesso per svegliarla" };
 const CELL_TIMEOUT_MS = 5_000;
 const LINKS_PER_HOUR = 5;
@@ -186,6 +199,7 @@ export async function startControlPlane(options: ControlPlaneOptions): Promise<C
 		const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
 		if (!EMAIL.test(email)) throw new HttpError(400, "Indirizzo email non valido");
 		const now = Date.now();
+		for (const [at, times] of linksByIp) if (times.every((t) => t <= now - 3_600_000)) linksByIp.delete(at);
 		const recent = (linksByIp.get(ip) ?? []).filter((at) => at > now - 3_600_000);
 		if (recent.length >= LINKS_PER_IP_HOUR) throw new HttpError(429, "Troppi link chiesti da qui: riprova tra un'ora");
 		linksByIp.set(ip, [...recent, now]);
@@ -503,7 +517,7 @@ export async function startControlPlane(options: ControlPlaneOptions): Promise<C
 		if (req.method !== "POST" || req.headers["x-owni"] !== "1") return send(res, 404, { error: "Not found" });
 		try {
 			if (url.pathname === "/api/signup") {
-				await signup(await readJson(req), req.socket.remoteAddress ?? "");
+				await signup(await readJson(req), clientAddress(req));
 				return send(res, 200, { ok: true });
 			}
 			if (url.pathname === "/api/verify") return send(res, 200, await verify(await readJson(req)));
@@ -744,7 +758,7 @@ export async function startControlPlane(options: ControlPlaneOptions): Promise<C
 		// Host is the cell's own address (a platform routes by it); the public one goes in X-Forwarded-Host.
 		// The cell answers only requests that came through here: proof that the gate (sleep, subscription) was passed.
 		const secret = cellOf(tenant)?.secret ?? "";
-		return { ...headers, host: cellHost, "x-forwarded-host": `${tenant}.${options.domain}`, "x-forwarded-proto": options.publicScheme, "x-forwarded-for": req.socket.remoteAddress ?? "", "x-owni-proxy": proxyToken(secret) };
+		return { ...headers, host: cellHost, "x-forwarded-host": `${tenant}.${options.domain}`, "x-forwarded-proto": options.publicScheme, "x-forwarded-for": clientAddress(req), "x-owni-proxy": proxyToken(secret) };
 	}
 
 	const server = createServer((req, res) => {

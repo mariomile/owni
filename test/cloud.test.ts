@@ -168,6 +168,17 @@ describe("Owni Cloud control plane (cells as local processes)", () => {
 		expect(statuses.at(-1)).toBe(429);
 	}, 60_000);
 
+	it("behind the proxy, the limit is per client: one asker cannot block everyone's sign-in", async () => {
+		const c = await cloud();
+		const home = c.at(DOMAIN);
+		// The proxy appends the address it saw last; whatever the client put before it does not count.
+		const ask = (i: number, from: string) => home("/api/signup", { method: "POST", body: JSON.stringify({ email: `q${i}@x.example` }), headers: { "x-forwarded-for": from } });
+		const statuses: number[] = [];
+		for (let i = 0; i < 21; i++) statuses.push((await ask(i, `10.9.9.${i}, 203.0.113.7`)).status);
+		expect(statuses.at(-1)).toBe(429);
+		expect((await ask(99, "203.0.113.8")).status).toBe(200);
+	}, 60_000);
+
 	it("a sleeping cell's next task survives a restart of the control plane", async () => {
 		const dataDir = tempDataDir();
 		const first = await cloudAt(dataDir);

@@ -62,7 +62,7 @@ import { attachmentSlots } from "./core/attachment-slots.ts";
 import { checkedUrl, publicAddress, WebFetchRefused } from "./core/web-fetch.ts";
 import { readPage } from "./core/watches.ts";
 import { skillMenuEntry } from "./core/skills.ts";
-import { webHostAllowed } from "./core/policy.ts";
+import { webHostAllowed, withChannel } from "./core/policy.ts";
 import type { DurableEngine, OwniTool } from "./core/engine.ts";
 import { EgressDenied, NotFound, UserNotAllowed } from "./core/errors.ts";
 import { instanceId as toInstanceId, tenantId as toTenantId } from "./core/ids.ts";
@@ -1407,7 +1407,7 @@ export async function startOwni(config: OwniConfig, options: OwniOptions = {}): 
 			const left = from.filter((x) => x !== id);
 			await runtime.registry.setAllowedUsers(tenant, other.id, AGENT_CHANNEL, left);
 			// Like the Agenti page: nobody left to hear from, no channel.
-			if (left.length === 0) await runtime.registry.setEgress(tenant, other.id, { ...other.egress, channels: other.egress.channels.filter((c) => c !== AGENT_CHANNEL) });
+			if (left.length === 0) await runtime.registry.setEgress(tenant, other.id, (egress) => withChannel(egress, AGENT_CHANNEL, false));
 		}
 		// Out of the organigramma (ADR 0117): the links it gave are the ones just taken back.
 		const org = runtime.org(tenant);
@@ -1472,7 +1472,7 @@ export async function startOwni(config: OwniConfig, options: OwniOptions = {}): 
 				await runtime.secrets(tenant).set(phoneSecret(id), JSON.stringify(credentials));
 				attachPhone(id, credentials);
 				const record = await runtime.registry.getInstance(tenant, id);
-				if (!record.egress.channels.includes("phone")) await runtime.registry.setEgress(tenant, id, { ...record.egress, channels: [...record.egress.channels, "phone"] });
+				await runtime.registry.setEgress(tenant, id, (egress) => withChannel(egress, "phone", true));
 				return { number };
 			},
 			disconnect: async (id) => {
@@ -1543,7 +1543,7 @@ export async function startOwni(config: OwniConfig, options: OwniOptions = {}): 
 				const bot = await attachTelegram(id, token);
 				await bot.start();
 				const record = await runtime.registry.getInstance(tenant, id);
-				if (!record.egress.channels.includes("telegram")) await runtime.registry.setEgress(tenant, id, { ...record.egress, channels: [...record.egress.channels, "telegram"] });
+				await runtime.registry.setEgress(tenant, id, (egress) => withChannel(egress, "telegram", true));
 				return me;
 			},
 			disconnect: async (id) => {
@@ -1585,7 +1585,7 @@ export async function startOwni(config: OwniConfig, options: OwniOptions = {}): 
 				await runtime.secrets(tenant).set(whatsappSecret(id), JSON.stringify(credentials));
 				attachWhatsApp(id, credentials);
 				const record = await runtime.registry.getInstance(tenant, id);
-				if (!record.egress.channels.includes("whatsapp")) await runtime.registry.setEgress(tenant, id, { ...record.egress, channels: [...record.egress.channels, "whatsapp"] });
+				await runtime.registry.setEgress(tenant, id, (egress) => withChannel(egress, "whatsapp", true));
 				return me;
 			},
 			disconnect: async (id) => {

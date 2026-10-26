@@ -121,7 +121,7 @@ describe("web tools in an instance", () => {
 		const s = await site({ "/": { body: "<title>T</title><p>Testo</p>" } });
 		const { owni, reply } = await boot(tempDataDir(), { OWNI_CHROMIUM_PATH: "/nonexistent/chromium" });
 		const policy = (await owni.runtime.registry.getInstance("default", "owni")).egress;
-		await owni.runtime.registry.setEgress("default", "owni", { ...policy, web: ["*"] });
+		await owni.runtime.registry.setEgress("default", "owni", () => ({ ...policy, web: ["*"] }));
 		expect(await reply(`/tool web_screenshot {"url":"${s.base}/"}`)).toContain("non sono disponibili su questo server");
 		expect(await reply(`/tool web_read {"url":"${s.base}/"}`)).toContain("Testo");
 	});
@@ -157,7 +157,7 @@ describe("web tools in an instance", () => {
 		const { owni, reply } = await boot(tempDataDir(), { OWNI_SCREENSHOTS_WITHOUT_SANDBOX: "1" });
 		// The page's own address only: the image's host, "localhost", is not on the list.
 		const policy = (await owni.runtime.registry.getInstance("default", "owni")).egress;
-		await owni.runtime.registry.setEgress("default", "owni", { ...policy, web: ["127.0.0.1"] });
+		await owni.runtime.registry.setEgress("default", "owni", () => ({ ...policy, web: ["127.0.0.1"] }));
 		const shot = await reply(`/tool web_screenshot {"url":"${s.base}/"}`);
 		expect(shot).toMatch(/Screenshot salvato in screenshot\/127\.0\.0\.1-.*\.png/);
 		const files = await owni.runtime.workspace("default", "owni").list("screenshot/");
@@ -166,7 +166,7 @@ describe("web tools in an instance", () => {
 		expect(other.hits).toEqual([]);
 		// A redirect is followed by us, one hop at a time: one towards the cloud's metadata never loads.
 		const jump = await site({ "/": { status: 302, location: "http://[::ffff:a9fe:a9fe]/latest/" } });
-		await owni.runtime.registry.setEgress("default", "owni", { ...policy, web: ["*"] });
+		await owni.runtime.registry.setEgress("default", "owni", () => ({ ...policy, web: ["*"] }));
 		const refused = await reply(`/tool web_screenshot {"url":"${jump.base}/"}`);
 		expect(refused).toMatch(/^Fatto\. Errore: la pagina non si apre/);
 		expect(await owni.runtime.workspace("default", "owni").list("screenshot/")).toHaveLength(1);

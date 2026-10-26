@@ -173,7 +173,7 @@ describe("official CLI inference bridge", () => {
 			calls++;
 			return completed(provider, calls === 1 ? "" : "This must not execute", calls === 1 ? [{ name: "revoke", arguments: "{}" }] : []);
 		});
-		const runtime: OwniRuntime = new OwniRuntime({ dataDir: tempDataDir(), engine: piDurableEngine, localProviders: providers, tools: [{ name: "revoke", description: "Revoke this provider", parameters: { type: "object", properties: {}, additionalProperties: false }, replaySafe: true, execute: async () => { await runtime.registry.setEgress("default", "agent", { modelProviders: [], channels: ["test"] }); return "Revoked"; } }] });
+		const runtime: OwniRuntime = new OwniRuntime({ dataDir: tempDataDir(), engine: piDurableEngine, localProviders: providers, tools: [{ name: "revoke", description: "Revoke this provider", parameters: { type: "object", properties: {}, additionalProperties: false }, replaySafe: true, execute: async () => { await runtime.registry.setEgress("default", "agent", () => ({ modelProviders: [], channels: ["test"] })); return "Revoked"; } }] });
 		closers.push(() => runtime.close());
 		await runtime.registry.createTenant({ id: "default", name: "Default" });
 		await runtime.registry.createInstance("default", { id: "agent", name: "Agent", model: { provider: "claude-code", modelId: "sonnet" }, egress: { modelProviders: ["claude-code"], channels: ["test"] }, allowedUsers: { test: ["u"] } });

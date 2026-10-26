@@ -12,6 +12,7 @@
  *
  * Works on the data directory; Owni can be running.
  */
+import { withChannel } from "../core/policy.ts";
 import { existsSync } from "node:fs";
 import { AuditLog } from "../core/audit.ts";
 import { briefStats } from "../core/brief.ts";
@@ -95,7 +96,7 @@ switch (command) {
 		for (const id of instances) {
 			const record = await registry.getInstance(tenant, id);
 			await registry.setAllowedUsers(tenant, id, "web", [...(record.allowedUsers.web ?? []), person.id]);
-			if (!record.egress.channels.includes("web")) await registry.setEgress(tenant, id, { ...record.egress, channels: [...record.egress.channels, "web"] });
+			await registry.setEgress(tenant, id, (egress) => withChannel(egress, "web", true));
 		}
 		console.log(`${person.name} (${person.role}) ${person.id}${instances.length > 0 ? `, instances: ${instances.join(", ")}` : ""}\nLogin link (give it privately; it works until replaced):\n\n  ${base}/login#${token}\n`);
 		break;

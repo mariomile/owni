@@ -161,7 +161,7 @@ describe("the organigramma's routes", () => {
 		for (const [id, name] of NAMES) if (id !== "owni") await api("/api/instances", { id, name });
 		// Permissions set by hand before stay until the first save.
 		await owni.runtime.registry.setAllowedUsers("default", "conti", "agente", ["ufficio"]);
-		await owni.runtime.registry.setEgress("default", "conti", { modelProviders: ["faux"], channels: ["web", "agente"] });
+		await owni.runtime.registry.setEgress("default", "conti", () => ({ modelProviders: ["faux"], channels: ["web", "agente"] }));
 		const first = await api("/api/org");
 		expect(first).toMatchObject({ status: 200, saved: false, org: { teams: [], agents: {} } });
 		expect(first.accepts.conti).toEqual(["ufficio"]);

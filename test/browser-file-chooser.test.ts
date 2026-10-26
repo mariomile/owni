@@ -214,7 +214,7 @@ describe.skipIf(!available)("no file uploads, in real Chromium", () => {
 		const owni: RunningOwni = await startOwni({ ...config, web: { ...config.web, port: 0 } }, { webAddressAllowed: (address) => address === "127.0.0.1" || publicAddress(address), schedulerIntervalMs: 60_000, log: () => {} });
 		closers.push(() => owni.stop());
 		const policy = (await owni.runtime.registry.getInstance("default", "owni")).egress;
-		await owni.runtime.registry.setEgress("default", "owni", { ...policy, web: ["127.0.0.1"] });
+		await owni.runtime.registry.setEgress("default", "owni", () => ({ ...policy, web: ["127.0.0.1"] }));
 		const base = `http://127.0.0.1:${(owni.server.address() as AddressInfo).port}`;
 		const login = await fetch(`${base}/api/login`, { method: "POST", headers: { "x-owni": "1" }, body: JSON.stringify({ token: (owni.ownerLink as string).split("#")[1] }) });
 		const cookie = (login.headers.get("set-cookie") ?? "").split(";")[0] as string;

@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { withConnector } from "./policy.ts";
 import { type ConnectorAction, type ConnectorActionResult, connectorActionReport } from "./connector-actions.ts";
 import { customToolName, type ToolProposal, toolEgressName } from "./proposals.ts";
 import type { OwniRuntime } from "./runtime.ts";
@@ -42,11 +43,7 @@ export async function decideToolProposal(
 	if (!changed) return proposal;
 	await audit.append({ type: `tool.${decision}`, instanceId: instance, proposalId: id, tool: proposal.name, hosts: proposal.hosts.join(","), by: `${by.channel}:${by.userId}` });
 	if (decision === "approved") {
-		const record = await runtime.registry.getInstance(tenant, instance);
-		const connectors = record.egress.connectors ?? [];
-		if (proposal.hosts.length > 0 && !connectors.includes(toolEgressName(proposal.name))) {
-			await runtime.registry.setEgress(tenant, instance, { ...record.egress, connectors: [...connectors, toolEgressName(proposal.name)] });
-		}
+		if (proposal.hosts.length > 0) await runtime.registry.setEgress(tenant, instance, (egress) => withConnector(egress, toolEgressName(proposal.name), true));
 		await runtime.reopen(tenant, instance);
 	}
 	if (proposal.thread !== undefined) {

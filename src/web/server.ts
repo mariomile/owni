@@ -39,7 +39,7 @@ import type { RoutineStore } from "../core/board-routines.ts";
 import type { BoardReview, BoardWork } from "../core/board-work.ts";
 import { DEV_PROVIDER, MODEL_PROVIDERS, type ModelInfo, modelProvider, subscriptionProvider } from "../core/model-providers.ts";
 import { LocalProviderError } from "../core/local-providers.ts";
-import { WEB_HOST_PATTERN, webHostAllowed } from "../core/policy.ts";
+import { WEB_HOST_PATTERN, webHostAllowed, withChannel, withConnector } from "../core/policy.ts";
 import { BRIEF_INSTRUCTION, BRIEF_THREAD_TITLE, briefCron, briefWhen } from "../core/brief.ts";
 import { GOOGLE_CONNECTOR, type GoogleAccounts, GoogleConsentError, type GoogleOAuth, type GoogleService, googleReturnQuery } from "../connectors/google.ts";
 import { ConnectorHttpError } from "../connectors/http.ts";
@@ -1182,8 +1182,7 @@ export function createWebApp(options: WebAppOptions): Server {
 		});
 		const body = (await readJson(req)) as { allowed?: unknown };
 		if (typeof body.allowed !== "boolean") throw new HttpError(400, "allowed: true o false");
-		const others = (record.egress.connectors ?? []).filter((c) => c !== WEB_ACTIONS_CONNECTOR);
-		await runtime.registry.setEgress(tenantId, id, { ...record.egress, connectors: body.allowed ? [...others, WEB_ACTIONS_CONNECTOR] : others });
+		await runtime.registry.setEgress(tenantId, id, (egress) => withConnector(egress, WEB_ACTIONS_CONNECTOR, body.allowed === true));
 		await runtime.audit(tenantId).append({ type: "web_actions.allowed", instanceId: id, allowed: body.allowed });
 		return { allowed: body.allowed };
 	});
@@ -1202,8 +1201,7 @@ export function createWebApp(options: WebAppOptions): Server {
 		});
 		const body = (await readJson(req)) as { allowed?: unknown };
 		if (typeof body.allowed !== "boolean") throw new HttpError(400, "allowed: true o false");
-		const others = (record.egress.connectors ?? []).filter((c) => c !== COMPUTER_CONNECTOR);
-		await runtime.registry.setEgress(tenantId, id, { ...record.egress, connectors: body.allowed ? [...others, COMPUTER_CONNECTOR] : others });
+		await runtime.registry.setEgress(tenantId, id, (egress) => withConnector(egress, COMPUTER_CONNECTOR, body.allowed === true));
 		await runtime.audit(tenantId).append({ type: "computer.allowed", instanceId: id, allowed: body.allowed });
 		return { allowed: body.allowed };
 	});
@@ -1254,8 +1252,7 @@ export function createWebApp(options: WebAppOptions): Server {
 			if (permissions?.supported !== true || !permissions.screenRecording || !permissions.accessibility) throw new HttpError(409, "Concedi Registrazione schermo e Accessibilità a Owni prima di abilitare Computer Use");
 		}
 		const connector = desktopConnector(options.desktop);
-		const others = (record.egress.connectors ?? []).filter((c) => c !== connector);
-		await runtime.registry.setEgress(tenantId, id, { ...record.egress, connectors: body.allowed ? [...others, connector] : others });
+		await runtime.registry.setEgress(tenantId, id, (egress) => withConnector(egress, connector, body.allowed === true));
 		await runtime.audit(tenantId).append({ type: "desktop.allowed", instanceId: id, allowed: body.allowed });
 		// The screen's tools are offered only while it is on: the agente opens again with or without them.
 		await runtime.reopen(tenantId, id);
@@ -1364,12 +1361,8 @@ export function createWebApp(options: WebAppOptions): Server {
 		// Tokens got for one address never go to another: a new address or a new kind of access signs in again.
 		const b = before?.transport;
 		if (b?.type === "http" && b.auth === "oauth" && (transport.type !== "http" || transport.url !== b.url || transport.auth !== "oauth")) await options.mcpOAuth?.forget(instance, id);
-		const record = await runtime.registry.getInstance(tenantId, instance);
-		const name = connectorEgressName(id);
-		const current = record.egress.connectors ?? [];
 		const allowed = body.allowed !== false;
-		const next = allowed ? [...new Set([...current, name])] : current.filter((c) => c !== name);
-		if (next.join() !== current.join()) await runtime.registry.setEgress(tenantId, instance, { ...record.egress, connectors: next });
+		await runtime.registry.setEgress(tenantId, instance, (egress) => withConnector(egress, connectorEgressName(id), allowed));
 		await runtime.audit(tenantId).append({ type: "connector.saved", instanceId: instance, connector: id, transport: connector.transport.type, allowed, approval: connector.approval ?? "risk" });
 		await runtime.reopen(tenantId, instance);
 		return { status: options.connectorStatus(instance).find((s) => s.id === id) };
@@ -1404,8 +1397,7 @@ export function createWebApp(options: WebAppOptions): Server {
 			...(entry.category === "pagamenti" ? { approval: "writes" as const } : {}),
 		};
 		const allow = async () => {
-			const record = await runtime.registry.getInstance(tenantId, instance);
-			await runtime.registry.setEgress(tenantId, instance, { ...record.egress, connectors: [...new Set([...(record.egress.connectors ?? []), connectorEgressName(entry.id)])] });
+			await runtime.registry.setEgress(tenantId, instance, (egress) => withConnector(egress, connectorEgressName(entry.id), true));
 		};
 		if (entry.auth === "oauth") {
 			// The sign-in starts before anything is saved: a service that refuses leaves nothing behind.
@@ -1483,9 +1475,7 @@ export function createWebApp(options: WebAppOptions): Server {
 				await runtime.audit(tenantId).append({ type: "secret.deleted", instanceId: instance, name });
 			}
 		}
-		const record = await runtime.registry.getInstance(tenantId, instance);
-		const name = connectorEgressName(id);
-		if ((record.egress.connectors ?? []).includes(name)) await runtime.registry.setEgress(tenantId, instance, { ...record.egress, connectors: (record.egress.connectors ?? []).filter((c) => c !== name) });
+		await runtime.registry.setEgress(tenantId, instance, (egress) => withConnector(egress, connectorEgressName(id), false));
 		if (removed) await runtime.audit(tenantId).append({ type: "connector.removed", instanceId: instance, connector: id });
 		await runtime.reopen(tenantId, instance);
 		return { removed };
@@ -1509,8 +1499,7 @@ export function createWebApp(options: WebAppOptions): Server {
 		const known = new Set<string>((await runtime.registry.listInstances(tenantId)).map((r) => r.id).filter((x) => !options.segreterie?.has(x)));
 		const from = [...new Set(asked)].filter((x) => x !== String(record.id) && known.has(x));
 		await runtime.registry.setAllowedUsers(tenantId, id, AGENT_CHANNEL, from);
-		const channels = record.egress.channels.filter((c) => c !== AGENT_CHANNEL);
-		await runtime.registry.setEgress(tenantId, id, { ...record.egress, channels: from.length === 0 ? channels : [...channels, AGENT_CHANNEL] });
+		await runtime.registry.setEgress(tenantId, id, (egress) => withChannel(egress, AGENT_CHANNEL, from.length > 0));
 		await runtime.audit(tenantId).append({ type: "agents.allowed", instanceId: id, personId: person.id, allowed: from.length, from: from.join(",") });
 		return from;
 	};
@@ -1543,7 +1532,7 @@ export function createWebApp(options: WebAppOptions): Server {
 			// Reconcile against all current people, not only the old allowlist: if cleanup
 			// fails after membership was saved, repeating this request must retry it.
 			for (const personId of people) if (!webPeople.includes(personId)) await options.browser?.clearProfile(id, personId);
-			if (!record.egress.channels.includes("web")) await runtime.registry.setEgress(tenantId, id, { ...record.egress, channels: [...record.egress.channels, "web"] });
+			await runtime.registry.setEgress(tenantId, id, (egress) => withChannel(egress, "web", true));
 		}
 		await runtime.registry.updateInstance(tenantId, id, {
 			...(typeof body.name === "string" && cleanName(body.name) !== "" ? { name: cleanName(body.name) } : {}),
@@ -1987,8 +1976,7 @@ export function createWebApp(options: WebAppOptions): Server {
 		});
 		const body = (await readJson(req)) as { allowed?: unknown };
 		if (typeof body.allowed !== "boolean") throw new HttpError(400, "allowed: true o false");
-		const others = (record.egress.connectors ?? []).filter((c) => c !== GOOGLE_CONNECTOR);
-		await runtime.registry.setEgress(tenantId, id, { ...record.egress, connectors: body.allowed ? [...others, GOOGLE_CONNECTOR] : others });
+		await runtime.registry.setEgress(tenantId, id, (egress) => withConnector(egress, GOOGLE_CONNECTOR, body.allowed === true));
 		await runtime.audit(tenantId).append({ type: "google.allowed", instanceId: id, allowed: body.allowed });
 		return { allowed: body.allowed };
 	});
@@ -2025,8 +2013,7 @@ export function createWebApp(options: WebAppOptions): Server {
 		});
 		const body = (await readJson(req)) as { allowed?: unknown };
 		if (typeof body.allowed !== "boolean") throw new HttpError(400, "allowed: true o false");
-		const others = (record.egress.connectors ?? []).filter((c) => c !== VOICE_CONNECTOR);
-		await runtime.registry.setEgress(tenantId, id, { ...record.egress, connectors: body.allowed ? [...others, VOICE_CONNECTOR] : others });
+		await runtime.registry.setEgress(tenantId, id, (egress) => withConnector(egress, VOICE_CONNECTOR, body.allowed === true));
 		await runtime.audit(tenantId).append({ type: "voice.allowed", instanceId: id, allowed: body.allowed });
 		return { allowed: body.allowed };
 	});
@@ -2041,8 +2028,7 @@ export function createWebApp(options: WebAppOptions): Server {
 		});
 		const body = (await readJson(req)) as { allowed?: unknown };
 		if (typeof body.allowed !== "boolean") throw new HttpError(400, "allowed: true o false");
-		const others = (record.egress.connectors ?? []).filter((c) => c !== SPEECH_CONNECTOR);
-		await runtime.registry.setEgress(tenantId, id, { ...record.egress, connectors: body.allowed ? [...others, SPEECH_CONNECTOR] : others });
+		await runtime.registry.setEgress(tenantId, id, (egress) => withConnector(egress, SPEECH_CONNECTOR, body.allowed === true));
 		await runtime.audit(tenantId).append({ type: "speech.allowed", instanceId: id, allowed: body.allowed });
 		return { allowed: body.allowed };
 	});
@@ -2057,8 +2043,7 @@ export function createWebApp(options: WebAppOptions): Server {
 		});
 		const body = (await readJson(req)) as { allowed?: unknown };
 		if (typeof body.allowed !== "boolean") throw new HttpError(400, "allowed: true o false");
-		const others = (record.egress.connectors ?? []).filter((c) => c !== IMAGE_CONNECTOR);
-		await runtime.registry.setEgress(tenantId, id, { ...record.egress, connectors: body.allowed ? [...others, IMAGE_CONNECTOR] : others });
+		await runtime.registry.setEgress(tenantId, id, (egress) => withConnector(egress, IMAGE_CONNECTOR, body.allowed === true));
 		await runtime.audit(tenantId).append({ type: "images.allowed", instanceId: id, allowed: body.allowed });
 		return { allowed: body.allowed };
 	});
@@ -2073,8 +2058,7 @@ export function createWebApp(options: WebAppOptions): Server {
 		});
 		const body = (await readJson(req)) as { allowed?: unknown };
 		if (typeof body.allowed !== "boolean") throw new HttpError(400, "allowed: true o false");
-		const others = (record.egress.connectors ?? []).filter((c) => c !== WEB_SEARCH_CONNECTOR);
-		await runtime.registry.setEgress(tenantId, id, { ...record.egress, connectors: body.allowed ? [...others, WEB_SEARCH_CONNECTOR] : others });
+		await runtime.registry.setEgress(tenantId, id, (egress) => withConnector(egress, WEB_SEARCH_CONNECTOR, body.allowed === true));
 		await runtime.audit(tenantId).append({ type: "web_search.allowed", instanceId: id, allowed: body.allowed });
 		return { allowed: body.allowed };
 	});
@@ -2090,7 +2074,7 @@ export function createWebApp(options: WebAppOptions): Server {
 		const hosts = [...new Set(body.hosts.map((h) => String(h).trim().toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, "")).filter((h) => h !== ""))];
 		const wrong = hosts.filter((h) => !WEB_HOST_PATTERN.test(h));
 		if (wrong.length > 0) throw new HttpError(400, `Non sono domini: ${wrong.slice(0, 5).join(", ")}. Scrivi per esempio comune.roma.it, oppure * per tutti i siti pubblici`);
-		await runtime.registry.setEgress(tenantId, id, { ...record.egress, web: hosts });
+		await runtime.registry.setEgress(tenantId, id, (egress) => ({ ...egress, web: hosts }));
 		await runtime.audit(tenantId).append({ type: "web.hosts_changed", instanceId: id, count: hosts.length, any: hosts.includes("*") });
 		return { hosts };
 	});

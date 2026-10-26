@@ -199,7 +199,7 @@ describe("deep research in an instance", () => {
 });
 
 async function enableSearch(owni: RunningOwni, web: string[]) {
-	await owni.runtime.registry.setEgress("default", "owni", { ...(await owni.runtime.registry.getInstance("default", "owni")).egress, web, connectors: ["web_search"] });
+	await owni.runtime.registry.setEgress("default", "owni", (egress) => ({ ...egress, web, connectors: ["web_search"] }));
 }
 
 const localOnly = (address: string) => address === "127.0.0.1" || publicAddress(address);

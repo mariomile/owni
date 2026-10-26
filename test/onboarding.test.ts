@@ -51,7 +51,7 @@ describe("primi passi", () => {
 		await api(`/api/instances/owni/threads/${thread.id}/messages`, "POST", { text: "Ciao" });
 		for (let i = 0; i < 200 && !(await api("/api/instances/owni/setup")).setup.tried; i++) await new Promise((r) => setTimeout(r, 30));
 		const record = await owni.runtime.registry.getInstance("default", "owni");
-		await owni.runtime.registry.setEgress("default", "owni", { ...record.egress, web: ["comune.roma.it"] });
+		await owni.runtime.registry.setEgress("default", "owni", () => ({ ...record.egress, web: ["comune.roma.it"] }));
 		// Someone added who cannot write to this instance is not the team yet.
 		const added = await api("/api/people", "POST", { name: "Giulia" });
 		expect((await api("/api/instances/owni/setup")).setup.people).toBe(false);
