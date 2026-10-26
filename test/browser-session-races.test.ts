@@ -5,7 +5,8 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CookieJar } from "../src/core/web-fetch.ts";
 import { BrowserProfiles } from "../src/core/web-profiles.ts";
-import { type Browser, type BrowserContext, BrowseSessions, MAX_TYPED, type Page } from "../src/core/web-session.ts";
+import { MAX_TYPED } from "../src/core/web-page-scripts.ts";
+import { type Browser, type BrowserContext, BrowseSessions, type Page } from "../src/core/web-session.ts";
 import { tempDataDir } from "./helpers.ts";
 
 const key = "acme/ops|web:alice";

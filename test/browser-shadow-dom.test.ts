@@ -121,7 +121,7 @@ describe.skipIf(!chromium)("web components, in real Chromium", () => {
 	it("a password in a shadow root shows no value, and a private value is hidden there as anywhere", async () => {
 		const { base, sessions, browser } = await start();
 		(await sessions.open("k", browser, `${base}/segreti`, guard));
-		sessions["sessions"].get("k")?.privateValues.add("valore-privato");
+		sessions["sessions"].get("k")?.person.privateValues.add("valore-privato");
 		const view = await sessions.view("k", guard);
 		const key = view.elements.find((e) => e.label === "Chiave");
 		expect(key).toMatchObject({ kind: "campo password" });
