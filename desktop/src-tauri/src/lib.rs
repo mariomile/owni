@@ -184,6 +184,12 @@ pub fn run() {
                 })
                 .build(),
         )
+        .menu(update::app_menu)
+        .on_menu_event(|app, event| {
+            if event.id() == update::MENU_ID {
+                update::check_now(app);
+            }
+        })
         .manage(Current::default())
         .invoke_handler(tauri::generate_handler![connect, state, use_local])
         .setup(|app| {
