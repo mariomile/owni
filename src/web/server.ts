@@ -3,15 +3,13 @@ import { readdirSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { extname, join, sep } from "node:path";
-import { IMAGE_CONNECTOR } from "../core/image-generation.ts";
 import type { WebAction, WebActionResult } from "../core/web-actions.ts";
 import type { GoogleAction, GoogleActionResult } from "../core/google-actions.ts";
 import { desktopConnector, type DesktopPermission, type DesktopPermissions } from "../core/desktop.ts";
-import { WEB_SEARCH_CONNECTOR } from "../core/web-search.ts";
 import type { PhoneAdapter } from "../channels/phone.ts";
 import type { WhatsAppAdapter, WhatsAppTemplate, WhatsAppWebhook } from "../channels/whatsapp.ts";
 import type { CatalogEntry } from "../connectors/catalog.ts";
-import { type ConnectorStatus, type ConnectorStore, connectorEgressName } from "../connectors/mcp.ts";
+import type { ConnectorStatus, ConnectorStore } from "../connectors/mcp.ts";
 import type { McpOAuth } from "../connectors/mcp-oauth.ts";
 import { isApprover, OWNER, type Approver } from "../core/approvals.ts";
 import type { ConnectorAction, ConnectorActionResult } from "../core/connector-actions.ts";
@@ -27,8 +25,8 @@ import { type BoardStore, dueText } from "../core/board.ts";
 import type { ScreenViews } from "../core/screen-views.ts";
 import type { RoutineStore } from "../core/board-routines.ts";
 import type { BoardReview, BoardWork } from "../core/board-work.ts";
-import { DEV_PROVIDER, type ModelInfo } from "../core/model-providers.ts";
-import { WEB_HOST_PATTERN, withChannel } from "../core/policy.ts";
+import type { ModelInfo } from "../core/model-providers.ts";
+import { withChannel } from "../core/policy.ts";
 import { type GoogleAccounts, GoogleConsentError, type GoogleOAuth, type GoogleService, googleReturnQuery } from "../connectors/google.ts";
 import { ConnectorHttpError } from "../connectors/http.ts";
 import { instanceId } from "../core/ids.ts";
@@ -52,13 +50,13 @@ import { type BrowserPanel, browserRoutes } from "./browser-routes.ts";
 import { chatRoutes } from "./chat-routes.ts";
 import { connectorRoutes } from "./connector-routes.ts";
 import { roomError, roomsRoutes } from "./rooms-routes.ts";
+import { settingsRoutes } from "./settings-routes.ts";
 import { type AddRoute, type Handler, HttpError, type Route, readBody, readJson, STREAMED, send } from "./http.ts";
 import { screenRoutes } from "./screen-routes.ts";
 import { publicRun, runRoutes } from "./run-routes.ts";
 import type { RunRecord } from "../core/run-store.ts";
 import type { RoomEntry, RoomEvent, Rooms } from "./rooms.ts";
-import { ABOUT_MAX, INSTRUCTIONS_MAX, ownInstructions, withAbout } from "./setup.ts";
-import { REPLY_CANCELLED, REPLY_FAILED } from "../gateway.ts";
+import { ABOUT_MAX, INSTRUCTIONS_MAX, withAbout } from "./setup.ts";
 import { proxyToken, sameSecret } from "./compare.ts";
 import { otpauthUri } from "./totp.ts";
 import { sendAsset } from "./assets.ts";
@@ -440,6 +438,18 @@ export function createWebApp(options: WebAppOptions): Server {
 	capabilityRoutes(route, { runtime, tenantId, knownInstance, voice: options.voice, speech: options.speech, images: options.images, search: options.search, computer: options.computer, desktop: options.desktop, google: options.google });
 
 	// --- the organigramma (ADR 0117): who does what, and who writes to whom ---
+	/** The agenti that may write to this one (ADR 0042), as the organigramma says (ADR 0117): never itself nor a segreteria. */
+	const allowAgents = async (person: Person, id: string, asked: readonly string[]): Promise<string[]> => {
+		// A segreteria has no conversations of its own: it can neither ask nor be asked.
+		if (options.segreterie?.has(id)) throw new HttpError(400, "La segreteria non scrive agli altri agenti");
+		const record = await runtime.registry.getInstance(tenantId, id);
+		const known = new Set<string>((await runtime.registry.listInstances(tenantId)).map((r) => r.id).filter((x) => !options.segreterie?.has(x)));
+		const from = [...new Set(asked)].filter((x) => x !== String(record.id) && known.has(x));
+		await runtime.registry.setAllowedUsers(tenantId, id, AGENT_CHANNEL, from);
+		await runtime.registry.setEgress(tenantId, id, (egress) => withChannel(egress, AGENT_CHANNEL, from.length > 0));
+		await runtime.audit(tenantId).append({ type: "agents.allowed", instanceId: id, personId: person.id, allowed: from.length, from: from.join(",") });
+		return from;
+	};
 	const saveOrg = orgRoutes(route, {
 		store: runtime.org(tenantId),
 		agents: async () =>
@@ -558,129 +568,13 @@ export function createWebApp(options: WebAppOptions): Server {
 	// --- what waits for a decision: tools proposti, forms, connector calls, Google writes, pratiche; the inbox ---
 	approvalRoutes(route, { runtime, tenantId, segreterie: options.segreterie, sendWebAction: options.sendWebAction, runConnectorAction: options.runConnectorAction, google: options.google, board: options.board, log: options.log, instanceAccess, approverOf, usageSummary });
 
-	// --- owner: the instance's computer (ADR 0013) ---
-	route("DELETE", "/api/instances/:id/computer", "owner", async ({ params }) => {
-		if (options.computer === undefined) throw new HttpError(501, "Il computer non è disponibile su questo server");
-		const id = params[0];
-		await knownInstance(id);
-		await options.computer.reset(id);
-		await runtime.audit(tenantId).append({ type: "computer.reset", instanceId: id });
-		return { ok: true };
-	});
-
-	// --- owner: the agente's screen (ADR 0045) ---
-	route("POST", "/api/desktop/permissions", "owner", async ({ req }) => {
-		const desktop = options.desktop;
-		if (desktop?.kind !== "local" || desktop.requestPermission === undefined) throw new HttpError(501, "I permessi Computer Use si gestiscono nell'app Owni su questo Mac");
-		const body = (await readJson(req)) as { permission?: unknown };
-		if (body.permission !== "screenRecording" && body.permission !== "accessibility") throw new HttpError(400, "permission: screenRecording o accessibility");
-		const permissions = await desktop.requestPermission(body.permission);
-		await runtime.audit(tenantId).append({ type: "desktop.permission.requested", permission: body.permission });
-		return { permissions };
-	});
-	route("DELETE", "/api/instances/:id/desktop", "owner", async ({ params }) => {
-		if (options.desktop === undefined) throw new HttpError(501, "Lo schermo non è disponibile su questo server");
-		if (options.desktop.shared) throw new HttpError(501, "Lo schermo è condiviso: si riavvia da dove gira");
-		const id = params[0];
-		await knownInstance(id);
-		await options.desktop.reset(id);
-		await runtime.audit(tenantId).append({ type: "desktop.reset", instanceId: id });
-		return { ok: true };
-	});
+	// --- owner: an instance's computer and screen, settings, primi passi, the sites it reads ---
+	settingsRoutes(route, { runtime, tenantId, computer: options.computer, desktop: options.desktop, people: options.people, defaultInstructions: options.defaultInstructions, browser: options.browser, connectedChannels: options.connectedChannels, connectors: options.connectors, search: options.search, voice: options.voice, speech: options.speech, images: options.images, knownInstance, instanceAccess, channelOf, personaOf, deletable });
 
 	// --- owner: an instance's connectors and their secrets ---
 	connectorRoutes(route, { runtime, tenantId, connectors: options.connectors, connectorStatus: options.connectorStatus, cell: options.cell, mcpOAuth: options.mcpOAuth, catalog: options.catalog });
-	// --- owner: settings ---
-	/** The agenti that may write to this one (ADR 0042), as the organigramma says (ADR 0117): never itself nor a segreteria. */
-	const allowAgents = async (person: Person, id: string, asked: readonly string[]): Promise<string[]> => {
-		// A segreteria has no conversations of its own: it can neither ask nor be asked.
-		if (options.segreterie?.has(id)) throw new HttpError(400, "La segreteria non scrive agli altri agenti");
-		const record = await runtime.registry.getInstance(tenantId, id);
-		const known = new Set<string>((await runtime.registry.listInstances(tenantId)).map((r) => r.id).filter((x) => !options.segreterie?.has(x)));
-		const from = [...new Set(asked)].filter((x) => x !== String(record.id) && known.has(x));
-		await runtime.registry.setAllowedUsers(tenantId, id, AGENT_CHANNEL, from);
-		await runtime.registry.setEgress(tenantId, id, (egress) => withChannel(egress, AGENT_CHANNEL, from.length > 0));
-		await runtime.audit(tenantId).append({ type: "agents.allowed", instanceId: id, personId: person.id, allowed: from.length, from: from.join(",") });
-		return from;
-	};
-	route("GET", "/api/instances/:id/settings", "owner", async ({ params }) => {
-		const r = await runtime.registry.getInstance(tenantId, params[0]);
-		return { settings: { name: r.name, instructions: r.instructions ?? "", persona: r.persona ?? {}, model: r.model, egress: r.egress, allowedUsers: r.allowedUsers, approvers: r.approvers ?? {}, deletable: deletable(r.id) } };
-	});
-	route("PUT", "/api/instances/:id/settings", "owner", async ({ params, req }) => {
-		const body = (await readJson(req)) as { name?: string; instructions?: string; persona?: unknown; about?: unknown; webPeople?: string[]; webApprovers?: string[] };
-		const id = params[0];
-		const persona = body.persona === undefined ? undefined : personaOf(body.persona);
-		const people = new Set((await options.people.list()).map((p) => p.id));
-		const pick = (list: unknown) => (Array.isArray(list) ? list.map(String).filter((x) => people.has(x)) : undefined);
-		const record = await runtime.registry.getInstance(tenantId, id);
-		// From «Primi passi»: who the owner is, as one block after the instructions, replaced on each save.
-		let about: string | undefined;
-		if (body.about !== undefined) {
-			if (typeof body.instructions === "string") throw new HttpError(400, "Manda le istruzioni o le informazioni su di te, non tutte e due");
-			const text = typeof body.about === "string" ? body.about.trim() : "";
-			if (text === "") throw new HttpError(400, "Scrivi due righe su di te o sulla tua azienda");
-			if (text.length > ABOUT_MAX) throw new HttpError(400, `Al massimo ${ABOUT_MAX} caratteri`);
-			if (/\[[^\]\n]{1,60}\]/.test(text)) throw new HttpError(400, "Sostituisci le parti tra parentesi quadre con i tuoi dati");
-			about = withAbout(record.instructions ?? options.defaultInstructions ?? "", text);
-			if (about.length > INSTRUCTIONS_MAX) throw new HttpError(400, "Le istruzioni sono già al limite: accorciale in Impostazioni");
-		}
-		const webPeople = pick(body.webPeople);
-		const webApprovers = pick(body.webApprovers);
-		if (webPeople !== undefined) {
-			await runtime.registry.setAllowedUsers(tenantId, id, "web", webPeople);
-			// Reconcile against all current people, not only the old allowlist: if cleanup
-			// fails after membership was saved, repeating this request must retry it.
-			for (const personId of people) if (!webPeople.includes(personId)) await options.browser?.clearProfile(id, personId);
-			await runtime.registry.setEgress(tenantId, id, (egress) => withChannel(egress, "web", true));
-		}
-		await runtime.registry.updateInstance(tenantId, id, {
-			...(typeof body.name === "string" && cleanName(body.name) !== "" ? { name: cleanName(body.name) } : {}),
-			...(persona === undefined ? {} : { persona }),
-			...(typeof body.instructions === "string" ? { instructions: body.instructions.slice(0, 20_000) || null } : {}),
-			...(about === undefined ? {} : { instructions: about }),
-			...(webApprovers === undefined ? {} : { approvers: { ...(record.approvers ?? {}), web: webApprovers } }),
-		});
-		await runtime.reopen(tenantId, id);
-		return { ok: true };
-	});
 	// --- the model (ADR 0032): any provider Owni offers, with the server's key or the owner's ---
 	modelRoutes(route, { runtime, tenantId, models: options.models, chats, knownInstance });
-	// --- primo avvio: what is left to make the instance useful, checked from the real settings ---
-	route("GET", "/api/instances/:id/setup", "owner", async ({ person, params }) => {
-		const me = person;
-		const { record } = await instanceAccess(me, params[0]);
-		// Cheap on purpose: the console asks on every open. No network, at most a few transcripts.
-		let tried = false;
-		if (record.egress.channels.includes("web")) {
-			const channel = channelOf(record.id);
-			for (const thread of (await channel.threads(me.id)).slice(0, 5)) {
-				if ((await channel.transcript(thread.id)).some((e) => e.from === "owni" && e.text !== REPLY_FAILED && e.text !== REPLY_CANCELLED)) {
-					tried = true;
-					break;
-				}
-			}
-		}
-		// A channel counts once someone can write to it: an empty «chi può scrivere» refuses everyone.
-		const connected = options.connectedChannels?.(record.id) ?? [];
-		const others = (record.allowedUsers.web ?? []).filter((id) => id !== me.id);
-		return {
-			setup: {
-				// The local development model answers with an echo: the owner picks a real one in Impostazioni.
-				model: record.model.provider !== DEV_PROVIDER,
-				instructions: ownInstructions(record.instructions ?? undefined, options.defaultInstructions),
-				tried,
-				channel: connected.some((c) => (record.allowedUsers[c] ?? []).length > 0),
-				web: (record.egress.web ?? []).length > 0 || (record.egress.connectors ?? []).includes(WEB_SEARCH_CONNECTOR),
-				images: (record.egress.connectors ?? []).includes(IMAGE_CONNECTOR),
-				connectors: (await options.connectors(record.id).list()).some((c) => c.enabled && (record.egress.connectors ?? []).includes(connectorEgressName(c.id))),
-				people: others.length > 0,
-				...(options.desktop?.kind === "local" ? { computerUse: (record.egress.connectors ?? []).includes(desktopConnector(options.desktop)) } : {}),
-				// What this server offers, so the console does not count a step nobody can take here.
-				can: { search: options.search !== undefined, transcription: options.voice !== undefined, speech: options.speech !== undefined, images: options.images !== undefined, ...(options.desktop?.kind === "local" ? { computerUse: true } : {}) },
-			},
-		};
-	});
 	// --- memoria: each person sees what the instance remembers about them, and the shared facts ---
 	const subjectOfPerson = (p: Person) => subjectOf("web", p.id);
 	route("GET", "/api/instances/:id/memory", "person", async ({ person, params }) => {
@@ -786,19 +680,6 @@ export function createWebApp(options: WebAppOptions): Server {
 		return { ok: true };
 	});
 
-	// --- owner: the sites an instance may read with its web tools ---
-	route("PUT", "/api/instances/:id/web", "owner", async ({ params, req }) => {
-		const id = params[0];
-		const record = await knownInstance(id);
-		const body = (await readJson(req)) as { hosts?: unknown };
-		if (!Array.isArray(body.hosts) || body.hosts.length > 200) throw new HttpError(400, "hosts: un elenco di domini (al massimo 200)");
-		const hosts = [...new Set(body.hosts.map((h) => String(h).trim().toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, "")).filter((h) => h !== ""))];
-		const wrong = hosts.filter((h) => !WEB_HOST_PATTERN.test(h));
-		if (wrong.length > 0) throw new HttpError(400, `Non sono domini: ${wrong.slice(0, 5).join(", ")}. Scrivi per esempio comune.roma.it, oppure * per tutti i siti pubblici`);
-		await runtime.registry.setEgress(tenantId, id, (egress) => ({ ...egress, web: hosts }));
-		await runtime.audit(tenantId).append({ type: "web.hosts_changed", instanceId: id, count: hosts.length, any: hosts.includes("*") });
-		return { hosts };
-	});
 
 	// --- owner: Telegram, WhatsApp and phone of an instance ---
 	channelRoutes(route, { runtime, tenantId, telegram: options.telegram, whatsapp: options.whatsapp, phone: options.phone, log: options.log, knownInstance });
