@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { readdirSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
@@ -2602,8 +2602,9 @@ export function createWebApp(options: WebAppOptions): Server {
 		const data = await readFile(join(openuiDir, name));
 		if (name === "frame.html") {
 			res.removeHeader("x-frame-options");
-			res.writeHead(200, { "content-type": TYPES[".html"] as string, "content-security-policy": OPENUI_CSP, "cache-control": "no-cache" });
-			res.end(data);
+			const nonce = randomBytes(16).toString("base64");
+			res.writeHead(200, { "content-type": TYPES[".html"] as string, "content-security-policy": openuiCsp(nonce), "cache-control": "no-cache" });
+			res.end(data.toString("utf8").replaceAll("__NONCE__", nonce));
 			return;
 		}
 		const cache = name.startsWith("openui-") ? "public, max-age=31536000, immutable" : "no-cache";
@@ -2651,10 +2652,14 @@ const ARTIFACT_CSP =
 	"font-src https://fonts.gstatic.com data:; img-src data: blob: https://cdn.jsdelivr.net https://unpkg.com https://cdnjs.cloudflare.com; media-src data: blob:; connect-src 'none'; form-action 'none'; frame-ancestors 'self'";
 
 /**
- * The OpenUI frame (ADR 0118): an opaque origin like an artifact, but it runs only Owni's own files
- * (the vendored bundle and the frame script), loads no pictures or fonts from elsewhere, and sends nothing out.
+ * The OpenUI frame (ADR 0118): an opaque origin like an artifact, but it runs only Owni's own scripts
+ * (the vendored bundle and the frame script, pinned by a nonce per response), loads no pictures, and sends nothing out.
+ * WebKit (Safari, the Mac app) never matches 'self' from a sandboxed frame, so scripts go by nonce, and stylesheets and
+ * fonts, which cannot run code, by scheme.
  */
-const OPENUI_CSP = "sandbox allow-scripts; default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src data: blob:; font-src 'self'; connect-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors 'self'";
+function openuiCsp(nonce: string): string {
+	return `sandbox allow-scripts; default-src 'none'; script-src 'nonce-${nonce}'; style-src http: https: 'unsafe-inline'; img-src data: blob:; font-src http: https:; connect-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors 'self'`;
+}
 
 function sandboxedHtml(res: ServerResponse, data: Buffer, download?: string): typeof STREAMED {
 	res.removeHeader("x-frame-options");
