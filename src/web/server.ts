@@ -625,8 +625,8 @@ export function createWebApp(options: WebAppOptions): Server {
 	}
 
 	async function serveStatic(req: IncomingMessage, res: ServerResponse, name: string): Promise<void> {
-		// Scripts are checked at every visit (and the service worker with them): the modules of one deploy must load together, never a mix with an older cached one.
-		const cache = name === "index.html" ? "no-store" : extname(name) === ".js" ? "no-cache" : name.startsWith("fonts/") ? "public, max-age=31536000, immutable" : "public, max-age=300";
+		// Scripts and the stylesheet are checked at every visit (and the service worker with them): the files of one deploy must load together, never a mix with an older cached one.
+		const cache = name === "index.html" ? "no-store" : [".js", ".css"].includes(extname(name)) ? "no-cache" : name.startsWith("fonts/") ? "public, max-age=31536000, immutable" : "public, max-age=300";
 		// A font is always fetched with CORS: the OpenUI frame, with no origin of its own, may use them too.
 		await sendAsset(req, res, join(options.uiDir, name), { "content-type": TYPES[extname(name)] ?? "application/octet-stream", "cache-control": cache, ...(name.startsWith("fonts/") ? { "access-control-allow-origin": "*" } : {}) });
 	}
