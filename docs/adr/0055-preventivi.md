@@ -1,5 +1,7 @@
 # Preventivi
 
+> Sostituito dall'[ADR 0121](0121-registri-sostituiti-da-code-run-e-file.md): lo strumento `quotes` non c'è più, i conti e i dati stanno nei file del workspace e li fa `code_run`.
+
 Chi ha una piccola impresa manda preventivi di continuo: «fammi un preventivo per Rossi Srl: 3 giornate di consulenza a 500 €, trasferta 120 €, IVA 22%», «rifai il 12 con lo sconto del 10%», «quali sono ancora aperti?», «il 12 è stato accettato». Finora Owni poteva solo scrivere un documento libero con `document_create`, facendo i conti a mente.
 
 ## Decisione

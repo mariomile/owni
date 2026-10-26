@@ -1,5 +1,7 @@
 # Fatture in uscita
 
+> Sostituito dall'[ADR 0121](0121-registri-sostituiti-da-code-run-e-file.md): lo strumento `sales_invoices` non c'è più, i conti e i dati stanno nei file del workspace e li fa `code_run`.
+
 Con preventivi (ADR 0055), ore (ADR 0058), clienti (ADR 0071) e tasse (ADR 0070) Owni sapeva cosa fatturare e a chi, ma la fattura la faceva la persona con un altro programma. Ora «fammi la fattura a Rossi per il preventivo 4», «fattura a Beta le ore di ottobre», «fattura a Gamma: consulenza 1.500 €», «nota di credito per la fattura 12» e «le fatture che mi hai fatto quest'anno» hanno una risposta: una fattura elettronica XML pronta da caricare, con la copia di cortesia in PDF.
 
 ## Decisione

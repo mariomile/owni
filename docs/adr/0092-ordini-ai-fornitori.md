@@ -1,5 +1,7 @@
 # Ordini ai fornitori
 
+> Sostituito dall'[ADR 0121](0121-registri-sostituiti-da-code-run-e-file.md): lo strumento `orders` non c'è più, i conti e i dati stanno nei file del workspace e li fa `code_run`.
+
 Con il magazzino (ADR 0089) e i prezzi d'acquisto (ADR 0090) Owni sapeva cosa sta finendo e quanto costa da ogni fornitore, ma non aiutava a riordinare: «cosa devo riordinare?», «fammi l'ordine per Beta», «è arrivato l'ordine?» non avevano risposta, e la merce arrivata non si legava a nessun ordine.
 
 ## Decisione

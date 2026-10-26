@@ -1,5 +1,7 @@
 # Le istruzioni dei registri stanno nei loro strumenti
 
+> Sostituito dall'[ADR 0121](0121-registri-sostituiti-da-code-run-e-file.md): i registri e le loro istruzioni non ci sono più.
+
 Dopo l'ADR 0100 i 25 registri dell'attività arrivano al modello solo quando li carica con `tool_search`, ma le istruzioni predefinite avevano ancora una frase lunga per ciascuno: quasi 12 mila caratteri, circa 3 mila token, pagati a ogni turno. Le istruzioni erano a 19.775 caratteri su un limite di 20.000, e quasi tutto quello che dicevano lo dicevano già le descrizioni degli strumenti.
 
 ## Decisione

@@ -1,5 +1,7 @@
 # Conferme solo dalla persona
 
+> Sostituito dall'[ADR 0121](0121-registri-sostituiti-da-code-run-e-file.md): il controllo sull'origine del turno per le conferme non c'è più: lo usavano solo i registri.
+
 Un'azione che non si annulla (emettere una fattura, applicare gli abbinamenti della banca, unire due clienti, cambiare i prezzi del listino) si fa con `confirm: true`, e fino a oggi lo strumento non sapeva da dove veniva il turno. Un avviso di Owni («è pronta la bozza del canone»), un'attività programmata, un webhook o un altro agente aprono un turno come un messaggio della persona: bastava che il modello mettesse `confirm: true` per fare il passo senza il suo sì. La settimana 67 lo aveva lasciato aperto.
 
 ## Decisione

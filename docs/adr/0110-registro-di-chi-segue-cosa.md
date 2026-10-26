@@ -1,5 +1,7 @@
 # 0110: Registro di chi segue cosa
 
+> Sostituito dall'[ADR 0121](0121-registri-sostituiti-da-code-run-e-file.md): il registro di chi segue cosa non c'è più, con i registri che lo alimentavano. Resta la riga «chi ha chiesto» sulle card di approvazione.
+
 Ogni agente ha i suoi registri, separati da quelli degli altri ([ADR 0041](0041-agenti.md)): clienti, fornitori, preventivi, ordini, appuntamenti, fatture di vendita, DDT. È voluto: chi parla con un agente vede solo quello che quell'agente sa. Il risultato però è che due agenti possono seguire lo stesso cliente senza saperlo. Vendite fa un preventivo ad Alfa srl mentre Acquisti ha già un ordine aperto ad Alfa srl come fornitore, e nessuno dei due lo dice alla persona. I messaggi tra agenti ([ADR 0042](0042-agenti-che-si-scrivono.md)) non aiutano: un agente chiede solo quando sa che c'è qualcosa da chiedere.
 
 ## Decisione

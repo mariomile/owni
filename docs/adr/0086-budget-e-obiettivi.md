@@ -1,5 +1,7 @@
 # Budget e obiettivi
 
+> Sostituito dall'[ADR 0121](0121-registri-sostituiti-da-code-run-e-file.md): lo strumento `budgets` non c'è più, i conti e i dati stanno nei file del workspace e li fa `code_run`.
+
 L'andamento dell'attività (settimana 61) dice come stanno andando le cose, ma non rispetto a quello che la persona si era data come limite o come traguardo. «Quanto ho speso per il software questo mese rispetto al budget?», «come vado con l'obiettivo di 60.000 € di fatturato?», «quali budget sto sforando?» non avevano una risposta, e nessuno avvisava quando una spesa passava il limite.
 
 ## Decisione

@@ -1,5 +1,7 @@
 # Leggere i documenti
 
+> In parte sostituito dall'[ADR 0121](0121-registri-sostituiti-da-code-run-e-file.md): il riepilogo delle fatture elettroniche non c'è più; restano i documenti letti e i file firmati `.p7m`.
+
 Chi lavora in una piccola azienda manda a Owni soprattutto documenti: un preventivo in PDF, un listino in Excel, un contratto in Word, una presentazione. Fino alla settimana 31 Owni li salvava nel workspace e poi rispondeva «è un file binario». Per leggerli doveva accendere il computer (settimana 18) e lanciare `pdftotext`: lento, non sempre disponibile, e il modello non sempre ci pensava.
 
 ## Come funziona

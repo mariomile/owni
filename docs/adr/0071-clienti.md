@@ -1,5 +1,7 @@
 # Clienti
 
+> Sostituito dall'[ADR 0121](0121-registri-sostituiti-da-code-run-e-file.md): lo strumento `clients` non c'è più, i conti e i dati stanno nei file del workspace e li fa `code_run`.
+
 Fatture, solleciti, preventivi e ore (ADR 0051-0058) sapevano tutto dei soldi di un cliente, ma niente di chi è: il referente, il telefono, come preferisce essere sentito, cosa ci si è detti l'ultima volta e quando richiamarlo. La domanda di chi ha una partita IVA è «cosa so di Rossi?» e «chi devo richiamare?». Ora «cosa so di Rossi?», «chi sono i miei clienti migliori?», «chi non sento da tre mesi?», «ricordami di ricontattare Beta tra due settimane», «ho sentito Beta» e «Rossi e Rossi Mario sono lo stesso cliente» hanno una risposta.
 
 ## Decisione

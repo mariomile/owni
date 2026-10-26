@@ -21,6 +21,7 @@ Owni è «pronta al 100%» quando ognuna di queste voci è vera e verificata da 
 - [x] **Task programmati**: una volta o a ripetizione, creati dalle persone o dall'istanza stessa; eseguiti anche dopo un riavvio; risultato consegnato al thread.
 - [x] **Tool proposti**: l'istanza scrive un tool, un approvatore lo approva su Telegram o web, gira in sandbox con egress dichiarato (ADR 0002).
 - [x] **Conti in Python**: ogni numero che un agente dà a una persona (totali, IVA, sconti, domande a un CSV o a un Excel) viene da un programma che gira in una sandbox senza rete, chiavi né disco; i file che scrive tornano nel workspace (ADR 0119).
+- [x] **Niente registri fissi**: fatture, spese, ore e il resto stanno nei file del workspace, i conti li fa `code_run`, le procedure per ogni cliente sono sue skill (ADR 0121).
 - [x] **Approvazioni** in un unico posto, visibili su Telegram (pulsanti) e web.
 - [x] **Approvazioni per rischio**: leggere e scrivere nel proprio spazio non chiedono; le scritture che un servizio dichiara interne e non distruttive partono subito (l'owner può alzarle a «chiedi»); mail inviate, eventi con invitati, cancellazioni, pagamenti e strumenti non descritti chiedono sempre. Bozze ed eventi senza invitati si fanno subito (ADR 0120).
 - [x] **Organigramma**: squadre con chi le coordina e, per ogni agente, ruolo, a chi risponde e responsabilità. Decide chi può scrivere a chi; ogni agente legge il suo posto prima di ogni richiesta e `agent_list` dice chi è responsabile di cosa. Le squadre pronte ci entrano da sole (ADR 0117).
@@ -50,3 +51,4 @@ Owni è «pronta al 100%» quando ognuna di queste voci è vera e verificata da 
 - ~~WhatsApp~~: dal 16 ottobre 2026 è un canale come Telegram (Cloud API di Meta, settimana 13, [week13.md](week13.md)).
 - Invio di mail o azioni irreversibili senza approvazione.
 - ~~Multi-tenant cloud con billing~~: dal 16 ottobre 2026 è in programma come Owni Cloud, una cella per tenant ([piano](piano-cloud.md)).
+- Registri dell'attività già pronti (fatture, preventivi, spese, magazzino e gli altri): tolti il 26 ottobre 2026, vedi [ADR 0121](adr/0121-registri-sostituiti-da-code-run-e-file.md).

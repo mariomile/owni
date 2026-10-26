@@ -1,5 +1,7 @@
 # Spese e prima nota
 
+> Sostituito dall'[ADR 0121](0121-registri-sostituiti-da-code-run-e-file.md): lo strumento `expenses` non c'è più, i conti e i dati stanno nei file del workspace e li fa `code_run`.
+
 Con scadenzario (ADR 0053), solleciti (ADR 0054) e preventivi (ADR 0055) Owni segue i soldi che entrano, ma non quelli che escono: gli scontrini finivano in una scatola e il commercialista li riceveva a fine trimestre in foto sparse. Ora «ho speso 42 euro di benzina», o la foto dello scontrino, diventano una spesa registrata, e «quanto ho speso a ottobre?», «fammi la prima nota del trimestre» e «mandami le spese per il commercialista» hanno una risposta.
 
 ## Decisione

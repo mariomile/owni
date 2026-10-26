@@ -75,12 +75,8 @@ Una scheda affidata a un agente che torna ogni giorno, nei feriali, ogni settima
 _Avoid_: routine, ricorrenza (nel testo per le persone)
 
 **Scadenza (di una scheda)**:
-Il giorno, a Roma, entro cui una scheda va fatta. La board dice «scade oggi» o «in ritardo di 3 giorni»; l'agente la riceve con la scheda. Diversa dallo scadenzario, che riguarda le fatture. Vedi ADR 0073.
+Il giorno, a Roma, entro cui una scheda va fatta. La board dice «scade oggi» o «in ritardo di 3 giorni»; l'agente la riceve con la scheda. Vedi ADR 0073.
 _Avoid_: deadline, due date (nel testo per le persone)
-
-**Registro di chi segue cosa**:
-Il registro del tenant che dice quale agente ha quale record (cliente, fornitore, preventivo, ordine, appuntamento, fattura, DDT), con ID, tipo, scheda collegata e ultima modifica. Partita IVA, codice fiscale e nome sono pseudonimizzati (HMAC con una chiave del tenant): nessun nome né contenuto in chiaro. Serve ad avvisare quando due agenti seguono lo stesso cliente o fornitore. Non è un'anagrafica comune: i record restano nei registri di ogni agente. Vedi ADR 0110.
-_Avoid_: anagrafica unica, CRM condiviso, subject ledger (nel testo per le persone)
 
 **Organigramma**:
 Come sono organizzati gli agenti dell'installazione, deciso dall'owner nella pagina Organigramma: le squadre con chi le coordina e, per ogni agente, il ruolo, la squadra, a chi risponde, le sue responsabilità e se è a disposizione di tutti. Decide chi può scrivere a chi: la stessa squadra, chi sta sopra e sotto, i coordinatori fra loro. Ogni agente legge il suo posto prima di ogni richiesta. Le persone non ci sono. Vedi ADR 0117.
@@ -93,10 +89,6 @@ _Avoid_: ownership, compito (che è la riga dell'agente)
 **Messaggio tra agenti**:
 Una richiesta che un agente manda a un altro con `agent_message`, solo se l'organigramma permette al secondo di ricevere messaggi dal primo. La risposta torna dopo, nella conversazione da cui era partita la domanda. Al più tre agenti in fila, senza giri. Se il collega è occupato, il risultato lo dice e la risposta può metterci di più. Vedi ADR 0042 e 0109.
 _Avoid_: chat tra bot, handoff, delega
-
-**Richiesta tra agenti da approvare**:
-Un passo che un agente chiede a un altro e che serve il sì di una persona: la chiamata esatta aspetta un approvatore dell'agente che la fa, in Approvazioni e nelle chat; approvata parte una volta, e l'esito torna all'agente che l'ha chiesta. Il testo dell'agente che chiede non è mai l'approvazione. Vedi ADR 0108.
-_Avoid_: escalation, delega dell'approvazione
 
 **Automazione**:
 Un indirizzo segreto di un agente che un altro servizio chiama (il modulo del sito, Stripe, Zapier): ogni chiamata fa partire l'agente con la sua istruzione e i dati ricevuti, per la persona che l'ha creata e nella sua conversazione. Vedi ADR 0060.
@@ -272,140 +264,16 @@ Una partita IVA scritta dal cliente in una mail che non supera il controllo form
 _Avoid_: partita IVA inesistente, partita IVA non attiva
 
 **Fattura elettronica**:
-Il file XML FatturaPA che passa dallo SdI, a volte firmato come `.xml.p7m`; Owni lo legge come un documento e ne fa un riepilogo in italiano, senza verificare la firma. La scadenza che conta è quella scritta in fattura. Vedi ADR 0052.
+Il file XML FatturaPA che passa dallo SdI, a volte firmato come `.xml.p7m`. Sta nel workspace come ogni altro file: Owni lo legge come testo (la firma `.p7m` viene tolta, senza verificarla) e i conti li fa `code_run`. La scadenza che conta è quella scritta in fattura. Vedi ADR 0052 e 0121.
 _Avoid_: e-fattura, XML della fattura, fattura digitale
 
-**Scadenzario**:
-L'elenco delle rate delle fatture elettroniche del workspace, da pagare o da incassare, con le scadute e quelle segnate pagate; lo tiene lo strumento `invoices`. Le note di credito si tolgono dal dovuto. Vedi ADR 0053.
-_Avoid_: agenda dei pagamenti, prima nota
-
-**Sollecito**:
-La mail che chiede a un cliente di pagare fatture scadute, in tre livelli: promemoria, secondo sollecito, sollecito formale (costituzione in mora). Owni la prepara con `invoices` op `reminder`, la manda solo dopo l'approvazione e la annota nello scadenzario. Vedi ADR 0054.
-_Avoid_: diffida, recupero crediti
-
-**Preventivo**:
-L'offerta numerata a un cliente, con righe, IVA, validità e riquadro per l'accettazione, fatta con lo strumento `quotes` e salvata in PDF o Word nel workspace. Una revisione tiene il numero (`2026-012-R1`). Vedi ADR 0055.
-_Avoid_: offerta, quotazione
-
 **Allegato**:
-Un file del workspace mandato con una mail di Owni (preventivo, fattura, documento). La card di approvazione mostra percorso e dimensione; all'approvazione il file deve essere identico a quello chiesto. Vedi ADR 0056.
+Un file del workspace mandato con una mail di Owni. La card di approvazione mostra percorso e dimensione; all'approvazione il file deve essere identico a quello chiesto. Vedi ADR 0056.
 _Avoid_: attachment
 
-**Spesa**:
-Un costo registrato con `expenses` (S-AAAA-NNNN): data, totale IVA compresa, IVA, fornitore, categoria, pagamento e, se c'è, lo scontrino nel workspace. La **prima nota** mette in fila le spese e gli incassi delle fatture pagate con il saldo. Vedi ADR 0057.
-_Avoid_: expense, costo, uscita (per la singola spesa)
-
-**Voce di ore**:
-Un tempo di lavoro registrato con `timesheet` (O-AAAA-NNNN): cliente, progetto, data, minuti, attività e se è fatturabile. Può essere da fatturare, nel preventivo N o fatturata con un riferimento. Vedi ADR 0058.
-_Avoid_: timesheet entry, ora (per la voce)
-
-**Rinnovo**:
-Un costo o un contratto che torna a ogni periodo (abbonamento, polizza, dominio, affitto), registrato con `renewals` (R-NNNN): importo, frequenza, prossima scadenza, se si rinnova da solo (`auto_renew`), se si paga da solo (`auto_pay`) e la data entro cui disdire. Vedi ADR 0064.
-_Avoid_: renewal, subscription
-
-**Voce di cassa**:
-Un movimento che la persona dice a Owni per la previsione di cassa, registrato con `cashflow` (C-NNNN): entrata o uscita, importo, data, una volta o ricorrente (ogni N mesi o ogni N giorni), fino a quando. Serve per quello che non sta in fatture, rinnovi o spese: tasse e F24, prelievi, rate di prestiti, entrate senza fattura. Vedi ADR 0065.
-_Avoid_: cashflow item, movimento (per la voce)
-
-**Profilo fiscale**:
-Come è tassata una persona nel regime forfettario, salvato con `taxes`: coefficiente di redditività (dal gruppo o dal codice ATECO), imposta al 15% o al 5%, anno di inizio, cassa previdenziale (gestione separata, artigiani, commercianti, cassa professionale) e le cifre dette dell'anno prima. Le aliquote dell'anno non stanno nel profilo. Vedi ADR 0070.
-_Avoid_: tax profile, regime (per il profilo)
-
-**Scheda cliente**:
-Quello che la persona dice a Owni di un cliente, salvato con `clients` (CL-NNNN): nome, partita IVA o codice fiscale, referenti con canale preferito, note, etichette e ricontatti. Fatturato, incassato, solleciti, preventivi e ore non stanno nella scheda: si leggono dai loro registri. Vedi ADR 0071.
-_Avoid_: CRM, anagrafica, contatto (per la scheda)
-
-**Ricontatto**:
-Un cliente da risentire in un giorno, registrato su una scheda cliente (FU-NNNN), con un promemoria alle 9 di quel giorno. Si sposta, si toglie o si segna fatto. Vedi ADR 0071.
-_Avoid_: follow-up, task (per il ricontatto)
-
-**Fattura in uscita**:
-Una fattura elettronica che Owni prepara per la persona con `sales_invoices`: prima una bozza (BZ-NNNN) senza numero, poi, dopo il sì, il numero dell'anno, l'XML in `fatture/emesse/` e la copia di cortesia in PDF. Non viene mandata allo SdI: la persona la carica sul portale. Vedi ADR 0072.
-_Avoid_: invoice, fattura emessa (per la bozza)
-
-**Liquidazione IVA**:
-Il conto che chi è in regime ordinario fa ogni mese o trimestre: IVA delle fatture emesse meno quella detraibile delle fatture ricevute, più il credito o il saldo che passa dal periodo prima. Se è a debito si versa con l'F24. Owni la stima con `vat_settlement`. Vedi ADR 0077.
-_Avoid_: VAT settlement, dichiarazione (per la liquidazione periodica)
-
-**Estratto conto**:
-Il file con i movimenti del conto che la banca dà (CSV, Excel o CAMT.053). Owni lo legge con `bank_statement` e spiega ogni movimento; l'abbinamento a una fattura, una spesa, un rinnovo o un F24 è sicuro o debole (solo l'importo) e cambia gli altri registri solo dopo un sì. Vedi ADR 0078.
-_Avoid_: bank statement, movimenti bancari (per il file)
-
-**Margine**:
-Nell'andamento dell'attività, gli incassi meno le spese dello stesso periodo, per cassa. Per il forfettario, tolte le tasse stimate, è quanto «ti resta in tasca»; per l'ordinario Owni dice solo quanto resta dopo l'IVA, prima di IRPEF e contributi. Lo calcola `business_report`. Vedi ADR 0080.
-_Avoid_: profitto, utile (per il margine per cassa)
-
-**Ritenuta d'acconto**:
-La parte del compenso (di solito il 20% dell'imponibile; per gli agenti il 23% sul 50% o sul 20% delle provvigioni) che il cliente sostituto d'imposta trattiene e versa allo Stato con l'F24, codice 1040, entro il 16 del mese dopo il pagamento. Per chi è in regime ordinario è un credito nella dichiarazione dell'anno in cui il cliente paga; nel forfettario non c'è. Owni la segue con `withholding`, leggendo le fatture in uscita e gli XML del workspace.
-_Avoid_: withholding tax, trattenuta (per la ritenuta)
-
-**CU (Certificazione Unica)**:
-Il documento con cui il cliente certifica, entro il 16 marzo dell'anno dopo, i compensi pagati e le ritenute trattenute. La persona dice a Owni i due importi, Owni li salva (CU-NNNN, da togliere con lo stesso codice se detta per sbaglio) e li confronta con le sue fatture, spiegando la differenza quando può. L'anno della CU è quello dei pagamenti: la CU 2026 certifica i compensi del 2025.
-_Avoid_: certificazione dei compensi, 770 (per la CU)
-
-**Agenda fiscale**:
-Tutte le scadenze di chi ha la partita IVA in una lista sola, in ordine di data: gli F24 di tasse e IVA, le CU, i rinnovi, le fatture da pagare e le scadenze di legge (dichiarazioni, LIPE, diritto camerale, bollo). Owni non la salva: la legge ogni volta dai registri e la può esportare in un file .ics. Vedi ADR 0083.
-_Avoid_: scadenziario fiscale, calendario delle tasse (per l'agenda fiscale)
-
-**Listino**:
-L'elenco di quello che la persona vende, servizi e prodotti, ognuno una voce con prezzo, unità e IVA (LS-NNNN, con un codice suo se vuole). Preventivi, fatture in uscita e ore da fatturare prendono il prezzo da lì; un nome che può essere più voci si chiede. Vedi ADR 0084.
-_Avoid_: catalogo, tariffario (per il listino)
-
-**Scheda del fornitore**:
-Quello che Owni sa di chi la persona paga (FO-NNNN): note, referenti e IBAN o partita IVA solo come li dice la persona; spesa, fatture aperte, giorni di pagamento e abbonamenti letti ogni volta dai registri. Un IBAN da pagare diverso da quelli già pagati si verifica per telefono prima di pagare. Vedi ADR 0085.
-_Avoid_: anagrafica fornitore, vendor (per la scheda del fornitore)
-
-**Budget**:
-Un limite di spesa che la persona si dà (BU-NNNN) su una categoria, un fornitore o tutte le spese, per mese, trimestre o anno; o un obiettivo di fatturato o incassato. Owni lo segue dai registri e avvisa una volta quando passa l'80% e il 100%. Vedi ADR 0086.
-_Avoid_: tetto di spesa, target (per il budget)
-
-**Fattura ricorrente**:
-Un canone che la persona fattura sempre allo stesso cliente (RI-NNNN) ogni mese, bimestre, trimestre, semestre o anno; Owni ne prepara la bozza a ogni periodo e avvisa, l'emissione resta della persona. Vedi ADR 0087.
-_Avoid_: abbonamento (per i canoni che fattura la persona: gli abbonamenti che paga sono i rinnovi)
-
 **Origine del turno**:
-Da dove nasce un turno di Owni: un messaggio della persona, un avviso, un'attività programmata o un altro agente. Le azioni che non si annullano si confermano solo nei turni della persona. Vedi ADR 0088.
+Da dove nasce un turno di Owni: un messaggio della persona, un avviso, un'attività programmata o un altro agente. Le azioni che servono un sì passano dalle approvazioni per rischio, qualunque sia l'origine. Vedi ADR 0120.
 _Avoid_: mittente (per l'origine)
-
-**Articolo di magazzino**:
-Una cosa che la persona tiene in magazzino (MG-NNNN), con la sua unità, il minimo sotto cui avvisare e i movimenti (carico, scarico, rettifica) da cui Owni ricava quanto ne resta e quanto vale al costo medio. Vedi ADR 0089.
-_Avoid_: prodotto (per l'articolo; il prezzo è la voce del listino)
-
-**Prezzo d'acquisto**:
-Quanto la persona paga un prodotto a un fornitore, letto dalle righe delle sue fatture: senza IVA, per unità, con gli sconti della fattura divisi sulle righe. Il prezzo a cui vende è la voce del listino. Vedi ADR 0090.
-_Avoid_: costo (per il prezzo d'acquisto; il costo medio è quello del magazzino)
-
-**Margini**:
-Quanto la persona guadagna davvero su un prodotto o un cliente: il ricavo senza IVA delle fatture emesse meno il costo della merce venduta, al costo medio del magazzino al momento di ogni vendita. Un costo trovato solo dal nome è una stima, mai una perdita. Owni li ricava ogni volta dai registri, senza salvarli. Vedi ADR 0091.
-_Avoid_: utile, guadagno netto (i margini non tolgono spese e tasse; quello è l'andamento dell'attività)
-
-**Ordine al fornitore**:
-Quello che la persona ordina a un fornitore (OR-NNNN), riga per riga sugli articoli del magazzino, con il prezzo atteso. È una bozza finché la persona non dice di averlo mandato; arriva in parte o tutto secondo le ricevute: le righe delle fatture caricate, la merce arrivata con la bolla, quella già in magazzino. Owni non lo manda mai. Vedi ADR 0092.
-_Avoid_: acquisto (per l'ordine; l'acquisto è la fattura ricevuta), bolla (la bolla è come arriva la merce, non l'ordine)
-
-**DDT (documento di trasporto)**:
-Il documento con cui la persona spedisce merce a un cliente (DT-NNNN finché è una bozza, poi «12/2026»), riga per riga, senza prezzi, con la causale e chi fa il trasporto. Emesso, scarica il magazzino (un reso rimette la merce del DDT da cui torna); non si cancella, si annulla tenendo il numero. Vedi ADR 0093.
-_Avoid_: bolla (per i DDT che fa la persona; la bolla è quella del fornitore che accompagna la merce in arrivo)
-
-**Fattura differita**:
-La fattura (tipo TD24) che a fine mese raccoglie i DDT di vendita di un cliente di quel mese, al netto dei resi, con i loro riferimenti (DatiDDT); va emessa entro il 15 del mese dopo, e la sua IVA va nel mese dei DDT. Non scarica il magazzino, perché la merce è uscita con i DDT; i DDT risultano fatturati solo quando è emessa. Vedi ADR 0093.
-_Avoid_: fattura riepilogativa
-
-**Appuntamento**:
-Un cliente che viene per uno o più servizi in un giorno e a un'ora, con la sua durata e, se ci sono, la risorsa che lo fa (una persona, una poltrona, un ponte). Fissato, fatto, disdetto o non presentato; non si cancella mai. Si fattura quando è fatto, segnato fatturato solo all'emissione. Non è una scadenza dell'agenda fiscale né un promemoria di Owni. Vedi ADR 0094.
-_Avoid_: prenotazione (per il dato salvato; «prenotare» va bene come verbo), evento (quello è il calendario Google)
-
-**Personale**:
-Le persone che lavorano nell'attività (PE-NNNN, mai detto), con ruolo, ore del contratto, la settimana solita, ferie e permessi dell'anno, e se c'è la risorsa degli appuntamenti che sono. Non sono utenti di Owni né agenti del board. Ha il primo e l'ultimo giorno in forza; chi se ne va si archivia, non si cancella. Si aggiunge solo quando è detta nuova, o quando se ne dice qualcosa e nessuno ha quel nome. Vedi ADR 0095.
-_Avoid_: dipendenti (per il dato salvato; va bene come parola), utenti, membri
-
-**Assenza**:
-Un periodo in cui una persona del personale non lavora: ferie (giorni o mezza giornata), permesso (ore), malattia (giorni, solo il protocollo, mai la diagnosi) o altro (un motivo dalla lista chiusa: lutto, congedo, 104…). Non ha note libere. Si cambia o si annulla, e annullata resta nello storico. Blocca la sua risorsa negli appuntamenti. Vedi ADR 0095.
-_Avoid_: chiusura (quella è dell'attività), ferie (per tutte le assenze)
-
-**Turno**:
-Le ore in cui una persona del personale lavora in un giorno: dalla settimana solita, o detto a parte per quel giorno, meno le assenze e le chiusure. Le ore in cui l'attività è aperta e nessuno è di turno sono scoperte. Vedi ADR 0095.
-_Avoid_: orario (quello è dell'attività), slot
 
 **Download**:
 Un file del web salvato da Owni nel workspace, sotto `download/`, con `web_download`: per leggerlo tutto o mandarlo. Solo dai siti consentiti, fino a 20 MB. Vedi ADR 0027.

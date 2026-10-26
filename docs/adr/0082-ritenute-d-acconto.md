@@ -1,5 +1,7 @@
 # Ritenute d'acconto e Certificazione Unica
 
+> Sostituito dall'[ADR 0121](0121-registri-sostituiti-da-code-run-e-file.md): lo strumento `withholding` non c'è più, i conti e i dati stanno nei file del workspace e li fa `code_run`.
+
 Per chi è in regime ordinario e lavora per clienti sostituti d'imposta, ogni fattura ha una ritenuta d'acconto che il cliente trattiene, versa con l'F24 e certifica nella Certificazione Unica entro il 16 marzo dell'anno dopo. Quella ritenuta è un credito nella dichiarazione dei redditi, ma solo se il cliente l'ha trattenuta davvero e se torna con la CU. Owni aveva le fatture e gli incassi ma non teneva il conto delle ritenute, e lo scadenzario aspettava il lordo dalle fatture XML senza dati di pagamento. Ora «quanto mi hanno trattenuto quest'anno?», «quali clienti devono ancora mandarmi la CU?», «la CU di Rossi torna?», «quanto credito ho per la dichiarazione?» e «Rossi mi ha pagato al netto?» hanno una risposta.
 
 ## Decisione

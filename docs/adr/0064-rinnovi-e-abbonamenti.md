@@ -1,5 +1,7 @@
 # Rinnovi e abbonamenti
 
+> Sostituito dall'[ADR 0121](0121-registri-sostituiti-da-code-run-e-file.md): lo strumento `renewals` non c'è più, i conti e i dati stanno nei file del workspace e li fa `code_run`.
+
 Assicurazioni, domini, software, affitti, utenze e contratti che si rinnovano da soli sono costi certi che nessuno guarda finché non arriva l'addebito o è troppo tardi per disdire. Con spese (ADR 0057) e ore (ADR 0058) Owni conosceva i soldi già usciti; ora conosce anche quelli che usciranno. «Ricordami che l'assicurazione dell'auto scade il 12 marzo, 480 euro l'anno», «Canva 12 euro al mese con la carta», «il contratto della fibra si rinnova da solo, disdetta 30 giorni prima», «quanto spendo di abbonamenti al mese?», «cosa scade nei prossimi 60 giorni?», «ho disdetto Netflix» e «ho pagato l'assicurazione» hanno una risposta.
 
 ## Decisione

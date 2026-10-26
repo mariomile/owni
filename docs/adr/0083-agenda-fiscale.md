@@ -1,5 +1,7 @@
 # Agenda fiscale
 
+> Sostituito dall'[ADR 0121](0121-registri-sostituiti-da-code-run-e-file.md): lo strumento `fiscal_agenda` non c'è più, i conti e i dati stanno nei file del workspace e li fa `code_run`.
+
 Le scadenze di chi ha la partita IVA erano sparse fra strumenti diversi: gli F24 delle tasse in `taxes`, quelli dell'IVA in `vat_settlement`, le CU in `withholding`, i rinnovi in `renewals`, le fatture da pagare nello scadenzario. Mancavano del tutto le scadenze che non hanno un importo calcolato da Owni: la dichiarazione dei redditi, la dichiarazione IVA, la LIPE, il diritto camerale, l'imposta di bollo sulle fatture elettroniche. Alla domanda «cosa devo pagare a novembre?» o «qual è la prossima scadenza fiscale?» non c'era una risposta sola, e niente finiva nel calendario.
 
 ## Decisione

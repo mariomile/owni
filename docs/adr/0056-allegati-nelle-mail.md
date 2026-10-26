@@ -1,5 +1,7 @@
 # Allegati nelle mail
 
+> In parte sostituito dall'[ADR 0121](0121-registri-sostituiti-da-code-run-e-file.md): i preventivi e i solleciti non ci sono più; restano gli allegati dal workspace nelle mail.
+
 Con preventivi (ADR 0055) e solleciti (ADR 0054) Owni prepara documenti da mandare ai clienti, ma le mail non potevano portare allegati: il PDF andava inoltrato a mano. Ora «manda il preventivo 12 a Rossi», «manda il sollecito a Gamma con la fattura allegata», «mandami per mail il report» e «rispondi a Marco allegando il contratto» partono con il file.
 
 ## Decisione

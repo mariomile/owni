@@ -1,5 +1,7 @@
 # Appuntamenti e prenotazioni
 
+> Sostituito dall'[ADR 0121](0121-registri-sostituiti-da-code-run-e-file.md): lo strumento `appointments` non c'è più, i conti e i dati stanno nei file del workspace e li fa `code_run`.
+
 Chi ha un'attività di servizi (parrucchiere, estetista, studio, officina, consulente) lavora ad appuntamenti: «fissa la signora Rossi giovedì alle 15 per taglio e piega», «quando ho un'ora libera giovedì pomeriggio?», «Rossi ha disdetto», «cosa ho domani?». Owni aveva il calendario Google della persona, l'agenda fiscale e i propri promemoria, ma nessuno di questi sa quanto dura un taglio, quando il negozio è chiuso, quale poltrona è libera o chi non si è presentato, e niente legava un appuntamento fatto alla fattura.
 
 ## Decisione

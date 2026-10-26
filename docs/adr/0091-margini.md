@@ -1,5 +1,7 @@
 # Margini
 
+> Sostituito dall'[ADR 0121](0121-registri-sostituiti-da-code-run-e-file.md): lo strumento `margins` non c'è più, i conti e i dati stanno nei file del workspace e li fa `code_run`.
+
 Con il listino (ADR 0084), il magazzino (ADR 0089) e i prezzi d'acquisto (ADR 0090) Owni sapeva a quanto la persona vende, quanto ha in magazzino e quanto paga, ma non quanto ci guadagna: «quanto guadagno sul toner?», «su cosa ci perdo?», «quanto mi rende Rossi?», «il listino è ancora giusto?» non avevano risposta.
 
 ## Decisione

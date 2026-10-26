@@ -1,5 +1,7 @@
 # Ore di lavoro
 
+> Sostituito dall'[ADR 0121](0121-registri-sostituiti-da-code-run-e-file.md): lo strumento `timesheet` non c'è più, i conti e i dati stanno nei file del workspace e li fa `code_run`.
+
 Chi lavora a ore teneva il conto su un foglio o nel calendario, poi rifaceva i calcoli per il preventivo o la fattura. Con preventivi (ADR 0055), allegati (ADR 0056) e spese (ADR 0057) mancava il pezzo che lega il tempo ai soldi. Ora «ho lavorato 3 ore per Rossi sul sito», «avvia il timer per Beta», «quanto devo fatturare a Rossi?», «manda a Rossi il riepilogo ore di ottobre» e «fai il preventivo con le ore di ottobre di Rossi» hanno una risposta.
 
 ## Decisione
