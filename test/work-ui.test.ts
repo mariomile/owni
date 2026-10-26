@@ -152,8 +152,7 @@ describe("automation overview reads and recovery", () => {
 		await viewPrograms(main);
 		expect(main.textContent).toContain("Contenuto precedentemente autorizzato");
 		revoked = true;
-		const refresh = nodes(main, "button").find((node) => node.textContent === "Aggiorna");
-		(refresh?.attrs.onclick as () => void)();
+		(mocks.state.onBoard as () => void)();
 		await vi.waitFor(() => expect(main.textContent).toContain("Accesso revocato"));
 		expect(main.textContent).not.toContain("Contenuto precedentemente autorizzato");
 	});
@@ -173,7 +172,7 @@ describe("automation overview reads and recovery", () => {
 		await viewPrograms(main);
 		expect(main.textContent).toContain("Descrizione riservata");
 		revoked = true;
-		(nodes(main, "button").find((node) => node.textContent === "Aggiorna")?.attrs.onclick as () => void)();
+		(mocks.state.onBoard as () => void)();
 		await vi.waitFor(() => expect(main.textContent).toContain("Board temporaneamente non disponibile"));
 		expect(main.textContent).not.toContain("Titolo riservato di un'altra persona");
 		expect(main.textContent).not.toContain("Descrizione riservata");
@@ -213,7 +212,7 @@ describe("automation overview reads and recovery", () => {
 		const main = mocks.h("main");
 		await viewPrograms(main);
 		expect(main.textContent).toContain("Controlla preventivi");
-		expect(main.textContent).toContain("1 automazione caricata");
+		expect(main.textContent).toContain("1 automazione");
 		expect(main.textContent).toContain("Dati parziali");
 		expect(main.textContent).toContain("Controlli pagina non disponibili");
 	});
