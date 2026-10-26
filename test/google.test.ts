@@ -155,7 +155,7 @@ describe("Google per persona", () => {
 		const thread = (await owner("/api/instances/owni/dm", {})).thread;
 		// Not allowed on the instance yet.
 		expect(await reply(owner, thread.id, '/tool google_mail_search {"query":"is:unread"}')).toContain("non ha Google tra i servizi consentiti");
-		expect((await owner("/api/instances/owni/google", { allowed: true }, "PUT")).status).toBe(200);
+		expect((await owner("/api/instances/owni/capabilities/google", { enabled: true }, "PUT")).status).toBe(200);
 		const found = await reply(owner, thread.id, '/tool google_mail_search {"query":"is:unread"}');
 		expect(found).toContain("id m1 (non letta)");
 		expect(found).toContain("Preventivo");
@@ -180,7 +180,7 @@ describe("Google per persona", () => {
 		const flow = await consent(base, owner, "calendar");
 		expect(flow.url.searchParams.get("scope")).toBe(`openid email ${GOOGLE_SCOPE.calendar}`);
 		expect((await flow.finish()).account.email).toBe("anna@example.com");
-		await owner("/api/instances/owni/google", { allowed: true }, "PUT");
+		await owner("/api/instances/owni/capabilities/google", { enabled: true }, "PUT");
 		const thread = (await owner("/api/instances/owni/dm", {})).thread;
 		expect(await reply(owner, thread.id, "/tool google_calendar_events {}")).toContain("Call con Rossi");
 		expect(await reply(owner, thread.id, '/tool google_mail_search {"query":"x"}')).not.toContain("Preventivo");
@@ -192,7 +192,7 @@ describe("Google per persona", () => {
 		const { owni, base } = await boot(tempDataDir());
 		const owner = await client(base, owni.ownerLink as string);
 		await (await consent(base, owner, "revoked")).finish();
-		await owner("/api/instances/owni/google", { allowed: true }, "PUT");
+		await owner("/api/instances/owni/capabilities/google", { enabled: true }, "PUT");
 		const thread = (await owner("/api/instances/owni/dm", {})).thread;
 		expect(await reply(owner, thread.id, "/tool google_calendar_events {}")).toContain("non vale più");
 	});
@@ -234,7 +234,7 @@ describe("Google per persona", () => {
 		expect(entries.find((e) => e.from === "owni")?.text).toContain("brief del mattino");
 		// In the brief's thread Owni only reads: nothing a mail says can make her act.
 		await (await consent(base, owner, "good")).finish();
-		await owner("/api/instances/owni/google", { allowed: true }, "PUT");
+		await owner("/api/instances/owni/capabilities/google", { enabled: true }, "PUT");
 		expect(await reply(owner, on.brief.threadId, '/tool memory_remember {"text":"x"}')).toContain("legge soltanto");
 		expect(await reply(owner, on.brief.threadId, "/tool google_calendar_events {}")).toContain("Call con Rossi");
 		const stats = briefStats(await owni.runtime.audit("default").read(), new Map([[on.brief.threadId, "owner"]]), new Date());

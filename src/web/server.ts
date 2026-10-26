@@ -4,12 +4,9 @@ import { readFile } from "node:fs/promises";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { extname, join, sep } from "node:path";
 import { ChannelRefused } from "../channels/types.ts";
-import { SPEECH_CONNECTOR } from "../channels/speech.ts";
 import { IMAGE_CONNECTOR } from "../core/image-generation.ts";
-import { VOICE_CONNECTOR } from "../channels/voice.ts";
-import { type WebAction, type WebActionResult, WebActionError, WEB_ACTIONS_CONNECTOR } from "../core/web-actions.ts";
+import { type WebAction, type WebActionResult, WebActionError } from "../core/web-actions.ts";
 import { cardView, decideGoogleAction, type GoogleAction, GoogleActionError, type GoogleActionResult } from "../core/google-actions.ts";
-import { COMPUTER_CONNECTOR } from "../core/computer.ts";
 import { describeCron } from "../core/cron.ts";
 import { desktopConnector, type DesktopPermission, type DesktopPermissions } from "../core/desktop.ts";
 import { WEB_SEARCH_CONNECTOR } from "../core/web-search.ts";
@@ -60,6 +57,7 @@ import { type BrowserState, MAX_TYPED, PRESS_KEYS, type PressKey } from "../core
 import { type PeopleStore, type Person, publicPerson, type SessionStore } from "./auth.ts";
 import { WebChannel, type WebEntry, type WebEvent, type WebThread } from "./channel.ts";
 import { boardRoutes } from "./board-routes.ts";
+import { capabilityRoutes } from "./capability-routes.ts";
 import { orgRoutes } from "./org-routes.ts";
 import { teamRoutes } from "./team-routes.ts";
 import { type AddRoute, type Handler, HttpError, type Route, readBody, readJson, STREAMED } from "./http.ts";
@@ -473,6 +471,7 @@ export function createWebApp(options: WebAppOptions): Server {
 
 	// --- the board (ADR 0050) ---
 	boardRoutes(route, { runtime, tenantId, people: options.people, board: options.board, segreterie: options.segreterie });
+	capabilityRoutes(route, { runtime, tenantId, knownInstance, voice: options.voice, speech: options.speech, images: options.images, search: options.search, computer: options.computer, desktop: options.desktop, google: options.google });
 
 	// --- the organigramma (ADR 0117): who does what, and who writes to whom ---
 	const saveOrg = orgRoutes(route, {
@@ -1146,32 +1145,8 @@ export function createWebApp(options: WebAppOptions): Server {
 			throw error;
 		}
 	});
-	route("PUT", "/api/instances/:id/web-actions-allowed", "owner", async ({ params, req }) => {
-		const id = params[0];
-		const record = await knownInstance(id);
-		const body = (await readJson(req)) as { allowed?: unknown };
-		if (typeof body.allowed !== "boolean") throw new HttpError(400, "allowed: true o false");
-		await runtime.registry.setEgress(tenantId, id, (egress) => withConnector(egress, WEB_ACTIONS_CONNECTOR, body.allowed === true));
-		await runtime.audit(tenantId).append({ type: "web_actions.allowed", instanceId: id, allowed: body.allowed });
-		return { allowed: body.allowed };
-	});
 
 	// --- owner: the instance's computer (ADR 0013) ---
-	route("GET", "/api/computer", "owner", async () => {
-		if (options.computer === undefined) return { available: false };
-		const problem = await options.computer.check();
-		return problem === undefined ? { available: true } : { available: true, problem };
-	});
-	route("PUT", "/api/instances/:id/computer-allowed", "owner", async ({ params, req }) => {
-		if (options.computer === undefined) throw new HttpError(501, "Il computer non è disponibile su questo server");
-		const id = params[0];
-		const record = await knownInstance(id);
-		const body = (await readJson(req)) as { allowed?: unknown };
-		if (typeof body.allowed !== "boolean") throw new HttpError(400, "allowed: true o false");
-		await runtime.registry.setEgress(tenantId, id, (egress) => withConnector(egress, COMPUTER_CONNECTOR, body.allowed === true));
-		await runtime.audit(tenantId).append({ type: "computer.allowed", instanceId: id, allowed: body.allowed });
-		return { allowed: body.allowed };
-	});
 	route("DELETE", "/api/instances/:id/computer", "owner", async ({ params }) => {
 		if (options.computer === undefined) throw new HttpError(501, "Il computer non è disponibile su questo server");
 		const id = params[0];
@@ -1182,19 +1157,6 @@ export function createWebApp(options: WebAppOptions): Server {
 	});
 
 	// --- owner: the agente's screen (ADR 0045) ---
-	// Kept for 30 seconds: Impostazioni asks at every visit, and the Docker check reads the image list.
-	let desktopCheck: { at: number; problem: Promise<string | undefined> } | undefined;
-	route("GET", "/api/desktop", "owner", async () => {
-		if (options.desktop === undefined) return { available: false };
-		const desktop = options.desktop;
-		if (desktop.kind === "local" && desktop.permissions !== undefined) {
-			const permissions = await desktop.permissions();
-			return { available: true, kind: "local", connector: desktopConnector(desktop), network: desktop.network, shared: desktop.shared, permissions, ...(permissions.problem === undefined ? {} : { problem: permissions.problem }) };
-		}
-		if (desktopCheck === undefined || Date.now() - desktopCheck.at > 30_000) desktopCheck = { at: Date.now(), problem: desktop.check() };
-		const problem = await desktopCheck.problem;
-		return { available: true, network: options.desktop.network, shared: options.desktop.shared, ...(problem === undefined ? {} : { problem }) };
-	});
 	route("POST", "/api/desktop/permissions", "owner", async ({ req }) => {
 		const desktop = options.desktop;
 		if (desktop?.kind !== "local" || desktop.requestPermission === undefined) throw new HttpError(501, "I permessi Computer Use si gestiscono nell'app Owni su questo Mac");
@@ -1203,23 +1165,6 @@ export function createWebApp(options: WebAppOptions): Server {
 		const permissions = await desktop.requestPermission(body.permission);
 		await runtime.audit(tenantId).append({ type: "desktop.permission.requested", permission: body.permission });
 		return { permissions };
-	});
-	route("PUT", "/api/instances/:id/desktop-allowed", "owner", async ({ params, req }) => {
-		if (options.desktop === undefined) throw new HttpError(501, "Lo schermo non è disponibile su questo server");
-		const id = params[0];
-		const record = await knownInstance(id);
-		const body = (await readJson(req)) as { allowed?: unknown };
-		if (typeof body.allowed !== "boolean") throw new HttpError(400, "allowed: true o false");
-		if (body.allowed && options.desktop.kind === "local") {
-			const permissions = await options.desktop.permissions?.();
-			if (permissions?.supported !== true || !permissions.screenRecording || !permissions.accessibility) throw new HttpError(409, "Concedi Registrazione schermo e Accessibilità a Owni prima di abilitare Computer Use");
-		}
-		const connector = desktopConnector(options.desktop);
-		await runtime.registry.setEgress(tenantId, id, (egress) => withConnector(egress, connector, body.allowed === true));
-		await runtime.audit(tenantId).append({ type: "desktop.allowed", instanceId: id, allowed: body.allowed });
-		// The screen's tools are offered only while it is on: the agente opens again with or without them.
-		await runtime.reopen(tenantId, id);
-		return { allowed: body.allowed };
 	});
 	route("DELETE", "/api/instances/:id/desktop", "owner", async ({ params }) => {
 		if (options.desktop === undefined) throw new HttpError(501, "Lo schermo non è disponibile su questo server");
@@ -1912,15 +1857,6 @@ export function createWebApp(options: WebAppOptions): Server {
 		await runtime.audit(tenantId).append({ type: "google.disconnected", personId: p.id });
 		return { ok: true };
 	});
-	route("PUT", "/api/instances/:id/google", "owner", async ({ params, req }) => {
-		const id = params[0];
-		const record = await knownInstance(id);
-		const body = (await readJson(req)) as { allowed?: unknown };
-		if (typeof body.allowed !== "boolean") throw new HttpError(400, "allowed: true o false");
-		await runtime.registry.setEgress(tenantId, id, (egress) => withConnector(egress, GOOGLE_CONNECTOR, body.allowed === true));
-		await runtime.audit(tenantId).append({ type: "google.allowed", instanceId: id, allowed: body.allowed });
-		return { allowed: body.allowed };
-	});
 
 	// --- writes to a person's Google account (ADR 0021): only that person sees and decides them ---
 	route("GET", "/api/instances/:id/google-actions", "person", async ({ person: p, params }) => {
@@ -1940,58 +1876,6 @@ export function createWebApp(options: WebAppOptions): Server {
 			if (error instanceof GoogleActionError) throw new HttpError(404, "Richiesta inesistente");
 			throw error;
 		}
-	});
-
-	// --- owner: voice messages transcribed for an instance (the audio leaves for the operator's service) ---
-	route("GET", "/api/voice", "owner", async () => (options.voice === undefined ? { available: false } : { available: true, host: options.voice.host }));
-	route("PUT", "/api/instances/:id/voice", "owner", async ({ params, req }) => {
-		if (options.voice === undefined) throw new HttpError(501, "La trascrizione dei vocali non è configurata su questo server");
-		const id = params[0];
-		const record = await knownInstance(id);
-		const body = (await readJson(req)) as { allowed?: unknown };
-		if (typeof body.allowed !== "boolean") throw new HttpError(400, "allowed: true o false");
-		await runtime.registry.setEgress(tenantId, id, (egress) => withConnector(egress, VOICE_CONNECTOR, body.allowed === true));
-		await runtime.audit(tenantId).append({ type: "voice.allowed", instanceId: id, allowed: body.allowed });
-		return { allowed: body.allowed };
-	});
-
-	// --- owner: replies as voice notes for an instance (their text goes to the operator's speech service) ---
-	route("GET", "/api/speech", "owner", async () => (options.speech === undefined ? { available: false } : { available: true, host: options.speech.host, voice: options.speech.voice }));
-	route("PUT", "/api/instances/:id/speech", "owner", async ({ params, req }) => {
-		if (options.speech === undefined) throw new HttpError(501, "Le risposte a voce non sono configurate su questo server");
-		const id = params[0];
-		const record = await knownInstance(id);
-		const body = (await readJson(req)) as { allowed?: unknown };
-		if (typeof body.allowed !== "boolean") throw new HttpError(400, "allowed: true o false");
-		await runtime.registry.setEgress(tenantId, id, (egress) => withConnector(egress, SPEECH_CONNECTOR, body.allowed === true));
-		await runtime.audit(tenantId).append({ type: "speech.allowed", instanceId: id, allowed: body.allowed });
-		return { allowed: body.allowed };
-	});
-
-	// --- owner: pictures on request for an instance (requests and pictures to change go to the operator's image service) ---
-	route("GET", "/api/images", "owner", async () => (options.images === undefined ? { available: false } : { available: true, host: options.images.host, maxPerDay: options.images.maxPerDay }));
-	route("PUT", "/api/instances/:id/images", "owner", async ({ params, req }) => {
-		if (options.images === undefined) throw new HttpError(501, "La generazione di immagini non è configurata su questo server");
-		const id = params[0];
-		const record = await knownInstance(id);
-		const body = (await readJson(req)) as { allowed?: unknown };
-		if (typeof body.allowed !== "boolean") throw new HttpError(400, "allowed: true o false");
-		await runtime.registry.setEgress(tenantId, id, (egress) => withConnector(egress, IMAGE_CONNECTOR, body.allowed === true));
-		await runtime.audit(tenantId).append({ type: "images.allowed", instanceId: id, allowed: body.allowed });
-		return { allowed: body.allowed };
-	});
-
-	// --- owner: web search for an instance (its queries go to the operator's search service) ---
-	route("GET", "/api/search", "owner", async () => (options.search === undefined ? { available: false } : { available: true, host: options.search.host }));
-	route("PUT", "/api/instances/:id/search", "owner", async ({ params, req }) => {
-		if (options.search === undefined) throw new HttpError(501, "La ricerca sul web non è configurata su questo server");
-		const id = params[0];
-		const record = await knownInstance(id);
-		const body = (await readJson(req)) as { allowed?: unknown };
-		if (typeof body.allowed !== "boolean") throw new HttpError(400, "allowed: true o false");
-		await runtime.registry.setEgress(tenantId, id, (egress) => withConnector(egress, WEB_SEARCH_CONNECTOR, body.allowed === true));
-		await runtime.audit(tenantId).append({ type: "web_search.allowed", instanceId: id, allowed: body.allowed });
-		return { allowed: body.allowed };
 	});
 
 	// --- owner: the sites an instance may read with its web tools ---

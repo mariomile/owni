@@ -245,8 +245,8 @@ describe("in an instance", () => {
 		const cookie = (login.headers.get("set-cookie") ?? "").split(";")[0] as string;
 		// biome-ignore lint: test
 		const api = async (path: string, body?: unknown): Promise<any> => (await fetch(`${base}${path}`, { method: body === undefined ? "GET" : "PUT", headers: { cookie, "x-owni": "1" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) })).json();
-		expect(await api("/api/speech")).toEqual({ available: true, host: "api.openai.com", voice: "nova" });
-		expect(await api("/api/instances/owni/voice", { allowed: true })).toEqual({ allowed: true });
+		expect((await api("/api/instances/owni/capabilities")).capabilities.find((c: any) => c.name === "speech")).toEqual({ name: "speech", available: true, enabled: false, host: "api.openai.com", voice: "nova" });
+		expect(await api("/api/instances/owni/capabilities/voice", { enabled: true })).toEqual({ enabled: true });
 		let id = 0;
 		const voiceNote = () => updates.push([{ update_id: ++id, message: { message_id: id, chat: { id: 7, type: "private" }, from: { id: 7 }, voice: { file_id: `v${id}`, duration: 3, mime_type: "audio/ogg" } } }]);
 		const written = (text: string) => updates.push([{ update_id: ++id, message: { message_id: id, chat: { id: 7, type: "private" }, from: { id: 7 }, text } }]);
@@ -258,7 +258,7 @@ describe("in an instance", () => {
 		voiceNote();
 		expect((await replies(1)).map((s) => s.method)).toEqual(["sendMessage"]);
 		expect(speech.asked).toHaveLength(0);
-		expect(await api("/api/instances/owni/speech", { allowed: true })).toEqual({ allowed: true });
+		expect(await api("/api/instances/owni/capabilities/speech", { enabled: true })).toEqual({ enabled: true });
 		voiceNote();
 		const spoken = await replies(1);
 		expect(spoken).toEqual([{ method: "sendVoice", caption: expect.stringContaining("che ore sono") }]);

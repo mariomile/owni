@@ -75,7 +75,7 @@ describe("attachments in the app, through the approval card", () => {
 		};
 		const { url } = await api("/api/google/start", {});
 		await api("/api/google/finish", { state: new URL(url).searchParams.get("state"), code: "good" });
-		await api(`/api/instances/${config.instanceId}/google`, { allowed: true }, "PUT");
+		await api(`/api/instances/${config.instanceId}/capabilities/google`, { enabled: true }, "PUT");
 		const workspace = workspaceDir(dataDir, tenantId(config.tenantId), instanceId(config.instanceId));
 		mkdirSync(join(workspace, "offerte"), { recursive: true });
 		const file = Buffer.from("%PDF-1.7\nofferta riservata Rossi\n");

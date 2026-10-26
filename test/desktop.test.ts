@@ -602,7 +602,7 @@ describe("the desktop in an agente", () => {
 		const screen = `/api/instances/owni/threads/${thread.id}/screen`;
 		// Without the screen the console stops asking.
 		expect(await api(screen)).toEqual({ status: 200, on: false, screen: null });
-		await api("/api/instances/owni/desktop-allowed", { allowed: true }, "PUT");
+		await api("/api/instances/owni/capabilities/desktop", { enabled: true }, "PUT");
 		expect(await api(screen)).toEqual({ status: 200, on: true, screen: null });
 		expect((await fetch(`${base}${screen}.png`, { headers: { cookie, "x-owni": "1" } })).status).toBe(404);
 		await api(`/api/instances/owni/threads/${thread.id}/messages`, { text: "/tool desktop_click {\"x\":10,\"y\":20}" });
@@ -633,11 +633,11 @@ describe("the desktop in an agente", () => {
 	it("the owner turns the screen on from the console; Owni looks at it from the chat and sees the picture", async () => {
 		const fake = fakeDesktop();
 		const { api } = await owni(fake.desktop);
-		expect(await api("/api/desktop")).toEqual({ status: 200, available: true, network: "none", shared: false });
+		expect((await api("/api/instances/owni/capabilities")).capabilities.find((c: any) => c.name === "desktop")).toEqual({ name: "desktop", available: true, enabled: false, network: "none", shared: false });
 		// The check is kept for a while: opening Impostazioni again does not ask Docker again.
-		await api("/api/desktop");
+		await api("/api/instances/owni/capabilities");
 		expect(fake.checks()).toBe(1);
-		expect((await api("/api/desktop", undefined, "GET", "")).status).toBe(401);
+		expect((await api("/api/instances/owni/capabilities", undefined, "GET", "")).status).toBe(401);
 		const thread = (await api("/api/instances/owni/dm", {})).thread;
 		const reply = async (text: string) => {
 			const answers = async () => ((await api(`/api/instances/owni/threads/${thread.id}`)).entries as { from: string; text?: string }[]).filter((e) => e.from === "owni");
@@ -653,7 +653,7 @@ describe("the desktop in an agente", () => {
 		// Not offered at all until the owner turns it on: the model never sees tools it cannot use.
 		expect(await reply("/tool desktop_look {}")).not.toContain("[1 immagine]");
 		expect(fake.calls).toEqual([]);
-		expect((await api("/api/instances/owni/desktop-allowed", { allowed: true }, "PUT")).allowed).toBe(true);
+		expect((await api("/api/instances/owni/capabilities/desktop", { enabled: true }, "PUT")).enabled).toBe(true);
 		expect(await reply("/tool desktop_look {}")).toContain("[1 immagine]");
 		expect(fake.calls.at(-1)?.tool).toBe("get_desktop_state");
 		expect((await api("/api/instances/owni/desktop", undefined, "DELETE")).status).toBe(200);
@@ -663,7 +663,7 @@ describe("the desktop in an agente", () => {
 
 	it("without a desktop the console says it is not available", async () => {
 		const { api } = await owni();
-		expect(await api("/api/desktop")).toEqual({ status: 200, available: false });
-		expect((await api("/api/instances/owni/desktop-allowed", { allowed: true }, "PUT")).status).toBe(501);
+		expect((await api("/api/instances/owni/capabilities")).capabilities.find((c: any) => c.name === "desktop")).toEqual({ name: "desktop", available: false, enabled: false });
+		expect((await api("/api/instances/owni/capabilities/desktop", { enabled: true }, "PUT")).status).toBe(501);
 	});
 });
