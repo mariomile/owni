@@ -22,8 +22,9 @@ export type ApprovalRoutesDeps = Pick<WebAppOptions, "segreterie" | "sendWebActi
 /**
  * What waits for a person's decision (ADR 0011, 0021, 0025): tools proposti, forms to send,
  * connector calls, writes to Google, the segreteria's pratiche; and the inbox that gathers them.
+ * Returns whether an agente waits for a person, for the agente's status (ADR 0125).
  */
-export function approvalRoutes(route: AddRoute, options: ApprovalRoutesDeps): void {
+export function approvalRoutes(route: AddRoute, options: ApprovalRoutesDeps): (person: Person, agent: InstanceRecord) => Promise<boolean> {
 	const { runtime, tenantId, instanceAccess, approverOf, usageSummary } = options;
 	const mayDecideAll = async (p: Person, instanceId: string) => isApprover(runtime, tenantId, instanceId, approverOf(p));
 	/**
@@ -119,27 +120,30 @@ export function approvalRoutes(route: AddRoute, options: ApprovalRoutesDeps): vo
 
 	// The inbox and rail share the same eligible objects across every visible instance. Counts
 	// skip the public payload projections; no source failure is turned into an empty queue.
+	const pendingOf = async (p: Person, r: InstanceRecord, now: Date) => {
+		const approver = await mayDecideAll(p, r.id);
+		const [allWeb, allConnectors, allGoogle, proposals, practices] = await Promise.all([
+			runtime.webActions(tenantId, r.id).list(now),
+			runtime.connectorActions(tenantId, r.id).list(now),
+			runtime.googleActions(tenantId, r.id).list(now),
+			approver ? runtime.proposals(tenantId, r.id).list() : [],
+			approver ? (options.segreterie?.get(r.id)?.practices.list() ?? []) : [],
+		]);
+		const webActions = approver ? allWeb : allWeb.filter((a) => a.requester === `web:${p.id}`);
+		const connectorActions = approver ? allConnectors : allConnectors.filter((a) => a.requester === `web:${p.id}`);
+		const googleActions = allGoogle.filter((a) => a.personId === p.id);
+		let pending = practices.filter((a) => a.status === "draft_ready").length;
+		for (const items of [proposals, webActions, connectorActions, googleActions]) pending += items.filter((a) => a.status === "pending").length;
+		return { approver, proposals, webActions, connectorActions, googleActions, practices, pending };
+	};
 	const collectApprovals = async (p: Person, includeGroups: boolean) => {
 		const visible = (await runtime.registry.listInstances(tenantId)).filter((r) => p.role === "owner" || (r.allowedUsers.web ?? []).includes(p.id));
 		const groups = [];
 		let pendingApprovals = 0;
 		const now = new Date();
 		for (const r of visible) {
-			const approver = await mayDecideAll(p, r.id);
-			const [allWeb, allConnectors, allGoogle, proposals, practices] = await Promise.all([
-				runtime.webActions(tenantId, r.id).list(now),
-				runtime.connectorActions(tenantId, r.id).list(now),
-				runtime.googleActions(tenantId, r.id).list(now),
-				approver ? runtime.proposals(tenantId, r.id).list() : [],
-				approver ? (options.segreterie?.get(r.id)?.practices.list() ?? []) : [],
-			]);
-			const webActions = approver ? allWeb : allWeb.filter((a) => a.requester === `web:${p.id}`);
-			const connectorActions = approver ? allConnectors : allConnectors.filter((a) => a.requester === `web:${p.id}`);
-			const googleActions = allGoogle.filter((a) => a.personId === p.id);
-			for (const items of [proposals, webActions, connectorActions, googleActions]) {
-				pendingApprovals += items.filter((a) => a.status === "pending").length;
-			}
-			pendingApprovals += practices.filter((a) => a.status === "draft_ready").length;
+			const { approver, proposals, webActions, connectorActions, googleActions, practices, pending } = await pendingOf(p, r, now);
+			pendingApprovals += pending;
 			if (includeGroups) groups.push({
 				instance: { id: r.id, name: r.name, isApprover: approver },
 				proposals,
@@ -151,17 +155,21 @@ export function approvalRoutes(route: AddRoute, options: ApprovalRoutesDeps): vo
 		}
 		return { groups, pendingApprovals };
 	};
+	/** An incarico «Da rivedere» this person reviews: who started it, else the owner. */
+	const reviews = async (p: Person, agent?: string) => {
+		let n = 0;
+		for (const card of options.board?.store.list() ?? []) {
+			if (card.status !== "da_rivedere" || (agent !== undefined && card.assignee !== agent)) continue;
+			const mine = card.work !== undefined && card.work.agent === card.assignee ? card.work.personId === p.id : p.role === "owner";
+			if (mine && (await options.board?.work.visibleTo(card, p.id))) n++;
+		}
+		return n;
+	};
 	route("GET", "/api/approvals", "person", async ({ person }) => collectApprovals(person, true));
 	route("GET", "/api/console-summary", "person", async ({ person: p }) => {
 		const { pendingApprovals } = await collectApprovals(p, false);
-		let boardReview = 0;
-		if (options.board !== undefined) {
-			for (const card of options.board.store.list()) {
-				if (card.status !== "da_rivedere") continue;
-				const mine = card.work !== undefined && card.work.agent === card.assignee ? card.work.personId === p.id : p.role === "owner";
-				if (mine && await options.board.work.visibleTo(card, p.id)) boardReview++;
-			}
-		}
-		return { usage: await usageSummary(), pendingApprovals, boardReview };
+		return { usage: await usageSummary(), pendingApprovals, boardReview: await reviews(p) };
 	});
+	// The agente waits for this person (ADR 0125): a decision of theirs, or a result to review.
+	return async (p: Person, r: InstanceRecord) => (await pendingOf(p, r, new Date())).pending > 0 || (await reviews(p, r.id)) > 0;
 }

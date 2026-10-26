@@ -75,6 +75,12 @@ describe("ready-made squadre", () => {
 		const list = await api("/api/teams");
 		expect(list.available).toBe(true);
 		expect(list.teams.map((t: { key: string }) => t.key)).toEqual(["contenuti", "vendite", "amministrazione"]);
+		// First what it changes in who writes to whom, by name, and nothing is made yet (ADR 0125).
+		const preview = await api("/api/teams/preview", { team: "contenuti" });
+		expect(preview.changes).toContainEqual({ from: "Ricercatore", to: "Caporedattore", allowed: true });
+		expect(preview.changes).toContainEqual({ from: "Caporedattore", to: "Scrittore", allowed: true });
+		expect((await api("/api/agents")).agents.map((a: { id: string }) => a.id)).toEqual(["owni"]);
+		expect((await api("/api/teams/preview", { team: "nessuna" })).status).toBe(400);
 		const made = await api("/api/teams", { team: "contenuti" });
 		expect(made.status).toBe(200);
 		expect(made.agents).toEqual([
@@ -82,14 +88,14 @@ describe("ready-made squadre", () => {
 			{ id: "ricercatore", name: "Ricercatore" },
 			{ id: "scrittore", name: "Scrittore" },
 		]);
-		const agents = (await api("/api/agents")).agents as { id: string; acceptsFrom: string[]; emoji?: string }[];
+		const agents = (await api("/api/agents")).agents as { id: string; acceptsFrom: string[] }[];
 		const of = (id: string) => agents.find((a) => a.id === id);
 		expect(of("caporedattore")?.acceptsFrom.sort()).toEqual(["ricercatore", "scrittore"]);
 		expect(of("scrittore")?.acceptsFrom.sort()).toEqual(["caporedattore", "ricercatore"]);
 		// Nobody outside the squadra: the main agente does not ask them, nor they it.
 		expect(of("owni")?.acceptsFrom).toEqual([]);
 		const settings = (await api("/api/instances/caporedattore/settings")).settings;
-		expect(settings.persona).toMatchObject({ emoji: "🗂️", named: true });
+		expect(settings.persona).toEqual({ tagline: "Pianifica i contenuti e rivede i testi", named: true });
 		// Only its job, after the default instructions like the form's: the squadra is in the organigramma.
 		expect(settings.instructions.indexOf("Pianifica post, articoli e newsletter")).toBeGreaterThan(100);
 		expect(settings.instructions).not.toContain("squadra");
@@ -109,6 +115,7 @@ describe("ready-made squadre", () => {
 		const anna = await login(link);
 		expect((await anna("/api/teams", { team: "vendite" })).status).toBe(403);
 		expect((await anna("/api/teams")).status).toBe(403);
+		expect((await anna("/api/teams/preview", { team: "vendite" })).status).toBe(403);
 	}, 30_000);
 });
 
@@ -130,6 +137,7 @@ describe("the squadre's routes, alone", () => {
 				made.push(input.id);
 			},
 			place: async (_p, change) => change({ teams: [], agents: {} }),
+			preview: async () => [],
 			room: async () => "r1",
 			audit: async (e) => void audit.push(e),
 			log: (m) => void logs.push(m),

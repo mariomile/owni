@@ -22,12 +22,21 @@ export type OrgRoutesDeps = {
 /** Change the organigramma and apply who may write to whom; the HttpError says what is wrong. */
 export type SaveOrg = (person: Person, change: (current: Org) => Org) => Promise<Org>;
 
+/** One permission a save would change: from now on `from` may write to `to`, or no longer. */
+export type OrgChange = { readonly from: string; readonly to: string; readonly allowed: boolean };
+
+/**
+ * What saving `change` would do to who may write to whom, by name, for the owner to confirm
+ * first. `extra` are agenti not made yet (a squadra pronta), that hear from nobody now.
+ */
+export type PreviewOrg = (change: (current: Org) => Org, extra?: readonly OrgAgent[]) => Promise<OrgChange[]>;
+
 /**
  * The organigramma (ADR 0117), for the owner: read it with who may write to whom now, and save it
- * whole. Saving rewrites every agente's permission to hear from the others. Returns the save,
- * for the ready-made squadre.
+ * whole. Saving rewrites every agente's permission to hear from the others. Returns the save and
+ * its preview, for the ready-made squadre.
  */
-export function orgRoutes(route: AddRoute, deps: OrgRoutesDeps): SaveOrg {
+export function orgRoutes(route: AddRoute, deps: OrgRoutesDeps): { save: SaveOrg; preview: PreviewOrg } {
 	const view = async () => {
 		const agents = await deps.agents();
 		const org = onlyKnown(deps.store.read(), new Map(agents.map((a) => [a.id, a.name])));
@@ -69,12 +78,36 @@ export function orgRoutes(route: AddRoute, deps: OrgRoutesDeps): SaveOrg {
 		if (missed.length > 0) throw new HttpError(500, `Organigramma salvato, ma chi può scrivere a ${missed.join(", ")} non è cambiato: salva di nuovo`);
 		return org;
 	};
+	const preview: PreviewOrg = async (change, extra = []) => {
+		const agents = [...(await deps.agents()), ...extra];
+		const names = new Map(agents.map((a) => [a.id, a.name]));
+		let next: Org;
+		try {
+			next = checkOrg(change(onlyKnown(deps.store.read(), names)), names);
+		} catch (error) {
+			if (error instanceof OrgError) throw new HttpError(400, error.message);
+			throw error;
+		}
+		const links = orgLinks(next, agents.map((a) => a.id));
+		const changes: OrgChange[] = [];
+		for (const a of agents) {
+			const before = new Set(a.accepts);
+			const after = new Set(links.get(a.id) ?? []);
+			for (const id of after) if (!before.has(id)) changes.push({ from: names.get(id) ?? id, to: a.name, allowed: true });
+			for (const id of before) if (!after.has(id) && names.has(id)) changes.push({ from: names.get(id) ?? id, to: a.name, allowed: false });
+		}
+		return changes;
+	};
 	const save: SaveOrg = (person, change) => {
 		const run = queue.then(() => saveNow(person, change));
 		queue = run.catch(() => {});
 		return run;
 	};
 	route("GET", "/api/org", "owner", view);
+	route("POST", "/api/org/preview", "owner", async ({ req }) => {
+		const body = (await readJson(req)) as { org?: unknown };
+		return { changes: await preview(() => body.org as Org) };
+	});
 	route("PUT", "/api/org", "owner", async ({ person, req }) => {
 		const body = (await readJson(req)) as { org?: unknown; version?: unknown };
 		await save(person, (current) => {
@@ -84,5 +117,5 @@ export function orgRoutes(route: AddRoute, deps: OrgRoutesDeps): SaveOrg {
 		});
 		return view();
 	});
-	return save;
+	return { save, preview };
 }

@@ -1,14 +1,11 @@
 /**
- * The personality of an agente (ADR 0041): the face it shows in the console and the voice
- * it answers with. Instructions say what it does; the persona says who it is.
+ * The personality of an agente (ADR 0041): what it is for and the voice it answers with. Instructions say what it does; the persona says who it is.
  */
 
 export const TONES = ["naturale", "formale", "amichevole", "conciso", "scherzoso"] as const;
 export type Tone = (typeof TONES)[number];
 
 export type Persona = {
-	/** One emoji, its face in the console. */
-	readonly emoji?: string;
 	/** What it is for, in one line: «Cerca e confronta fornitori». */
 	readonly tagline?: string;
 	/** How it talks. "naturale" adds nothing to the instructions. */
@@ -22,9 +19,6 @@ export type Persona = {
 };
 
 export const TAGLINE_MAX = 120;
-/** An emoji with skin tone and joiners stays short; anything longer is not one emoji. */
-const EMOJI_MAX = 16;
-const graphemes = new Intl.Segmenter("it", { granularity: "grapheme" });
 
 export class PersonaError extends Error {}
 
@@ -39,17 +33,9 @@ const TONE_LINES: Record<Exclude<Tone, "naturale">, string> = {
 export function checkPersona(input: unknown): Persona {
 	if (input === undefined || input === null) return {};
 	if (typeof input !== "object") throw new PersonaError("Personalità non valida");
-	const { emoji, tagline, tone } = input as Record<string, unknown>;
-	const out: { emoji?: string; tagline?: string; tone?: Tone } = {};
-	if (emoji !== undefined && emoji !== null && emoji !== "") {
-		if (typeof emoji !== "string") throw new PersonaError("Emoji non valida");
-		const e = emoji.trim();
-		// One grapheme with a pictograph, a flag or a keycap in it; no letters, and no invisible format characters but the emoji joiners.
-		const one = [...graphemes.segment(e)].length === 1;
-		const picture = /[\p{Extended_Pictographic}\p{Regional_Indicator}\u20E3]/u.test(e);
-		if (e.length > EMOJI_MAX || !one || !picture || /\p{L}|\s/u.test(e) || /\p{Cf}/u.test(e.replace(/\u200D/g, ""))) throw new PersonaError("Scegli una sola emoji");
-		out.emoji = e;
-	}
+	// An emoji from before ADR 0125 is left out like any field we do not know.
+	const { tagline, tone } = input as Record<string, unknown>;
+	const out: { tagline?: string; tone?: Tone } = {};
 	if (tagline !== undefined && tagline !== null) {
 		if (typeof tagline !== "string") throw new PersonaError("Descrizione non valida");
 		const t = tagline.replace(/\s+/g, " ").trim();

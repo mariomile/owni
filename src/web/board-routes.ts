@@ -1,6 +1,8 @@
 import { BOARD_LIMITS, BoardError, type BoardStore, CARD_PRIORITIES, CARD_STATUSES, type CardChange, type CardPriority, type CardStatus, type CheckChange } from "../core/board.ts";
 import { describeWhen, nextTime, type Routine, routineWhen, type RoutineStore } from "../core/board-routines.ts";
 import type { BoardWork } from "../core/board-work.ts";
+import type { AgentStatus } from "../core/agent-activity.ts";
+import type { InstanceRecord } from "../core/registry.ts";
 import type { OwniRuntime } from "../core/runtime.ts";
 import type { Person, PeopleStore } from "./auth.ts";
 import { type AddRoute, HttpError, readJson } from "./http.ts";
@@ -12,15 +14,17 @@ export type BoardRoutesDeps = {
 	readonly board: { readonly store: BoardStore; readonly work: BoardWork; readonly routines?: RoutineStore } | undefined;
 	/** Segreterie take no schede. */
 	readonly segreterie: ReadonlyMap<string, unknown> | undefined;
+	/** The agente's status for this person (ADR 0125), shown next to the assignee. */
+	readonly agentNow: (agent: InstanceRecord, person: Person) => Promise<{ readonly status: AgentStatus; readonly statusText: string }>;
 };
 
 /**
  * The board in the console (ADR 0050). The owner sees every scheda; a member those they created
  * or work on, and those of the agenti they can talk to.
  */
-export function boardRoutes(route: AddRoute, { runtime, tenantId, people, board, segreterie }: BoardRoutesDeps): void {
+export function boardRoutes(route: AddRoute, { runtime, tenantId, people, board, segreterie, agentNow }: BoardRoutesDeps): void {
 	const boardOf = () => {
-		if (board === undefined) throw new HttpError(501, "La board non è disponibile su questo server");
+		if (board === undefined) throw new HttpError(501, "Gli incarichi non sono disponibili su questo server");
 		return board;
 	};
 	const boardAgents = async () => (await runtime.registry.listInstances(tenantId)).filter((r) => !(segreterie?.has(r.id) ?? false));
@@ -28,7 +32,7 @@ export function boardRoutes(route: AddRoute, { runtime, tenantId, people, board,
 	const visibleCard = async (ref: string, p: Person) => {
 		const { store, work } = boardOf();
 		const card = store.get(ref);
-		if (card === undefined || !(await work.visibleTo(card, p.id))) throw new HttpError(404, "Scheda inesistente");
+		if (card === undefined || !(await work.visibleTo(card, p.id))) throw new HttpError(404, "Incarico inesistente");
 		return card;
 	};
 	const boardError = (error: unknown): never => {
@@ -51,21 +55,21 @@ export function boardRoutes(route: AddRoute, { runtime, tenantId, people, board,
 			else if (typeof c === "object" && c !== null && typeof c.item === "string" && typeof c.done === "boolean") check = { item: c.item, done: c.done };
 			else throw new HttpError(400, "check: { add } oppure { item, done } oppure { item, remove: true }");
 		}
-		if (body.after !== undefined && body.after !== null && !(Array.isArray(body.after) && body.after.every((x) => typeof x === "string"))) throw new HttpError(400, "after: i numeri delle schede, come «12»");
+		if (body.after !== undefined && body.after !== null && !(Array.isArray(body.after) && body.after.every((x) => typeof x === "string"))) throw new HttpError(400, "after: i numeri degli incarichi, come «12»");
 		const after = body.after === undefined ? undefined : body.after === null ? [] : (body.after as string[]).filter((x) => x.trim() !== "");
 		return { priority, status, assignee, due, check, after };
 	};
 	/** What a scheda comes after (ADR 0076): only schede this person sees. */
-	const afterOf = async (refs: readonly string[] | undefined, p: Person) => (refs === undefined ? undefined : Promise.all(refs.map(async (ref) => (await visibleCard(ref, p).catch(() => boardError(new BoardError(`La scheda ${ref} non c'è`)))).id)));
+	const afterOf = async (refs: readonly string[] | undefined, p: Person) => (refs === undefined ? undefined : Promise.all(refs.map(async (ref) => (await visibleCard(ref, p).catch(() => boardError(new BoardError(`L'incarico ${ref} non c'è`)))).id)));
 	/** A scheda that comes back (ADR 0069) is the business of who set it and of the owner. */
 	const routinesOf = () => {
 		const routines = boardOf().routines;
-		if (routines === undefined) throw new HttpError(501, "Le schede che si ripetono non sono disponibili su questo server");
+		if (routines === undefined) throw new HttpError(501, "Gli incarichi che si ripetono non sono disponibili su questo server");
 		return routines;
 	};
 	const ownRoutine = (id: string, p: Person): Routine => {
 		const r = routinesOf().get(id);
-		if (r === undefined || (p.role !== "owner" && r.personId !== p.id)) throw new HttpError(404, "Questa scheda non si ripete più");
+		if (r === undefined || (p.role !== "owner" && r.personId !== p.id)) throw new HttpError(404, "Questo incarico non si ripete più");
 		return r;
 	};
 	const routineView = (r: Routine) => ({ ...r, whenText: describeWhen(r.when) });
@@ -81,7 +85,7 @@ export function boardRoutes(route: AddRoute, { runtime, tenantId, people, board,
 		return {
 			cards,
 			routines: shown.map(routineView),
-			agents: agents.map((r) => ({ id: r.id, name: r.name, ...(r.persona?.emoji === undefined ? {} : { emoji: r.persona.emoji }), canAssign: r.egress.channels.includes("web") && (r.allowedUsers.web ?? []).includes(p.id) })),
+			agents: await Promise.all(agents.map(async (r) => ({ id: r.id, name: r.name, ...(await agentNow(r, p)), canAssign: r.egress.channels.includes("web") && (r.allowedUsers.web ?? []).includes(p.id) }))),
 			people: Object.fromEntries([...involved].map((id) => [id, names.get(id) ?? "una persona"])),
 			auto: { replies: BOARD_LIMITS.autoRounds, hours: BOARD_LIMITS.autoMs / 3_600_000 },
 		};
@@ -93,9 +97,9 @@ export function boardRoutes(route: AddRoute, { runtime, tenantId, people, board,
 		const after = await afterOf(afterRefs, p);
 		// «Si ripete»: no scheda now, one at each time, worked with this person.
 		if (body.repeat !== undefined && body.repeat !== null) {
-			if (!assignee) throw new HttpError(400, "Una scheda che si ripete va affidata a un agente");
-			if (after !== undefined && after.length > 0) throw new HttpError(400, "Una scheda che si ripete non aspetta altre schede");
-			if (due) throw new HttpError(400, "Una scheda che si ripete non ha una scadenza");
+			if (!assignee) throw new HttpError(400, "Un incarico che si ripete va affidato a un agente");
+			if (after !== undefined && after.length > 0) throw new HttpError(400, "Un incarico che si ripete non aspetta altri incarichi");
+			if (due) throw new HttpError(400, "Un incarico che si ripete non ha una scadenza");
 			const routines = routinesOf();
 			let routine: Routine;
 			try {

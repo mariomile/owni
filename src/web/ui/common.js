@@ -237,8 +237,9 @@ function holdToasts(open) {
 $toasts?.addEventListener("pointerenter", () => holdToasts(true));
 $toasts?.addEventListener("pointerleave", () => holdToasts(false));
 
-export function toast(text, bad = false) {
-	const t = h(`div.toast${bad ? ".bad" : ""}`, bad ? { role: "alert" } : {}, icon(bad ? "alert" : "check"), h("span", text));
+/** A short note at the bottom; `action` ({ label, href }) is a link to go on from it. */
+export function toast(text, bad = false, action) {
+	const t = h(`div.toast${bad ? ".bad" : ""}`, bad ? { role: "alert" } : {}, icon(bad ? "alert" : "check"), h("span", text), action ? h("a.toast-action", { href: action.href, onclick: () => t.close() }, action.label) : null);
 	// An error is usually longer and says what to do: it stays longer.
 	let left = bad ? 9000 : 4200;
 	let started = 0;
@@ -270,6 +271,7 @@ export function toast(text, bad = false) {
 		t.style.setProperty("--dy", `${dy}px`);
 	};
 	t.addEventListener("pointerdown", (e) => {
+		if (e.target.closest?.("a")) return;
 		from = { x: e.clientX, y: e.clientY };
 		t.setPointerCapture(e.pointerId);
 		t.classList.add("dragging");
@@ -537,8 +539,13 @@ export function confirmDialog(title, text, okLabel, onOk) {
 }
 
 
-/** «🔎 Ricercatore», or the name alone. */
-export function agentLabel(agent) {
-	return agent.emoji ? `${agent.emoji} ${agent.name}` : agent.name;
+/**
+ * The agente's status (ADR 0125) as the server computed it, with what it is on: the same chip on
+ * the Agenti page, the organigramma, the board and its panel.
+ */
+export function agentStatus(agent) {
+	if (!agent?.statusText) return null;
+	const tone = { al_lavoro: ".ok", aspetta_te: ".warn" }[agent.status] ?? "";
+	return h("span.agent-status", h(`span.chip${tone}`, agent.statusText), agent.doing ? h("span.agent-doing", agent.doing) : null);
 }
 

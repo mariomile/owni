@@ -1,5 +1,7 @@
 # Volti degli agenti
 
+> Aggiornata dall'[ADR 0125](0125-stato-unico-degli-agenti-e-console-piu-chiara.md): l'emoji non c'è più, nemmeno accanto al nome. Il volto è l'unico segno di un agente.
+
 Con più agenti, la console li distingueva solo per nome ed emoji: un selettore in cima alla barra, una lettera o un'emoji in un quadrato nella pagina Agenti, tre puntini mentre uno risponde. Mario vuole un design che faccia «wow», ispirato a Grok e Grok Bot. xAI racconta che in Grok Bot gli oggetti principali sono gli agenti, non le chat, e che ognuno ha un avatar riconoscibile «quasi con la coda dell'occhio»: forme semplici, occhi espressivi, una famiglia sola con piccole varianti, e l'avatar stesso che si muove per dire che sta lavorando, al posto dei tre puntini ([Designing Grok Bot](https://x.ai/news/designing-grok-bot)).
 
 ## Decisione

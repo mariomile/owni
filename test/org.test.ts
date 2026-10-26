@@ -169,8 +169,19 @@ describe("the organigramma's routes", () => {
 
 		const { version } = first;
 		expect((await api("/api/org", { org: { teams: [{ id: "x", name: "X", lead: "conti" }], agents: {} }, version }, "PUT")).status).toBe(400);
+		// Before saving, the owner sees what changes (ADR 0125): by name, nothing applied yet.
+		const preview = await api("/api/org/preview", { org: COMPANY });
+		expect(preview.status).toBe(200);
+		expect(preview.changes).toContainEqual({ from: "Owni", to: "Responsabile vendite", allowed: true });
+		expect(preview.changes).toContainEqual({ from: "Preventivi", to: "Responsabile vendite", allowed: true });
+		// The permission set by hand goes: the organigramma does not link them.
+		expect(preview.changes).toContainEqual({ from: "Assistente d'ufficio", to: "Contabile", allowed: false });
+		expect((await api("/api/org")).accepts.conti).toEqual(["ufficio"]);
+		expect((await api("/api/org/preview", { org: { teams: [{ id: "x", name: "X", lead: "conti" }], agents: {} } })).status).toBe(400);
 		const saved = await api("/api/org", { org: COMPANY, version }, "PUT");
 		expect(saved.status).toBe(200);
+		// Taking it apart again would take those permissions away.
+		expect((await api("/api/org/preview", { org: EMPTY_ORG })).changes).toContainEqual({ from: "Owni", to: "Responsabile vendite", allowed: false });
 		expect(saved.saved).toBe(true);
 		expect(saved.accepts).toEqual(Object.fromEntries(orgLinks(COMPANY, [...NAMES.keys()])));
 		expect((await owni.runtime.registry.getInstance("default", "owni")).egress.channels).toContain("agente");

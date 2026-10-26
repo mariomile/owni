@@ -1,5 +1,5 @@
 // Segreteria page.
-import { agentLabel, api, confirmDialog, emptyNote, fmt, go, h, head, mount, needInstance, route, state, toast } from "../common.js";
+import { api, confirmDialog, emptyNote, fmt, go, h, head, mount, needInstance, route, state, toast } from "../common.js";
 import { render } from "../shell.js";
 
 // ---------- segreteria ----------
@@ -52,7 +52,7 @@ export async function viewSegreteria(main) {
 	}
 	const detail = h("div");
 	mount(main, 
-		head(agentLabel(inst), h("h1", "Segreteria commerciale"), `${open} ${open === 1 ? "pratica aspetta" : "pratiche aspettano"} la tua decisione. Nessuna mail parte senza Approva.`),
+		head(inst.name, h("h1", "Segreteria commerciale"), `${open} ${open === 1 ? "pratica aspetta" : "pratiche aspettano"} la tua decisione. Nessuna mail parte senza Approva.`),
 		pratiche.length ? h("div.pratiche", list, detail) : emptyNote("div.card.empty", "Ancora nessuna richiesta", "Le richieste di preventivo arrivate per email compariranno qui e su Telegram."),
 	);
 	const p = pratiche.find((x) => x.praticaId === selected) ?? pratiche[0];

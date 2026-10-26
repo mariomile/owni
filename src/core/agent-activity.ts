@@ -1,8 +1,26 @@
 import type { Card } from "./board.ts";
 import type { RunRecord } from "./run-store.ts";
 
-/** What an agente is doing now (ADR 0109). `doing` is one short line, or empty. */
-export type Activity = { readonly busy: boolean; readonly busyFor?: number; readonly doing: string };
+/**
+ * What an agente is doing now (ADR 0109). `doing` is one short line, or empty. `busy`: a run is
+ * queued or running; `running`: one is running now; `open`: an incarico «In corso» is assigned to it.
+ */
+export type Activity = { readonly busy: boolean; readonly busyFor?: number; readonly running: boolean; readonly open: boolean; readonly doing: string };
+
+/** The one status of an agente, the same on every page that shows it (ADR 0125). */
+export const AGENT_STATUS = { al_lavoro: "Al lavoro", aspetta_te: "Aspetta te", in_coda: "In coda", libero: "Libero" } as const;
+export type AgentStatus = keyof typeof AGENT_STATUS;
+
+/**
+ * Running now wins; then what waits for the person (`waiting`: a decision or a review of theirs);
+ * then work handed to it and not running (a queued run, an incarico «In corso»); else free.
+ */
+export function agentStatus(activity: Activity, waiting: boolean): AgentStatus {
+	if (activity.running) return "al_lavoro";
+	if (waiting) return "aspetta_te";
+	if (activity.busy || activity.open) return "in_coda";
+	return "libero";
+}
 
 /** Who asks: a console person, or an agente working (for a person, when its conversation is with one). */
 export type Viewer = { readonly person?: string; readonly agent?: string };
@@ -59,7 +77,7 @@ export function activityReader(deps: ActivityDeps): (agent: string, viewer: View
 				}
 			}
 		}
-		return { busy, ...(busy && since !== undefined ? { busyFor: Math.max(0, Math.round((now.getTime() - since) / 1000)) } : {}), doing };
+		return { busy, ...(busy && since !== undefined ? { busyFor: Math.max(0, Math.round((now.getTime() - since) / 1000)) } : {}), running: runs.some((r) => r.status === "running"), open: open.length > 0, doing };
 	};
 }
 
@@ -77,7 +95,7 @@ export function runtimeActivity(options: {
 		thread: async (agent, threadId) => options.channel(agent)?.thread(threadId),
 	});
 	// One agente deleted or with an unreadable runs.json must not break the list of the others.
-	return (agent, viewer) => read(agent, viewer).catch(() => ({ busy: false, doing: "" }));
+	return (agent, viewer) => read(agent, viewer).catch(() => ({ busy: false, running: false, open: false, doing: "" }));
 }
 
 /**

@@ -1,5 +1,5 @@
 // Automazioni page.
-import { agentLabel, api, confirmDialog, dmHref, emptyNote, fmt, h, head, icon, mount, needInstance, route, state, toast } from "../common.js";
+import { api, confirmDialog, dmHref, emptyNote, fmt, h, head, icon, mount, needInstance, route, state, toast } from "../common.js";
 import { copyBox } from "../listen.js";
 import { runHistory } from "../runs.js";
 
@@ -96,7 +96,7 @@ export async function viewAutomations(main) {
 	if (!main.isConnected || state.instance !== inst) return;
 	mount(
 		main,
-		head(agentLabel(inst), h("h1", "Eventi esterni"), `Indirizzi segreti che fanno lavorare ${inst.name} quando un altro servizio li chiama: un modulo compilato, un ordine dal sito, un pagamento su Stripe, uno Zap. Al più 30 chiamate l'ora per automazione. Ognuno vede le sue, l'owner tutte.`, h("button.btn.accent", { onclick: create }, icon("plus"), "Nuovo evento esterno")),
+		head(inst.name, h("h1", "Eventi esterni"), `Indirizzi segreti che fanno lavorare ${inst.name} quando un altro servizio li chiama: un modulo compilato, un ordine dal sito, un pagamento su Stripe, uno Zap. Al più 30 chiamate l'ora per automazione. Ognuno vede le sue, l'owner tutte.`, h("button.btn.accent", { onclick: create }, icon("plus"), "Nuovo evento esterno")),
 		h("div.stack", panel, listBox, runHistory([inst], { sources: ["automation"], names, title: "Esiti delle tue automazioni" })),
 	);
 	if (route().rest[0] === "nuovo") create();

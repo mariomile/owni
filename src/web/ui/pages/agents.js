@@ -1,5 +1,5 @@
 // Agenti page.
-import { agentHome, agentInfoHref, agentLabel, api, dmHref, emptyNote, face, faceColor, go, h, head, icon, instanceHref, mount, state, store, toast } from "../common.js";
+import { agentHome, agentStatus, api, dmHref, emptyNote, face, faceColor, h, head, icon, instanceHref, mount, state, store, toast } from "../common.js";
 import { TONES } from "../tones.js";
 import { refreshInstances, refreshSetup } from "../session.js";
 import { render } from "../shell.js";
@@ -8,12 +8,12 @@ import { teamsForm } from "../teams.js";
 // ---------- agenti (ADR 0041) ----------
 /** Starting points for a new agente: they only fill the form. */
 const AGENT_TEMPLATES = [
-	{ label: "Da zero", name: "", emoji: "", tagline: "", tone: "naturale", about: "" },
-	{ label: "Assistente", name: "Assistente", emoji: "🙂", tagline: "Agenda, promemoria, mail e cose da fare", tone: "amichevole", about: "Aiuta una persona a organizzare la giornata: impegni, promemoria, liste, risposte alle mail." },
-	{ label: "Ricercatore", name: "Ricercatore", emoji: "🔎", tagline: "Cerca, confronta e cita le fonti", tone: "conciso", about: "Fa ricerche sul web e nei file, confronta opzioni e fornitori, scrive report brevi con le fonti." },
-	{ label: "Scrittore", name: "Scrittore", emoji: "✍️", tagline: "Testi, post e mail con la nostra voce", tone: "naturale", about: "Scrive e rivede testi: post, articoli, newsletter, mail. Chiede sempre a chi sono rivolti e che tono usare." },
-	{ label: "Analista", name: "Analista", emoji: "📊", tagline: "Numeri, tabelle e grafici", tone: "conciso", about: "Risponde a domande su tabelle CSV ed Excel, fa i conti con i tool e prepara grafici e report." },
-	{ label: "Assistenza clienti", name: "Assistenza", emoji: "💬", tagline: "Risponde ai clienti con garbo", tone: "formale", about: "Risponde alle domande dei clienti su prodotti, ordini e tempi, e passa a una persona quello che non sa." },
+	{ label: "Da zero", name: "", tagline: "", tone: "naturale", about: "" },
+	{ label: "Assistente", name: "Assistente", tagline: "Agenda, promemoria, mail e cose da fare", tone: "amichevole", about: "Aiuta una persona a organizzare la giornata: impegni, promemoria, liste, risposte alle mail." },
+	{ label: "Ricercatore", name: "Ricercatore", tagline: "Cerca, confronta e cita le fonti", tone: "conciso", about: "Fa ricerche sul web e nei file, confronta opzioni e fornitori, scrive report brevi con le fonti." },
+	{ label: "Scrittore", name: "Scrittore", tagline: "Testi, post e mail con la nostra voce", tone: "naturale", about: "Scrive e rivede testi: post, articoli, newsletter, mail. Chiede sempre a chi sono rivolti e che tono usare." },
+	{ label: "Analista", name: "Analista", tagline: "Numeri, tabelle e grafici", tone: "conciso", about: "Risponde a domande su tabelle CSV ed Excel, fa i conti con i tool e prepara grafici e report." },
+	{ label: "Assistenza clienti", name: "Assistenza", tagline: "Risponde ai clienti con garbo", tone: "formale", about: "Risponde alle domande dei clienti su prodotti, ordini e tempi, e passa a una persona quello che non sa." },
 ];
 
 
@@ -23,7 +23,6 @@ function slug(text) {
 
 export function agentForm() {
 	const name = h("input", { type: "text", placeholder: "Ricercatore", maxlength: "80", "aria-label": "Nome" });
-	const emoji = h("input.emoji-input", { type: "text", placeholder: "🙂", maxlength: "16", "aria-label": "Emoji" });
 	const id = h("input", { type: "text", placeholder: "ricercatore", class: "mono", maxlength: "63" });
 	const tagline = h("input", { type: "text", maxlength: "120", placeholder: "Cerca, confronta e cita le fonti" });
 	const tone = h("select", TONES.map(([value, label]) => h("option", { value }, label)));
@@ -53,7 +52,6 @@ export function agentForm() {
 						for (const b of chips.querySelectorAll("button")) b.setAttribute("aria-pressed", "false");
 						e.currentTarget.setAttribute("aria-pressed", "true");
 						name.value = t.name;
-						emoji.value = t.emoji;
 						tagline.value = t.tagline;
 						tone.value = t.tone;
 						instructions.value = t.about;
@@ -62,21 +60,22 @@ export function agentForm() {
 						name.focus();
 					},
 				},
-				t.emoji ? `${t.emoji} ${t.label}` : t.label,
+				t.label,
 			),
 		),
 	);
 	draw();
 	const create = async () => {
 		try {
-			const { instance } = await api("/api/instances", { method: "POST", body: { id: id.value.trim(), name: name.value.trim(), instructions: instructions.value, persona: { emoji: emoji.value, tagline: tagline.value, tone: tone.value } } });
+			const { instance } = await api("/api/instances", { method: "POST", body: { id: id.value.trim(), name: name.value.trim(), instructions: instructions.value, persona: { tagline: tagline.value, tone: tone.value } } });
 			dialog.close();
 			await refreshInstances();
 			state.instance = state.instances.find((i) => i.id === instance.id) ?? state.instance;
 			store("owni.instance", state.instance.id);
-			toast(`Agente ${agentLabel(instance)} creato`);
+			// Straight into its conversation: the first thing to do with a new agente is to write to it.
+			toast(`Agente ${instance.name} creato`, false, { label: "Configura", href: instanceHref("impostazioni", ["identita"], instance.id) });
 			await refreshSetup();
-			go("impostazioni");
+			location.hash = dmHref(instance.id);
 			render();
 		} catch (error) {
 			toast(error.message, true);
@@ -87,7 +86,7 @@ export function agentForm() {
 		h("h2", "Nuovo agente"),
 		h("p.muted", "Aggiungi un agente quando serve un compito o un insieme di accessi separato. Parte con il modello dell'agente principale; all'inizio solo tu puoi scrivergli. Dal profilo decidi materiali, capacità e accessi."),
 		h("div.field", h("span", "Parti da"), chips),
-		h("div.field", h("span", "Nome"), h("div.name-row", preview, emoji, name)),
+		h("div.field", h("span", "Nome"), h("div.name-row", preview, name)),
 		h("label.field", h("span", "Cosa fa, in una riga"), tagline),
 		h("label.field", h("span", "Tono"), tone),
 		h("label.field", h("span", "Chi lo usa e per cosa"), instructions),
@@ -103,7 +102,8 @@ export function agentForm() {
 export async function viewAgents(main) {
 	const owner = state.me.role === "owner";
 	const { agents } = await api("/api/agents");
-	const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+	// Only what there is: a count of zero says nothing.
+	const counts = (a) => [[a.schedules + a.watches, "automazione", "automazioni"], [a.memories, "ricordo", "ricordi"]].filter(([n]) => n > 0).map(([n, one, many]) => `${n} ${n === 1 ? one : many}`);
 	const writesTo = (a) => agents.filter((x) => x.acceptsFrom?.includes(a.id)).map((x) => x.name);
 	const card = (a) => {
 		const el = h(
@@ -114,16 +114,16 @@ export async function viewAgents(main) {
 				h("h2", h("a.agent-profile-link", { href: agentHome(a.id) }, a.name), a.id === state.instance?.id ? h("span.tag", "aperto") : null),
 				a.tagline ? h("p", a.tagline) : null,
 				h("p.muted.small", [a.model?.provider === "faux" ? "Modello di prova" : a.model?.name, TONES.find(([v]) => v === a.tone)?.[1], a.channels.filter((c) => c !== "web" && c !== "agente").join(", ")].filter(Boolean).join(" · ")),
-				h("p.muted.small", h("span.tag", a.busy ? `Occupato${a.busyFor === undefined ? "" : ` da ${a.busyFor < 90 ? `${a.busyFor} s` : `${Math.round(a.busyFor / 60)} min`}`}` : "Libero"), a.doing ? ` ${a.busy ? "sta lavorando su" : "scheda in corso"}: ${a.doing}` : ""),
-				h("p.muted.small", [plural(a.schedules, "task", "task"), plural(a.watches, "sentinella", "sentinelle"), plural(a.memories, "ricordo", "ricordi")].join(" · ")),
+				h("p.small", agentStatus(a)),
+				counts(a).length ? h("p.muted.small", counts(a).join(" · ")) : null,
 				a.acceptsFrom?.length ? h("p.muted.small", `Gli scrivono: ${a.acceptsFrom.map((id) => agents.find((x) => x.id === id)?.name ?? id).join(", ")}`) : null,
 				owner && writesTo(a).length ? h("p.muted.small", `Può scrivere a: ${writesTo(a).join(", ")}`) : null,
 			),
 			h(
 				"div.agent-actions",
+				// One thing to do with an agente: write to it. Its name opens the details.
 				a.canChat ? h("a.btn.small.accent", { href: dmHref(a.id) }, "Scrivi") : null,
-				a.canChat ? h("a.btn.small.ghost", { href: agentInfoHref(a.id) }, "Dettagli") : null,
-				owner ? h("a.btn.small.ghost", { href: instanceHref("impostazioni", ["identita"], a.id) }, "Configura") : null,
+				owner ? h("a.quiet-link", { href: instanceHref("impostazioni", ["identita"], a.id) }, "Configura") : null,
 			),
 		);
 		// Each card glows in its agente's colour, so the faces read as a team and not as a list.
@@ -132,9 +132,14 @@ export async function viewAgents(main) {
 	};
 	mount(
 		main,
-		head(null, h("h1", "Agenti"), "Il tuo assistente e gli eventuali agenti con responsabilità separate. Di ognuno trovi documenti, memoria, procedure e configurazione.", owner ? h("button.btn.accent", { onclick: () => agentForm() }, icon("plus"), "Nuovo agente") : null),
+		head(
+			null,
+			h("h1", "Agenti"),
+			owner ? ["Il tuo assistente e gli agenti con responsabilità separate. Ruoli e chi scrive a chi sono nell'", h("a", { href: "#/organigramma" }, "organigramma"), "."] : "Il tuo assistente e gli agenti con responsabilità separate.",
+			owner ? h("button.btn.ghost", { title: "Più agenti già pronti a lavorare insieme", onclick: () => teamsForm() }, "Squadre pronte") : null,
+			owner ? h("button.btn.accent", { onclick: () => agentForm() }, icon("plus"), "Nuovo agente") : null,
+		),
 		agents.length === 0 ? emptyNote("div.empty", "Nessun agente", owner ? "Crea il primo con Nuovo agente." : "Chiedi all'owner di aggiungerti a un agente.") : h("div.agents", agents.map(card)),
-		owner ? h("details.card.fold.agent-team-options", h("summary", h("span.fold-glyph", icon("agenti")), h("span.fold-text", h("b", "Estendi il team quando serve"), h("small", "Squadre pronte e organigramma.")), h("span.fold-chevron", icon("down"))), h("div.fold-body", h("p.muted", "Una nuova conversazione non richiede un nuovo agente. Aggiungi una squadra pronta quando vuoi dividere responsabilità e accessi; nell'organigramma decidi ruoli, squadre e chi può scrivere a chi."), h("div.actions", h("a.btn.ghost", { href: "#/organigramma" }, "Organigramma"), h("button.btn.ghost", { title: "Più agenti già pronti a lavorare insieme", onclick: () => teamsForm() }, "Squadre pronte")))) : null,
 	);
 }
 

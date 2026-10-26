@@ -1,8 +1,8 @@
 // Organigramma page (ADR 0117): squadre, roles, responsabilità, and who writes to whom;
 // at #/organigramma/albero the same agenti as a tree of who answers to whom.
-import { agentHome, api, confirmDialog, emptyNote, face, faceColor, h, head, icon, mount, route, toast } from "../common.js";
+import { agentHome, agentStatus, api, confirmDialog, emptyNote, face, faceColor, h, head, icon, mount, route, toast } from "../common.js";
 import { render } from "../shell.js";
-import { teamsForm } from "../teams.js";
+import { confirmLinks } from "../teams.js";
 
 /** A squadra's ID from its name, free among the others: «Vendite» → vendite, vendite-2… */
 function teamId(name, teams) {
@@ -25,9 +25,16 @@ export async function viewOrg(main) {
 	// Only its own rows: an agente called «constructor» is not Object's.
 	const place = (id) => (Object.hasOwn(org.agents, id) ? org.agents[id] : { owns: [] });
 
-	/** Save the whole organigramma, then draw the page again from what the server kept. */
+	/**
+	 * Save the whole organigramma, then draw the page again from what the server kept. The first
+	 * save replaces the permissions set by hand: the owner sees which ones first (ADR 0125).
+	 */
 	const save = async (next, done) => {
 		try {
+			if (!saved) {
+				const { changes } = await api("/api/org/preview", { method: "POST", body: { org: next } });
+				if (changes.length > 0 && !(await confirmLinks("Da ora decide l'organigramma", "Chi può scrivere a chi segue l'organigramma, non più le scelte fatte a mano. Cambia così:", changes, "Salva"))) return false;
+			}
 			await api("/api/org", { method: "PUT", body: { org: next, version } });
 			toast(done);
 			render();
@@ -157,7 +164,7 @@ export async function viewOrg(main) {
 				p.owns.length ? h("ul.org-owns", p.owns.map((o) => h("li", o))) : null,
 				h("p.muted.small", p.reportsTo ? `Risponde a ${name(p.reportsTo)}` : "Risponde alle persone", below.length ? ` · Rispondono a lui: ${list(below)}` : ""),
 				h("p.muted.small", writesTo.length ? `Può scrivere a ${list(writesTo)}` : "Non scrive ad altri agenti"),
-				a.busy || a.doing ? h("p.muted.small", h("span.tag", a.busy ? "Occupato" : "Libero"), a.doing ? ` ${a.doing}` : "") : null,
+				a.statusText ? h("p.small", agentStatus(a)) : null,
 			),
 			h("button.btn.small.ghost", { onclick: () => agentDialog(id), "aria-label": `Modifica il posto di ${a.name}` }, "Modifica"),
 		);
@@ -177,7 +184,7 @@ export async function viewOrg(main) {
 			`button.org-node${leads ? ".lead" : ""}`,
 			{ type: "button", onclick: () => agentDialog(id), "aria-label": `${[a.name, role, where].filter(Boolean).join(", ")}: modifica il suo posto` },
 			face(a, 32),
-			h("span.org-node-text", h("b", a.name), role ? h("span", role) : null, where ? h("small", where) : null),
+			h("span.org-node-text", h("b", a.name), role ? h("span", role) : null, where ? h("small", where) : null, a.statusText ? agentStatus({ ...a, doing: "" }) : null),
 		);
 		el.style.setProperty("--glow", faceColor(a));
 		return el;
@@ -219,12 +226,11 @@ export async function viewOrg(main) {
 			h("h1", "Organigramma"),
 			"Chi fa cosa tra gli agenti, chi coordina e chi risponde a chi. Da qui decidi anche chi può scrivere a chi: ogni agente lo sa e passa agli altri quello che è loro.",
 			h("button.btn.accent", { onclick: () => teamDialog() }, icon("plus"), "Nuova squadra"),
-			h("button.btn.ghost", { onclick: () => teamsForm() }, "Squadre pronte"),
 		),
-		saved ? null : h("p.card.pad.org-first", "Finché non salvi l'organigramma, gli agenti si scrivono come deciso finora. Al primo salvataggio, anche creando una squadra pronta, vale solo l'organigramma."),
-		agents.length ? views : null,
+		// Which permissions are in effect, always in sight; the first save asks before changing them.
+		h("div.org-bar", agents.length ? views : null, h(`span.chip${saved ? ".accent" : ""}.org-mode`, saved ? "Permessi: dall'organigramma" : "Permessi: decisi a mano")),
 		agents.length === 0
-			? emptyNote("div.empty", "Nessun agente", "Crea un agente o una squadra pronta per cominciare.")
+			? emptyNote("div.empty", "Nessun agente", "Crea un agente o una squadra pronta in ", h("a", { href: "#/agenti" }, "Agenti"), ".")
 			: asTree
 				? tree()
 				: h(
