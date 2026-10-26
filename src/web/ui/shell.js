@@ -1,6 +1,6 @@
 // Shell: sidebar, account menu, theme.
 import { accountDialog } from "./account.js";
-import { $app, agentHome, api, ApiError, batched, channelHref, channelName, dmHref, emptyNote, face, fmt, go, h, icon, initials, instanceHref, mount, movedHref, route, selectInstance, state, store, toast } from "./common.js";
+import { $app, agentHome, api, ApiError, batched, channelHref, channelName, dmHref, emptyNote, face, go, h, icon, initials, instanceHref, mount, movedHref, route, selectInstance, state, store, toast } from "./common.js";
 import { renderLogin } from "./login.js";
 import { viewActivity } from "./pages/activity.js";
 import { agentForm, viewAgents } from "./pages/agents.js";
@@ -41,7 +41,7 @@ export const PAGES = [
 	{ id: "organigramma", label: "Organigramma", group: "Gestione", owner: true, view: viewOrg },
 	{ id: "impostazioni", label: "Configurazione dell'agente", group: "Gestione", owner: true, view: viewSettings },
 	{ id: "inizia", label: "Primi passi", group: "Gestione", owner: true, view: viewStart },
-	{ id: "gestione", label: "Gestione", group: "Gestione", view: viewManagement },
+	{ id: "gestione", label: "Account e gestione", group: "Gestione", view: viewManagement },
 	{ id: "persone", label: "Persone e accessi", group: "Gestione", owner: true, view: viewPeople },
 	{ id: "attivita", label: "Attività e spesa", group: "Gestione", view: viewActivity },
 ];
@@ -59,7 +59,7 @@ function workspaceNav(item) {
 	if (item.id === "dm") {
 		const inst = state.instance;
 		const who = h("a.agent-context", { href: agentHome(inst?.id) }, inst ? face(inst, 20) : null, h("span.agent-context-label", inst?.name ?? "Il tuo assistente"));
-		return h("div.conversation-context", windowDrag(), who, h("div.conversation-context-actions", h("div.conversation-tools", { role: "group", "aria-label": "Strumenti della conversazione" })));
+		return h("div.conversation-context", windowDrag(), h("h1.sr", inst ? `Messaggi con ${inst.name}` : "Messaggi diretti"), who, h("div.conversation-context-actions", h("div.conversation-tools", { role: "group", "aria-label": "Strumenti della conversazione" })));
 	}
 	return null;
 }
@@ -72,10 +72,31 @@ function homeAgent() {
 async function viewManagement(main) {
 	const owner = state.me.role === "owner";
 	mount(main, h("div.head", h("div.head-title", h("h1", "Account e gestione"), h("p", "Le tue impostazioni personali e la gestione dell'installazione sono separate."))),
-		h("div.card.pad.stack", h("h2", "Il mio account"), h("p.muted", "Collegamenti personali e verifica in due passaggi."), h("button.btn", { onclick: accountDialog }, "Apri il tuo account")),
+		h("div.card.pad.stack", h("h2", "Il tuo account"), h("p.muted", "Collegamenti personali e verifica in due passaggi."), h("button.btn", { onclick: accountDialog }, "Apri il tuo account")),
 		owner ? h("section.management-links", h("h2", "Installazione"), h("a.card.pad", { href: "#/persone" }, "Persone e accessi"), h("a.card.pad", { href: instanceHref("impostazioni", ["providers"]) }, "Provider disponibili"), h("a.card.pad", { href: "#/attivita" }, "Consumi e registro delle attività")) : h("a.btn.ghost", { href: "#/attivita" }, "Le tue esecuzioni e i consumi"),
 	);
 }
+
+// ---------- dialogs ----------
+// Every dialog is named by its own heading: the first h1-h3 inside it, whenever it is added or drawn.
+let dialogHeadings = 0;
+function nameDialog(dialog) {
+	if (dialog.hasAttribute("aria-labelledby") || dialog.hasAttribute("aria-label")) return;
+	const heading = dialog.querySelector("h1, h2, h3");
+	if (!heading) return;
+	heading.id ||= `dialog-title-${++dialogHeadings}`;
+	dialog.setAttribute("aria-labelledby", heading.id);
+}
+new MutationObserver((records) => {
+	for (const { addedNodes } of records) {
+		for (const node of addedNodes) {
+			if (node.nodeType !== Node.ELEMENT_NODE) continue;
+			const own = node.closest("dialog");
+			if (own) nameDialog(own);
+			for (const dialog of node.querySelectorAll?.("dialog") ?? []) nameDialog(dialog);
+		}
+	}
+}).observe(document.body, { childList: true, subtree: true });
 
 const railPhone = matchMedia("(max-width: 860px)");
 railPhone.addEventListener("change", syncRailControls);
@@ -98,20 +119,23 @@ export function render() {
 	closeMenu();
 	closeModelMenu();
 	const chat = item.id === "dm" || (item.id === "canali" && current.rest[0] && current.rest[0] !== "nuova");
-	const main = h("main", { id: "main", class: chat ? "is-chat" : "is-page" });
+	const main = h("main", { id: "main", tabindex: "-1", class: chat ? "is-chat" : "is-page" });
 	const content = h(chat ? "div.page-content.chat-content" : "div.page-content");
 	mount(main, workspaceNav(item), content);
 	const shell = h(
 		`div.shell${store("owni.rail") === "closed" ? ".collapsed" : ""}`,
+		h("a.skip", { href: "#main", onclick: (e) => { e.preventDefault(); main.focus(); } }, "Salta al contenuto"),
 		h("header.topbar", windowDrag(), h("button.icon-btn.rail-menu", {
 			"aria-label": "Apri la barra laterale", "aria-controls": "rail", "aria-expanded": "false",
-			onclick: () => { shell.classList.toggle("open"); syncRailControls(); },
+			onclick: () => setDrawer(!shell.classList.contains("open")),
 		}, icon("menu")), h("b.topbar-brand", "Owni"), h("button.icon-btn", { "aria-label": "Cerca", title: "Cerca", onclick: openPalette }, icon("search"))),
-		h("div.scrim", { onclick: closeRailOnPhone }), h("aside.rail", { id: "rail" }), main,
+		h("div.scrim", { onclick: () => setDrawer(false) }), h("aside.rail", { id: "rail" }), main,
 	);
 	mount($app, shell);
 	renderRail();
 	void refreshConversations().then(renderRail);
+	const place = `${view}/${current.rest[0] ?? ""}`;
+	document.title = `${pageName(item, current)} · Owni`;
 	state.onEntry = undefined;
 	state.onRoom = undefined;
 	state.onRun = undefined;
@@ -121,8 +145,50 @@ export function render() {
 	item.view(content).catch((error) => {
 		if (!content.isConnected || error instanceof ApiError && error.status === 401) return;
 		mount(content, emptyNote("div.empty", "Non riesco a caricare questa sezione", error.message), h("button.btn", { onclick: render }, "Riprova"));
+	}).finally(() => {
+		if (!content.isConnected) return;
+		const title = content.querySelector("h1")?.textContent?.trim();
+		if (title && !chat) document.title = `${title} · Owni`;
+		// A new page: the screen reader starts at its title. A page drawn again in place (a live update) keeps the focus where it is.
+		if (place === focusedPlace) return;
+		focusedPlace = place;
+		if (!main.contains(document.activeElement)) {
+			const heading = content.querySelector("h1") ?? main;
+			heading.tabIndex = -1;
+			heading.focus({ preventScroll: true });
+		}
 	});
 }
+
+/** What the tab says: the page, or the conversation's agent or canale. */
+function pageName(item, { rest }) {
+	if (item.id === "dm") return state.instance?.name ?? item.label;
+	if (item.id === "canali") {
+		const room = state.conversations.channels.find((c) => c.id === rest[0]);
+		return room ? channelName(room.title) : item.label;
+	}
+	return item.label;
+}
+
+/** The page whose title last took the focus: a page drawn again in place keeps the focus where it is. */
+let focusedPlace;
+
+/** The phone's sidebar is a modal drawer: focus goes in, the page behind is inert, Esc closes, focus comes back to its button. */
+function setDrawer(open) {
+	const shell = document.querySelector(".shell");
+	if (!shell) return;
+	shell.classList.toggle("open", open);
+	syncRailControls();
+	if (open) shell.querySelector(".rail")?.querySelector("a[href], button")?.focus();
+	else shell.querySelector(".rail-menu")?.focus();
+}
+
+document.addEventListener("keydown", (e) => {
+	if (e.key !== "Escape" || e.defaultPrevented || !railPhone.matches || !document.querySelector(".shell.open")) return;
+	if (document.querySelector("dialog[open], .menu, .model-menu")) return;
+	e.preventDefault();
+	setDrawer(false);
+});
 
 function toggleRail() {
 	const shell = document.querySelector(".shell");
@@ -152,6 +218,8 @@ function syncRailControls() {
 	}
 	const rail = shell.querySelector(".rail");
 	if (rail) rail.inert = railPhone.matches && !open;
+	// Open on a phone, only the drawer can be reached.
+	for (const behind of shell.querySelectorAll("main, .topbar")) behind.inert = railPhone.matches && open;
 }
 
 /** The rail's direct conversations and canali, with what is unread (ADR 0113). */
@@ -209,7 +277,7 @@ export function renderRail() {
 		),
 		h(
 			"div.rail-actions",
-			h("button.rail-btn", { onclick: openPalette, "aria-label": "Vai a una sezione", title: "Cerca" }, icon("search"), h("span.label", "Cerca"), h("kbd", navigator.platform.startsWith("Mac") ? "⌘K" : "Ctrl K")),
+			h("button.rail-btn", { onclick: openPalette, "aria-label": "Cerca una sezione o una conversazione", title: "Cerca" }, icon("search"), h("span.label", "Cerca"), h("kbd", navigator.platform.startsWith("Mac") ? "⌘K" : "Ctrl K")),
 		),
 		h(
 			"div.rail-scroll",
@@ -224,13 +292,29 @@ export function renderRail() {
 				"button.who-id",
 				{ onclick: openMenu, "aria-haspopup": "menu", "aria-expanded": document.querySelector(".menu") ? "true" : "false", "aria-label": `Account e gestione, ${state.me.name}`, title: "Account e gestione" },
 				h("span.avatar", { "aria-hidden": "true" }, initials(state.me.name)),
-				h("span.who-text", h("span.name", state.me.name), h("span.role", state.instance?.name ?? (state.me.role === "owner" ? "Owner" : "Membro"))),
+				h("span.who-text", h("span.name", state.me.name), roleLine() ? h("span.role", roleLine()) : null),
 				icon("more"),
 			),
 		),
 	);
 	rail.querySelector(".rail-scroll").scrollTop = scrollTop;
 	syncRailControls();
+}
+
+const THEMES = { auto: "automatico", dark: "scuro", light: "chiaro" };
+const dollars = new Intl.NumberFormat("it-IT", { style: "currency", currency: "USD", currencyDisplay: "narrowSymbol", minimumFractionDigits: 2, maximumFractionDigits: 2 });
+/** «0,00 $»; under a cent, enough digits to show it is not nothing. */
+const usd = (n) => n > 0 && n < 0.01 ? `${n.toLocaleString("it-IT", { maximumFractionDigits: 4 })} $` : dollars.format(n);
+
+/** The person's role, unless it is already their name (the owner is often called Owner). */
+function roleLine() {
+	const role = state.me.role === "owner" ? "Owner" : "Membro";
+	return state.me.name.trim().toLowerCase() === role.toLowerCase() ? "" : role;
+}
+
+/** Opens the form for a new agente (the command palette's). */
+export function newAgent() {
+	agentForm();
 }
 
 /** The account menu: spend, management sections, account, theme, exit. */
@@ -242,6 +326,7 @@ function openMenu() {
 	const u = state.usage;
 	const share = u ? Math.min(1, u.todayUsd / u.hardUsd) : 0;
 	const { view } = route();
+	const roleText = [roleLine(), state.me.twoFactor ? "verifica attiva" : ""].filter(Boolean).join(" · ");
 	const entry = (iconName, label, action, current) =>
 		h(
 			"button",
@@ -263,13 +348,13 @@ function openMenu() {
 	};
 	const menu = h(
 		"div.menu",
-		h("div.menu-head", h("span.avatar", { "aria-hidden": "true" }, initials(state.me.name)), h("div", h("div.name", state.me.name), h("div.role", `${owner ? "Owner" : "Membro"}${state.me.twoFactor ? " · verifica attiva" : ""}`))),
+		h("div.menu-head", h("span.avatar", { "aria-hidden": "true" }, initials(state.me.name)), h("div", h("div.name", state.me.name), roleText ? h("div.role", roleText) : null)),
 		u
 			? h(
 					"div.spend",
-					h("div.row", h("span", "Spesa di oggi"), h("b.mono", fmt.usd(u.todayUsd))),
+					h("div.row", h("span", "Spesa di oggi"), h("b.mono", usd(u.todayUsd))),
 					h("div.bar", h(`i${share >= 1 ? ".bad" : u.todayUsd >= u.softUsd ? ".warn" : ""}`, { "data-w": share })),
-					h("div.row", h("span.muted", `soglia ${fmt.usd(u.softUsd)}`), h("span.muted", `tetto ${fmt.usd(u.hardUsd)}`)),
+					h("div.row", h("span.muted", `soglia ${usd(u.softUsd)}`), h("span.muted", `tetto ${usd(u.hardUsd)}`)),
 				)
 			: null,
 		h(
@@ -282,7 +367,8 @@ function openMenu() {
 			installOffer && !installed() ? entry("install", "Installa l'app", install) : null,
 			h("hr", { role: "separator" }),
 			entry("account", "Il tuo account", accountDialog),
-			entry("theme", "Tema chiaro/scuro", cycleTheme),
+			entry("theme", `Tema: ${THEMES[store("owni.theme") ?? "auto"] ?? THEMES.auto}`, cycleTheme),
+			entry("keyboard", "Scorciatoie da tastiera", shortcutsDialog),
 			entry("logout", "Esci", async () => {
 				await api("/api/logout", { method: "POST" }).catch(() => {});
 				state.me = undefined;
@@ -334,10 +420,37 @@ export function closeMenu() {
 	return true;
 }
 
+/** The theme, kept in this browser: `auto` follows the system. */
+export function setTheme(mode) {
+	applyTheme(mode);
+	toast(mode === "auto" ? "Tema: come il sistema" : mode === "dark" ? "Tema scuro" : "Tema chiaro");
+}
+
 function cycleTheme() {
 	const current = store("owni.theme") ?? "auto";
-	const next = current === "auto" ? "dark" : current === "dark" ? "light" : "auto";
-	applyTheme(next);
-	toast(next === "auto" ? "Tema: come il sistema" : next === "dark" ? "Tema scuro" : "Tema chiaro");
+	setTheme(current === "auto" ? "dark" : current === "dark" ? "light" : "auto");
+}
+
+/** The keys that do something in the console, and only those. */
+function shortcutsDialog() {
+	const mac = navigator.platform.startsWith("Mac");
+	const keys = (...parts) => h("span.keys", parts.map((k) => h("kbd", k)));
+	const rows = [
+		[keys(mac ? "⌘" : "Ctrl", "K"), "Cerca una sezione, una conversazione o un'azione"],
+		[keys(mac ? "⌘" : "Ctrl", "↵"), "Crea l'incarico, nel modulo Nuovo incarico"],
+		[keys("↵"), "Invia il messaggio"],
+		[keys("⇧", "↵"), "A capo, senza inviare"],
+		[keys("/"), "Nel messaggio: i comandi dell'agente (frecce per scegliere, ↵ o Tab per confermare)"],
+		[keys("Esc"), "Chiude la finestra, il menu o la barra laterale"],
+	];
+	const dialog = h(
+		"dialog.shortcuts",
+		h("h2", "Scorciatoie da tastiera"),
+		h("dl.shortcut-list", rows.map(([k, text]) => [h("dt", k), h("dd", text)])),
+		h("div.actions", h("button.btn.ghost", { onclick: () => dialog.close() }, "Chiudi")),
+	);
+	dialog.addEventListener("close", () => dialog.remove());
+	document.body.append(dialog);
+	dialog.showModal();
 }
 

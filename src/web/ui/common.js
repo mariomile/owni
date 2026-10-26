@@ -82,6 +82,7 @@ const ICONS = {
 	send: ["M12 19V5", "m6 11 6-6 6 6"],
 	more: ["M6 12h.01M12 12h.01M18 12h.01"],
 	account: ["M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z", "M4 21a8 8 0 0 1 16 0"],
+	keyboard: ["M3 6h18v12H3Z", "M7 10h.01M11 10h.01M15 10h.01M19 10h.01", "M7 14h10"],
 	screen: ["M3 4h18v12H3Z", "M8 20h8", "M12 16v4"],
 	browser: ["M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Z", "M3 12h18", "M12 3c2.5 2.5 3.8 5.5 3.8 9s-1.3 6.5-3.8 9c-2.5-2.5-3.8-5.5-3.8-9S9.5 5.5 12 3Z"],
 	back: ["M19 12H5", "m11 6-6 6 6 6"],
@@ -234,11 +235,16 @@ function holdToasts(open) {
 	for (const t of $toasts.children) open ? t.hold?.() : t.go?.();
 	layoutToasts();
 }
+// Held while pointed at or while a toast has the keyboard focus.
+const holdWhileInside = () => holdToasts($toasts.matches(":hover, :focus-within"));
 $toasts?.addEventListener("pointerenter", () => holdToasts(true));
-$toasts?.addEventListener("pointerleave", () => holdToasts(false));
+$toasts?.addEventListener("pointerleave", holdWhileInside);
+$toasts?.addEventListener("focusin", () => holdToasts(true));
+$toasts?.addEventListener("focusout", () => queueMicrotask(holdWhileInside));
 
 export function toast(text, bad = false) {
-	const t = h(`div.toast${bad ? ".bad" : ""}`, bad ? { role: "alert" } : {}, icon(bad ? "alert" : "check"), h("span", text));
+	// Focusable, so the keyboard can hold a toast to read it; Escape dismisses it.
+	const t = h(`div.toast${bad ? ".bad" : ""}`, { tabindex: "0", ...(bad ? { role: "alert" } : {}) }, icon(bad ? "alert" : "check"), h("span", text));
 	// An error is usually longer and says what to do: it stays longer.
 	let left = bad ? 9000 : 4200;
 	let started = 0;
@@ -255,6 +261,9 @@ export function toast(text, bad = false) {
 		}, 280);
 	};
 	t.close = close;
+	t.addEventListener("keydown", (e) => {
+		if (e.key === "Escape") close();
+	});
 	t.go = () => {
 		started = Date.now();
 		timer = setTimeout(close, left);

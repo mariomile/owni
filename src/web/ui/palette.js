@@ -1,33 +1,39 @@
 // Command palette.
 import { channelHref, channelName, dmHref, go, h, icon, mount, state } from "./common.js";
-import { PAGES } from "./shell.js";
+import { newAgent, PAGES, setTheme } from "./shell.js";
 
 // ---------- command palette (⌘K) ----------
 export function openPalette() {
 	if (!state.me || document.querySelector("dialog.palette")) return;
 	const items = PAGES.filter((p) => p.palette !== false && (!p.owner || state.me.role === "owner") && (!p.when || p.when(state.instance))).map((p) => ({ ...p, icon: p.id, href: p.href?.(), to: [p.id] }));
-	// Conversations by name, once something is typed: the direct messages and the canali in the rail.
-	const dms = state.conversations.direct.flatMap((d) => {
-		const agent = state.instances.find((i) => i.id === d.instanceId);
-		return agent ? [{ label: agent.name, group: "Messaggi diretti", icon: "dm", href: dmHref(agent.id) }] : [];
-	});
+	// What can be done, not only where to go: «Scrivi a» each agente, a new incarico or agente, the theme.
+	const owner = state.me.role === "owner";
+	const actions = [
+		{ label: "Nuovo incarico", group: "Azione", icon: "plus", to: ["board", "nuovo"], first: true },
+		...(owner ? [{ label: "Nuovo agente", group: "Azione", icon: "plus", run: newAgent }] : []),
+		...state.instances.filter((i) => i.canChat).map((agent) => ({ label: `Scrivi a ${agent.name}`, group: "Azione", icon: "dm", href: dmHref(agent.id) })),
+		...[["auto", "Tema automatico"], ["light", "Tema chiaro"], ["dark", "Tema scuro"]].map(([mode, label]) => ({ label, group: "Azione", icon: "theme", run: () => setTheme(mode) })),
+	];
+	// Canali by name, once something is typed.
 	const rooms = state.conversations.channels.map((c) => ({ label: channelName(c.title), group: "Canale", icon: "canali", href: channelHref(c.id) }));
-	const input = h("input", { type: "text", placeholder: "Vai a una sezione o a una conversazione…", "aria-label": "Cerca una sezione o una conversazione", autocomplete: "off" });
+	const input = h("input", { type: "text", placeholder: "Vai a una sezione, scrivi a un agente, crea…", "aria-label": "Cerca una sezione, una conversazione o un'azione", autocomplete: "off" });
 	const list = h("ul", { role: "listbox" });
 	let active = 0;
 	let shown = items;
-	const dialog = h("dialog.palette", input, list);
+	const dialog = h("dialog.palette", { "aria-label": "Cerca una sezione o un'azione" }, input, list);
 	const pick = (item) => {
 		dialog.close();
 		dialog.remove();
 		document.querySelector(".shell")?.classList.remove("open");
-		if (item.href) location.hash = item.href;
+		if (item.run) item.run();
+		else if (item.href) location.hash = item.href;
 		else go(...item.to);
 	};
 	const draw = () => {
 		const q = input.value.trim().toLowerCase();
-		const talks = q === "" ? [] : [...dms, ...rooms].filter((c) => c.label.toLowerCase().includes(q)).slice(0, 8);
-		shown = [...items.filter((i) => q ? i.label.toLowerCase().includes(q) : ["board", "approvazioni", "agenti", "gestione"].includes(i.id)), ...talks];
+		const talks = q === "" ? [] : rooms.filter((c) => c.label.toLowerCase().includes(q)).slice(0, 8);
+		const matches = (i) => i.label.toLowerCase().includes(q);
+		shown = [...items.filter((i) => q ? matches(i) : ["board", "approvazioni", "agenti", "gestione"].includes(i.id)), ...actions.filter((a) => q ? matches(a) : a.first), ...talks];
 		active = Math.min(active, Math.max(0, shown.length - 1));
 		mount(list, 
 			...shown.map((item, n) =>
