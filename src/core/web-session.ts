@@ -6,8 +6,6 @@ import { PersonControl, PRESS_KEYS, type PressKey, privateSlice } from "./web-pe
 import type { BrowserProfiles } from "./web-profiles.ts";
 import { ACTION_TIMEOUT_MS, BrowseError, Hung, READ_TIMEOUT_MS, within } from "./web-session-support.ts";
 
-export { BrowseError, MAX_ELEMENTS, MAX_TYPED, PRESS_KEYS, type Guard, type PressKey };
-
 /** What the browser needs from Chromium (Playwright's Browser satisfies it). */
 export type Browser = {
 	newContext(options: { viewport: { width: number; height: number }; userAgent: string; acceptDownloads: boolean; serviceWorkers: "block" }): Promise<BrowserContext>;
