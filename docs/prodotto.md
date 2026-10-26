@@ -14,6 +14,7 @@ Owni è «pronta al 100%» quando ognuna di queste voci è vera e verificata da 
 
 - [x] Tool per istanza, ricalcolati e applicati riaprendo l'istanza quando cambiano (ADR 0004).
 - [x] **Connettori MCP** (Streamable HTTP e stdio) configurabili per istanza, con segreti nel secret store ed egress per host; i loro tool arrivano al modello (ADR 0003).
+- [x] **Collegamenti API** per agente: indirizzo base, chiave (token, header o parametro) e una nota su cosa sa fare; l'agente legge subito, scrive dopo l'approvazione, raggiunge solo quell'host e non vede mai la chiave. Ogni agente ha le sue chiavi (ADR 0116).
 - [x] **Workspace**: l'istanza crea, legge, elenca e invia file; le persone li caricano e scaricano da web e Telegram.
 - [x] **Task programmati**: una volta o a ripetizione, creati dalle persone o dall'istanza stessa; eseguiti anche dopo un riavvio; risultato consegnato al thread.
 - [x] **Tool proposti**: l'istanza scrive un tool, un approvatore lo approva su Telegram o web, gira in sandbox con egress dichiarato (ADR 0002).

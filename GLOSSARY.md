@@ -502,6 +502,10 @@ _Avoid_: notifica (quando ha pulsanti), card
 Un servizio del catalogo (Notion, Linear, Jira, Stripe, GitHub e altri) che l'owner collega dalla pagina Connettori entrando con il suo account, o incollando un token. L'accesso resta sul server di Owni e si rinnova da solo; quando non si rinnova il connettore è «Da collegare». Vedi ADR 0024.
 _Avoid_: integrazione, plugin, app
 
+**Collegamento API**:
+Un connettore verso l'API di un servizio senza server MCP (un gestionale, un CRM, l'API interna): l'owner dà l'indirizzo base, come si entra, la chiave e cosa sa fare. L'agente legge subito e per scrivere chiede l'approvazione; la chiave è solo di quell'agente e non arriva mai al modello. Vedi ADR 0116.
+_Avoid_: webhook, integrazione, http tool
+
 **Azione di un connettore**:
 Una chiamata a uno strumento di un servizio collegato che cambia qualcosa (crea, modifica, cancella). Owni la prepara come richiesta; parte, una volta, solo quando chi l'ha chiesta o un approvatore la approva. Gli strumenti che il servizio indica come di sola lettura partono subito. Vedi ADR 0025.
 _Avoid_: tool call, operazione

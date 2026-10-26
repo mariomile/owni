@@ -16,6 +16,7 @@ import { WEB_SEARCH_CONNECTOR } from "../core/web-search.ts";
 import { MissingPhoneField, PHONE_NUMBER, PHONE_PIN, type PhoneAdapter } from "../channels/phone.ts";
 import { MissingWhatsAppField, TEMPLATE_LANGUAGE, TEMPLATE_NAME, type WhatsAppAdapter, type WhatsAppTemplate, type WhatsAppWebhook } from "../channels/whatsapp.ts";
 import { CONNECTOR_CATALOG, type CatalogEntry } from "../connectors/catalog.ts";
+import { apiTransportProblem } from "../connectors/api.ts";
 import { type ConnectorStatus, CONNECTOR_ID, type ConnectorStore, connectorEgressName, type McpConnector } from "../connectors/mcp.ts";
 import { type McpOAuth, McpOAuthError } from "../connectors/mcp-oauth.ts";
 import { attachmentNote } from "../core/attachment-note.ts";
@@ -106,9 +107,14 @@ export type WhatsAppStatus = {
 	readonly template: WhatsAppTemplate | null;
 };
 
-/** The token a one-click connector was given, per instance: two instances with GitHub keep their own. */
+/** The token a one-click connector or an API was given, per instance: two instances with GitHub keep their own. */
 function catalogTokenSecret(instanceId: string, connectorId: string): string {
 	return `connector.${connectorId}.${instanceId}.authorization`;
+}
+
+/** Where the secrets of one instance's connector start: they go with the connector (ADR 0116). */
+function connectorSecretPrefix(instanceId: string, connectorId: string): string {
+	return `connector.${connectorId}.${instanceId}.`;
 }
 
 /**
@@ -1315,16 +1321,50 @@ export function createWebApp(options: WebAppOptions): Server {
 		const id = params[1] as string;
 		if (!CONNECTOR_ID.test(id)) throw new HttpError(400, "ID: lettere minuscole, cifre e trattini");
 		let transport = body.transport as McpConnector["transport"];
-		if (transport?.type !== "http" && transport?.type !== "stdio") throw new HttpError(400, "transport: http | stdio");
+		if (transport?.type !== "http" && transport?.type !== "stdio" && transport?.type !== "api") throw new HttpError(400, "transport: http | stdio | api");
 		// With OAuth the sign-in is the only credential: a secret header would also reach the authorization server.
 		if (transport.type === "http" && transport.auth === "oauth") transport = { type: "http", url: transport.url, auth: "oauth" };
-		const connector: McpConnector = { id, name: String(body.name ?? id), transport, enabled: body.enabled !== false, ...(body.approval === "none" ? { approval: "none" as const } : {}) };
 		const store = options.connectors(instance);
 		const before = (await store.list()).find((c) => c.id === id);
+		// An API's key (ADR 0116): given here, kept by the server, never sent back. The connector names it.
+		const keySecret = catalogTokenSecret(instance, id);
+		let newKey: string | undefined;
+		if (transport.type === "api") {
+			const t = transport;
+			const auth = t.auth?.kind === "bearer" ? { kind: "bearer" as const } : t.auth?.kind === "header" || t.auth?.kind === "query" ? { kind: t.auth.kind, name: String(t.auth.name ?? "").trim() } : undefined;
+			const notes = typeof t.notes === "string" ? t.notes.trim() : "";
+			transport = { type: "api", baseUrl: String(t.baseUrl ?? "").trim(), ...(auth === undefined ? {} : { auth }), ...(notes === "" ? {} : { notes }) };
+			const problem = apiTransportProblem(transport);
+			if (problem !== undefined) throw new HttpError(400, problem[0]?.toUpperCase() + problem.slice(1));
+			const key = (body as { key?: unknown }).key;
+			if (auth !== undefined && typeof key === "string" && key.trim() !== "") {
+				newKey = key.trim().replace(auth?.kind === "bearer" ? /^Bearer\s+/i : /^$/, "");
+				if (!/^[\x21-\x7e]{4,4096}$/.test(newKey)) throw new HttpError(400, "La chiave va incollata senza spazi né a capo");
+			}
+			const b = before?.transport;
+			// A key given for one address never goes to another: a new host asks for the key again.
+			const sameHost = b?.type === "api" && new URL(b.baseUrl).origin === new URL(transport.baseUrl).origin;
+			const kept = b?.type === "api" && b.secret === keySecret && sameHost && newKey === undefined;
+			// Without a way in there is no key: an old one is deleted below.
+			if (auth !== undefined) {
+				if (newKey !== undefined || kept) transport = { ...transport, secret: keySecret };
+				else if (b?.type === "api" && b.secret !== undefined && !sameHost) throw new HttpError(400, "Il servizio ha un indirizzo nuovo: rimetti la chiave");
+				else throw new HttpError(400, "Manca la chiave");
+			}
+		}
+		const connector: McpConnector = { id, name: String(body.name ?? id), transport, enabled: body.enabled !== false, ...(body.approval === "none" ? { approval: "none" as const } : {}) };
 		try {
 			await store.save(connector);
 		} catch (error) {
 			throw new HttpError(400, error instanceof Error ? error.message : String(error));
+		}
+		if (newKey !== undefined) {
+			await runtime.secrets(tenantId).set(keySecret, newKey);
+			await runtime.audit(tenantId).append({ type: "secret.set", instanceId: instance, name: keySecret });
+		} else if (before?.transport.type === "api" && before.transport.secret !== undefined && (transport.type !== "api" || transport.secret === undefined)) {
+			// An API's key with no API to go to (no way in, or now another kind of connector) is not kept for anything else.
+			await runtime.secrets(tenantId).delete(before.transport.secret);
+			await runtime.audit(tenantId).append({ type: "secret.deleted", instanceId: instance, name: before.transport.secret });
 		}
 		// Tokens got for one address never go to another: a new address or a new kind of access signs in again.
 		const b = before?.transport;
@@ -1437,11 +1477,14 @@ export function createWebApp(options: WebAppOptions): Server {
 		const gone = (await store.list()).find((c) => c.id === id);
 		const removed = await store.remove(id);
 		await options.mcpOAuth?.forget(instance, id);
-		// The token a one-click connector was given belongs to it alone: it goes with it.
-		const secret = catalogTokenSecret(instance, id);
-		if (gone?.transport.type === "http" && Object.values(gone.transport.headerSecrets ?? {}).includes(secret)) {
-			await runtime.secrets(tenantId).delete(secret);
-			await runtime.audit(tenantId).append({ type: "secret.deleted", instanceId: instance, name: secret });
+		// The connector's own secrets (its token, key or headers, ADR 0116) belong to it alone: they go with it.
+		if (gone !== undefined) {
+			const secrets = runtime.secrets(tenantId);
+			for (const name of await secrets.names()) {
+				if (!name.startsWith(connectorSecretPrefix(instance, id))) continue;
+				await secrets.delete(name);
+				await runtime.audit(tenantId).append({ type: "secret.deleted", instanceId: instance, name });
+			}
 		}
 		const record = await runtime.registry.getInstance(tenantId, instance);
 		const name = connectorEgressName(id);
@@ -1452,7 +1495,9 @@ export function createWebApp(options: WebAppOptions): Server {
 	});
 	route("PUT", "/api/instances/:id/secrets/:name", "owner", async ({ params, req }) => {
 		const name = params[1] as string;
-		if (!/^connector\.[a-z0-9-]{1,24}\.[a-zA-Z0-9_.-]{1,40}$/.test(name)) throw new HttpError(400, "Nome segreto: connector.<id>.<nome>");
+		// Only this instance's own (ADR 0116): two agenti with a connector of the same ID never share a secret.
+		const own = /^connector\.([a-z0-9-]{1,24})\.([^.]+)\.[a-zA-Z0-9_-]{1,40}$/.exec(name);
+		if (own === null || own[2] !== params[0]) throw new HttpError(400, "Nome segreto: connector.<connettore>.<agente>.<nome>");
 		const body = (await readJson(req)) as { value?: string };
 		if (typeof body.value !== "string" || body.value === "") throw new HttpError(400, "Valore mancante");
 		await runtime.secrets(tenantId).set(name, body.value);

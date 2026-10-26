@@ -12,12 +12,13 @@ import { CONNECTOR_ACTION_LIMITS, ConnectorActionError, ConnectorActionUncertain
 import type { OwniTool } from "../core/engine.ts";
 import type { EgressPolicy } from "../core/policy.ts";
 import type { TenantSecrets } from "../core/secrets.ts";
+import { apiCaller, type ApiTransport, apiTools, apiTransportProblem, sendApproved } from "./api.ts";
 import { egressFetch } from "./http.ts";
 import { type McpOAuth, McpSignInNeeded, oauthWords } from "./mcp-oauth.ts";
 
 /**
- * A connector to an MCP server, configured by the owner. Holds no secrets: header and
- * environment values name entries of the tenant's secret store.
+ * A connector to an MCP server, or to an HTTP API with a key (ADR 0116), configured by the owner.
+ * Holds no secrets: header, environment and key values name entries of the tenant's secret store.
  */
 export type McpConnector = {
 	readonly id: string;
@@ -30,7 +31,8 @@ export type McpConnector = {
 				/** "oauth": the owner signs in on the service's page; the tokens live in the secret store (ADR 0024). */
 				readonly auth?: "oauth";
 		  }
-		| { readonly type: "stdio"; readonly command: string; readonly args?: readonly string[]; readonly envSecrets?: Readonly<Record<string, string>> };
+		| { readonly type: "stdio"; readonly command: string; readonly args?: readonly string[]; readonly envSecrets?: Readonly<Record<string, string>> }
+		| ApiTransport;
 	readonly enabled: boolean;
 	/**
 	 * "writes" (the default): a tool the server does not mark read-only waits for a person's
@@ -67,6 +69,10 @@ export class ConnectorStore {
 		if (connector.transport.type === "http") {
 			const url = new URL(connector.transport.url);
 			if (url.protocol !== "https:" && url.protocol !== "http:") throw new Error("MCP URL must be http(s)");
+		}
+		if (connector.transport.type === "api") {
+			const problem = apiTransportProblem(connector.transport);
+			if (problem !== undefined) throw new Error(problem);
 		}
 		const all = (await this.list()).filter((c) => c.id !== connector.id);
 		await writeFileAtomic(this.file, `${JSON.stringify([...all, connector], null, 2)}\n`);
@@ -114,7 +120,7 @@ const REASON = "owni_reason";
 /** Where a connector points: an approved call runs only if it still points there. */
 export function connectorServer(connector: Pick<McpConnector, "transport">): string {
 	const t = connector.transport;
-	return t.type === "http" ? t.url : [t.command, ...(t.args ?? [])].join(" ");
+	return t.type === "http" ? t.url : t.type === "api" ? t.baseUrl : [t.command, ...(t.args ?? [])].join(" ");
 }
 
 /** Whether calling this tool waits for a person: it may change something, and the owner wants to be asked. */
@@ -149,7 +155,8 @@ export const MAX_TOOLS_PER_CONNECTOR = 64;
  * fails is skipped (audited), so one broken server never takes the instance down.
  */
 export class McpConnections {
-	private clients: { id: string; server: string; client: Client }[] = [];
+	/** What is open: an MCP session, or an API's caller; `call` runs an approved call on it. */
+	private clients: { id: string; server: string; call(tool: string, args: Record<string, unknown>): Promise<{ text: string; isError: boolean }>; close(): Promise<void> }[] = [];
 	private statuses: ConnectorStatus[] = [];
 
 	constructor(private readonly options: McpConnectionsOptions) {}
@@ -170,10 +177,14 @@ export class McpConnections {
 				await this.options.audit.append({ type: "egress.denied", instanceId: this.options.instanceId, kind: "connector", target: connectorEgressName(connector.id) });
 				continue;
 			}
+			if (connector.transport.type === "api") {
+				statuses.push(await this.api(connector, connector.transport, tools));
+				continue;
+			}
 			try {
 				const client = new Client({ name: "owni", version: "0.0.0" });
 				await client.connect(await this.transport(connector), { timeout: 20_000 });
-				this.clients.push({ id: connector.id, server: connectorServer(connector), client });
+				this.clients.push({ id: connector.id, server: connectorServer(connector), call: (tool, args) => this.callTool(client, tool, args), close: () => client.close() });
 				const listed = await client.listTools(undefined, { timeout: 20_000 });
 				const names: string[] = [];
 				const asked: string[] = [];
@@ -214,7 +225,41 @@ export class McpConnections {
 	async close(): Promise<void> {
 		const clients = this.clients;
 		this.clients = [];
-		await Promise.allSettled(clients.map((c) => c.client.close()));
+		await Promise.allSettled(clients.map((c) => c.close()));
+	}
+
+	/** A collegamento API (ADR 0116): its two tools, with its key from the secret store. */
+	private async api(connector: McpConnector, transport: ApiTransport, tools: OwniTool[]): Promise<ConnectorStatus> {
+		const key = transport.secret === undefined ? undefined : await this.options.secrets.get(transport.secret);
+		if (transport.auth !== undefined && key === undefined) {
+			await this.options.audit.append({ type: "connector.failed", instanceId: this.options.instanceId, connector: connector.id, error: "missing key" });
+			return { id: connector.id, connected: false, tools: [], error: "manca la chiave: mettila con «Modifica»", badToken: true };
+		}
+		const caller = apiCaller({ id: connector.id, transport }, connectorEgressName(connector.id), key, this.options.policy, this.options.fetch);
+		const actions = this.options.actions;
+		const own = apiTools({
+			connector: { ...connector, transport },
+			caller,
+			toolName: (tool) => toolName(connector.id, tool),
+			...(actions === undefined
+				? {}
+				: {
+						propose: (input, ctx) =>
+							actions.propose({
+								connector,
+								server: transport.baseUrl,
+								...input,
+								...(ctx.thread === undefined ? {} : { thread: ctx.thread }),
+								...(ctx.inputs === undefined ? {} : { inputs: ctx.inputs }),
+								callId: ctx.callId,
+							}),
+					}),
+		});
+		tools.push(...own);
+		this.clients.push({ id: connector.id, server: transport.baseUrl, call: (_tool, args) => sendApproved(connector.name, caller, args), close: async () => {} });
+		const names = own.map((t) => t.name);
+		await this.options.audit.append({ type: "connector.connected", instanceId: this.options.instanceId, connector: connector.id, tools: names.length });
+		return { id: connector.id, connected: true, tools: names, ...((connector.approval ?? "writes") === "writes" ? { approval: [toolName(connector.id, "write")] } : {}) };
 	}
 
 	private async transport(connector: McpConnector) {
@@ -247,6 +292,7 @@ export class McpConnections {
 				requestInit: { headers },
 			});
 		}
+		if (connector.transport.type === "api") throw new Error("an API collegamento has no MCP session");
 		// Only what the connector names (the SDK adds a fixed set of basics: HOME, PATH, USER,
 		// SHELL, TERM, LOGNAME), never the rest of Owni's environment, where keys live.
 		const env: Record<string, string> = { PATH: process.env.PATH ?? "/usr/bin:/bin" };
@@ -266,9 +312,13 @@ export class McpConnections {
 		const entry = this.clients.find((c) => c.id === connectorId);
 		if (entry === undefined) throw new ConnectorActionError("il connettore non è collegato ora: va ricollegato, poi si chiede di nuovo");
 		if (entry.server !== server) throw new ConnectorActionError("il connettore ora punta a un altro servizio: la richiesta non vale più");
+		return entry.call(tool, args);
+	}
+
+	private async callTool(client: Client, tool: string, args: Record<string, unknown>): Promise<{ text: string; isError: boolean }> {
 		let result: Awaited<ReturnType<Client["callTool"]>>;
 		try {
-			result = await entry.client.callTool({ name: tool, arguments: args }, undefined, { timeout: this.options.callTimeoutMs ?? 120_000 });
+			result = await client.callTool({ name: tool, arguments: args }, undefined, { timeout: this.options.callTimeoutMs ?? 120_000 });
 		} catch (error) {
 			// Refused by the policy before leaving: not done.
 			if (error instanceof EgressDenied || (error instanceof Error && error.cause instanceof EgressDenied)) throw new ConnectorActionError("il connettore non è più consentito per questa istanza");

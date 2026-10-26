@@ -1922,14 +1922,13 @@ export async function startOwni(config: OwniConfig, options: OwniOptions = {}): 
 
 /**
  * Whether a key of the secret store is one agente's own, to delete with it (ADR 0046). Agente IDs
- * have no dots, so the match is exact. Header secrets a connector names stay: the owner chose
- * them, and other agenti may use them too.
+ * have no dots, so the match is exact. Its connectors' secrets are named after it (ADR 0116).
  */
 function ownSecret(name: string, instance: string): boolean {
 	return (
 		[telegramTokenSecret(instance), `telegram.webhookSecret.${instance}`, whatsappSecret(instance), phoneSecret(instance)].includes(name) ||
 		name.startsWith(mcpOAuthSecret(instance, "")) ||
-		(name.startsWith("connector.") && name.endsWith(`.${instance}.authorization`))
+		(name.startsWith("connector.") && name.split(".")[2] === instance)
 	);
 }
 
