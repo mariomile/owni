@@ -1,5 +1,5 @@
 import { CODE_RUN_LIMITS, type CodeFile, CodeRunError, runCode } from "../code-run.ts";
-import { Type } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import { defineOwniTool, type OwniTool } from "../engine.ts";
 import { fence } from "../untrusted.ts";
 import { type Workspace, WorkspaceError } from "../workspace.ts";

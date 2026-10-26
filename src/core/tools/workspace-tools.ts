@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { Type } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import { readPdfPage } from "../document-reader.ts";
 import { DocumentTexts } from "../document-texts.ts";
 import { DocumentError, type DocumentText, documentKind, documentLabel, documentPartsLabel, documentSectionAt, looksLikeDocument, oldFormatAdvice, signedPlainText } from "../documents.ts";

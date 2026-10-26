@@ -1,4 +1,4 @@
-import { Type } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import { defineOwniTool, type OwniTool } from "../engine.ts";
 import { parseSkillMd, type Skill, SkillError, type SkillStore, SKILL_LIMITS, skillName, toSkillMd } from "../skills.ts";
 import type { Workspace } from "../workspace.ts";

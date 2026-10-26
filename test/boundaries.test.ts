@@ -21,10 +21,10 @@ function importsOf(file: string): string[] {
 }
 
 describe("module boundaries", () => {
-	it("only src/core/adapters/pi-durable* imports Pi packages, except pi-ai for the TypeBox schema builder tools are written in", () => {
+	it("only src/core/adapters/pi-durable* imports Pi packages", () => {
 		const offenders = sourceFiles("src")
 			.filter((file) => !relative("src/core/adapters", file).startsWith("pi-durable"))
-			.filter((file) => importsOf(file).some((spec) => spec.startsWith("@earendil-works/") && spec !== "@earendil-works/pi-ai"));
+			.filter((file) => importsOf(file).some((spec) => spec.startsWith("@earendil-works/")));
 		expect(offenders).toEqual([]);
 	});
 

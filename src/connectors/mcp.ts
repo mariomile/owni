@@ -9,7 +9,7 @@ import { writeFileAtomic } from "../core/atomic-file.ts";
 import type { AuditLog } from "../core/audit.ts";
 import { EgressDenied } from "../core/errors.ts";
 import { CONNECTOR_ACTION_LIMITS, ConnectorActionError, ConnectorActionUncertain } from "../core/connector-actions.ts";
-import { Type } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import { defineOwniTool, type OwniTool } from "../core/engine.ts";
 import type { EgressPolicy } from "../core/policy.ts";
 import type { TenantSecrets } from "../core/secrets.ts";

@@ -1,4 +1,4 @@
-import { type Static, Type } from "@earendil-works/pi-ai";
+import { type Static, Type } from "typebox";
 import { defineOwniTool, type OwniTool } from "../engine.ts";
 import { checkDate, type DayRates, type ExchangeRates, ExchangeRateError, FIRST_RATES_DATE, type RatesOn, type RatesSeries } from "../exchange-rates.ts";
 import { addDays } from "../italian-calendar.ts";

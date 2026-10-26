@@ -1,5 +1,5 @@
 import { COMPUTER_CONNECTOR, COMPUTER_LIMITS, ComputerError, type ComputerProvider, type ComputerRun, workPath } from "../computer.ts";
-import { Type } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import { defineOwniTool, type OwniTool } from "../engine.ts";
 import type { EgressPolicy } from "../policy.ts";
 import { fence } from "../untrusted.ts";

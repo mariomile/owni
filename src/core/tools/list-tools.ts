@@ -1,4 +1,4 @@
-import { Type } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import { defineOwniTool, type OwniTool } from "../engine.ts";
 import { LIST_LIMITS, type List, ListError, type ListItem, type ListStore, listKey, listName, ordered, resolveItems, untrustedLists, type Which } from "../lists.ts";
 import { SHARED } from "../memory.ts";

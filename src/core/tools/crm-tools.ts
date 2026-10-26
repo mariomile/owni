@@ -1,4 +1,4 @@
-import { Type } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import { defineOwniTool, type OwniTool } from "../engine.ts";
 import { hashIdempotency, type PracticeStore } from "../practice.ts";
 import type { CrmAdapter } from "../../connectors/types.ts";

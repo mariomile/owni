@@ -1,4 +1,5 @@
-import { StringEnum, Type } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
+import { StringEnum } from "../tool-schema.ts";
 import { defineOwniTool, type OwniTool } from "../engine.ts";
 
 type VoiceMode = "auto" | "always" | "never";

@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
-import { StringEnum, Type } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
+import { StringEnum } from "../tool-schema.ts";
 import { BOARD_LIMITS, type Card, CARD_PRIORITIES, type CardStatus, type CheckChange, BoardError, type BoardStore, dueDay, dueIn, dueLabel, dueText, STATUS_LABEL, waitingFor } from "../board.ts";
 import { digestText } from "../board-digest.ts";
 import { type BoardWork, checklistText } from "../board-work.ts";

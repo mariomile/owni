@@ -1,4 +1,4 @@
-import { Type } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import { defineOwniTool, type OwniTool, type ToolContext } from "../engine.ts";
 import { capitalized, italianDateTime, twoDigits } from "../italian-format.ts";
 import { type CodiceFiscale, EU_VAT_COUNTRIES, type EuVatCountry, parseTaxId } from "../tax-ids.ts";

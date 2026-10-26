@@ -1,4 +1,5 @@
-import { StringEnum, Type } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
+import { StringEnum } from "../tool-schema.ts";
 import { defineOwniTool, type OwniTool } from "../engine.ts";
 import { IMAGE_CONNECTOR, IMAGE_QUALITIES, IMAGE_SHAPES, type GenerateImage, ImageGenerationError } from "../image-generation.ts";
 import { imageProblem, imageType } from "../images.ts";

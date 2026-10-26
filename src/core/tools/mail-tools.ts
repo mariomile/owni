@@ -1,4 +1,4 @@
-import { Type } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import { defineOwniTool, type OwniTool } from "../engine.ts";
 import { hashIdempotency } from "../practice.ts";
 import type { MailAdapter } from "../../connectors/types.ts";

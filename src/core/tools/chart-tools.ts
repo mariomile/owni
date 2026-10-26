@@ -1,4 +1,5 @@
-import { StringEnum, Type } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
+import { StringEnum } from "../tool-schema.ts";
 import { CHART_KINDS, CHART_LIMITS, ChartError, type ChartSeries, type ChartSpec } from "../chart-spec.ts";
 import { makeChartFile } from "../document-reader.ts";
 import { DocumentError } from "../documents.ts";

@@ -1,5 +1,5 @@
 import { AGENT_CHANNEL } from "../agent-messages.ts";
-import { Type } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import { defineOwniTool, type OwniTool } from "../engine.ts";
 import { ScheduleError, type ScheduleStore } from "../schedules.ts";
 

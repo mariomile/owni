@@ -1,5 +1,5 @@
 import { ARTIFACT_LIMITS, ArtifactError, type ArtifactRef } from "../artifacts.ts";
-import { Type } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import { defineOwniTool, type OwniTool, type ToolContext } from "../engine.ts";
 
 /** The pages of the console conversations of one agente. */

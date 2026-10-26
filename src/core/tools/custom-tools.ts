@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { egressFetch } from "../../connectors/http.ts";
-import { Type } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import { defineOwniTool, type OwniTool } from "../engine.ts";
 import type { EgressPolicy } from "../policy.ts";
 import { customToolName, ProposalError, type ProposalStore, type ToolProposal, toolEgressName } from "../proposals.ts";

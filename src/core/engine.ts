@@ -1,4 +1,4 @@
-import type { Static, TSchema } from "@earendil-works/pi-ai";
+import type { Static, TSchema } from "typebox";
 import type { ModelSelection } from "./registry.ts";
 import type { TurnOrigin } from "./turn-origin.ts";
 import type { LocalProviders } from "./local-providers.ts";

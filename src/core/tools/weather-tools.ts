@@ -1,4 +1,4 @@
-import { Type } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import { defineOwniTool, type OwniTool } from "../engine.ts";
 import { addDays } from "../italian-calendar.ts";
 import { capitalized, italianDay, italianNumber } from "../italian-format.ts";

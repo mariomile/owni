@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { Type } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import { setTimeout as sleep } from "node:timers/promises";
 import { AudioError, audioInfo, audioLabel, splitAudio } from "../audio.ts";
 import { defineOwniTool, type OwniTool } from "../engine.ts";

@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
-import { StringEnum, Type } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
+import { StringEnum } from "../tool-schema.ts";
 import { defineOwniTool, type OwniTool } from "../engine.ts";
 import { type EgressPolicy, webHostAllowed } from "../policy.ts";
 import type { AskedBy } from "../agent-asks.ts";

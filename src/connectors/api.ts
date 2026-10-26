@@ -1,6 +1,7 @@
 import { EgressDenied } from "../core/errors.ts";
 import { ConnectorActionError, ConnectorActionUncertain, CONNECTOR_ACTION_LIMITS } from "../core/connector-actions.ts";
-import { StringEnum, Type } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
+import { StringEnum } from "../core/tool-schema.ts";
 import { defineOwniTool, type OwniTool } from "../core/engine.ts";
 import type { EgressPolicy } from "../core/policy.ts";
 import { egressFetch } from "./http.ts";

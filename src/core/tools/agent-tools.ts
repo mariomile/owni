@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { AGENT_LIMITS, AgentRate, chainProblem, type Origin } from "../agent-messages.ts";
 import type { Activity } from "../agent-activity.ts";
-import { Type } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import { defineOwniTool, type OwniTool } from "../engine.ts";
 
 /** Another agente this one may write to: it accepts messages from it (ADR 0042). */

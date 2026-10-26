@@ -1,6 +1,6 @@
 import { makeDocumentFile } from "../document-reader.ts";
 import { DocumentError, documentKind } from "../documents.ts";
-import { Type } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import { defineOwniTool, type OwniTool } from "../engine.ts";
 import { MAKE_LIMITS, type MakeFormat, picturePaths } from "../make-document.ts";
 import { type Workspace, WorkspaceError } from "../workspace.ts";

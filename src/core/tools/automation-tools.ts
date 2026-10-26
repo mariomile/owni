@@ -1,6 +1,6 @@
 import { type Automation, AutomationError, AUTOMATION_LIMITS, type AutomationStore } from "../automations.ts";
 import { AGENT_CHANNEL } from "../agent-messages.ts";
-import { Type } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
 import { defineOwniTool, type OwniTool } from "../engine.ts";
 
 type Thread = { readonly channel: string; readonly threadId: string };

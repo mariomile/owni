@@ -1,4 +1,5 @@
-import { StringEnum, type Static, Type } from "@earendil-works/pi-ai";
+import { type Static, Type } from "typebox";
+import { StringEnum } from "../tool-schema.ts";
 import { localMinute } from "../cron.ts";
 import { defineOwniTool, type OwniTool } from "../engine.ts";
 import { italianWeekday } from "../italian-format.ts";

@@ -1,5 +1,6 @@
 import { desktopConnector, DESKTOP_LIMITS, DesktopError, type DesktopProvider, fenced, fitWithin } from "../desktop.ts";
-import { StringEnum, Type } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
+import { StringEnum } from "../tool-schema.ts";
 import { defineOwniTool, type OwniTool, type EngineImage, type ToolContext, type ToolResult } from "../engine.ts";
 import type { EgressPolicy } from "../policy.ts";
 import { pngSize } from "../png-read.ts";

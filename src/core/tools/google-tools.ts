@@ -2,7 +2,7 @@ import { type CalendarEvent, EVENT_ID_PATTERN, type EventTime, type GoogleClient
 import { ConnectorHttpError } from "../../connectors/http.ts";
 import { EgressDenied } from "../errors.ts";
 import { type CurrentEvent, type EventDraft, eventTime, GOOGLE_ACTION_LIMITS, GoogleActionError, type GoogleAction, type GoogleActionResult, type GoogleActionStore, googleActionTitle, instant, type MailDraft, nextDay, validAddress } from "../google-actions.ts";
-import { Type, type TSchema } from "@earendil-works/pi-ai";
+import { Type, type TSchema } from "typebox";
 import { defineOwniTool, type OwniTool, type ToolContext } from "../engine.ts";
 import { ATTACHMENT_LIMITS, AttachmentError, attachFiles } from "../mail-attachments.ts";
 import type { Workspace } from "../workspace.ts";
