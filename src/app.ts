@@ -36,7 +36,7 @@ import { piDurableEngine } from "./core/adapters/pi-durable.ts";
 import { providerModels } from "./core/adapters/pi-durable-models.ts";
 import { ChatModels } from "./core/chat-models.ts";
 import { LocalProviders, type CliRunner } from "./core/local-providers.ts";
-import { decideConnectorAction, decideToolProposal, decideWebAction, isApprover, NotAnApprover, webActionReport } from "./core/approvals.ts";
+import { connectorAction, decide, isApprover, NotAnApprover, toolProposal, webAction, webActionReport } from "./core/approvals.ts";
 import { CONNECTOR_ACTION_LIMITS, type ConnectorAction, ConnectorActionError, connectorActionReport, fitsInChat } from "./core/connector-actions.ts";
 import { sendWebAction, type WebAction, WEB_ACTIONS_CONNECTOR } from "./core/web-actions.ts";
 import { type GoogleAction, type GoogleActionResult, googleActionReport, googleActionTitle } from "./core/google-actions.ts";
@@ -767,7 +767,7 @@ export async function startOwni(config: OwniConfig, options: OwniOptions = {}): 
 		if (pending === undefined) return;
 		if (decision === "approved" && !fitsInChat(pending)) return; // only from the console
 		try {
-			const decided = await decideConnectorAction(runtime, tenant, instance, id, decision, { channel: adapter.name, userId: action.userId }, runConnectorAction(instance), log);
+			const decided = await decide(connectorAction(runConnectorAction(instance), log), runtime, tenant, instance, id, decision, { channel: adapter.name, userId: action.userId });
 			const mine = decided.decidedBy?.channel === adapter.name && decided.decidedBy.userId === action.userId;
 			const word = { rejected: "rifiutata", expired: "scaduta", done: "approvata e fatta", failed: "approvata, ma non è riuscita", uncertain: "approvata, esito incerto" }[decided.status as string] ?? decided.status;
 			await adapter.send({ tenantId: tenant, instanceId: instance, channel: adapter.name, threadId: action.threadId, idempotencyKey: `decision:${action.actionId}`, text: `Richiesta ${id}: ${word}${mine || decided.status === "expired" ? "" : " (decisa in precedenza)"}.` });
@@ -788,7 +788,7 @@ export async function startOwni(config: OwniConfig, options: OwniOptions = {}): 
 		if (pending === undefined) return;
 		if (decision === "approved" && pending.shown.some(([, v]) => v.length > 300)) return; // only from the console
 		try {
-			const decided = await decideWebAction(runtime, tenant, instance, id, decision, { channel: adapter.name, userId: action.userId }, sendForInstance(instance));
+			const decided = await decide(webAction(sendForInstance(instance)), runtime, tenant, instance, id, decision, { channel: adapter.name, userId: action.userId });
 			const mine = decided.decidedBy?.channel === adapter.name && decided.decidedBy.userId === action.userId;
 			const word = { rejected: "rifiutata", expired: "scaduta", done: "approvata e inviata", failed: "approvata, ma il modulo non è partito", uncertain: "approvata, esito incerto" }[decided.status as string] ?? decided.status;
 			await adapter.send({ tenantId: tenant, instanceId: instance, channel: adapter.name, threadId: action.threadId, idempotencyKey: `decision:${action.actionId}`, text: `Richiesta ${id}: ${word}${mine || decided.status === "expired" ? "" : " (decisa in precedenza)"}.` });
@@ -807,7 +807,7 @@ export async function startOwni(config: OwniConfig, options: OwniOptions = {}): 
 		if (m === null) return;
 		if (m[2] === "approved" && ((await runtime.proposals(tenant, instance).get(m[1] as string))?.code.length ?? 0) > 1500) return; // only from the console
 		try {
-			const proposal = await decideToolProposal(runtime, tenant, instance, m[1] as string, m[2] as "approved" | "rejected", { channel: adapter.name, userId: action.userId });
+			const proposal = await decide(toolProposal, runtime, tenant, instance, m[1] as string, m[2] as "approved" | "rejected", { channel: adapter.name, userId: action.userId });
 			await adapter.send({
 				tenantId: tenant,
 				instanceId: instance,
@@ -817,7 +817,7 @@ export async function startOwni(config: OwniConfig, options: OwniOptions = {}): 
 				text: `${customToolName(proposal.name)}: ${proposal.status === "approved" ? "approvato" : "rifiutato"}${proposal.decidedBy?.channel === adapter.name && proposal.decidedBy.userId === action.userId ? "" : " (deciso in precedenza)"}.`,
 			});
 		} catch (error) {
-			// Not an approver: silence (audited in decideToolProposal).
+			// Not an approver: silence (audited in decide).
 			if (!(error instanceof NotAnApprover)) throw error;
 		}
 	}

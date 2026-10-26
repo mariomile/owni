@@ -17,7 +17,7 @@ import { apiTransportProblem } from "../connectors/api.ts";
 import { type ConnectorStatus, CONNECTOR_ID, type ConnectorStore, connectorEgressName, type McpConnector } from "../connectors/mcp.ts";
 import { type McpOAuth, McpOAuthError } from "../connectors/mcp-oauth.ts";
 import { attachmentNote } from "../core/attachment-note.ts";
-import { decideConnectorAction, decideToolProposal, decideWebAction, isApprover, NotAnApprover, OWNER, type Approver } from "../core/approvals.ts";
+import { connectorAction, decide, isApprover, NotAnApprover, OWNER, toolProposal, type Approver, webAction } from "../core/approvals.ts";
 import { type ConnectorAction, ConnectorActionError, type ConnectorActionResult } from "../core/connector-actions.ts";
 import { documentKind, documentLabel } from "../core/documents.ts";
 import { recordingLabel } from "../core/recordings.ts";
@@ -1095,7 +1095,7 @@ export function createWebApp(options: WebAppOptions): Server {
 		const body = (await readJson(req)) as { decision?: string };
 		if (body.decision !== "approved" && body.decision !== "rejected") throw new HttpError(400, "decision: approved | rejected");
 		try {
-			return { proposal: await decideToolProposal(runtime, tenantId, params[0], params[1], body.decision, approverOf(person)) };
+			return { proposal: await decide(toolProposal, runtime, tenantId, params[0], params[1], body.decision, approverOf(person)) };
 		} catch (error) {
 			if (error instanceof NotAnApprover) throw new HttpError(403, "Non sei un approvatore di questo agente");
 			throw error;
@@ -1117,7 +1117,7 @@ export function createWebApp(options: WebAppOptions): Server {
 		if (options.sendWebAction === undefined) throw new HttpError(501, "Le azioni sul web non sono disponibili su questo server");
 		const by = (await mayDecideAll(p, params[0])) ? approverOf(p) : { channel: "web", userId: p.id };
 		try {
-			return { action: await decideWebAction(runtime, tenantId, params[0], params[1], body.decision, by, options.sendWebAction(params[0])) };
+			return { action: await decide(webAction(options.sendWebAction(params[0])), runtime, tenantId, params[0], params[1], body.decision, by) };
 		} catch (error) {
 			if (error instanceof NotAnApprover) throw new HttpError(403, "Questa richiesta la decide chi l'ha fatta o un approvatore");
 			if (error instanceof WebActionError) throw new HttpError(404, "Richiesta inesistente");
@@ -1138,7 +1138,7 @@ export function createWebApp(options: WebAppOptions): Server {
 		if (options.runConnectorAction === undefined) throw new HttpError(501, "Le azioni dei connettori non sono disponibili su questo server");
 		const by = (await mayDecideAll(p, params[0])) ? approverOf(p) : { channel: "web", userId: p.id };
 		try {
-			return { action: await decideConnectorAction(runtime, tenantId, params[0], params[1], body.decision, by, options.runConnectorAction(params[0])) };
+			return { action: await decide(connectorAction(options.runConnectorAction(params[0])), runtime, tenantId, params[0], params[1], body.decision, by) };
 		} catch (error) {
 			if (error instanceof NotAnApprover) throw new HttpError(403, "Questa richiesta la decide chi l'ha fatta o un approvatore");
 			if (error instanceof ConnectorActionError) throw new HttpError(404, "Richiesta inesistente");
