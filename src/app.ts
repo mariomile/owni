@@ -92,7 +92,7 @@ import { runtimeActivity, viewerOf } from "./core/agent-activity.ts";
 import { createMemoryTools } from "./core/tools/memory-tools.ts";
 import { createAutomationTools } from "./core/tools/automation-tools.ts";
 import { createSkillTools } from "./core/tools/skill-tools.ts";
-import { schedulesOf } from "./core/tools/schedule-tools.ts";
+import { createScheduleTools } from "./core/tools/schedule-tools.ts";
 import { createWatchTools } from "./core/tools/watch-tools.ts";
 import { createWorkspaceTools } from "./core/tools/workspace-tools.ts";
 import { romeDayKey, UsageLedger } from "./core/usage.ts";
@@ -526,8 +526,7 @@ export async function startOwni(config: OwniConfig, options: OwniOptions = {}): 
 			// The brief's thread: read-only tools only, and vat_check on paper (its numbers would come from mail).
 			const briefs = runtime.schedules(record.tenantId, record.id);
 			const isBriefThread = async (thread: { channel: string; threadId: string }) => thread.channel === "web" && (await briefs.list()).some((s) => s.kind === "brief" && s.threadId === thread.threadId);
-			const schedules = schedulesOf({ store: runtime.schedules(record.tenantId, record.id), defaultTimeZone: config.timeZone, whoIs: (thread) => runtime.participant(record.tenantId, record.id, thread) });
-			const tools = [
+						const tools = [
 				...createWorkspaceTools({ workspace: runtime.workspace(record.tenantId, record.id), sendFile: (f) => runtime.sendFile(record.tenantId, record.id, f) }),
 				...createDocumentTools({ workspace: runtime.workspace(record.tenantId, record.id) }),
 				...createChartTools({ workspace: runtime.workspace(record.tenantId, record.id), sendFile: (f) => runtime.sendFile(record.tenantId, record.id, f) }),
@@ -561,7 +560,7 @@ export async function startOwni(config: OwniConfig, options: OwniOptions = {}): 
 								await runtime.audit(record.tenantId).append({ ...event, instanceId: record.id });
 							},
 						})),
-				...schedules.tools,
+				...createScheduleTools({ store: runtime.schedules(record.tenantId, record.id), defaultTimeZone: config.timeZone }),
 				...createAutomationTools({
 					store: runtime.automations(record.tenantId, record.id),
 					instance: record.id,

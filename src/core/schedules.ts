@@ -20,8 +20,6 @@ export type Schedule = {
 	readonly createdAt: string;
 	/** A brief del mattino: one per person and instance, turned on and off from the console. */
 	readonly kind?: "brief";
-	/** The tool call that made it through a seam (a client's ricontatto): a call run again finds it instead of making another. */
-	readonly callId?: string;
 };
 
 export type NewSchedule = {
@@ -31,15 +29,10 @@ export type NewSchedule = {
 	readonly when: Schedule["when"];
 	readonly createdBy: Schedule["createdBy"];
 	readonly kind?: "brief";
-	readonly callId?: string;
 };
 
-/**
- * Limits that keep a runaway instance from flooding itself. The reminders another tool makes
- * through a seam (a schedule with a callId: a client's ricontatto) have their own cap, counted
- * apart, so many ricontatti never stop the person's own tasks nor the brief.
- */
-export const SCHEDULE_LIMITS = { maxPerInstance: 50, maxReminders: 200, minIntervalMinutes: 5, maxInstructionChars: 2000 } as const;
+/** Limits that keep a runaway instance from flooding itself. */
+export const SCHEDULE_LIMITS = { maxPerInstance: 50, minIntervalMinutes: 5, maxInstructionChars: 2000 } as const;
 
 export class ScheduleError extends Error {
 	override readonly name = "ScheduleError";
@@ -53,9 +46,7 @@ export class ScheduleStore {
 		if (input.instruction.trim() === "") throw new ScheduleError("Empty instruction");
 		if (input.instruction.length > SCHEDULE_LIMITS.maxInstructionChars) throw new ScheduleError(`Instruction over ${SCHEDULE_LIMITS.maxInstructionChars} characters`);
 		const all = await this.list();
-		if (input.callId !== undefined) {
-			if (all.filter((s) => s.callId !== undefined).length >= SCHEDULE_LIMITS.maxReminders) throw new ScheduleError(`At most ${SCHEDULE_LIMITS.maxReminders} reminders per instance`);
-		} else if (all.filter((s) => s.callId === undefined).length >= SCHEDULE_LIMITS.maxPerInstance) throw new ScheduleError(`At most ${SCHEDULE_LIMITS.maxPerInstance} schedules per instance`);
+		if (all.length >= SCHEDULE_LIMITS.maxPerInstance) throw new ScheduleError(`At most ${SCHEDULE_LIMITS.maxPerInstance} schedules per instance`);
 		const nextRunAt = firstRun(input.when, now);
 		const schedule: Schedule = { ...input, id: randomBytes(6).toString("hex"), nextRunAt, createdAt: now.toISOString() };
 		await this.save(schedule);
@@ -101,27 +92,18 @@ export class ScheduleStore {
 
 	/**
 	 * Record that the run planned for `ranFor` happened. A one-off ends; a recurring one moves
-	 * to its first run after `now`, so a long downtime gives one catch-up run, not many. A one-off
-	 * made through a seam (with a callId) is deleted once it ran: it does not sit on disk.
+	 * to its first run after `now`, so a long downtime gives one catch-up run, not many.
 	 */
 	async advance(schedule: Schedule, ranFor: string, now: Date): Promise<Schedule> {
 		const next = "at" in schedule.when ? null : nextDistinctRun(parseCron(schedule.when.cron), now, schedule.when.timeZone, new Date(ranFor)).toISOString();
 		const updated: Schedule = { ...schedule, nextRunAt: next, lastRunAt: ranFor };
-		if (next === null && schedule.callId !== undefined) {
-			await this.remove(schedule.id);
-			return updated;
-		}
 		await this.update(updated);
 		return updated;
 	}
 
-	/** Stop it for good, keeping it visible with the reason; a seam's reminder (with a callId) is deleted instead, so it does not count toward the cap. */
+	/** Stop it for good, keeping it visible with the reason. */
 	async disable(schedule: Schedule, reason: string): Promise<Schedule> {
 		const updated: Schedule = { ...schedule, nextRunAt: null, disabledReason: reason };
-		if (schedule.callId !== undefined) {
-			await this.remove(schedule.id);
-			return updated;
-		}
 		await this.update(updated);
 		return updated;
 	}
