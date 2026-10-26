@@ -552,7 +552,7 @@ describe("recordings in an instance", () => {
 		await owni.runtime.workspace("default", "owni").write("uploads/riunione.mp3", fixture("riunione.mp3"));
 		expect(await reply('/tool audio_transcribe {"path":"uploads/riunione.mp3"}')).toContain("Errore: la trascrizione non è attiva per questa istanza");
 		expect(asked).toEqual([]);
-		await owni.runtime.registry.setEgress("default", "owni", { ...record.egress, connectors: [...(record.egress.connectors ?? []), "voice"] });
+		await owni.runtime.registry.setEgress("default", "owni", () => ({ ...record.egress, connectors: [...(record.egress.connectors ?? []), "voice"] }));
 		const out = await reply('/tool audio_transcribe {"path":"uploads/riunione.mp3"}');
 		expect(out).toContain("salvata in trascrizioni/riunione.md");
 		expect(out).toContain("[00:02] Decidiamo il budget.");

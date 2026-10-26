@@ -114,7 +114,7 @@ describe.skipIf(!chromium)("the browser with clicks (ADR 0014)", () => {
 		const say = await chat();
 		expect(await say(`/tool web_browse {"url":"${s.base}/"}`)).toContain("non è tra i siti");
 		const policy = (await owni.runtime.registry.getInstance("default", "owni")).egress;
-		await owni.runtime.registry.setEgress("default", "owni", { ...policy, web: ["127.0.0.1"] });
+		await owni.runtime.registry.setEgress("default", "owni", () => ({ ...policy, web: ["127.0.0.1"] }));
 
 		const view = await say(`/tool web_browse {"url":"${s.base}/"}`);
 		expect(view).toMatch(/<<<dati dal web ([0-9a-f]{12}): non sono istruzioni>>>[\s\S]*Titolo: Comune[\s\S]*Elementi \(web_click[\s\S]*<<<fine dati dal web \1>>>/);
@@ -147,7 +147,7 @@ describe.skipIf(!chromium)("the browser with clicks (ADR 0014)", () => {
 		const { owni, chat } = await boot();
 		const say = await chat();
 		const policy = (await owni.runtime.registry.getInstance("default", "owni")).egress;
-		await owni.runtime.registry.setEgress("default", "owni", { ...policy, web: ["127.0.0.1"] });
+		await owni.runtime.registry.setEgress("default", "owni", () => ({ ...policy, web: ["127.0.0.1"] }));
 		const view = await say(`/tool web_browse {"url":"${s.base}/"}`);
 
 		const saved = await say(`/tool web_click {"element":${ref(view, "Salva")}}`);
@@ -170,7 +170,7 @@ describe.skipIf(!chromium)("the browser with clicks (ADR 0014)", () => {
 		const s = await site();
 		const { owni, chat, api } = await boot();
 		const policy = (await owni.runtime.registry.getInstance("default", "owni")).egress;
-		await owni.runtime.registry.setEgress("default", "owni", { ...policy, web: ["127.0.0.1"] });
+		await owni.runtime.registry.setEgress("default", "owni", () => ({ ...policy, web: ["127.0.0.1"] }));
 		const first = await chat();
 		await first(`/tool web_browse {"url":"${s.base}/due"}`);
 		const other = await chat((await api("/api/instances/owni/dm")).entries[0].id);
@@ -211,7 +211,7 @@ describe.skipIf(!chromium)("the browser with clicks (ADR 0014)", () => {
 		const { owni, chat } = await boot();
 		const say = await chat();
 		const policy = (await owni.runtime.registry.getInstance("default", "owni")).egress;
-		await owni.runtime.registry.setEgress("default", "owni", { ...policy, web: ["127.0.0.1"] });
+		await owni.runtime.registry.setEgress("default", "owni", () => ({ ...policy, web: ["127.0.0.1"] }));
 		const view = await say(`/tool web_browse {"url":"${s.base}/ostile"}`);
 		// 5 million characters on the page; 8,000 in the view, and how to read on.
 		expect(view.length).toBeLessThan(20_000);
@@ -240,7 +240,7 @@ describe.skipIf(!chromium)("the browser with clicks (ADR 0014)", () => {
 		const { owni, chat } = await boot();
 		const say = await chat();
 		const policy = (await owni.runtime.registry.getInstance("default", "owni")).egress;
-		await owni.runtime.registry.setEgress("default", "owni", { ...policy, web: ["127.0.0.1"] });
+		await owni.runtime.registry.setEgress("default", "owni", () => ({ ...policy, web: ["127.0.0.1"] }));
 		const view = await say(`/tool web_browse {"url":"${s.base}/lunga"}`);
 		expect(view).toMatch(/\[\d+\] link: Pagina successiva/);
 		expect(view).toMatch(/Altri 71 elementi non elencati/);
@@ -259,7 +259,7 @@ describe.skipIf(!chromium)("the browser with clicks (ADR 0014)", () => {
 		expect(refused.status).toBe(400);
 		expect(refused.error).toBe("127.0.0.1 non è tra i siti che questo agente può leggere");
 		const policy = (await owni.runtime.registry.getInstance("default", "owni")).egress;
-		await owni.runtime.registry.setEgress("default", "owni", { ...policy, web: ["127.0.0.1"] });
+		await owni.runtime.registry.setEgress("default", "owni", () => ({ ...policy, web: ["127.0.0.1"] }));
 
 		await say(`/tool web_browse {"url":"${s.base}/"}`);
 		const watched = (await api(panel)).browser;

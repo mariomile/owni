@@ -20,6 +20,19 @@ export type EgressPolicy = {
 
 export const DENY_ALL: EgressPolicy = { modelProviders: [], channels: [] };
 
+/** The policy with one connector on or off: the same object when it already is. */
+export function withConnector(policy: EgressPolicy, connector: string, on: boolean): EgressPolicy {
+	const connectors = policy.connectors ?? [];
+	if (connectors.includes(connector) === on) return policy;
+	return { ...policy, connectors: on ? [...connectors, connector] : connectors.filter((c) => c !== connector) };
+}
+
+/** The policy with one channel on or off: the same object when it already is. */
+export function withChannel(policy: EgressPolicy, channel: string, on: boolean): EgressPolicy {
+	if (policy.channels.includes(channel) === on) return policy;
+	return { ...policy, channels: on ? [...policy.channels, channel] : policy.channels.filter((c) => c !== channel) };
+}
+
 /**
  * Who may talk to an instance: channel name → channel-native user IDs. Default deny: a
  * channel without an entry, or with an empty list, accepts nobody.

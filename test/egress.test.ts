@@ -114,12 +114,22 @@ describe("egress policy changed while the instance is open", () => {
 		await runtime.submit({ tenantId: "acme", instanceId: "ops", channel: "test", threadId: "t", userId: "u", text: "uno", messageId: "1" });
 		await waitFor(() => replies.length === 1);
 		// Opened: now the policy changes on disk, as the console does, without a reopen.
-		await runtime.registry.setEgress("acme", "ops", { modelProviders: ["faux"], channels: ["test", "other"] });
+		await runtime.registry.setEgress("acme", "ops", () => ({ modelProviders: ["faux"], channels: ["test", "other"] }));
 		await runtime.submit({ tenantId: "acme", instanceId: "ops", channel: "other", threadId: "t2", userId: "u", text: "due", messageId: "2" });
 		await waitFor(() => replies.some((r) => r.channel === "other"));
-		await runtime.registry.setEgress("acme", "ops", { modelProviders: ["faux"], channels: ["other"] });
+		await runtime.registry.setEgress("acme", "ops", () => ({ modelProviders: ["faux"], channels: ["other"] }));
 		await expect(runtime.submit({ tenantId: "acme", instanceId: "ops", channel: "test", threadId: "t", userId: "u", text: "tre", messageId: "3" })).rejects.toThrow(EgressDenied);
 		await runtime.close();
 	});
 });
 
+
+describe("egress policy changed by two requests at once", () => {
+	it("keeps both changes: each one applies to the policy on disk, not to a copy read earlier", async () => {
+		const { runtime } = await runtimeWithInstance({ egress: { modelProviders: ["faux"], channels: ["test"], connectors: [] } });
+		const add = (connector: string) => runtime.registry.setEgress("acme", "ops", (egress) => ({ ...egress, connectors: [...(egress.connectors ?? []), connector] }));
+		await Promise.all([add("web_search"), add("google"), add("voice")]);
+		expect([...((await runtime.registry.getInstance("acme", "ops")).egress.connectors ?? [])].sort()).toEqual(["google", "voice", "web_search"]);
+		await runtime.close();
+	});
+});

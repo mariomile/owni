@@ -208,7 +208,7 @@ describe("web_submit in an instance", () => {
 		const s = await contactSite();
 		const { owni, api, chat, dataDir } = await boot(tempDataDir());
 		const policy = (await owni.runtime.registry.getInstance("default", "owni")).egress;
-		await owni.runtime.registry.setEgress("default", "owni", { ...policy, web: ["*"] });
+		await owni.runtime.registry.setEgress("default", "owni", () => ({ ...policy, web: ["*"] }));
 		const { reply } = await chat(api);
 		const read = await reply(`/tool web_read {"url":"${s.base}/contact"}`);
 		expect(read).toContain(`Modulo 1: POST ${s.base}/send`);
@@ -238,7 +238,7 @@ describe("web_submit in an instance", () => {
 		const s = await contactSite();
 		const { owni, api, loginWith, chat } = await boot(tempDataDir());
 		const policy = (await owni.runtime.registry.getInstance("default", "owni")).egress;
-		await owni.runtime.registry.setEgress("default", "owni", { ...policy, web: ["*"], connectors: [...(policy.connectors ?? []), "web-actions"] });
+		await owni.runtime.registry.setEgress("default", "owni", () => ({ ...policy, web: ["*"], connectors: [...(policy.connectors ?? []), "web-actions"] }));
 		const people = [];
 		for (const name of ["Luca", "Sara"]) {
 			const { person, link } = await api("/api/people", { name });
@@ -384,7 +384,7 @@ describe("web_submit on Telegram", () => {
 		const owni = await startOwni({ ...config, web: { ...config.web, port: 0 } }, { telegramFetch: telegram.fetch, webAddressAllowed: localOnly, schedulerIntervalMs: 60_000, log: () => {} });
 		closers.push(() => owni.stop());
 		const policy = (await owni.runtime.registry.getInstance("default", "owni")).egress;
-		await owni.runtime.registry.setEgress("default", "owni", { ...policy, web: ["*"], connectors: [...(policy.connectors ?? []), "web-actions"] });
+		await owni.runtime.registry.setEgress("default", "owni", () => ({ ...policy, web: ["*"], connectors: [...(policy.connectors ?? []), "web-actions"] }));
 		const ask = `/tool web_submit {"page_url":"${s.base}/contact","form":1,"values":{"name":"Sette"},"reason":"Modulo di contatto"}`;
 		telegram.updates.push([{ update_id: 1, message: { message_id: 3, chat: { id: 7, type: "private" }, from: { id: 7 }, text: ask } }]);
 		await waitUntil(() => telegram.sent.filter((m) => m.text.startsWith("Azione sul web da approvare")).length === 2);

@@ -437,11 +437,11 @@ describe("sentinelle from the console", () => {
 		};
 		const thread = (await api("/api/instances/owni/dm", "POST", {})).thread;
 		const record = await owni.runtime.registry.getInstance("default", "owni");
-		await owni.runtime.registry.setEgress("default", "owni", { ...record.egress, web: ["example.com"] });
+		await owni.runtime.registry.setEgress("default", "owni", () => ({ ...record.egress, web: ["example.com"] }));
 		const refused = await api("/api/instances/owni/watches", "POST", { url: `${s.base}/orari`, threadId: thread.id });
 		expect(refused.status).toBe(400);
 		expect(refused.error).toContain("non è tra i siti");
-		await owni.runtime.registry.setEgress("default", "owni", { ...record.egress, web: ["*"] });
+		await owni.runtime.registry.setEgress("default", "owni", () => ({ ...record.egress, web: ["*"] }));
 		expect((await api("/api/instances/owni/watches", "POST", { url: `${s.base}/orari`, threadId: "altro" })).status).toBe(400);
 		const created = await api("/api/instances/owni/watches", "POST", { url: `${s.base}/orari`, what: "Orari", everyMinutes: 60, threadId: thread.id });
 		expect(created.watch).toMatchObject({ url: `${s.base}/orari`, what: "Orari", everyMinutes: 60, channel: "web", threadId: thread.id });

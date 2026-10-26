@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
@@ -11,32 +11,10 @@ import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { piDurableEngine } from "../src/core/adapters/pi-durable.ts";
 import type { OwniTool, EngineOpenOptions, EngineReply } from "../src/core/engine.ts";
-import { instanceId, tenantId } from "../src/core/ids.ts";
-import { instanceFile } from "../src/core/paths.ts";
+import { tenantId } from "../src/core/ids.ts";
 import { TenantRegistry } from "../src/core/registry.ts";
 import { modelApiKeySecret, TenantSecrets } from "../src/core/secrets.ts";
 import { tempDataDir, waitFor } from "./helpers.ts";
-
-/** A folder's fsync the test can hold: a file renamed into it is visible, its write not finished. */
-const fsync = vi.hoisted(() => ({ dir: undefined as string | undefined, reached: () => {}, held: Promise.resolve() }));
-vi.mock("node:fs/promises", async (importOriginal) => {
-	const actual = await importOriginal<typeof import("node:fs/promises")>();
-	return {
-		...actual,
-		open: async (...args: Parameters<typeof actual.open>) => {
-			const handle = await actual.open(...args);
-			if (fsync.dir !== undefined && args[0] === fsync.dir) {
-				const sync = handle.sync.bind(handle);
-				handle.sync = async () => {
-					fsync.reached();
-					await fsync.held;
-					return sync();
-				};
-			}
-			return handle;
-		},
-	};
-});
 
 const DEV = { provider: "faux", modelId: "owni-dev" };
 const GROK = { provider: "xai", modelId: "grok-4.7" };
@@ -682,7 +660,7 @@ describe("restart after the configuration changed", () => {
 		expect(await storedInstructions(storageDir)).toEqual({ "web:t1": "Skills: invoices", "web:t2": "Skills: invoices" });
 	});
 
-	it("an instance policy already on disk while its write is still being flushed counts too", async () => {
+	it("an instance policy written while a check is pending counts, before its writer has even resumed", async () => {
 		const { storageDir, ids } = await leftForGrok(["web:t1", "web:t2"]);
 		const registry = new TenantRegistry(tempDataDir());
 		await registry.createTenant({ id: "acme", name: "Acme" });
@@ -699,16 +677,10 @@ describe("restart after the configuration changed", () => {
 		session.onReply((reply) => replies.push(reply));
 		const reattached = session.reattach(ids[0]!, "web:t1");
 		await waitFor(() => checks === 2);
-		let flush = () => {};
-		fsync.held = new Promise<void>((resolve) => (flush = resolve));
-		const renamed = new Promise<void>((resolve) => (fsync.reached = resolve));
-		fsync.dir = dirname(instanceFile(registry.dataDir, tenantId("acme"), instanceId("ops")));
-		const written = registry.setEgress("acme", "ops", { modelProviders: ["faux"], channels: ["web"] });
-		await renamed;
+		// The write is synchronous under the file's lock: on disk before the call returns its promise.
+		const written = registry.setEgress("acme", "ops", () => ({ modelProviders: ["faux"], channels: ["web"] }));
 		release();
 		expect(await reattached).toBe(true);
-		fsync.dir = undefined;
-		flush();
 		await written;
 		expect(await session.reattach(ids[1]!, "web:t2")).toBe(true);
 		await waitFor(() => replies.length === 2);
