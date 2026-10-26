@@ -217,7 +217,6 @@ export function renderRail() {
 			h("a.rail-btn.attention-link", { href: "#/approvazioni", "aria-current": view === "approvazioni" ? "page" : undefined, onclick: closeRailOnPhone, title: "Richiede te" }, icon("approvazioni"), h("span.label", "Richiede te"), state.pendingApprovals + state.boardReview ? h("span.count", String(state.pendingApprovals + state.boardReview)) : null),
 			canali,
 			dms,
-			h("nav.sections.rail-management", { "aria-label": "Gestione" }, h("a", { href: state.instances.length === 1 ? agentHome(state.instances[0].id) : "#/agenti", onclick: closeRailOnPhone, title: "Agenti" }, icon("agenti"), h("span.label", state.instances.length === 1 ? "Il tuo assistente" : "Agenti")), h("a", { href: "#/gestione", onclick: closeRailOnPhone, title: "Account e gestione" }, icon("gestione"), h("span.label", "Account e gestione"))),
 		),
 		h(
 			"div.rail-foot",
@@ -230,7 +229,6 @@ export function renderRail() {
 			),
 		),
 	);
-	rail.querySelector(".rail-foot").before(rail.querySelector(".rail-management"));
 	rail.querySelector(".rail-scroll").scrollTop = scrollTop;
 	syncRailControls();
 }
