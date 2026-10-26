@@ -4,7 +4,7 @@ import { documentText } from "../src/core/documents.ts";
 import { makeDocument } from "../src/core/make-document.ts";
 import { cellOf, columnName, parseCsv } from "../src/core/make-xlsx.ts";
 import { inlineSpans, markdownBlocks } from "../src/core/markdown-blocks.ts";
-import { pngOf } from "../src/core/pdf-images.ts";
+import { pngOf } from "../src/core/pdf-codecs.ts";
 import { readPng } from "../src/core/png-read.ts";
 import { evaluateFormula, normalizeFormula } from "../src/core/sheet-formulas.ts";
 import { createDocumentTools } from "../src/core/tools/document-tools.ts";

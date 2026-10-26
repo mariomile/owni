@@ -2,7 +2,7 @@ import { Worker } from "node:worker_threads";
 import { DocumentError, type DocumentText } from "./documents.ts";
 import type { Chart, ChartSpec } from "./charts.ts";
 import type { MadeDocument, MakeInput } from "./make-document.ts";
-import type { PdfPageImage } from "./pdf-text.ts";
+import type { PdfPageImage } from "./pdf-images.ts";
 
 /**
  * Reads a document in a worker thread (ADR 0026), so a file made to be slow or huge costs at

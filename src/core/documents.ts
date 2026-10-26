@@ -1,6 +1,7 @@
 import { withoutBidiControls, xmlUnescape } from "./html-text.ts";
 import { isSignedEnvelope, P7mError, signedContent, signedContentStart } from "./p7m.ts";
-import { PdfError, pdfText, trimLines } from "./pdf-text.ts";
+import { PdfError } from "./pdf-objects.ts";
+import { pdfText, trimLines } from "./pdf-text.ts";
 import { Zip, ZipError } from "./zip.ts";
 
 /**

@@ -3,7 +3,8 @@ import { ChartError, type ChartSpec, drawChart } from "./charts.ts";
 import { DocumentError, documentText, unsignedData } from "./documents.ts";
 import { MakeError, type MakeInput, makeDocument } from "./make-document.ts";
 import { P7mError } from "./p7m.ts";
-import { PdfError, pdfPageImage } from "./pdf-text.ts";
+import { pdfPageImage } from "./pdf-images.ts";
+import { PdfError } from "./pdf-objects.ts";
 
 /**
  * Runs one extraction for document-reader.ts, away from the event loop that serves everyone:
