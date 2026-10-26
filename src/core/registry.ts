@@ -63,6 +63,9 @@ export class TenantRegistry {
 	 */
 	private readonly creating = new Map<string, Promise<unknown>>();
 
+	/** Each tenant's instance names, read from disk once and kept in step by the writers below. */
+	private readonly names = new Map<TenantId, Map<string, string>>();
+
 	constructor(readonly dataDir: string) {}
 
 	async createTenant(input: { id: string; name: string }): Promise<TenantRecord> {
@@ -114,6 +117,7 @@ export class TenantRegistry {
 			createdAt: new Date().toISOString(),
 		};
 		await writeJsonExclusive(instanceFile(this.dataDir, tenant, id), record);
+		this.names.get(tenant)?.set(id, record.name);
 		await new AuditLog(this.dataDir, tenant).append({
 			type: "instance.created",
 			instanceId: id,
@@ -161,6 +165,7 @@ export class TenantRegistry {
 			...(persona === undefined ? {} : { persona }),
 		};
 		await writeFileAtomic(instanceFile(this.dataDir, record.tenantId, record.id), `${JSON.stringify(record, null, 2)}\n`);
+		this.names.get(record.tenantId)?.set(record.id, record.name);
 		await new AuditLog(this.dataDir, record.tenantId).append({ type: "instance.updated", instanceId: record.id, fields: Object.keys(change).join(",") });
 		return record;
 	}
@@ -224,6 +229,7 @@ export class TenantRegistry {
 			if ((error as NodeJS.ErrnoException).code === "ENOENT") throw new NotFound(`Instance "${record.id}" not found in tenant "${record.tenantId}"`);
 			throw error;
 		}
+		this.names.get(record.tenantId)?.delete(record.id);
 		await new AuditLog(this.dataDir, record.tenantId).append({ type: "instance.deleted", instanceId: record.id, name: record.name });
 		// The instance is gone already: files that resist are removed at the next start.
 		await this.purgeRemoved(record.tenantId).catch(() => {});
@@ -261,17 +267,20 @@ export class TenantRegistry {
 	}
 
 	/**
-	 * Each instance's ID and name, read at once: for an agente's instructions, built on every
-	 * request without waiting (ADR 0117). A folder without a readable record is skipped.
+	 * Each instance's ID and name, at once: for an agente's instructions, built on every request
+	 * without waiting (ADR 0117). Read from disk on first use, then kept by create, update and
+	 * delete. A folder without a readable record is skipped.
 	 */
-	instanceNamesSync(tenant: string): Map<string, string> {
+	instanceNamesSync(tenant: string): ReadonlyMap<string, string> {
 		const t = tenantId(tenant);
+		const kept = this.names.get(t);
+		if (kept !== undefined) return kept;
 		const names = new Map<string, string>();
-		let ids: string[];
+		let ids: string[] = [];
 		try {
 			ids = readdirSync(join(tenantDir(this.dataDir, t), "instances"), { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name);
 		} catch {
-			return names;
+			// No instances yet.
 		}
 		for (const id of ids) {
 			try {
@@ -281,6 +290,7 @@ export class TenantRegistry {
 				// Being made or deleted: not an instance now.
 			}
 		}
+		this.names.set(t, names);
 		return names;
 	}
 }

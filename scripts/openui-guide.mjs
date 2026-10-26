@@ -24,7 +24,7 @@ const preamble = [
 	"- Never invent data. Every number, name, date and amount comes from the conversation, a file or a tool result; with no data, ask or say so in text.",
 	"- Write every label, title and option in the person's language (Italian unless they write in another).",
 	"- Pictures from the web do not load in the block: do not use Image, ImageBlock, ImageGallery or any image slot.",
-	"- A button with @ToAssistant, or a form's submit, writes the person's next message in their box, for them to read and send: the words of the action, the values filled in, and its context. Make that message read as what the person means (\"Conferma il preventivo per Rossi\"). @OpenUrl opens a web page in a new tab, only with an http(s) URL you actually have.",
+	"- A button with @ToAssistant, or a form's submit, writes the person's next message in their box, for them to read and send: the words of the action, the values filled in, and its context. Make that message read as what the person means (\"Conferma la consegna a Rossi\"). @OpenUrl opens a web page in a new tab, only with an http(s) URL you actually have.",
 	"- Nothing in the block can call Owni, a tool or the network: Query() and Mutation() are not available. Do the work with your tools first, then show the result.",
 	"",
 	"The language follows.",
@@ -36,10 +36,10 @@ const rules = openuiChatPromptOptions.additionalRules.filter((rule) => !/realist
 const form = `Example 3 — Form to collect a request (a compact form, no pictures):
 
 root = Card([header, form])
-header = CardHeader("Nuovo preventivo", "Due dettagli e lo preparo")
-form = Form("preventivo", formButtons, [fcClient, fcDelivery, fcKind, fcNotes])
+header = CardHeader("Nuova richiesta", "Due dettagli e la prendo in carico")
+form = Form("richiesta", formButtons, [fcClient, fcDelivery, fcKind, fcNotes])
 formButtons = Buttons([btnSubmit], "row")
-btnSubmit = Button("Prepara il preventivo", @ToAssistant("Prepara il preventivo con questi dati"), "primary")
+btnSubmit = Button("Invia la richiesta", @ToAssistant("Prendi in carico la richiesta con questi dati"), "primary")
 fcClient = FormControl("Cliente", clientInput, "Nome o ragione sociale")
 clientInput = Input("cliente", "es. Rossi Srl", "text", { required: true })
 fcDelivery = FormControl("Consegna", deliveryPicker)

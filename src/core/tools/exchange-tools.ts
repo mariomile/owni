@@ -8,7 +8,6 @@ export type ExchangeToolsOptions = { readonly rates: ExchangeRates };
 /** Amounts above this are not an invoice: a typo, refused rather than converted. */
 const MAX_AMOUNT = 1e9;
 const MAX_AMOUNTS = 20;
-const CODE = /^[A-Za-z]{3}$/;
 
 /** The ECB's currencies, past ones included, in Italian with their article. */
 const NAMES: Readonly<Record<string, string>> = {

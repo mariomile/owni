@@ -70,9 +70,10 @@ export function handles(agents: readonly { readonly instanceId: string; readonly
 	}));
 }
 
-/** The agenti a text calls by @nome, in the order of the stanza; @tutti calls them all. */
+/** The agenti a text calls by @nome, in the order of the stanza; @tutti calls them all. A @nome in code (fenced or inline) is not a call. */
 export function mentioned(text: string, agents: readonly { readonly instanceId: string; readonly name: string }[]): string[] {
-	const words = new Set([...text.matchAll(/(?:^|[^\p{L}\p{N}_@])@([\p{L}\p{N}_-]+)/gu)].map((m) => fold((m[1] ?? "").normalize("NFC")).replace(/_/g, "-").replace(/-+$/, "")));
+	const prose = text.replace(/```[\s\S]*?(?:```|$)/g, " ").replace(/`[^`\n]*`/g, " ");
+	const words = new Set([...prose.matchAll(/(?:^|[^\p{L}\p{N}_@])@([\p{L}\p{N}_-]+)/gu)].map((m) => fold((m[1] ?? "").normalize("NFC")).replace(/_/g, "-").replace(/-+$/, "")));
 	if (words.has("tutti") || words.has("all")) return agents.map((a) => a.instanceId);
 	const keys = agents.map((a) => mentionKeys(a.name));
 	return agents

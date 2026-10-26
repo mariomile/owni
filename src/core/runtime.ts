@@ -4,7 +4,7 @@ import { recordTurn, UsageLedger } from "./usage.ts";
 import { SerialQueue } from "./serial-queue.ts";
 import { AgentAsks } from "./agent-asks.ts";
 import { ConnectorActionStore } from "./connector-actions.ts";
-import type { OwniTool, DurableEngine, EngineImage, EngineReply, EngineSession, EngineRunEvent, EngineRunState, TurnUsage } from "./engine.ts";
+import type { OwniTool, DurableEngine, EngineImage, EngineReply, EngineSession, EngineRunEvent, EngineRunState } from "./engine.ts";
 import { RunStore, isActiveRun, runId, runRequestId, type RunRecord, type RunEvent, type RunFilter } from "./run-store.ts";
 export type { RunRecord, RunEvent, RunFilter, RunStatus } from "./run-store.ts";
 import type { TurnOrigin } from "./turn-origin.ts";

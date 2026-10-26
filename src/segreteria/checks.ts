@@ -62,7 +62,6 @@ function mentionsForbidden(hay: string, mention: string): boolean {
 
 export function runDeterministicChecks(cfg: ChecksConfig, draft: DraftCheckInput): CheckFailure[] {
 	const fails: CheckFailure[] = [];
-	const text = `${draft.subject}\n${draft.body}`;
 	const bodyNoQuotes = draft.body
 		.split("\n")
 		.filter((l) => !l.trimStart().startsWith(">"))

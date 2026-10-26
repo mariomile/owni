@@ -229,6 +229,25 @@ describe("a collegamento API of an agente (ADR 0116)", () => {
 		expect(await secrets.get("connector.crm.owni.authorization")).toBeUndefined();
 	});
 
+	it("a custom MCP connector keeps its saved headers only for the host they were saved for", async () => {
+		const { api } = await boot();
+		const put = async (url: string, headerSecrets: Record<string, string>) => {
+			await api("/api/instances/owni/connectors/mcpx", { name: "X", transport: { type: "http", url, headerSecrets }, enabled: true, allowed: false }, "PUT");
+			return (await api("/api/instances/owni/connectors")).connectors.find((c: { id: string }) => c.id === "mcpx").transport.headerSecrets;
+		};
+		const auth = { authorization: "connector.mcpx.owni.authorization" };
+		await api("/api/instances/owni/secrets/connector.mcpx.owni.authorization", { value: "Bearer t" }, "PUT");
+		expect(await put("https://a.example.com/mcp", auth)).toEqual(auth);
+		// The same origin, another path: the header stays.
+		expect(await put("https://a.example.com/other", auth)).toEqual(auth);
+		// Another host: the saved header is not carried over.
+		expect(await put("https://b.example.com/mcp", auth)).toEqual({});
+		// Another host with a header given in the same save: that one stays.
+		await put("https://a.example.com/mcp", auth);
+		const given = { "x-api-key": "connector.mcpx.owni.x-api-key" };
+		expect(await put("https://c.example.com/mcp", { ...auth, ...given })).toEqual(given);
+	});
+
 	it("a secret is set only under the agente it belongs to", async () => {
 		const { api } = await boot();
 		expect((await api("/api/instances/owni/secrets/connector.crm.vendite.authorization", { value: "x" }, "PUT")).status).toBe(400);

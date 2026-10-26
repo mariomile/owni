@@ -47,7 +47,6 @@ export function extractLead(
 	const deliverySite =
 		/(?:sede|consegna presso|installazione|indirizzo)\s*[:\-]?\s*([^\n.]{3,60})/i.exec(body)?.[1]?.trim();
 
-	const budget = /budget/i.test(body) ? /budget[^\d]*(\d+[.,]?\d*)/i.exec(body)?.[1] : undefined;
 	const hasBudgetMention = /budget/i.test(body);
 
 	const lang: LeadFields["originalLanguage"] = detectLanguage(body);
