@@ -18,7 +18,7 @@ export function createDocumentTools(options: DocumentToolsOptions): OwniTool[] {
 		{
 			name: "document_create",
 			description:
-				"Create a Word (.docx), Excel (.xlsx) or PDF file in your workspace: a letter, a report, a price list, a table (a preventivo for a customer: use quotes, which numbers it and computes the totals). Then send it with file_send in the same turn. " +
+				"Create a Word (.docx), Excel (.xlsx) or PDF file in your workspace: a letter, a report, a price list, a table. Then send it with file_send in the same turn. " +
 				"Write the content in Markdown. Word and PDF: # headings, paragraphs (a single line break stays a line break, as in an address), **bold**, *italic*, " +
 				"- and 1. lists, | tables | (columns size themselves; ---: aligns a column right, numbers already are), > quotes, --- for a line, \\newpage for a new page, " +
 				"[links](https://...), pictures from the workspace ![logo](uploads/logo.png) (PNG or JPEG; a picture whose description says logo comes out small on the left; ![foto|8cm](...) sets the width). " +

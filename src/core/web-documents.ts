@@ -63,13 +63,7 @@ export function dispositionName(header: string | undefined): string | undefined 
 	return name === "" ? undefined : name;
 }
 
-/**
- * An electronic invoice's file name as the SdI gives it: country, the sender's tax id, «_» and a
- * progressive (IT01234567890_00001.xml). Other .xml links (feeds, sitemaps) are not documents.
- */
-const INVOICE_NAME = /\/[A-Z]{2}[A-Za-z0-9]{1,28}_[A-Za-z0-9]{1,5}\.xml$/;
-
-/** Links on a page to documents (PDF, Office, OpenDocument, CSV, signed files, electronic invoices): absolute, once each, at most `max`. */
+/** Links on a page to documents (PDF, Office, OpenDocument, CSV, signed files): absolute, once each, at most `max`. */
 export function documentLinks(html: string, base: string, max = 20): string[] {
 	const out = new Set<string>();
 	for (const tag of html.matchAll(/<(?:a|iframe|embed|object)\s[^>]{0,2000}>/gi)) {
@@ -84,7 +78,7 @@ export function documentLinks(html: string, base: string, max = 20): string[] {
 		}
 		if (url.protocol !== "http:" && url.protocol !== "https:") continue;
 		url.hash = "";
-		if (!/\.(pdf|docx?|xlsx?|pptx?|odt|ods|odp|csv|p7m)$/i.test(url.pathname) && !INVOICE_NAME.test(url.pathname)) continue;
+		if (!/\.(pdf|docx?|xlsx?|pptx?|odt|ods|odp|csv|p7m)$/i.test(url.pathname)) continue;
 		out.add(url.toString());
 		if (out.size >= max) break;
 	}

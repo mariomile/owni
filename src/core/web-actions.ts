@@ -1,5 +1,5 @@
 import { ActionQueue, type QueuedStatus } from "./action-queue.ts";
-import type { AskedBy } from "./agent-requests.ts";
+import type { AskedBy } from "./agent-asks.ts";
 import { CookieJar, checkedUrl, pageText, WebFetchRefused, type WebFetchOptions, webFetch } from "./web-fetch.ts";
 import { FormRefused, formBody, formFingerprint, pageForms, type WebForm } from "./web-forms.ts";
 

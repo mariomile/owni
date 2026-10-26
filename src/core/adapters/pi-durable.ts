@@ -45,7 +45,6 @@ import {
 } from "@earendil-works/pi-durable";
 import { createNodePhotonImages } from "@earendil-works/pi-durable/images/node";
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
-import { createToolSearchTool } from "@earendil-works/pi-durable/tool-search";
 import { DEFAULT_IMAGE_LIMITS, type ImageProcessor } from "@earendil-works/pi-durable/tools";
 import type { OwniTool, DurableEngine, EngineImage, EngineOpenOptions, EngineReply, EngineSession, EngineRunEvent, EngineRunState, JsonValue, TurnUsage } from "../engine.ts";
 import type { ModelSelection } from "../registry.ts";
@@ -151,10 +150,6 @@ export const piDurableEngine: DurableEngine = {
 				],
 			}),
 		);
-		// Deferred tools are found and loaded by the model with tool_search (ADR 0100).
-		const deferred = options.tools.filter((tool) => tool.deferred === true);
-		if (deferred.length > 0) registry.install(defineExtension({ name: "tool-search", tools: [toolSearch(deferred)] }));
-
 		const storage = await openNodeSqliteStorage(join(options.storageDir, "pi-durable.sqlite"));
 		let threadModels: ThreadModelState | undefined;
 		const ownModel: OwnModel = (key) => threadModels?.value?.models[key];
@@ -773,39 +768,12 @@ async function modelFor<T>(models: MutableModels, options: EngineOpenOptions, ow
 	}
 }
 
-/**
- * Pi Durable's tool_search (ADR 0100), with two changes. Its description lists the deferred tools,
- * so the model knows them whatever an instance's stored instructions say. A query made only of
- * their exact names loads those alone; BM25 ranks a name below its neighbours and would load eight.
- */
-export function toolSearch(deferred: readonly OwniTool[]): ReturnType<typeof createToolSearchTool> {
-	const base = createToolSearchTool();
-	// The first sentence: up to the first full stop or colon followed by a space or the end.
-	const what = (description: string) => (description.trim().split(/[.:](?:\s|$)/)[0] ?? "");
-	return {
-		...base,
-		description: `Carica gli strumenti che non ti sono dati all'inizio: li hai dalla chiamata dopo e restano per tutta la conversazione. Cerca col nome esatto, uno o più separati da spazi: carica solo quelli. Sono:\n${deferred.map((tool) => `- ${tool.name}: ${what(tool.description)}`).join("\n")}`,
-		async execute(args, api, context) {
-			const known = new Set(deferred.map((tool) => tool.name));
-			const words = [...new Set(args.query.split(/[\s,]+/).filter((word) => word !== ""))];
-			if (words.length === 0 || !words.every((word) => known.has(word))) return base.execute({ ...args, limit: args.limit ?? 3 }, api, context);
-			// Exact names: load those still deferred, report the others as already loaded. No BM25.
-			const live = new Set((await api.agent(context)).deferred.map((tool) => tool.name));
-			const load = words.filter((word) => live.has(word));
-			const loaded = words.filter((word) => !live.has(word));
-			const text = [load.length > 0 ? `Caricati: ${load.join(", ")}. Li hai dalla prossima chiamata.` : "", loaded.length > 0 ? `Già caricati: ${loaded.join(", ")}.` : ""].filter(Boolean).join(" ");
-			return { output: [{ type: "text", text }], details: { loaded: load }, ...(load.length > 0 ? { control: { addTools: load } } : {}) };
-		},
-	};
-}
-
 function toPiTool(tool: OwniTool, stopped: ReadonlySet<string>): ToolRegistration {
 	return defineTool({
 		name: tool.name,
 		description: tool.description,
 		parameters: Type.Unsafe<Record<string, unknown>>(tool.parameters as never),
 		replay: tool.replaySafe ? "safe" : "unsafe",
-		deferred: tool.deferred,
 		execute: async (args, api, callContext) => {
 			const threadKey = await threadKeyOf(api, api.conversationId, callContext);
 			const at = threadKey?.indexOf(":") ?? -1;

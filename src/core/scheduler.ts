@@ -1,3 +1,4 @@
+import { BRIEF_INSTRUCTION } from "./brief.ts";
 import { UserNotAllowed } from "./errors.ts";
 import { schedulePerson, type ScheduleStore } from "./schedules.ts";
 import { checkWatches, type WatchStore } from "./watches.ts";
@@ -39,7 +40,8 @@ export class Scheduler {
 					await target.submit({
 						channel: schedule.channel,
 						threadId: schedule.threadId,
-						text: `[Task programmato ${schedule.id}] ${schedule.instruction}`,
+						// A saved brief always sends the current text: it is the product's, not the person's.
+						text: `[Task programmato ${schedule.id}] ${schedule.kind === "brief" ? BRIEF_INSTRUCTION : schedule.instruction}`,
 						messageId: `schedule:${schedule.id}:${plannedFor}`,
 						scheduleId: schedule.id,
 						onBehalfOf: schedulePerson(schedule),

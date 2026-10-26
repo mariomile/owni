@@ -2,7 +2,7 @@ import { mkdir } from "node:fs/promises";
 import { AuditLog } from "./audit.ts";
 import { recordTurn, UsageLedger } from "./usage.ts";
 import { SerialQueue } from "./serial-queue.ts";
-import { AgentAsks, AgentRequestStore } from "./agent-requests.ts";
+import { AgentAsks } from "./agent-asks.ts";
 import { ConnectorActionStore } from "./connector-actions.ts";
 import type { OwniTool, DurableEngine, EngineImage, EngineReply, EngineSession, EngineRunEvent, EngineRunState, TurnUsage } from "./engine.ts";
 import { RunStore, isActiveRun, runId, runRequestId, type RunRecord, type RunEvent, type RunFilter } from "./run-store.ts";
@@ -16,30 +16,7 @@ import { Outbox, type OutboxEntry } from "./outbox.ts";
 import { MemoryStore, memoryNote, Participants, SHARED, subjectOf } from "./memory.ts";
 import { ListStore, listsLine } from "./lists.ts";
 import { nowLine } from "./turn-context.ts";
-import { InvoiceStore } from "./invoice-store.ts";
-import { QuoteStore } from "./quote-store.ts";
-import { ExpenseStore } from "./expense-store.ts";
-import { TimesheetStore } from "./timesheet-store.ts";
-import { RenewalStore } from "./renewal-store.ts";
-import { PriceListStore } from "./price-list-store.ts";
-import { CashflowStore } from "./cashflow-store.ts";
-import { TaxStore } from "./tax-store.ts";
-import { VatStore } from "./vat-store.ts";
-import { BankStore } from "./bank-store.ts";
-import { WithholdingStore } from "./withholding-store.ts";
-import { ClientStore } from "./client-store.ts";
-import { SupplierStore } from "./supplier-store.ts";
-import { BudgetStore } from "./budget-store.ts";
-import { PurchaseStore } from "./purchase-store.ts";
-import { MarginStore } from "./margin-store.ts";
-import { AppointmentStore } from "./appointment-store.ts";
-import { StaffStore } from "./staff-store.ts";
-import { DdtStore } from "./ddt-store.ts";
-import { OrderStore } from "./order-store.ts";
-import { StockStore } from "./stock-store.ts";
-import { RecurringStore } from "./recurring-invoice-store.ts";
-import { SalesInvoiceStore } from "./sales-invoice-store.ts";
-import { agentAsksFile, agentRequestsDir, connectorActionsDir, customToolsDir, engineDir, googleActionsDir, instanceDir, lockFile, outboxDir, proposalsDir, schedulesDir, tenantDir, watchesDir, webActionsDir, workspaceDir } from "./paths.ts";
+import { agentAsksFile, connectorActionsDir, customToolsDir, engineDir, googleActionsDir, instanceDir, lockFile, outboxDir, proposalsDir, schedulesDir, tenantDir, watchesDir, webActionsDir, workspaceDir } from "./paths.ts";
 import { GoogleActionStore } from "./google-actions.ts";
 import { WebActionStore } from "./web-actions.ts";
 import { ProposalStore } from "./proposals.ts";
@@ -183,11 +160,6 @@ export class OwniRuntime {
 		return new ConnectorActionStore(connectorActionsDir(this.options.dataDir, tenantId(tenant), instanceId(instance)));
 	}
 
-	/** Steps other agenti asked for, waiting for (or past) one of this instance's approvers (ADR 0108). */
-	agentRequests(tenant: string, instance: string): AgentRequestStore {
-		return new AgentRequestStore(agentRequestsDir(this.options.dataDir, tenantId(tenant), instanceId(instance)));
-	}
-
 	/** What other agenti last asked this instance, per conversation (ADR 0108). */
 	agentAsks(tenant: string, instance: string): AgentAsks {
 		return new AgentAsks(agentAsksFile(this.options.dataDir, tenantId(tenant), instanceId(instance)));
@@ -234,123 +206,6 @@ export class OwniRuntime {
 	/** The liste of an instance: each person's and the shared ones. */
 	lists(tenant: string, instance: string): ListStore {
 		return new ListStore(instanceDir(this.options.dataDir, tenantId(tenant), instanceId(instance)));
-	}
-
-	/** The scadenzario of an instance: which invoices are paid, and the owner's company. */
-	invoices(tenant: string, instance: string): InvoiceStore {
-		return new InvoiceStore(instanceDir(this.options.dataDir, tenantId(tenant), instanceId(instance)));
-	}
-
-	/** The preventivi of an instance. */
-	quotes(tenant: string, instance: string): QuoteStore {
-		return new QuoteStore(instanceDir(this.options.dataDir, tenantId(tenant), instanceId(instance)));
-	}
-
-	/** The spese of an instance. */
-	expenses(tenant: string, instance: string): ExpenseStore {
-		return new ExpenseStore(instanceDir(this.options.dataDir, tenantId(tenant), instanceId(instance)));
-	}
-
-	/** The ore di lavoro of an instance: entries, timers and rates. */
-	timesheet(tenant: string, instance: string): TimesheetStore {
-		// A to_quote reservation whose quote was made is billed with it, never dropped.
-		const quotes = this.quotes(tenant, instance);
-		return new TimesheetStore(instanceDir(this.options.dataDir, tenantId(tenant), instanceId(instance)), { finishedQuote: (callId) => quotes.finished(callId) });
-	}
-
-	/** The rinnovi e abbonamenti of an instance. */
-	renewals(tenant: string, instance: string): RenewalStore {
-		return new RenewalStore(instanceDir(this.options.dataDir, tenantId(tenant), instanceId(instance)));
-	}
-
-	/** Il listino prezzi of an instance. */
-	priceList(tenant: string, instance: string): PriceListStore {
-		return new PriceListStore(instanceDir(this.options.dataDir, tenantId(tenant), instanceId(instance)));
-	}
-
-	/** La previsione di cassa of an instance: the balances said and the voci added by hand. */
-	cashflow(tenant: string, instance: string): CashflowStore {
-		return new CashflowStore(instanceDir(this.options.dataDir, tenantId(tenant), instanceId(instance)));
-	}
-
-	/** Le tasse del forfettario of an instance: the profile and the figures said per year. */
-	taxes(tenant: string, instance: string): TaxStore {
-		return new TaxStore(instanceDir(this.options.dataDir, tenantId(tenant), instanceId(instance)));
-	}
-
-	/** La liquidazione IVA of an instance: the periodicity, the F24 marked paid, the deductibility marks and the credit said per year. */
-	vat(tenant: string, instance: string): VatStore {
-		return new VatStore(instanceDir(this.options.dataDir, tenantId(tenant), instanceId(instance)));
-	}
-
-	/** L'estratto conto of an instance: the bank movements loaded, the imports, the matches and the settings. */
-	bank(tenant: string, instance: string): BankStore {
-		return new BankStore(instanceDir(this.options.dataDir, tenantId(tenant), instanceId(instance)));
-	}
-
-	/** Le ritenute of an instance: the CU received. */
-	withholding(tenant: string, instance: string): WithholdingStore {
-		return new WithholdingStore(instanceDir(this.options.dataDir, tenantId(tenant), instanceId(instance)));
-	}
-
-	/** I clienti of an instance: the cards with what the person said about each client. */
-	clients(tenant: string, instance: string): ClientStore {
-		return new ClientStore(instanceDir(this.options.dataDir, tenantId(tenant), instanceId(instance)));
-	}
-
-	/** I fornitori of an instance: the cards with what the person said about each supplier. */
-	suppliers(tenant: string, instance: string): SupplierStore {
-		return new SupplierStore(instanceDir(this.options.dataDir, tenantId(tenant), instanceId(instance)));
-	}
-
-	/** Budget e obiettivi of an instance: the spending limits and income targets the person set. */
-	budgets(tenant: string, instance: string): BudgetStore {
-		return new BudgetStore(instanceDir(this.options.dataDir, tenantId(tenant), instanceId(instance)));
-	}
-
-	/** I prezzi d'acquisto of an instance: only the increases already said (the prices are read from the invoices received). */
-	purchases(tenant: string, instance: string): PurchaseStore {
-		return new PurchaseStore(instanceDir(this.options.dataDir, tenantId(tenant), instanceId(instance)));
-	}
-
-	/** I margini of an instance: only the voci the brief already said (the margins are read from the registers). */
-	margins(tenant: string, instance: string): MarginStore {
-		return new MarginStore(instanceDir(this.options.dataDir, tenantId(tenant), instanceId(instance)));
-	}
-
-	/** I DDT in uscita of an instance: the DDTs, their numbering, what the brief said. */
-	ddt(tenant: string, instance: string): DdtStore {
-		return new DdtStore(instanceDir(this.options.dataDir, tenantId(tenant), instanceId(instance)));
-	}
-
-	/** Gli appuntamenti of an instance (appointments.json), outside the workspace. */
-	appointments(tenant: string, instance: string): AppointmentStore {
-		return new AppointmentStore(instanceDir(this.options.dataDir, tenantId(tenant), instanceId(instance)));
-	}
-
-	/** Il personale of an instance (staff.json), outside the workspace: HR data, not Owni's users. */
-	staff(tenant: string, instance: string): StaffStore {
-		return new StaffStore(instanceDir(this.options.dataDir, tenantId(tenant), instanceId(instance)));
-	}
-
-	/** Gli ordini ai fornitori of an instance: the orders, the lead times said, what the brief said. */
-	orders(tenant: string, instance: string): OrderStore {
-		return new OrderStore(instanceDir(this.options.dataDir, tenantId(tenant), instanceId(instance)));
-	}
-
-	/** Il magazzino of an instance: the articles and their movements. */
-	stock(tenant: string, instance: string): StockStore {
-		return new StockStore(instanceDir(this.options.dataDir, tenantId(tenant), instanceId(instance)));
-	}
-
-	/** Le fatture ricorrenti of an instance: the canoni whose drafts Owni prepares every period. */
-	recurringInvoices(tenant: string, instance: string): RecurringStore {
-		return new RecurringStore(instanceDir(this.options.dataDir, tenantId(tenant), instanceId(instance)));
-	}
-
-	/** Le fatture emesse of an instance: drafts, invoices issued, numbering. */
-	salesInvoices(tenant: string, instance: string): SalesInvoiceStore {
-		return new SalesInvoiceStore(instanceDir(this.options.dataDir, tenantId(tenant), instanceId(instance)));
 	}
 
 	/** Whom a private thread is with, as "<channel>:<userId>"; undefined for a group or unknown thread. */

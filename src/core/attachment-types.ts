@@ -26,7 +26,7 @@ export const ATTACHMENT_TYPES: Readonly<Record<string, string>> = {
 };
 
 /** What the person can attach, said when a file is refused. */
-const ATTACHMENT_KINDS = "PDF, Word, Excel, PowerPoint, OpenDocument (odt, ods), RTF, CSV, testo, immagini PNG e JPG, fatture XML e p7m";
+const ATTACHMENT_KINDS = "PDF, Word, Excel, PowerPoint, OpenDocument (odt, ods), RTF, CSV, testo, immagini PNG e JPG, XML, file firmati p7m";
 
 const OLE = Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]);
 const ZIP = Buffer.from("PK\x03\x04", "latin1");

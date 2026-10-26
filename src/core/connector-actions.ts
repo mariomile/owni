@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { ActionQueue, type QueuedStatus } from "./action-queue.ts";
-import type { AskedBy } from "./agent-requests.ts";
+import type { AskedBy } from "./agent-asks.ts";
 import { oneLine } from "./plain-text.ts";
 
 /**

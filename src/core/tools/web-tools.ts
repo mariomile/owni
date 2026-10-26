@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import type { OwniTool } from "../engine.ts";
 import { type EgressPolicy, webHostAllowed } from "../policy.ts";
-import type { AskedBy } from "../agent-requests.ts";
+import type { AskedBy } from "../agent-asks.ts";
 import { readForm, type WebAction, WebActionError, WEB_ACTIONS_CONNECTOR, type WebActionStore } from "../web-actions.ts";
 import { DocumentError, type DocumentText, documentExtension, documentKind, documentLabel, documentPartsLabel, documentSectionAt, oldFormatAdvice } from "../documents.ts";
 import { imageType } from "../images.ts";
@@ -475,7 +475,7 @@ async function readWebDocument(page: WebPage, offset: number): Promise<DocumentT
 	const advice = oldFormatAdvice(urlFileName(page.url), page.bytes);
 	if (advice !== undefined) return `Errore: ${advice} Per tenerlo o mandarlo, salvalo con web_download.`;
 	if (imageType(page.bytes) !== undefined) return "Errore: è un'immagine, non una pagina. Per guardarla salvala con web_download e poi usa image_view.";
-	return "Errore: non è una pagina di testo né un documento che so leggere (PDF, Word, Excel, PowerPoint, OpenDocument, fatture elettroniche XML o .p7m).";
+	return "Errore: non è una pagina di testo né un documento che so leggere (PDF, Word, Excel, PowerPoint, OpenDocument o .p7m).";
 }
 
 /** A piece of a document from the web, fenced like a page, with how to read on outside the fence. */
@@ -549,6 +549,6 @@ async function freePath(workspace: Workspace, path: string, data: Buffer): Promi
 	const same = there.size === data.length && (await workspace.read(path).catch(() => undefined))?.equals(data) === true;
 	if (same) return path;
 	const hash = createHash("sha256").update(data).digest("hex").slice(0, 8);
-	// Before the whole extension of a signed file: fattura-ab12cd34.xml.p7m.
+	// Before the whole extension of a signed file: nota-ab12cd34.xml.p7m.
 	return path.replace(/((?:\.[A-Za-z0-9]{1,5})?\.p7m|\.[^./]*)?$/i, (ext) => `-${hash}${ext}`);
 }
