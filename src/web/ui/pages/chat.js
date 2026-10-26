@@ -10,6 +10,7 @@ import { refreshCounters } from "../session.js";
 import { refreshConversations, renderRail } from "../shell.js";
 import { conversationRuns } from "../runs.js";
 import { renderMarkdown } from "../markdown.js";
+import { fillComposer } from "../openui.js";
 import { linkPreviews, sources } from "../sources.js";
 import { artifactCard, artifactPanel, isHtml } from "../artifacts.js";
 import { agentPanel } from "../agent-panel.js";
@@ -319,6 +320,7 @@ function conversationView(inst, main, thread, entries, model) {
 		await api(`/api/instances/${inst.id}/threads/${encodeURIComponent(threadId)}/model`, { method: "PUT", body: picked ? { provider: picked.provider, modelId: picked.modelId } : {} });
 	}));
 	conversation.append(transcript, h("div.dock", asks, box.el));
+	transcript.addEventListener("openui-action", (event) => fillComposer(box.input, event.detail.text));
 	transcript.scrollTop = transcript.scrollHeight;
 	// A message written on the empty chat: sent as soon as its conversation opens.
 	if (main.isConnected && store(`owni.autosend.${threadId}`) === "1") {
@@ -355,6 +357,9 @@ function threadPanel(inst, render, onShow, onChange) {
 	const title = h("span.page-title", "Thread");
 	const list = h("div.thread-list", { role: "log", "aria-live": "polite" });
 	const dock = h("div.thread-dock");
+	// A click in an interactive answer of the open thread: written in its box.
+	let input = null;
+	list.addEventListener("openui-action", (event) => input && fillComposer(input, event.detail.text));
 	const el = h(
 		"aside.browser-panel.thread-panel",
 		{ hidden: true, "aria-label": "Thread" },
@@ -434,6 +439,7 @@ function threadPanel(inst, render, onShow, onChange) {
 				}
 			});
 			mount(dock, box.el);
+			input = box.input;
 			if (route().rest[2] !== id) history.pushState(null, "", dmHref(inst.id, id));
 			// Read first, then the summary under the message: else it would still say unread.
 			void markRead(inst, id).then(onChange);

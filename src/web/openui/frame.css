@@ -1,0 +1,81 @@
+/* OpenUI in Owni's colors and type (ADR 0118): monochrome, Archivo and Monaspace, no blue accent. */
+/* The fonts by an address of their own: a copy the browser kept from before, without the header a frame with no origin needs, is not reused. */
+@font-face { font-family: "Archivo"; src: url("/fonts/archivo-latin.woff2?frame") format("woff2"); font-weight: 100 900; font-stretch: 62% 125%; font-display: swap; unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Archivo"; src: url("/fonts/archivo-latin-ext.woff2?frame") format("woff2"); font-weight: 100 900; font-stretch: 62% 125%; font-display: swap; unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "Monaspace Neon"; src: url("/fonts/monaspace-neon-latin-400.woff2?frame") format("woff2"); font-weight: 400; font-display: swap; }
+
+:root {
+	--openui-font-body: "Archivo", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+	--openui-font-heading: var(--openui-font-body);
+	--openui-font-label: var(--openui-font-body);
+	--openui-font-numbers: var(--openui-font-body);
+	--openui-font-code: "Monaspace Neon", ui-monospace, "SFMono-Regular", Menlo, monospace;
+	--openui-background: transparent;
+	--openui-foreground: #ffffff;
+	--openui-popover-background: #ffffff;
+	--openui-text-neutral-primary: #0d0d0d;
+	--openui-text-neutral-secondary: #5d5d5d;
+	--openui-text-neutral-link: #0d0d0d;
+	--openui-text-brand: #0d0d0d;
+	--openui-text-accent-primary: #ffffff;
+	--openui-interactive-accent-default: #0d0d0d;
+	--openui-interactive-accent-hover: #2a2a2a;
+	--openui-interactive-accent-pressed: #0d0d0d;
+	--openui-interactive-accent-disabled: #0d0d0d66;
+	--openui-border-default: #ebebeb;
+	--openui-border-interactive: #d9d9d9;
+	--openui-border-accent: #ebebeb;
+	--openui-border-accent-emphasis: #0d0d0d;
+	--openui-border-info-emphasis: #0d0d0d;
+	color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+	:root:not([data-openui-theme="light"]) {
+		--openui-foreground: #141414;
+		--openui-popover-background: #141414;
+		--openui-text-neutral-primary: #fcfcfc;
+		--openui-text-neutral-secondary: #b4b4b4;
+		--openui-text-neutral-link: #fcfcfc;
+		--openui-text-brand: #fcfcfc;
+		--openui-text-accent-primary: #0d0d0d;
+		--openui-interactive-accent-default: #fcfcfc;
+		--openui-interactive-accent-hover: #d9d9d9;
+		--openui-interactive-accent-pressed: #fcfcfc;
+		--openui-interactive-accent-disabled: #fcfcfc66;
+		--openui-border-default: #1f1f1f;
+		--openui-border-interactive: #2e2e2e;
+		--openui-border-accent: #1f1f1f;
+		--openui-border-accent-emphasis: #fcfcfc;
+		--openui-border-info-emphasis: #fcfcfc;
+		color-scheme: dark;
+	}
+}
+
+:root[data-openui-theme="dark"] {
+	--openui-foreground: #141414;
+	--openui-popover-background: #141414;
+	--openui-text-neutral-primary: #fcfcfc;
+	--openui-text-neutral-secondary: #b4b4b4;
+	--openui-text-neutral-link: #fcfcfc;
+	--openui-text-brand: #fcfcfc;
+	--openui-text-accent-primary: #0d0d0d;
+	--openui-interactive-accent-default: #fcfcfc;
+	--openui-interactive-accent-hover: #d9d9d9;
+	--openui-interactive-accent-pressed: #fcfcfc;
+	--openui-interactive-accent-disabled: #fcfcfc66;
+	--openui-border-default: #1f1f1f;
+	--openui-border-interactive: #2e2e2e;
+	--openui-border-accent: #1f1f1f;
+	--openui-border-accent-emphasis: #fcfcfc;
+	--openui-border-info-emphasis: #fcfcfc;
+	color-scheme: dark;
+}
+
+html, body { margin: 0; padding: 0; background: transparent; }
+body { font-family: var(--openui-font-body); color: var(--openui-text-neutral-primary); -webkit-font-smoothing: antialiased; overflow: hidden; }
+/* The frame grows with the answer: no inner scroll, no margin below the last card. */
+#root { padding: 2px; }
+/* OpenUI's type shorthands (--openui-text-*) name Inter outright: the family is Owni's everywhere, keeping their sizes and weights. */
+*, *::before, *::after { font-family: var(--openui-font-body) !important; }
+code, pre, kbd, samp, code *, pre * { font-family: var(--openui-font-code) !important; }

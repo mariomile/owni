@@ -19,6 +19,10 @@ _Avoid_: risposta citata
 Quello che un agente fa e sa, a destra della conversazione: attività, artifact, routine, memoria, documenti e procedure. La configurazione non ci sta: è una pagina dell'owner. Vedi ADR 0114.
 _Avoid_: scheda dell'agente, profilo
 
+**Risposta interattiva**:
+Un pezzo di interfaccia dentro la risposta dell'agente, nella console: schede, tabelle, grafici, bottoni da scegliere o un modulo breve. Un click scrive il messaggio successivo nella casella della persona, che lo legge e lo manda. Non è un artifact: quello è una pagina a sé accanto alla conversazione. Vedi ADR 0118.
+_Avoid_: widget, generative UI nei testi per le persone
+
 **Lavori**:
 L'area degli incarichi e delle automazioni. Si apre sulla Board degli incarichi. Vedi ADR 0115.
 

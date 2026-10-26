@@ -652,6 +652,11 @@ table.ledger td.mono:first-child { white-space: nowrap; }
 table.ledger td.num { text-align: right; font-family: var(--mono); font-size: 12.5px; font-variant-numeric: tabular-nums; }
 table.ledger td pre.code { white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; }
 pre.code { margin: 0; padding: 12px 14px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 10px; overflow: auto; max-height: 360px; font: 12.5px/1.6 var(--mono); white-space: pre; }
+/* An interactive answer (ADR 0118): a sandboxed frame as tall as what it draws; a quiet block until then. */
+.openui { margin: 6px 0; border-radius: 10px; }
+.openui:not(.drawn) { background: var(--bg-2); }
+.openui-frame { display: block; width: 100%; height: 120px; border: 0; background: transparent; }
+.openui:not(.drawn) .openui-frame { opacity: 0; }
 
 /* ---------- chat ---------- */
 main.is-chat { --chat-column: 720px; height: 100%; display: flex; flex-direction: column; }

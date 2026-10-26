@@ -15,3 +15,10 @@ The provider marks in src/web/ui/models.js are the path outlines of LobeHub
 Icons (https://github.com/lobehub/lobe-icons), MIT License, Copyright (c) 2023
 LobeHub. The marks themselves are trademarks of their owners, shown only to
 name each provider.
+
+The interactive answers in the chat are drawn by the OpenUI browser bundle
+(https://www.openui.com), vendored in src/web/openui, and the guide to its
+language in src/core/openui-guide.ts is generated from OpenUI's packages: MIT
+License, Copyright (c) 2011-2024 Thesys Inc., reproduced in src/web/openui/LICENSE.
+The bundle includes React and React DOM (MIT, Copyright (c) Meta Platforms, Inc.
+and affiliates) and other libraries whose license notices it keeps.

@@ -2,6 +2,7 @@
 import { api, batched, channelHref, channelName, confirmDialog, emptyNote, face, faceColor, fmt, go, h, head, icon, initials, mount, route, state, store, thinking, toast, whenSeen } from "../common.js";
 import { agentCommands, commandMenu } from "../commands.js";
 import { renderMarkdown } from "../markdown.js";
+import { fillComposer } from "../openui.js";
 import { copyButton, listenButton } from "../listen.js";
 import { refreshConversations, render, renderRail, windowDrag } from "../shell.js";
 import { artifactCard, artifactPanel, isHtml } from "../artifacts.js";
@@ -109,9 +110,12 @@ function roomMessage(room, entry, answer, slot) {
 	const who = known && openAgent ? h("button.who", { type: "button", title: `Apri ${agent?.name ?? "l'agente"}`, onclick: () => openAgent(entry.instanceId) }, name) : h("b.who", name);
 	who.style.setProperty("--agent", faceColor(agent ?? { id: entry.instanceId }));
 	const actions = entry.text || answer ? h("div.msg-actions", entry.text ? [copyButton(entry.text), listenButton(entry.text)] : null, answer) : null;
-	return h("div.msg.owni", h("div.meta", face(agent ?? { id: entry.instanceId }, 20), who, h("span", fmt.time(entry.at)), by), entry.artifact ? artifactCard(entry.instanceId, entry.artifact.threadId, entry.artifact, (a) => void artifacts?.openArtifact(entry.instanceId, entry.artifact.threadId, a))
+	const msg = h("div.msg.owni", h("div.meta", face(agent ?? { id: entry.instanceId }, 20), who, h("span", fmt.time(entry.at)), by), entry.artifact ? artifactCard(entry.instanceId, entry.artifact.threadId, entry.artifact, (a) => void artifacts?.openArtifact(entry.instanceId, entry.artifact.threadId, a))
 		: entry.file ? fileCard(entry.instanceId, entry.file)
 		: h("div.body", renderMarkdown(entry.text ?? "")), actions, slot);
+	// A click in its interactive answer (ADR 0118) goes back to the agente that wrote it, not to the last one that spoke.
+	if (agent?.present) msg.addEventListener("openui-action", (event) => { event.detail.text = `@${agent.handle} ${event.detail.text}`.slice(0, 4000); });
+	return msg;
 }
 
 /** Under a message with a thread: who answered, how many replies, the last one. Nothing when none yet. */
@@ -310,6 +314,7 @@ async function viewRoom(main, roomId, openId) {
 		h("button.icon-btn.room-remove", { onclick: remove, title: "Cancella il canale", "aria-label": `Cancella il canale ${channelName(room.title)}` }, icon("trash")),
 	);
 	if (entries.length === 0) transcript.append(h("div.room-note", `Nel canale: ${room.agents.map((a) => a.name).join(", ")}. Scrivi @nome per chiamarne uno, @tutti per tutti.`));
+	transcript.addEventListener("openui-action", (event) => fillComposer(box.input, event.detail.text));
 	const split = h("div.chat-split", h("section.conversation", header, transcript, box.el), panel.el, artifacts.el);
 	mount(main, split);
 	box.fit();
@@ -330,6 +335,9 @@ async function viewRoom(main, roomId, openId) {
  */
 function threadPanel(channel, onChange, onShow) {
 	const list = h("div.thread-list", { role: "log", "aria-live": "polite" });
+	// A click in an interactive answer of the open thread: written in its box.
+	let input = null;
+	list.addEventListener("openui-action", (event) => input && fillComposer(input, event.detail.text));
 	const dock = h("div.thread-dock");
 	const el = h(
 		"aside.browser-panel.thread-panel",
@@ -400,6 +408,7 @@ function threadPanel(channel, onChange, onShow) {
 				onChange();
 			});
 			mount(dock, box.el);
+			input = box.input;
 			box.fit();
 			if (route().rest[2] !== id) history.pushState(null, "", channelHref(channel.id, id));
 			// Read first, then the summary under the message: else it would still say unread.

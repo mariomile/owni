@@ -1,4 +1,5 @@
 import { h } from "./common.js";
+import { openuiBlock } from "./openui.js";
 
 // A bounded subset for assistant replies, not a full CommonMark implementation. Beyond these
 // limits the remaining content stays readable as text; no source text is silently truncated.
@@ -9,6 +10,7 @@ const MAX_CELLS = 64;
 const HEADING = /^ {0,3}(#{1,6})(?:[ \t]+(.*))?$/;
 const SETEXT = /^ {0,3}(={2,}|-{3,})[ \t]*$/;
 const FENCE = /^ {0,3}(`{3,}|~{3,})(.*)$/;
+const OPENUI = /^\s*openui(?:-lang)?(?:\s|$)/i;
 const FENCE_END = /^ {0,3}(`+|~+)[ \t]*$/;
 const QUOTE = /^ {0,3}>[ \t]?(.*)$/;
 const RULE = /^ {0,3}([-*_])(?:[ \t]*\1){2,}[ \t]*$/;
@@ -406,7 +408,9 @@ function blocks(lines, parent, context, depth) {
 				if (end && end[1][0] === fence[1][0] && end[1].length >= fence[1].length) { at++; break; }
 				code.push(lines[at++]);
 			}
-			parent.append(codeBlock(context, code.join("\n"), fence[2]));
+			const body = code.join("\n");
+			// An OpenUI Lang block is drawn as an interface (ADR 0118); the code is the fallback.
+			parent.append(OPENUI.test(fence[2]) ? openuiBlock(body, () => codeBlock(context, body, fence[2])) : codeBlock(context, body, fence[2]));
 			continue;
 		}
 		const heading = HEADING.exec(line);
