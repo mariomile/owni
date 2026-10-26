@@ -27,7 +27,7 @@ export function openPalette() {
 	const draw = () => {
 		const q = input.value.trim().toLowerCase();
 		const talks = q === "" ? [] : [...dms, ...rooms].filter((c) => c.label.toLowerCase().includes(q)).slice(0, 8);
-		shown = [...items.filter((i) => q ? i.label.toLowerCase().includes(q) : ["lavori", "agenti", "gestione"].includes(i.id)), ...talks];
+		shown = [...items.filter((i) => q ? i.label.toLowerCase().includes(q) : ["board", "approvazioni", "agenti", "gestione"].includes(i.id)), ...talks];
 		active = Math.min(active, Math.max(0, shown.length - 1));
 		mount(list, 
 			...shown.map((item, n) =>

@@ -1,4 +1,4 @@
-// Approvals page, with the connector and Google action cards.
+// Richiede te: the decisions and results that wait for the person, with the connector and Google action cards.
 import { api, emptyNote, fmt, h, head, icon, instanceHref, mount, route, state, toast } from "../common.js";
 import { agentRequestCard, askedByNote, connectorActionCard, decideWith, decisionCard, googleActionCard } from "../cards.js";
 import { refreshCounters } from "../session.js";
@@ -11,23 +11,57 @@ function toolTitle(name) {
 	return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
+/** Same recipient rule as the console summary: being the owner does not take another person's review. */
+export function needsBoardReview(card, viewer) {
+	return card.status === "da_rivedere" && (card.work && card.work.agent === card.assignee ? card.work.personId === viewer.id : viewer.role === "owner");
+}
+
+/** What the agente said when it moved the incarico to «Da rivedere»: the result to look at. */
+function resultOf(card) {
+	const moved = (card.events ?? []).findLastIndex((e) => e.kind === "status" && e.status === "da_rivedere");
+	return moved < 0 ? undefined : card.events.slice(moved).find((e) => e.kind === "comment" && e.by.kind === "agent")?.text;
+}
+
+/** The incarichi that wait for this person to accept the result, newest first. */
+export function reviewRows(board, viewer) {
+	const agents = new Map((board.agents ?? []).map((a) => [a.id, a]));
+	return (board.cards ?? []).filter((card) => needsBoardReview(card, viewer)).sort((a, b) => String(b.updatedAt ?? "").localeCompare(String(a.updatedAt ?? ""))).map((card) => {
+		const result = resultOf(card)?.replace(/\s+/g, " ").trim();
+		return h("article.card.pad.dossier.review-card",
+			h("header", h("div", h("h2", `#${card.n} ${card.title}`), h("small.dossier-meta", `${card.assignee ? agents.get(card.assignee)?.name ?? "Un agente" : "Non assegnato"} · Da rivedere${card.updatedAt ? ` · ${fmt.time(card.updatedAt)}` : ""}`))),
+			result ? h("p.review-result", result.length > 280 ? `${result.slice(0, 279)}…` : result) : h("p.muted", "L'agente l'ha spostato in «Da rivedere» senza un commento."),
+			h("div.actions", h("a.btn.accent", { href: `#/board/${encodeURIComponent(card.id)}` }, "Rivedi il risultato"), h("span.muted", "Lo accetti e l'incarico è fatto, oppure lo rimandi indietro con un commento.")));
+	});
+}
+
+/** Richiede te: every decision and every result that waits for this person, across the agenti they can see. */
 export async function viewApprovals(main) {
 	const person = state.me;
-	mount(main, head(null, "Autorizzazioni", "Le azioni che aspettano una tua decisione, fra gli agenti a cui hai accesso."), h("p.muted", { role: "status" }, "Carico le richieste…"));
+	const title = "Richiede te";
+	mount(main, head(null, title, "Le decisioni e i risultati che aspettano te."), h("p.muted", { role: "status" }, "Carico le richieste…"));
 	let inbox;
+	let board;
 	try {
-		inbox = await api("/api/approvals");
+		[inbox, board] = await Promise.all([api("/api/approvals"), api("/api/board").catch((error) => ({ error }))]);
 	} catch (error) {
 		if (!main.isConnected || state.me !== person) return;
-		mount(main, head(null, "Autorizzazioni", "Non sono riuscita a caricare tutte le richieste."), h("div.card.pad", { role: "alert" }, h("p", error.message), h("p.muted", "Questo non significa che non ci sia niente da autorizzare."), h("button.btn", { onclick: () => void viewApprovals(main) }, "Riprova")));
+		mount(main, head(null, title, "Non sono riuscita a caricare tutte le richieste."), h("div.card.pad", { role: "alert" }, h("p", error.message), h("p.muted", "Questo non significa che non ci sia niente da decidere."), h("button.btn", { onclick: () => void viewApprovals(main) }, "Riprova")));
 		return;
 	}
 	if (!main.isConnected || state.me !== person) return;
 	const groups = inbox.groups.map(approvalGroup);
+	const pending = groups.flatMap((group) => group.pending);
+	const reviews = board.error ? [] : reviewRows(board, person);
 	state.pendingApprovals = inbox.pendingApprovals;
+	if (!board.error) state.boardReview = reviews.length;
 	renderRail();
-	mount(main, head(null, "Autorizzazioni", "Controlla agente e conseguenza prima di decidere. Autorizzare un'azione è diverso da accettare il risultato di un incarico."),
-		h("div.stack", groups.flatMap((group) => group.pending), inbox.pendingApprovals ? null : emptyNote("div.card.empty", "Niente da autorizzare", "Qui compaiono le azioni che puoi decidere, per tutti gli agenti consentiti."), groups.some((group) => group.decided.length) ? h("details.approval-history", h("summary", "Decisioni precedenti"), h("div.stack", groups.flatMap((group) => group.decided))) : null),
+	const section = (label, items) => items.length ? h("section.inbox-section", h("h2.inbox-title", label, h("span.count", String(items.length))), h("div.stack", items)) : null;
+	mount(main, head(null, title, "Le decisioni e i risultati che aspettano te, per tutti gli agenti a cui hai accesso."),
+		board.error ? h("p.load-warning", { role: "status" }, `Gli incarichi da rivedere non sono disponibili: ${board.error.message}`) : null,
+		section("Da decidere", pending),
+		section("Da rivedere", reviews),
+		pending.length || reviews.length ? null : emptyNote("div.card.empty", "Niente richiede te", "Quando un agente ti chiede il permesso per un'azione o ti consegna un incarico, lo trovi qui."),
+		groups.some((group) => group.decided.length) ? h("details.approval-history", h("summary", "Decisioni precedenti"), h("div.stack", groups.flatMap((group) => group.decided))) : null,
 	);
 	const [type, instanceId, id] = route().rest;
 	if (type && instanceId && id) {

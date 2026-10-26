@@ -57,13 +57,13 @@ Lo stato della conversazione resta sopra la casella su una riga compatta durante
 
 ## Lavori e automazioni
 
-**Lavori** mostra incarichi, autorizzazioni ed esiti personali delle esecuzioni, attraverso gli agenti consentiti. Si filtra per Tutti, In corso, Richiede te, Conclusi e per agente; la scelta dell’agente nella chat non filtra questa vista. I quattro stati degli incarichi restano distinti. Una risposta pronta non equivale a un risultato accettato né a una consegna riuscita.
+**Lavori** apre la Board degli incarichi, in quattro colonne (Da fare, In corso, Da rivedere, Fatto), con i filtri della Board. La barra di Lavori ha Incarichi, Automazioni e, se c’è, Pratiche. Le esecuzioni di un agente sono nella sezione Attività del suo pannello ([ADR 0115](adr/0115-richiede-te-e-lavori.md)).
 
-**Richiede te** include le revisioni della persona e le azioni che può autorizzare. Le autorizzazioni sono aggregate dal server con le stesse regole del conteggio; ogni card conserva il suo agente e tipo. Le operazioni Google restano della persona proprietaria dell’account. «Accetta risultato» chiude la revisione di un incarico; una card di invio autorizza la chiamata esatta mostrata.
+**Richiede te** è una pagina sola, `#/approvazioni`: «Da decidere» con le schede complete delle azioni che la persona può autorizzare, che si decidono lì, e «Da rivedere» con gli incarichi il cui risultato aspetta lei, ognuno con il risultato lasciato dall’agente e «Rivedi il risultato», che apre l’incarico nella Board. Sotto, le decisioni precedenti. Le autorizzazioni sono aggregate dal server con le stesse regole del conteggio; ogni scheda conserva il suo agente e tipo. Le operazioni Google restano della persona proprietaria dell’account. Se la Board non si legge, la pagina mostra comunque le decisioni.
 
 **Automazioni** chiede quando deve partire il lavoro: A un orario, Quando cambia una pagina, Quando arriva un evento, Ripeti un incarico. Ogni tipo apre il proprio modulo per un agente esplicito. Configurazione, ultima esecuzione e risultato restano separati. La Segreteria conserva il proprio flusso completo dentro Pratiche commerciali.
 
-Le viste dichiarano le fonti non caricate e consentono di riprovare. Le approvazioni non vengono conservate in caso di lettura fallita; per altri dati, una fonte temporaneamente irraggiungibile può mostrare l’ultima lettura con un avviso. Un 401/403/404 elimina quella copia. Se l’elenco agenti aggiornato conferma un cambio di accesso, una lettura Board fallita elimina anche la copia precedente della Board. Gli aggiornamenti della Board ricaricano le fonti senza azzerare i filtri.
+Automazioni dichiara le fonti non caricate e consente di riprovare. Per i dati una fonte temporaneamente irraggiungibile può mostrare l’ultima lettura con un avviso. Un 401/403/404 elimina quella copia. Se l’elenco agenti aggiornato conferma un cambio di accesso, una lettura Board fallita elimina anche la copia precedente della Board. Gli aggiornamenti della Board ricaricano le fonti senza azzerare i filtri.
 
 I nuovi link a chat, file, procedure e configurazione includono l’agente in `?agent=...`. I vecchi link restano compatibili; quelli espliciti non ripiegano su un altro agente se manca l’accesso. Le conversazioni restano personali, anche per l’owner.
 
