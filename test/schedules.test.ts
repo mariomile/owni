@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { piDurableEngine } from "../src/core/adapters/pi-durable.ts";
+import { BRIEF_INSTRUCTION } from "../src/core/brief.ts";
 import { OwniRuntime, type Reply } from "../src/core/index.ts";
 import { Scheduler } from "../src/core/scheduler.ts";
 import { ScheduleError, ScheduleStore } from "../src/core/schedules.ts";
@@ -39,6 +40,16 @@ describe("tasks programmati", () => {
 		expect((await h.store.get(s.id))?.nextRunAt).toBeNull();
 		const audit = await h.runtime.audit("acme").read();
 		expect(audit).toContainEqual(expect.objectContaining({ type: "schedule.fired", scheduleId: s.id }));
+		await h.runtime.close();
+	});
+
+	it("a saved brief always sends the current brief instruction, not the text it was saved with", async () => {
+		const h = await setup();
+		const s = await h.store.create({ instruction: "Brief vecchio con le righe dei registri", kind: "brief", channel: "test", threadId: "t1", when: { at: "2026-10-15T09:00:00Z" }, createdBy: { kind: "person", channel: "test", userId: "u" } }, h.clock.now);
+		expect(await h.scheduler.tick(new Date("2026-10-15T09:00:10Z"))).toBe(1);
+		await waitFor(() => h.replies.length === 1);
+		expect(text(h.replies[0]!)).toContain(`[Task programmato ${s.id}] ${BRIEF_INSTRUCTION}`);
+		expect(text(h.replies[0]!)).not.toContain("registri");
 		await h.runtime.close();
 	});
 

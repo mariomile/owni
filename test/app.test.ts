@@ -1,18 +1,15 @@
-import { existsSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
 import { type RunningOwni, startOwni } from "../src/app.ts";
-import { agentThreadId } from "../src/core/agent-messages.ts";
-import { OWNER } from "../src/core/approvals.ts";
 import { BoardStore } from "../src/core/board.ts";
-import { instanceId, instanceId as toInstanceId, tenantId, tenantId as toTenantId } from "../src/core/ids.ts";
-import { agentRequestsDir, instanceDir, tenantDir } from "../src/core/paths.ts";
-import { SUBJECT_TOOLS, SubjectLedger, SUBJECTS_KEY_SECRET } from "../src/core/subjects.ts";
+import { instanceId as toInstanceId, tenantId as toTenantId } from "../src/core/ids.ts";
+import { instanceDir, tenantDir } from "../src/core/paths.ts";
 import { romeDayKey } from "../src/core/usage.ts";
 import { proxyToken } from "../src/web/compare.ts";
 import { loadOwniConfig } from "../src/main/config.ts";
-import { FAUX_MODEL, loadTools, tempDataDir, waitFor } from "./helpers.ts";
+import { tempDataDir, waitFor } from "./helpers.ts";
 
 const running: RunningOwni[] = [];
 afterEach(async () => {
@@ -293,122 +290,6 @@ describe("pnpm start (startOwni)", () => {
 		expect((await api("/api/instances/vendite/schedules")).schedules).toEqual([]);
 		expect((await api("/api/instances/vendite/telegram")).telegram.connected).toBe(false);
 	});
-
-	it("chi segue cosa (ADR 0110): the owner sees it on the scheda, a scheda or an agente deleted takes its part away", async () => {
-		const dataDir = tempDataDir();
-		const { owni, base } = await boot(dataDir);
-		const api = await client(base, owni.ownerLink as string);
-		await api("/api/instances", { id: "vendite", name: "Vendite" });
-		await api("/api/instances", { id: "acquisti", name: "Acquisti" });
-		const send = (method: string, path: string, body?: unknown, cookie = api.cookie) =>
-			// biome-ignore lint: test
-			fetch(`${base}${path}`, { method, headers: { "x-owni": "1", "content-type": "application/json", cookie }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) }).then(async (r) => ({ status: r.status, ...((await r.json()) as any) }));
-		const ledger = new SubjectLedger(join(dataDir, "tenants", "default"), (await owni.runtime.secrets("default").get(SUBJECTS_KEY_SECRET)) as string);
-		const party = ledger.party({ name: "Alfa srl" });
-		ledger.sync("vendite", { quotes: [{ id: "2026-004", party, f: "a" }] });
-		ledger.sync("acquisti", { orders: [{ id: "OR-0003", party, f: "b" }] });
-		const { card } = await api("/api/board", { title: "Offerta Alfa" });
-		ledger.link("vendite", card, ["2026-004"]);
-
-		const seen = await api(`/api/board/${card.id}/subjects`);
-		expect(seen.linked).toMatchObject([{ agent: "Vendite", kind: "preventivo", id: "2026-004", card: card.n }]);
-		expect(seen.others).toMatchObject([{ agent: "Acquisti", kind: "ordine", id: "OR-0003" }]);
-		const { link } = await api("/api/people", { name: "Anna", role: "member" });
-		const member = await client(base, link);
-		expect((await send("GET", `/api/board/${card.id}/subjects`, undefined, member.cookie)).status).toBe(403);
-
-		expect((await send("DELETE", `/api/board/${card.id}`)).ok).toBe(true);
-		expect(ledger.list().some((e) => e.card !== undefined)).toBe(false);
-		expect((await send("DELETE", "/api/instances/acquisti", { confirm: "Acquisti" })).status).toBe(200);
-		expect(ledger.list().map((e) => `${e.agent} ${e.id}`)).toEqual(["vendite 2026-004"]);
-	});
-
-	it("chi segue cosa (ADR 0110) through the real tools: the owner hears who, at most five; a member only that someone has it", async () => {
-		const dataDir = tempDataDir();
-		const { owni, base } = await boot(dataDir);
-		const api = await client(base, owni.ownerLink as string);
-		await api("/api/instances", { id: "vendite", name: "Vendite" });
-		await api("/api/instances", { id: "acquisti", name: "Acquisti" });
-		const { person: anna, link } = await api("/api/people", { name: "Anna", role: "member" });
-		const owner = (await api("/api/people")).people.find((p: { role: string }) => p.role === "owner");
-		for (const id of ["vendite", "acquisti"]) {
-			const res = await fetch(`${base}/api/instances/${id}/settings`, { method: "PUT", headers: { cookie: api.cookie, "x-owni": "1" }, body: JSON.stringify({ webPeople: [owner.id, anna.id] }) });
-			expect(res.status).toBe(200);
-		}
-		const memberApi = await client(base, link);
-		const chat = async (call: typeof api, instance: string) => {
-			const thread = (await call(`/api/instances/${instance}/dm`, {})).thread;
-			return async (text: string): Promise<string> => {
-				const answers = async () => ((await call(`/api/instances/${instance}/threads/${thread.id}`)).entries as { from: string; text?: string }[]).filter((e) => e.from === "owni");
-				const before = (await answers()).length;
-				await call(`/api/instances/${instance}/threads/${thread.id}/messages`, { text });
-				for (const start = Date.now(); Date.now() - start < 30_000; ) {
-					const now = await answers();
-					if (now.length > before) return now.at(-1)?.text ?? "";
-					await new Promise((r) => setTimeout(r, 30));
-				}
-				throw new Error("no reply");
-			};
-		};
-		const vendite = await chat(api, "vendite");
-		const acquisti = await chat(api, "acquisti");
-		// The hook's tools are the app's: every one is there to load.
-		const found = await loadTools(vendite, ...Object.keys(SUBJECT_TOOLS));
-		for (const name of Object.keys(SUBJECT_TOOLS)) expect(found, name).toContain(name);
-		await loadTools(acquisti, "clients");
-
-		const quote = JSON.stringify({ op: "create", customer: "Rossi Srl", items: [{ description: "Consulenza", quantity: 2, unit: "giornate", price: 500 }], vat: 22 });
-		owni.runtime.invoices("default", "vendite").setCompany({ vat: "IT00000010017", name: "Beta Studio Srl", cf: "00000010017", address: "Via Roma 1, 20121 Milano MI", regime: "ordinario", ibans: ["IT51X0000000000000000000001"], by: "test:u", at: new Date().toISOString() });
-		for (let i = 0; i < 6; i++) {
-			const made = await vendite(`/tool quotes ${quote}`);
-			expect(made).not.toMatch(/Errore|Attenzione/);
-		}
-		const said = await acquisti('/tool clients {"op":"upsert","client":"Rossi Srl"}');
-		expect(said).toContain("Fatto, ho creato la scheda CL-0001.");
-		expect(said).toMatch(/Attenzione, lo stesso cliente o fornitore lo segue anche un altro agente: Vendite ha già preventivo [^;]+(; Vendite ha già preventivo [^;]+){4}, e altri 1\. Dillo alla persona/);
-		// Saved again about the same client: not news.
-		expect(await acquisti('/tool clients {"op":"upsert","client":"Rossi Srl","contact":{"name":"Marco"}}')).not.toContain("Attenzione");
-
-		// A member, on a new quote for the same client: no agente, no record.
-		const memberVendite = await chat(memberApi, "vendite");
-		await loadTools(memberVendite, "quotes");
-		const told = await memberVendite(`/tool quotes ${quote}`);
-		expect(told).toContain("Attenzione, un altro agente segue già lo stesso cliente o fornitore.");
-		expect(told).not.toMatch(/Acquisti|CL-0001/);
-	}, 60_000);
-
-	it("chi segue cosa (ADR 0110): the drafts the recurring sweep makes go into the ledger", async () => {
-		const dataDir = tempDataDir();
-		const { owni, base } = await boot(dataDir);
-		const api = await client(base, owni.ownerLink as string);
-		await api("/api/instances", { id: "vendite", name: "Vendite" });
-		const at = new Date().toISOString();
-		owni.runtime.invoices("default", "vendite").setCompany({ vat: "IT00000010017", name: "Beta Studio Srl", cf: "00000010017", address: "Via Roma 1, 20121 Milano MI", regime: "ordinario", ibans: ["IT51X0000000000000000000001"], by: "test:u", at });
-		const year = String(new Date().getFullYear());
-		owni.runtime.salesInvoices("default", "vendite").update("seed", (state) => ({ ...state, settings: { by: "test:u", at, lastBefore: { [year]: 0 } } }));
-		const thread = (await api("/api/instances/vendite/dm", {})).thread;
-		const reply = async (text: string): Promise<string> => {
-			const answers = async () => ((await api(`/api/instances/vendite/threads/${thread.id}`)).entries as { from: string; text?: string }[]).filter((e) => e.from === "owni");
-			const before = (await answers()).length;
-			await api(`/api/instances/vendite/threads/${thread.id}/messages`, { text });
-			for (const start = Date.now(); Date.now() - start < 30_000; ) {
-				const now = await answers();
-				if (now.length > before) return now.at(-1)?.text ?? "";
-				await new Promise((r) => setTimeout(r, 30));
-			}
-			throw new Error("no reply");
-		};
-		await loadTools(reply, "sales_invoices recurring_invoices");
-		const delta = { customer: "Delta Servizi Srl", vat_number: "00000020016", address: "Via Verdi 2, 00184 Roma RM", recipient_code: "ZZZ0001" };
-		expect(await reply(`/tool sales_invoices ${JSON.stringify({ op: "draft", ...delta, lines: [{ description: "Primo lavoro", price: 100 }], vat: 22 })}`)).toContain("BZ-0001");
-		const month = ["gennaio", "febbraio", "marzo", "aprile", "maggio", "giugno", "luglio", "agosto", "settembre", "ottobre", "novembre", "dicembre"][new Date().getMonth()];
-		expect(await reply(`/tool recurring_invoices ${JSON.stringify({ op: "add", customer: "Delta Servizi Srl", lines: [{ description: "Canone", price: 300 }], vat: 22, cadence: "monthly", day: 1, start: month })}`)).toContain("RI-0001");
-		const ledger = new SubjectLedger(join(dataDir, "tenants", "default"), (await owni.runtime.secrets("default").get(SUBJECTS_KEY_SECRET)) as string);
-		expect(ledger.list().filter((e) => e.register === "sales").map((e) => e.id)).toEqual(["BZ-0001"]);
-		// Past the sweep's five minutes.
-		await owni.scheduler.tick(new Date(Date.now() + 10 * 60_000));
-		expect(ledger.list().filter((e) => e.register === "sales").map((e) => e.id)).toEqual(["BZ-0001", "BZ-0002"]);
-	}, 60_000);
 
 	it("schede that come back (ADR 0069): set from the board, made at their time and started with who set them", async () => {
 		const { owni, base } = await boot(tempDataDir());
@@ -753,62 +634,29 @@ describe("pnpm start (startOwni)", () => {
 		expect((await member("/api/instances", { id: "mia", name: "Mia" })).error).toBeDefined();
 		expect((await owner("/api/instances")).instances.map((i: { id: string }) => i.id)).toEqual(["owni"]);
 	});
-});
 
-describe("richieste di un altro agente nelle chat e al riavvio (ADR 0108)", () => {
-	const origin = { channel: "web", threadId: "t1" } as const;
-	const input = { tool: "code_run", args: { code: "print(6 * 7)" }, what: "calcolo", askedBy: { id: "helper", name: "Helper", request: "quanto fa 6 per 7?" }, thread: { channel: "agente", threadId: agentThreadId("helper", origin) }, origin };
-	const helper = { id: "helper", name: "Helper", model: FAUX_MODEL, egress: { modelProviders: ["faux"], channels: ["web"] } };
-
-	it("a Telegram tap: a long one is approved only in the console, a chat that does not approve is told so, an approver's yes runs it once", async () => {
-		const { owni, telegram } = await boot(tempDataDir());
-		await owni.runtime.registry.createInstance("default", helper);
-		const store = owni.runtime.agentRequests("default", "owni");
-		const short = await store.propose(input, new Date(), "k1");
-		const long = await store.propose({ ...input, preview: "x".repeat(2_000) }, new Date(), "k2");
-		let n = 0;
-		const tap = (from: number, data: string) => telegram.updates.push([{ update_id: 500 + ++n, callback_query: { id: `cqa${n}`, from: { id: from }, message: { message_id: 50 + n, chat: { id: from } }, data } }]);
-		const said = (chat: string, text: string) => waitFor(() => telegram.sent.some((m) => m.chat_id === chat && m.text === text));
-
-		tap(9, `agent:${long.id}:approved`);
-		await said("9", `Richiesta ${long.id}: è lunga, si legge intera e si approva dalla console web (Approvazioni).`);
-		// Chat 7 may write to Owni, but does not approve for her.
-		tap(7, `agent:${short.id}:approved`);
-		await said("7", `Richiesta ${short.id}: non approvi per questo agente, la decide solo chi approva per lui.`);
-		expect((await store.get(short.id))?.status).toBe("pending");
-		expect((await store.get(long.id))?.status).toBe("pending");
-		expect(await owni.runtime.audit("default").read()).toContainEqual(expect.objectContaining({ type: "user.denied", userId: "7", action: "agent_request.approved", actionId: short.id }));
-
-		tap(9, `agent:${short.id}:approved`);
-		await said("9", `Richiesta ${short.id}: approvata e fatta.`);
-		expect((await store.get(short.id))?.result).toEqual({ text: expect.stringContaining("42") });
-		// A second tap, even the other way, changes nothing: it is told the decision that stands.
-		const decided = await store.get(short.id);
-		tap(9, `agent:${short.id}:rejected`);
-		await waitFor(() => telegram.sent.filter((m) => m.chat_id === "9" && m.text === `Richiesta ${short.id}: approvata e fatta.`).length === 2);
-		expect(await store.get(short.id)).toEqual(decided);
-	});
-
-	it("at start: a request left running is settled as uncertain, and every outcome not passed on to the asking agente is told", async () => {
+	it("a data folder with the old registries still starts; their files are not read and not touched", async () => {
 		const dataDir = tempDataDir();
 		const first = await boot(dataDir);
-		await first.owni.runtime.registry.createInstance("default", helper);
-		const store = first.owni.runtime.agentRequests("default", "owni");
-		// Done, with Owni stopping before the notice went out.
-		const untold = await store.propose(input, new Date(), "k1");
-		expect((await store.decide(untold.id, "approved", OWNER, async () => ({ text: "42" }))).action.status).toBe("done");
-		// Running when the process died.
-		const left = await store.propose(input, new Date(), "k2");
-		writeFileSync(join(agentRequestsDir(dataDir, tenantId("default"), instanceId("owni")), `${left.id}.json`), JSON.stringify({ ...left, status: "running", decidedAt: new Date().toISOString(), decidedBy: OWNER }));
+		await first.owni.runtime.secrets("default").set("subjects.key", "chiave-vecchia");
 		running.splice(running.indexOf(first.owni), 1);
 		await first.owni.stop();
-
-		const { owni } = await boot(dataDir);
-		const again = owni.runtime.agentRequests("default", "owni");
-		await until(async () => (await again.get(untold.id))?.outcomeTold === true && (await again.get(left.id))?.outcomeTold === true);
-		expect(await again.get(left.id)).toMatchObject({ status: "uncertain", result: { uncertain: true } });
-		expect(await again.outcomeUntold()).toEqual([]);
-		const audit = await owni.runtime.audit("default").read();
-		expect(audit).toContainEqual(expect.objectContaining({ type: "agent_request.uncertain", actionId: left.id }));
+		const old = {
+			[join(instanceDir(dataDir, toTenantId("default"), toInstanceId("owni")), "invoices.json")]: '{"company":{"vat":"IT00000010017"}}',
+			[join(instanceDir(dataDir, toTenantId("default"), toInstanceId("owni")), "quotes.json")]: '{"quotes":[{"id":"2026-001"}]}',
+			[join(instanceDir(dataDir, toTenantId("default"), toInstanceId("owni")), "agent-requests", "r1.json")]: '{"id":"r1","status":"pending"}',
+			[join(tenantDir(dataDir, toTenantId("default")), "subjects.json")]: "cifrato-come-prima",
+		};
+		for (const [file, content] of Object.entries(old)) {
+			mkdirSync(join(file, ".."), { recursive: true });
+			writeFileSync(file, content);
+		}
+		const { base } = await boot(dataDir);
+		const api = await client(base, first.owni.ownerLink as string);
+		expect((await api("/api/instances")).instances.map((i: { id: string }) => i.id)).toEqual(["owni"]);
+		const thread = (await api("/api/instances/owni/dm", {})).thread;
+		await api(`/api/instances/owni/threads/${thread.id}/messages`, { text: "ciao" });
+		await until(async () => ((await api(`/api/instances/owni/threads/${thread.id}`)).entries as { from: string }[]).some((e) => e.from === "owni"));
+		for (const [file, content] of Object.entries(old)) expect(readFileSync(file, "utf8"), file).toBe(content);
 	});
 });

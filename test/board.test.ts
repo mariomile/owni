@@ -7,7 +7,6 @@ import { approveFromChat } from "../src/app/board.ts";
 import { tempDataDir } from "./helpers.ts";
 
 /** Board tools with no registers behind them. */
-const noSubjects = { missing: () => [], link: async () => "" };
 
 const anna = { kind: "person", id: "p_anna" } as const;
 const ricerca = { kind: "agent", id: "ricerca" } as const;
@@ -221,7 +220,7 @@ describe("the board (ADR 0050)", () => {
 			{ id: "owni", name: "Owni" },
 			{ id: "ricerca", name: "Ricercatore" },
 		];
-		const tool = (self: string, name: string) => createBoardTools({ subjects: noSubjects, self, store, work, agents, personOf: (t) => (t.channel === "web" && t.threadId.startsWith("chat") ? "p_anna" : undefined) }).find((t) => t.name === name) as { execute: (a: Record<string, unknown>, c: never) => Promise<string> };
+		const tool = (self: string, name: string) => createBoardTools({ self, store, work, agents, personOf: (t) => (t.channel === "web" && t.threadId.startsWith("chat") ? "p_anna" : undefined) }).find((t) => t.name === name) as { execute: (a: Record<string, unknown>, c: never) => Promise<string> };
 		expect(await tool("owni", "board_list").execute({}, ctx())).toBe("Nessuna scheda.");
 		expect(await tool("owni", "board_summary").execute({}, ctx("chat1"))).toMatch(/^La board è vuota/);
 		// From Anna's conversation with Owni: the scheda goes to Ricercatore, who starts at once.
@@ -432,7 +431,7 @@ describe("the board (ADR 0050)", () => {
 		it("the tools: board_create with parent hands it over; board_show lists the sotto-schede", async () => {
 			const { work, store } = setup({ agentName: async (id) => ({ ricerca: "Ricercatore", scrittore: "Scrittore" })[id] });
 			const parent = await work.create({ title: "Newsletter", assignee: "ricerca" }, anna, "p_anna");
-			const tools = createBoardTools({ subjects: noSubjects, self: "ricerca", store, work, agents: async () => [{ id: "ricerca", name: "Ricercatore" }, { id: "scrittore", name: "Scrittore" }], personOf: (t) => (t.channel === "web" ? "p_anna" : undefined) });
+			const tools = createBoardTools({ self: "ricerca", store, work, agents: async () => [{ id: "ricerca", name: "Ricercatore" }, { id: "scrittore", name: "Scrittore" }], personOf: (t) => (t.channel === "web" ? "p_anna" : undefined) });
 			const tool = (n: string) => tools.find((t) => t.name === n) as (typeof tools)[number];
 			const said = await tool("board_create").execute({ title: "Testo", assignee: "Scrittore", parent: "#1" }, ctx(parent.work?.threadId));
 			expect(said).toMatch(/Sotto-scheda #2 \(parte di #1\) affidata a Scrittore, che ci sta lavorando/);
@@ -504,7 +503,7 @@ describe("the board (ADR 0050)", () => {
 				{ id: "owni", name: "Owni" },
 				{ id: "ricerca", name: "Ricercatore" },
 			];
-			const tool = (self: string, name: string) => createBoardTools({ subjects: noSubjects, self, store, work, agents, personOf: () => "p_anna" }).find((t) => t.name === name) as { execute: (a: Record<string, unknown>, c: never) => Promise<string> };
+			const tool = (self: string, name: string) => createBoardTools({ self, store, work, agents, personOf: () => "p_anna" }).find((t) => t.name === name) as { execute: (a: Record<string, unknown>, c: never) => Promise<string> };
 			const threadId = card.work?.threadId as string;
 			expect(await tool("ricerca", "board_update").execute({ check_done: 1, check_add: "Confrontare le consegne" }, ctx(threadId))).toBe("Scheda #1: lista 1/3.");
 			expect(await tool("owni", "board_update").execute({ card: "1", check_done: 2 }, ctx("chat1"))).toMatch(/non è assegnata a te/);
@@ -584,7 +583,7 @@ describe("the board (ADR 0050)", () => {
 		it("the tools: board_create with after waits for those, and board_list and board_show say so", async () => {
 			const { work, store } = setup({ agentName: async (id) => ({ ricerca: "Ricercatore", scrittore: "Scrittore" })[id] });
 			const parent = await work.create({ title: "Newsletter", assignee: "ricerca" }, anna, "p_anna");
-			const tools = createBoardTools({ subjects: noSubjects, self: "ricerca", store, work, agents: async () => [{ id: "ricerca", name: "Ricercatore" }, { id: "scrittore", name: "Scrittore" }], personOf: () => "p_anna" });
+			const tools = createBoardTools({ self: "ricerca", store, work, agents: async () => [{ id: "ricerca", name: "Ricercatore" }, { id: "scrittore", name: "Scrittore" }], personOf: () => "p_anna" });
 			const tool = (n: string) => tools.find((t) => t.name === n) as (typeof tools)[number];
 			const thread = ctx(parent.work?.threadId);
 			expect(await tool("board_create").execute({ title: "Testo", assignee: "Scrittore", parent: "#1" }, thread)).toMatch(/Sotto-scheda #2 .*che ci sta lavorando/);
@@ -660,7 +659,7 @@ describe("the board (ADR 0050)", () => {
 			expect(posts[0]?.text).toMatch(/\n\nScadenza: venerdì 30 ottobre \((scade|in ritardo)[^)]*\)\.\n\n/);
 			expect(posts[0]?.text).not.toMatch(/\(scade venerdì/);
 			const agents = async () => [{ id: "ricerca", name: "Ricercatore" }];
-			const tool = (name: string) => createBoardTools({ subjects: noSubjects, self: "ricerca", store, work, agents, personOf: () => "p_anna" }).find((t) => t.name === name) as { execute: (a: Record<string, unknown>, c: never) => Promise<string> };
+			const tool = (name: string) => createBoardTools({ self: "ricerca", store, work, agents, personOf: () => "p_anna" }).find((t) => t.name === name) as { execute: (a: Record<string, unknown>, c: never) => Promise<string> };
 			// A day already gone, as from a wrong year: refused, with why.
 			expect(await tool("board_create").execute({ title: "Fattura Bianchi", due: "2020-01-10" }, ctx("chat1"))).toMatch(/^Errore: la scadenza venerdì 10 gennaio 2020 è già passata/);
 			const soon = new Date(Date.now() + 5 * 86_400_000).toISOString().slice(0, 10);
