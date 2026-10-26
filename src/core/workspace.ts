@@ -128,13 +128,16 @@ export class Workspace {
 				if ((error as NodeJS.ErrnoException).code === "ENOENT" || (error as NodeJS.ErrnoException).code === "ENOTDIR") return;
 				throw error;
 			}
-			for (const name of names) {
-				if (name.startsWith(".")) continue; // temp files of atomic writes
-				const full = join(dir, name);
-				const stat = await lstat(full);
-				if (stat.isDirectory()) await walk(full);
-				else if (stat.isFile()) out.push({ path: relative(this.root, full).split(sep).join("/"), size: stat.size, modifiedAt: stat.mtime.toISOString() });
-			}
+			await Promise.all(
+				names
+					.filter((name) => !name.startsWith(".")) // temp files of atomic writes
+					.map(async (name) => {
+						const full = join(dir, name);
+						const stat = await lstat(full);
+						if (stat.isDirectory()) await walk(full);
+						else if (stat.isFile()) out.push({ path: relative(this.root, full).split(sep).join("/"), size: stat.size, modifiedAt: stat.mtime.toISOString() });
+					}),
+			);
 		};
 		await walk(start);
 		return out.sort((a, b) => a.path.localeCompare(b.path));
