@@ -256,7 +256,8 @@ describe.skipIf(chrome === undefined || !existsSync(chrome))("the organigramma a
 			expect(await page.locator("dialog[open] h2").innerText()).toBe("Preventivi");
 			await page.keyboard.press("Escape");
 			await page.getByRole("button", { name: "Squadre", exact: true }).click();
-			await page.locator(".org-tree").waitFor({ state: "detached" });
+			// The shell clears the page at once and draws the view when its data arrives: wait for that, not for the tree to go.
+			await page.locator(".org-team").first().waitFor();
 			expect(new URL(page.url()).hash).toBe("#/organigramma");
 			// The view drawn after the click keeps the focus on its button.
 			expect(await page.evaluate(`document.activeElement?.textContent`)).toBe("Squadre");
