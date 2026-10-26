@@ -197,6 +197,23 @@ describe("official CLI inference bridge", () => {
 		expect(prompts[1]).toContain("somma sette"); expect(prompts[1]).toContain("toolResult"); expect(prompts[1]).toContain("risultato 7"); expect(prompts[0]).toContain("Rispondi in italiano");
 		await session.submit("web:test", "somma sette", "idempotent-1"); await session.idle(); expect(executed).toBe(1); expect(calls).toBe(2);
 	});
+	it("runs an Owni tool Claude called natively instead of letting it give up", async () => {
+		let calls = 0; const seen: unknown[] = [];
+		const native = (name: string, input: unknown) => JSON.stringify({ type: "assistant", message: { content: [{ type: "tool_use", id: name, name, input }] } });
+		const providers = await local(async (request) => {
+			if (isStatus(request.args)) return auth(request.provider);
+			calls++;
+			if (calls > 1) return completed("claude-code", "Media: 7");
+			const refused = JSON.stringify({ type: "user", message: { content: [{ type: "tool_result", content: "<tool_use_error>Error: No such tool available: sum</tool_use_error>" }] } });
+			return ok([native("sum", { files: '["a.csv"]', n: 7 }), refused, native("exec", { cmd: "ls" }), refused, completed("claude-code", "Strumenti non disponibili").stdout].join("\n"));
+		});
+		const session = await piDurableEngine.open({ storageDir: tempDataDir(), model: { provider: "claude-code", modelId: "sonnet" }, apiKey: async () => "owni-local-subscription", localProviders: providers, instructions: "", tools: [{ name: "sum", description: "Sum", parameters: { type: "object", properties: { files: { type: "array", items: { type: "string" } }, n: { type: "number" } }, required: ["files"], additionalProperties: false }, replaySafe: true, execute: async (args) => { seen.push(args); return "7"; } }] });
+		closers.push(() => session.close());
+		const reply = new Promise<EngineReply>((resolve) => session.onReply(resolve));
+		await session.submit("web:test", "media", "native-1");
+		expect(await reply).toMatchObject({ status: "answered", text: "Media: 7" });
+		expect(seen).toEqual([{ files: ["a.csv"], n: 7 }]); expect(calls).toBe(2);
+	});
 	it("one-shot calls use the same scoped subscription capability without API keys", async () => {
 		const providers = await local(async ({ provider, args }) => isStatus(args) ? auth(provider) : completed(provider, "Sintesi"));
 		const client = createPiCompletionClient({ apiKey: async () => undefined, localProviders: providers, assertAllowed: async () => {} });

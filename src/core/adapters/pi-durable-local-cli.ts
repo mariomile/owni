@@ -144,7 +144,7 @@ function failureEvents(stdout: string): FailureDetails {
 	return failures;
 }
 
-const BRIDGE = "You are Owni's inference engine. The transcript below is the complete conversation, including system instructions, tool declarations, prior assistant tool calls and tool results. Continue it faithfully. Return only the requested JSON object. To use an Owni tool, return its name and JSON-encoded arguments in toolCalls; Owni executes it after its own authorization checks and sends its result in the next request. Never execute native CLI tools, commands, file operations, browser operations, or MCP tools. Use only the Owni tools declared in the transcript. A final user-facing answer goes in text with an empty toolCalls array. When requesting tools text may be empty. Images are attached in transcript order.";
+const BRIDGE = "You are Owni's inference engine. The transcript below is the complete conversation, including system instructions, tool declarations, prior assistant tool calls and tool results. Continue it faithfully. Return only the requested JSON object. To use an Owni tool, return its name and JSON-encoded arguments in toolCalls; Owni executes it after its own authorization checks and sends its result in the next request. Owni tools are not native tools here: calling one natively fails with «No such tool available», which never means the tool is unavailable, so put the request in toolCalls instead. Never execute native CLI tools, commands, file operations, browser operations, or MCP tools. Use only the Owni tools declared in the transcript. A final user-facing answer goes in text with an empty toolCalls array. When requesting tools text may be empty. Images are attached in transcript order.";
 function schema(names: string[]) {
 	return { type: "object", additionalProperties: false, required: ["text", "toolCalls"], properties: { text: { type: "string" }, toolCalls: { type: "array", maxItems: 16, items: { type: "object", additionalProperties: false, required: ["name", "arguments"], properties: { name: { type: "string", ...(names.length === 0 ? {} : { enum: names }) }, arguments: { type: "string", description: "A JSON object encoded as a string, matching the named Owni tool's parameters" } } } } } };
 }
@@ -207,15 +207,42 @@ export function codexInferenceCatalog(model: string, cache?: unknown): Record<st
 	};
 }
 
+/**
+ * Claude sometimes calls a declared Owni tool as a native CLI tool, gets «No such tool available»
+ * (the CLI has none) and gives up with an empty toolCalls. Its first such batch is what it meant:
+ * Owni runs it as if it had come in toolCalls. Arguments the model JSON-encoded where the schema
+ * wants an array or an object are decoded first.
+ */
+function nativeOwniCalls(entries: readonly Record<string, unknown>[], tools: ReadonlyMap<string, Tool>): { name: string; arguments: string }[] {
+	for (const entry of entries) {
+		if (entry.type !== "assistant") continue;
+		const content = (entry.message as { content?: unknown } | undefined)?.content;
+		const uses = (Array.isArray(content) ? content : []).filter((block): block is { name: string; input: Record<string, unknown> } => typeof block === "object" && block !== null && block.type === "tool_use" && tools.has(block.name) && typeof block.input === "object" && block.input !== null);
+		if (uses.length === 0) continue;
+		return uses.map(({ name, input }) => {
+			const properties = (tools.get(name)?.parameters as { properties?: Record<string, { type?: unknown }> }).properties ?? {};
+			const args = Object.fromEntries(Object.entries(input).map(([key, value]) => {
+				if (typeof value !== "string" || !["array", "object"].includes(String(properties[key]?.type))) return [key, value];
+				try { return [key, JSON.parse(value)]; } catch { return [key, value]; }
+			}));
+			return { name, arguments: JSON.stringify(args) };
+		});
+	}
+	return [];
+}
+
 function parseResponse(id: string, stdout: string, tools: ReadonlyMap<string, Tool>) {
 	let response: unknown;
 	let inputTokens = 0;
 	let outputTokens = 0;
 	if (id === "claude-code") {
-		const result = stdout.split("\n").filter((line) => line.trim() !== "").map((line) => JSON.parse(line) as Record<string, unknown>).findLast((entry) => entry.type === "result" || entry.subtype === "success");
+		const entries = stdout.split("\n").filter((line) => line.trim() !== "").map((line) => JSON.parse(line) as Record<string, unknown>);
+		const result = entries.findLast((entry) => entry.type === "result" || entry.subtype === "success");
 		if (result === undefined) throw new Error("Missing Claude result");
 		if (result.is_error === true || result.subtype !== "success") throw inferenceFailure(failureDetails(result));
 		response = result.structured_output ?? (typeof result.result === "string" ? JSON.parse(result.result) : undefined);
+		const attempted = nativeOwniCalls(entries, tools);
+		if (attempted.length > 0 && typeof response === "object" && response !== null && Array.isArray((response as { toolCalls?: unknown }).toolCalls) && (response as { toolCalls: unknown[] }).toolCalls.length === 0) response = { text: "", toolCalls: attempted };
 		const usage = result.usage as Record<string, number> | undefined;
 		inputTokens = (usage?.input_tokens ?? 0) + (usage?.cache_read_input_tokens ?? 0) + (usage?.cache_creation_input_tokens ?? 0);
 		outputTokens = usage?.output_tokens ?? 0;
