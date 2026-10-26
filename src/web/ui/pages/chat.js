@@ -21,6 +21,11 @@ import { agentPanel } from "../agent-panel.js";
 /** A workspace picture shown in the page (not downloaded). */
 const pictureUrl = (inst, path) => `/api/instances/${inst.id}/files/raw?path=${encodeURIComponent(path)}&inline=1`;
 
+/** How many messages a conversation draws at first; earlier ones are loaded on request. */
+const PAGE = 60;
+/** The browser sizes a textarea to its text by itself (CSS field-sizing); older WebKit needs the height measured. */
+const FIELD_SIZING = CSS.supports("field-sizing", "content");
+
 /** An answer: its markdown, and the sites it links to folded underneath. */
 function reply(text) {
 	const md = renderMarkdown(text);
@@ -249,7 +254,19 @@ function conversationView(inst, main, thread, entries, model) {
 			if (button) button.onclick = () => void replies.open(entry, entry.thread.id);
 		}
 	});
-	for (const e of entries) show(e);
+	// The last PAGE messages; the earlier ones come on request, above, without moving what is being read.
+	let from = Math.max(0, entries.length - PAGE);
+	const older = h("button.btn.small.older", { type: "button", hidden: from === 0, onclick: () => {
+		const before = transcript.scrollHeight;
+		const anchor = older.nextSibling;
+		const start = Math.max(0, from - PAGE);
+		for (const e of entries.slice(start, from)) show(e, (el) => transcript.insertBefore(el, anchor));
+		from = start;
+		older.hidden = from === 0;
+		transcript.scrollTo({ top: transcript.scrollTop + transcript.scrollHeight - before, behavior: "instant" });
+	} }, "Carica messaggi precedenti");
+	transcript.append(older);
+	for (const e of entries.slice(from)) show(e);
 	// Google writes this conversation asked for: decided here, above the box, without leaving the chat.
 	const asks = h("div.asks", { hidden: true });
 	const drawAsks = async () => {
@@ -434,7 +451,7 @@ function landing(inst, main, thread, model) {
 					),
 				),
 			),
-			state.setupLeft > 0 ? h("p.aside", h("a", { href: "#/inizia" }, stepsLeftText(state.setupLeft))) : null,
+			state.setupLeft > 0 && state.setup && !state.setup.model && !state.setup.tried ? h("p.aside", h("a", { href: "#/inizia" }, stepsLeftText(state.setupLeft))) : null,
 			state.me.role !== "owner" && installOffer && !installed() ? h("p.aside", h("button.btn.small.ghost", { onclick: install }, icon("install"), "Installa Owni come app")) : null,
 		),
 	);
@@ -479,7 +496,9 @@ function chatBox(inst, key, dropZone, onSend, extra = null) {
 			...Array.from({ length: uploading }, () => h("span.chip.loading", { "aria-label": "Caricamento" })),
 		);
 	};
+	// field-sizing grows the box by itself; the height is measured only where it is missing.
 	const fit = () => {
+		if (FIELD_SIZING) return;
 		input.style.height = "auto";
 		input.style.height = `${Math.min(220, input.scrollHeight)}px`;
 	};

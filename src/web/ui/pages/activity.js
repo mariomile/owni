@@ -3,6 +3,7 @@ import { api, emptyNote, fmt, h, head, icon, mount, state } from "../common.js";
 import { runHistory } from "../runs.js";
 
 // ---------- attività ----------
+const money = new Intl.NumberFormat("it-IT", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 });
 /** Where an audit event comes from, by the first part of its type: a label, an icon, the prefixes it covers. */
 const AUDIT_GROUPS = [
 	["Messaggi", "chat", ["message", "reply", "draft", "outbox", "mail", "notice", "tap"]],
@@ -248,7 +249,7 @@ export async function viewActivity(main) {
 			h(
 				"div.card.pad",
 				h("h3.section-title", "Oggi"),
-				h("div.row-gap", h("span", h("b", fmt.usd(usage.todayUsd))), h("span.muted", `soglia di avviso ${fmt.usd(usage.softUsd)} · tetto ${fmt.usd(usage.hardUsd)}`)),
+				h("div.row-gap", h("span", h("b", money.format(usage.todayUsd))), h("span.muted", `soglia di avviso ${money.format(usage.softUsd)} · tetto ${money.format(usage.hardUsd)}`)),
 				h("div.spend", h("div.bar", h(`i${share >= 1 ? ".bad" : usage.todayUsd >= usage.softUsd ? ".warn" : ""}`, { "data-w": share }))),
 				h("p.muted", "Oltre il tetto Owni smette di chiamare il modello fino a domani; l'invio di bozze già approvate continua."),
 			),

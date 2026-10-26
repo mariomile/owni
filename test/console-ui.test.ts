@@ -19,6 +19,14 @@ describe("console modules", () => {
 		expect(missing).toEqual([]);
 	});
 
+	it("the service worker's shell lists every font the stylesheet loads (a missing one falls back to the system font offline)", () => {
+		const sw = readFileSync(join(ui, "sw.js"), "utf8");
+		const shell = JSON.parse((/const SHELL = (\[.*\]);/.exec(sw) as RegExpExecArray)[1] as string) as string[];
+		const fonts = [...readFileSync(join(ui, "app.css"), "utf8").matchAll(/url\("(\/fonts\/[^"]+)"\)/g)].map((m) => m[1] as string);
+		expect(fonts.length).toBeGreaterThan(0);
+		expect(fonts.filter((f) => !shell.includes(f))).toEqual([]);
+	});
+
 	it("pages never import each other, and only shell.js imports from pages/", () => {
 		const offenders: string[] = [];
 		for (const file of scripts) {
