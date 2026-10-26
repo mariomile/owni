@@ -1,6 +1,6 @@
 import { inflateSync } from "node:zlib";
 import { type PdfEncryption, pdfCipher, type PdfCipher } from "./pdf-crypt.ts";
-import { ccittDecode, lzwDecode, PdfImageError, runLengthDecode } from "./pdf-images.ts";
+import { ccittDecode, lzwDecode, PdfImageError, runLengthDecode } from "./pdf-codecs.ts";
 
 /**
  * The object layer of the PDF reader (ADR 0026): the lexer, the objects of a file (also those

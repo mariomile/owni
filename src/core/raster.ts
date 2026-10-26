@@ -1,4 +1,4 @@
-import { pngOf } from "./pdf-images.ts";
+import { pngOf } from "./pdf-codecs.ts";
 import { SANS, SANS_BOLD } from "./chart-font.ts";
 
 /**
