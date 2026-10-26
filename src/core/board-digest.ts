@@ -32,8 +32,8 @@ export function digestText(cards: readonly Card[], now: Date, agentName: (id: st
 	const list = (xs: readonly Card[], line: (c: Card) => string) => [...xs.slice(0, 5).map((c) => `- ${line(c)}`), ...(xs.length > 5 ? [`- e altre ${xs.length - 5}`] : [])];
 	return [
 		"La board, questa settimana.",
-		closed.length === 0 ? "Nessuna scheda chiusa negli ultimi 7 giorni." : `${closed.length === 1 ? "Una scheda chiusa" : `${closed.length} schede chiuse`} negli ultimi 7 giorni.`,
-		open.length === 0 ? "Nessuna scheda aperta." : `Aperte: ${count("da_fare")} da fare, ${count("in_corso")} in corso, ${count("da_rivedere")} da rivedere.`,
+		closed.length === 0 ? "Nessun incarico chiuso negli ultimi 7 giorni." : `${closed.length === 1 ? "Un incarico chiuso" : `${closed.length} incarichi chiusi`} negli ultimi 7 giorni.`,
+		open.length === 0 ? "Nessun incarico aperto." : `Aperti: ${count("da_fare")} da fare, ${count("in_corso")} in corso, ${count("da_rivedere")} da rivedere.`,
 		...(late.length === 0 ? [] : ["In ritardo:", ...list(late, (c) => `#${c.n} ${c.title}${who(c)}, ${dueText(c.due as string, now)}`)]),
 		...(review.length === 0 ? [] : ["Da rivedere:", ...list(review, (c) => `#${c.n} ${c.title}${who(c)}`)]),
 	].join("\n");

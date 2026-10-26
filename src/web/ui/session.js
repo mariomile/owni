@@ -176,7 +176,7 @@ function connectEvents() {
 		void refreshCounters();
 		if (route().view === "programmi") return state.onBoard?.(event);
 		if (["board", "approvazioni"].includes(route().view) && !document.querySelector("dialog[open]")) return render();
-		toast(event.kind === "due" ? `Scheda #${event.n} ${event.text}: ${event.title}` : event.kind === "started" ? `Scheda #${event.n} partita da sola: ${event.title}` : `Scheda #${event.n} da rivedere: ${event.title}`);
+		toast(event.kind === "due" ? `Incarico #${event.n} ${event.text}: ${event.title}` : event.kind === "started" ? `Incarico #${event.n} partito da solo: ${event.title}` : `Incarico #${event.n} da rivedere: ${event.title}`);
 	});
 	state.events = es;
 }

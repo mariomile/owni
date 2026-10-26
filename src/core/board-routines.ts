@@ -117,7 +117,7 @@ export class RoutineStore {
 			createdAt: now.toISOString(),
 		};
 		updateJsonFile<RoutineFile>(this.file, { routines: [] }, (f) => {
-			if (f.routines.length >= ROUTINE_LIMITS.routines) throw new BoardError(`Ci sono già ${ROUTINE_LIMITS.routines} schede che si ripetono: togline qualcuna`);
+			if (f.routines.length >= ROUTINE_LIMITS.routines) throw new BoardError(`Ci sono già ${ROUTINE_LIMITS.routines} incarichi che si ripetono: togline qualcuno`);
 			return { routines: [...f.routines, made] };
 		});
 		return made;
@@ -128,7 +128,7 @@ export class RoutineStore {
 		let changed: Routine | undefined;
 		updateJsonFile<RoutineFile>(this.file, { routines: [] }, (f) => {
 			const r = f.routines.find((x) => x.id === id);
-			if (r === undefined) throw new BoardError("Questa scheda non si ripete più");
+			if (r === undefined) throw new BoardError("Questo incarico non si ripete più");
 			changed = change(r);
 			return { routines: f.routines.map((x) => (x.id === id ? (changed as Routine) : x)) };
 		});
@@ -137,7 +137,7 @@ export class RoutineStore {
 
 	remove(id: string): void {
 		updateJsonFile<RoutineFile>(this.file, { routines: [] }, (f) => {
-			if (!f.routines.some((r) => r.id === id)) throw new BoardError("Questa scheda non si ripete più");
+			if (!f.routines.some((r) => r.id === id)) throw new BoardError("Questo incarico non si ripete più");
 			return { routines: f.routines.filter((r) => r.id !== id) };
 		});
 	}
@@ -210,8 +210,8 @@ export async function runRoutines(d: RoutineRunDeps, now = new Date()): Promise<
 			if (last !== undefined && last.status !== "fatto") {
 				const when = new Intl.DateTimeFormat("it-IT", { timeZone: ROUTINE_ZONE, weekday: "long", day: "numeric", month: "long", hour: "numeric", minute: "2-digit" }).format(new Date(planned));
 				// Said by the routine's agente, as when an agente is deleted: nobody wrote it.
-				board.update(last.id, { comment: `Doveva ripartire ${when}, ma questa scheda non è ancora chiusa: riparte la volta dopo.` }, { kind: "agent", id: r.assignee });
-				change(r.id, withProblem(`la scheda #${last.n} non era ancora chiusa`));
+				board.update(last.id, { comment: `Doveva ripartire ${when}, ma questo incarico non è ancora chiuso: riparte la volta dopo.` }, { kind: "agent", id: r.assignee });
+				change(r.id, withProblem(`l'incarico #${last.n} non era ancora chiuso`));
 				continue;
 			}
 			const by = { kind: "person", id: r.personId } as const;
@@ -233,8 +233,8 @@ export async function runRoutines(d: RoutineRunDeps, now = new Date()): Promise<
 			} catch (error) {
 				// It waits in «Da fare», with why: the next time comments on it instead of making another.
 				if (!(error instanceof BoardError)) throw error;
-				board.update(card.id, { comment: `Non è partita: ${error.message}. Avviala dalla board.` }, { kind: "agent", id: r.assignee });
-				change(r.id, withProblem(`la scheda #${card.n} non è partita`));
+				board.update(card.id, { comment: `Non è partito: ${error.message}. Avvialo da Incarichi.` }, { kind: "agent", id: r.assignee });
+				change(r.id, withProblem(`l'incarico #${card.n} non è partito`));
 			}
 		} catch (error) {
 			d.log(`board: routine ${r.id}: ${error instanceof Error ? error.message : String(error)}`);

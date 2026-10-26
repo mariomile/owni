@@ -77,7 +77,7 @@ export class BoardWork {
 		const { auto, ...fields } = input;
 		if (fields.assignee !== undefined) await this.checkAgent(fields.assignee, by.kind === "person" ? personId : undefined);
 		const parent = fields.parent === undefined ? undefined : this.deps.store.get(fields.parent);
-		if (fields.parent !== undefined && parent === undefined) throw new BoardError("La scheda di cui fa parte non c'è più");
+		if (fields.parent !== undefined && parent === undefined) throw new BoardError("L'incarico di cui fa parte non c'è più");
 		const card = this.deps.store.create({ ...fields, ...(parent === undefined ? {} : { parent: parent.id }) }, by);
 		if (fields.assignee === undefined) return card;
 		if (by.kind === "person" && personId !== undefined) return this.begin(card, personId, by, auto);
@@ -87,7 +87,7 @@ export class BoardWork {
 			return await this.begin(card, work.personId, by, parent.auto !== undefined);
 		} catch (error) {
 			if (!(error instanceof BoardError)) throw error;
-			return this.deps.store.update(card.id, { comment: `Non è partita: ${error.message}. Avviala dalla board.` }, by);
+			return this.deps.store.update(card.id, { comment: `Non è partito: ${error.message}. Avvialo da Incarichi.` }, by);
 		}
 	}
 
@@ -97,7 +97,7 @@ export class BoardWork {
 	 */
 	async change(id: string, change: CardChange, by: CardActor, personId: string | undefined): Promise<Card> {
 		const before = this.deps.store.get(id);
-		if (before === undefined) throw new BoardError("Scheda inesistente");
+		if (before === undefined) throw new BoardError("Incarico inesistente");
 		const person = by.kind === "person" ? personId : undefined;
 		if (change.status === "in_corso" && before.status === "da_fare") throw new BoardError("Per metterla In corso affidala a un agente e premi Avvia");
 		const handedOver = change.assignee !== undefined && change.assignee !== null && change.assignee !== before.assignee;
@@ -139,8 +139,8 @@ export class BoardWork {
 	 */
 	async startWaiting(id: string, personId: string, by: CardActor, auto?: boolean): Promise<Card> {
 		const card = this.deps.store.get(id);
-		if (card === undefined) throw new BoardError("Scheda inesistente");
-		if (card.assignee === undefined) throw new BoardError("Assegna prima la scheda a un agente");
+		if (card === undefined) throw new BoardError("Incarico inesistente");
+		if (card.assignee === undefined) throw new BoardError("Assegna prima l'incarico a un agente");
 		await this.checkAgent(card.assignee, personId);
 		if (card.status === "da_fare" && waitingFor(card, this.deps.store.list()).length > 0) return this.begin(card, personId, by, auto);
 		const claimed = this.deps.store.update(card.id, { from: "da_fare", status: "in_corso" }, by);
@@ -177,7 +177,7 @@ export class BoardWork {
 			} catch (error) {
 				if (!(error instanceof BoardError)) throw error;
 				const back = this.deps.store.get(card.id);
-				if (back !== undefined) this.deps.store.update(back.id, { ...(back.status === "in_corso" ? { status: "da_fare" as const } : {}), comment: `Non è partita da sola: ${error.message}. Avviala dalla board.` }, queued.by);
+				if (back !== undefined) this.deps.store.update(back.id, { ...(back.status === "in_corso" ? { status: "da_fare" as const } : {}), comment: `Non è partito da solo: ${error.message}. Avvialo da Incarichi.` }, queued.by);
 			}
 		}
 		return started;
@@ -325,7 +325,7 @@ export class BoardWork {
 		try {
 			await this.deps.post(work.agent, work.threadId, work.personId, text);
 		} catch (error) {
-			throw new BoardError(`Salvato sulla scheda, ma non sono riuscito a dirlo all'agente: ${error instanceof Error ? error.message : String(error)}`);
+			throw new BoardError(`Salvato sull'incarico, ma non sono riuscito a dirlo all'agente: ${error instanceof Error ? error.message : String(error)}`);
 		}
 	}
 
@@ -333,7 +333,7 @@ export class BoardWork {
 	async checkAgent(agent: string, personId: string | undefined): Promise<void> {
 		const name = await this.deps.agentName(agent);
 		if (name === undefined) throw new BoardError(`Agente «${agent}» inesistente`);
-		if (personId !== undefined && !(await this.deps.canChat(agent, personId))) throw new BoardError(`Non puoi affidare schede a ${name}: non sei tra le persone che possono scrivergli`);
+		if (personId !== undefined && !(await this.deps.canChat(agent, personId))) throw new BoardError(`Non puoi affidare incarichi a ${name}: non sei tra le persone che possono scrivergli`);
 	}
 }
 

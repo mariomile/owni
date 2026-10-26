@@ -74,13 +74,13 @@ describe("schede that come back (ADR 0069)", () => {
 		expect(await run("2026-10-20T07:01:00Z")).toBe(0);
 		expect(store.list()).toHaveLength(1);
 		const said = store.get(first?.id as string)?.events.at(-1);
-		expect(said?.text).toMatch(/^Doveva ripartire martedì 20 ottobre.*non è ancora chiusa: riparte la volta dopo/);
+		expect(said?.text).toMatch(/^Doveva ripartire martedì 20 ottobre.*non è ancora chiuso: riparte la volta dopo/);
 		expect(said?.by).toEqual({ kind: "agent", id: "ricerca" });
-		expect(routines.get(r.id)?.problem).toBe(`la scheda #${first?.n} non era ancora chiusa`);
+		expect(routines.get(r.id)?.problem).toBe(`l'incarico #${first?.n} non era ancora chiuso`);
 		// A person who can no longer talk to the agente: no scheda, paused, and why.
 		const lost = routines.create({ title: "Di Marco", assignee: "ricerca", when: { every: "giorno", time: "09:00" }, personId: "p_marco" }, new Date("2026-10-18T10:00:00Z"));
 		await run("2026-10-19T07:02:00Z");
-		expect(routines.get(lost.id)).toMatchObject({ paused: true, problem: expect.stringMatching(/Non puoi affidare schede a Ricercatore/) });
+		expect(routines.get(lost.id)).toMatchObject({ paused: true, problem: expect.stringMatching(/Non puoi affidare incarichi a Ricercatore/) });
 		// A person removed: paused too.
 		const gone = routines.create({ title: "Di chi non c'è", assignee: "ricerca", when: { every: "giorno", time: "09:00" }, personId: "p_gone" }, new Date("2026-10-18T10:00:00Z"));
 		await run("2026-10-19T07:03:00Z");
@@ -116,8 +116,8 @@ describe("schede that come back (ADR 0069)", () => {
 		expect(await failing.run("2026-10-19T07:01:00Z")).toBe(1);
 		const card = failing.store.list()[0];
 		expect(card?.status).toBe("da_fare");
-		expect(card?.events.at(-1)?.text).toMatch(/^Non è partita: .*chat non disponibile\. Avviala dalla board\.$/);
-		expect(failing.routines.get(c.id)).toMatchObject({ last: card?.id, problem: `la scheda #${card?.n} non è partita` });
+		expect(card?.events.at(-1)?.text).toMatch(/^Non è partito: .*chat non disponibile\. Avvialo da Incarichi\.$/);
+		expect(failing.routines.get(c.id)).toMatchObject({ last: card?.id, problem: `l'incarico #${card?.n} non è partito` });
 		expect(await failing.run("2026-10-20T07:01:00Z")).toBe(0);
 		expect(failing.store.list()).toHaveLength(1);
 	});

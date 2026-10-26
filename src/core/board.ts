@@ -164,13 +164,13 @@ export class BoardStore {
 		const at = now.toISOString();
 		let made: Card | undefined;
 		updateJsonFile<BoardFile>(this.file, { next: 1, cards: [] }, (board) => {
-			if (board.cards.filter((c) => c.status !== "fatto").length >= BOARD_LIMITS.open) throw new BoardError(`Ci sono già ${BOARD_LIMITS.open} schede aperte: chiudine qualcuna`);
+			if (board.cards.filter((c) => c.status !== "fatto").length >= BOARD_LIMITS.open) throw new BoardError(`Ci sono già ${BOARD_LIMITS.open} incarichi aperti: chiudine qualcuno`);
 			if (input.parent !== undefined) {
 				const parent = board.cards.find((c) => c.id === input.parent);
-				if (parent === undefined) throw new BoardError("La scheda di cui fa parte non c'è più");
-				if (parent.parent !== undefined) throw new BoardError(`La scheda #${parent.n} è già una sotto-scheda: le sotto-schede non ne hanno altre`);
-				if (parent.status === "fatto") throw new BoardError(`La scheda #${parent.n} è chiusa`);
-				if (board.cards.filter((c) => c.parent === parent.id && c.status !== "fatto").length >= BOARD_LIMITS.children) throw new BoardError(`La scheda #${parent.n} ha già ${BOARD_LIMITS.children} sotto-schede aperte`);
+				if (parent === undefined) throw new BoardError("L'incarico di cui fa parte non c'è più");
+				if (parent.parent !== undefined) throw new BoardError(`L'incarico #${parent.n} fa già parte di un altro: un incarico dentro un altro non ne ha di suoi`);
+				if (parent.status === "fatto") throw new BoardError(`L'incarico #${parent.n} è chiuso`);
+				if (board.cards.filter((c) => c.parent === parent.id && c.status !== "fatto").length >= BOARD_LIMITS.children) throw new BoardError(`L'incarico #${parent.n} ha già ${BOARD_LIMITS.children} incarichi aperti dentro`);
 			}
 			const after = afterIds(board.cards, undefined, input.after ?? []);
 			made = {
@@ -197,14 +197,14 @@ export class BoardStore {
 
 	/** Apply a change and record it; an agente never moves a scheda to «Fatto». */
 	update(id: string, change: CardChange, by: CardActor, now = new Date()): Card {
-		if (by.kind === "agent" && change.status === "fatto") throw new BoardError("Solo una persona sposta una scheda in «Fatto», dopo averla rivista");
+		if (by.kind === "agent" && change.status === "fatto") throw new BoardError("Solo una persona sposta un incarico in «Fatto», dopo averlo rivisto");
 		const at = now.toISOString();
 		let changed: Card | undefined;
 		updateJsonFile<BoardFile>(this.file, { next: 1, cards: [] }, (board) => {
 			const card = board.cards.find((c) => c.id === id);
-			if (card === undefined) throw new BoardError("Scheda inesistente");
-			if (change.from !== undefined && card.status !== change.from) throw new BoardError(`La scheda #${card.n} non è più in «${STATUS_LABEL[change.from]}»`);
-			if (by.kind === "agent" && card.status === "fatto" && change.status !== undefined) throw new BoardError(`La scheda #${card.n} è chiusa: la riapre una persona`);
+			if (card === undefined) throw new BoardError("Incarico inesistente");
+			if (change.from !== undefined && card.status !== change.from) throw new BoardError(`L'incarico #${card.n} non è più in «${STATUS_LABEL[change.from]}»`);
+			if (by.kind === "agent" && card.status === "fatto" && change.status !== undefined) throw new BoardError(`L'incarico #${card.n} è chiuso: lo riapre una persona`);
 			const events: CardEvent[] = [];
 			let next: Card = card;
 			const due = change.due === undefined || change.due === null ? change.due : dueDay(change.due);
@@ -284,7 +284,7 @@ export class BoardStore {
 
 	remove(id: string): void {
 		updateJsonFile<BoardFile>(this.file, { next: 1, cards: [] }, (board) => {
-			if (!board.cards.some((c) => c.id === id)) throw new BoardError("Scheda inesistente");
+			if (!board.cards.some((c) => c.id === id)) throw new BoardError("Incarico inesistente");
 			// Its sotto-schede stay, on their own; who came after it no longer waits for it.
 			return {
 				...board,
@@ -338,11 +338,11 @@ function afterIds(cards: readonly Card[], self: string | undefined, refs: readon
 	for (const ref of refs) {
 		const n = /^#?(\d{1,6})$/.exec(ref.trim())?.[1];
 		const card = cards.find((c) => c.id === ref || (n !== undefined && c.n === Number(n)));
-		if (card === undefined) throw new BoardError(`La scheda ${n === undefined ? ref : `#${n}`} non c'è`);
-		if (card.id === self) throw new BoardError("Una scheda non può venire dopo sé stessa");
+		if (card === undefined) throw new BoardError(`L'incarico ${n === undefined ? ref : `#${n}`} non c'è`);
+		if (card.id === self) throw new BoardError("Un incarico non può venire dopo sé stesso");
 		if (!ids.includes(card.id)) ids.push(card.id);
 	}
-	if (ids.length > BOARD_LIMITS.after) throw new BoardError(`Una scheda viene dopo al massimo ${BOARD_LIMITS.after} schede`);
+	if (ids.length > BOARD_LIMITS.after) throw new BoardError(`Un incarico viene dopo al massimo ${BOARD_LIMITS.after} incarichi`);
 	if (self === undefined) return ids;
 	// Following what each comes after must never lead back here.
 	const seen = new Set<string>();
@@ -352,7 +352,7 @@ function afterIds(cards: readonly Card[], self: string | undefined, refs: readon
 		if (seen.has(id)) continue;
 		seen.add(id);
 		const card = cards.find((c) => c.id === id);
-		if (card?.after?.includes(self) === true) throw new BoardError(`La scheda #${card.n} viene già dopo questa: si aspetterebbero a vicenda`);
+		if (card?.after?.includes(self) === true) throw new BoardError(`L'incarico #${card.n} viene già dopo questo: si aspetterebbero a vicenda`);
 		queue.push(...(card?.after ?? []));
 	}
 	return ids;
@@ -398,7 +398,7 @@ function checked(card: Card, change: CheckChange): { card: Card; event: { kind: 
 	const ref = change.item.trim();
 	const index = /^\d{1,2}$/.test(ref) ? Number(ref) - 1 : list.findIndex((i) => i.id === ref);
 	const item = list[index];
-	if (item === undefined) throw new BoardError(`La scheda #${card.n} non ha la voce ${ref} nella lista`);
+	if (item === undefined) throw new BoardError(`L'incarico #${card.n} non ha la voce ${ref} nella lista`);
 	if ("remove" in change) {
 		const rest = list.filter((i) => i.id !== item.id);
 		const { checklist: _c, ...without } = card;

@@ -64,7 +64,7 @@ export function startBoard(w: BoardWiring): BoardWork {
 		// The agente's words on this move, not an older round's.
 		const moved = card.events.findLastIndex((e) => e.kind === "status" && e.status === "da_rivedere");
 		const summary = card.events.slice(moved).find((e) => e.kind === "comment" && e.by.kind === "agent" && e.by.id === card.assignee)?.text;
-		const text = `Scheda #${card.n} da rivedere: ${card.title}${agent === undefined ? "" : `\n${agent} l'ha finita`}${summary === undefined ? "." : `: ${summary.length > 300 ? `${summary.slice(0, 300)}[...]` : summary}`}\n\nApprovala da qui, o rimandala indietro con cosa cambiare dalla Board della console.`;
+		const text = `Incarico #${card.n} da rivedere: ${card.title}${agent === undefined ? "" : `\n${agent} l'ha finito`}${summary === undefined ? "." : `: ${summary.length > 300 ? `${summary.slice(0, 300)}[...]` : summary}`}\n\nApprovalo da qui, o rimandalo indietro con cosa cambiare da Incarichi nella console.`;
 		// Approved with a tap (ADR 0079); sending it back needs words, so that stays on the board.
 		const buttons = [{ label: "Approva", data: `${BOARD_TAP}${card.id}:fatto` }];
 		for (const adapter of w.ownerChats()) {
@@ -108,10 +108,10 @@ export async function approveFromChat(work: BoardWork, people: PeopleStore, data
 	const m = /^board:(c_[0-9a-f]{12}):fatto$/.exec(data);
 	if (m === null) return undefined;
 	const owner = (await people.list()).find((p) => p.role === "owner");
-	if (owner === undefined) return "Non c'è un owner nella console: approvala dalla Board.";
+	if (owner === undefined) return "Non c'è un owner nella console: approvalo da Incarichi.";
 	try {
 		const card = await work.change(m[1] as string, { status: "fatto", from: "da_rivedere" }, { kind: "person", id: owner.id }, owner.id);
-		return `Scheda #${card.n} approvata e chiusa.`;
+		return `Incarico #${card.n} approvato e chiuso.`;
 	} catch (error) {
 		if (error instanceof BoardError) return `${error.message}.`;
 		throw error;

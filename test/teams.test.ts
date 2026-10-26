@@ -107,6 +107,7 @@ describe("ready-made squadre", () => {
 		expect(room.room.agents.map((a: { instanceId: string }) => a.instanceId)).toEqual(["caporedattore", "ricercatore", "scrittore"]);
 		const again = await api("/api/teams", { team: "contenuti" });
 		expect(again.agents.map((a: { id: string }) => a.id)).toEqual(["caporedattore-2", "ricercatore-2", "scrittore-2"]);
+		expect(again.agents.map((a: { name: string }) => a.name)).toEqual(["Caporedattore 2", "Ricercatore 2", "Scrittore 2"]);
 		expect((await api("/api/org")).org.agents["scrittore-2"]).toMatchObject({ team: "contenuti-2", reportsTo: "caporedattore-2" });
 		expect((await api("/api/agents")).agents.find((a: { id: string }) => a.id === "scrittore-2").acceptsFrom.sort()).toEqual(["caporedattore-2", "ricercatore-2"]);
 		expect((await api("/api/teams", { team: "nessuna" })).status).toBe(400);
