@@ -3,6 +3,7 @@ import { agentHome, agentInfoHref, agentLabel, api, dmHref, emptyNote, face, fac
 import { TONES } from "../tones.js";
 import { refreshInstances, refreshSetup } from "../session.js";
 import { render } from "../shell.js";
+import { teamsForm } from "../teams.js";
 
 // ---------- agenti (ADR 0041) ----------
 /** Starting points for a new agente: they only fill the form. */
@@ -99,78 +100,11 @@ export function agentForm() {
 	name.focus();
 }
 
-/** Ready-made squadre (ADR 0068): a few agenti that ask each other, with a room for all of them. */
-async function teamsForm() {
-	let listed;
-	try {
-		listed = await api("/api/teams");
-	} catch (error) {
-		return toast(error.message, true);
-	}
-	const { teams, available } = listed;
-	if (!available) return toast("Questa installazione non crea agenti dalla console", true);
-	// One squadra at a time: every button waits while one is made.
-	const busy = (on) => {
-		for (const b of dialog.querySelectorAll(".team button")) b.disabled = on;
-	};
-	const make = async (team) => {
-		busy(true);
-		try {
-			const { agents, room, note } = await api("/api/teams", { method: "POST", body: { team: team.key } });
-			dialog.close();
-			await refreshInstances();
-			toast(note ?? `Squadra ${team.name} pronta: ${agents.map((a) => a.name).join(", ")}`, note !== undefined);
-			if (room) go("canali", room);
-			else go("agenti");
-			render();
-		} catch (error) {
-			busy(false);
-			toast(error.message, true);
-		}
-	};
-	const dialog = h(
-		"dialog.teams-form",
-		h("h2", "Squadre pronte"),
-		h("p.muted", "Tre agenti con un compito ciascuno, che si chiedono aiuto tra loro, e una stanza dove li chiami tutti. Chi coordina divide il lavoro; sulla board può farne sotto-schede per gli altri. Dopo sono agenti come gli altri: li cambi o li elimini uno per uno."),
-		h(
-			"div.teams",
-			teams.map((team) => {
-				const button = h("button.btn.small.accent", { type: "button", onclick: () => void make(team) }, "Crea la squadra");
-				return h(
-					"section.team",
-					h("b", `${team.emoji} ${team.name}`),
-					h("p.muted.small", team.summary),
-					h("ul", team.members.map((m, i) => h("li", h("span", `${m.emoji} ${m.name}`), h("small.muted", i === 0 ? `coordina · ${m.tagline}` : m.tagline)))),
-					button,
-				);
-			}),
-		),
-		h("div.actions", h("button.btn.ghost", { onclick: () => dialog.close() }, "Chiudi")),
-	);
-	dialog.addEventListener("close", () => dialog.remove());
-	document.body.append(dialog);
-	dialog.showModal();
-}
-
-
 export async function viewAgents(main) {
 	const owner = state.me.role === "owner";
 	const { agents } = await api("/api/agents");
 	const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 	const writesTo = (a) => agents.filter((x) => x.acceptsFrom?.includes(a.id)).map((x) => x.name);
-	// «Fate squadra»: every agente may ask every other one; the per-agente card in Impostazioni stays the fine control.
-	const team = agents.filter((a) => !state.instances.find((i) => i.id === a.id)?.hasSegreteria);
-	const together = team.length > 1 && team.every((a) => team.every((x) => x.id === a.id || a.acceptsFrom?.includes(x.id)));
-	const setTeam = async (on) => {
-		try {
-			for (const a of team) await api(`/api/instances/${a.id}/agents`, { method: "PUT", body: { from: on ? team.filter((x) => x.id !== a.id).map((x) => x.id) : [] } });
-			toast(on ? "Ora gli agenti possono chiedersi aiuto tra loro" : "Gli agenti non si scrivono più tra loro");
-			render();
-		} catch (error) {
-			toast(error.message, true);
-		}
-	};
-	const teamButton = owner && team.length > 1 ? h("button.btn.ghost", { title: "Ogni agente può chiedere aiuto agli altri mentre lavora", onclick: () => setTeam(!together) }, together ? "Separa gli agenti" : "Fate squadra") : null;
 	const card = (a) => {
 		const el = h(
 			`article.card.agent${a.id === state.instance?.id ? ".current" : ""}`,
@@ -200,7 +134,7 @@ export async function viewAgents(main) {
 		main,
 		head(null, h("h1", "Agenti"), "Il tuo assistente e gli eventuali agenti con responsabilità separate. Di ognuno trovi documenti, memoria, procedure e configurazione.", owner ? h("button.btn.accent", { onclick: () => agentForm() }, icon("plus"), "Nuovo agente") : null),
 		agents.length === 0 ? emptyNote("div.empty", "Nessun agente", owner ? "Crea il primo con Nuovo agente." : "Chiedi all'owner di aggiungerti a un agente.") : h("div.agents", agents.map(card)),
-		owner ? h("details.card.fold.agent-team-options", h("summary", h("span.fold-glyph", icon("agenti")), h("span.fold-text", h("b", "Estendi il team quando serve"), h("small", "Squadre pronte e collaborazione tra agenti.")), h("span.fold-chevron", icon("down"))), h("div.fold-body", h("p.muted", "Una nuova conversazione non richiede un nuovo agente. Aggiungi una squadra o consenti la collaborazione quando vuoi dividere responsabilità e accessi."), h("div.actions", teamButton, h("button.btn.ghost", { title: "Più agenti già pronti a lavorare insieme", onclick: () => teamsForm() }, "Squadre pronte")))) : null,
+		owner ? h("details.card.fold.agent-team-options", h("summary", h("span.fold-glyph", icon("agenti")), h("span.fold-text", h("b", "Estendi il team quando serve"), h("small", "Squadre pronte e organigramma.")), h("span.fold-chevron", icon("down"))), h("div.fold-body", h("p.muted", "Una nuova conversazione non richiede un nuovo agente. Aggiungi una squadra pronta quando vuoi dividere responsabilità e accessi; nell'organigramma decidi ruoli, squadre e chi può scrivere a chi."), h("div.actions", h("a.btn.ghost", { href: "#/organigramma" }, "Organigramma"), h("button.btn.ghost", { title: "Più agenti già pronti a lavorare insieme", onclick: () => teamsForm() }, "Squadre pronte")))) : null,
 	);
 }
 

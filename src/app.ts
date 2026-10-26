@@ -114,6 +114,7 @@ import { salesEnvOf } from "./core/tools/sales-invoice-env.ts";
 import { createTimesheetTools } from "./core/tools/timesheet-tools.ts";
 import { createAgentTools } from "./core/tools/agent-tools.ts";
 import { AGENT_CHANNEL, AGENT_LIMITS, AgentRate, agentThreadId, relayAgentAnswer } from "./core/agent-messages.ts";
+import { placeLine, withoutAgent } from "./core/org.ts";
 import { type AgentRequest, agentRequestCard, agentRequestFitsInChat, agentRequestReport, askedByIn, askedByLines, undoAgentRequest, withAgentRequests } from "./core/agent-requests.ts";
 import { AgentChannel } from "./channels/agents.ts";
 import { runtimeActivity, viewerOf } from "./core/agent-activity.ts";
@@ -338,6 +339,19 @@ export async function startOwni(config: OwniConfig, options: OwniOptions = {}): 
 		today: () => new Date().toLocaleString("it-IT", { timeZone: config.timeZone, dateStyle: "full", timeStyle: "short" }),
 	});
 	const segreteriaId = config.segreteria?.instanceId;
+	/** The other agenti as `self` sees them for agent_list (ADR 0042, 0117): whether each accepts its messages, and its place in the organigramma. */
+	const company = async (self: InstanceRecord) => {
+		const org = runtime.org(self.tenantId).read();
+		return (await runtime.registry.listInstances(self.tenantId))
+			.filter((r) => r.id !== self.id && r.id !== segreteriaId)
+			.map((r) => {
+				const place = placeLine(org, r.id);
+				return {
+					accepts: r.egress.channels.includes(AGENT_CHANNEL) && (r.allowedUsers[AGENT_CHANNEL] ?? []).includes(self.id),
+					colleague: { id: r.id, name: r.name, ...(r.persona?.tagline === undefined ? {} : { tagline: r.persona.tagline }), ...(place === "" ? {} : { place }) },
+				};
+			});
+	};
 	const connectorStore = (id: string) => new ConnectorStore(instanceDir(config.dataDir, toTenantId(tenant), toInstanceId(id)));
 	const policyOf = (record: InstanceRecord) => async () => (await runtime.registry.getInstance(record.tenantId, record.id)).egress;
 	// A sentinella reads a page like web_read: the owner's list of sites, read fresh at every check.
@@ -735,10 +749,8 @@ export async function startOwni(config: OwniConfig, options: OwniOptions = {}): 
 					self: record.id,
 					...agentRatesOf(record.id),
 					activity: (agent, thread) => liveActivity(record.tenantId)(agent, viewerOf(record.id, thread, WebChannel.ownerOf)),
-					colleagues: async () =>
-						(await runtime.registry.listInstances(record.tenantId))
-							.filter((r) => r.id !== record.id && r.id !== segreteriaId && r.egress.channels.includes(AGENT_CHANNEL) && (r.allowedUsers[AGENT_CHANNEL] ?? []).includes(record.id))
-							.map((r) => ({ id: r.id, name: r.name, ...(r.persona?.tagline === undefined ? {} : { tagline: r.persona.tagline }) })),
+					colleagues: async () => (await company(record)).filter((c) => c.accepts).map((c) => c.colleague),
+					company: async () => (await company(record)).filter((c) => !c.accepts && c.colleague.place !== undefined).map((c) => c.colleague),
 					post: async ({ to, origin, text, key }) => {
 						const channel = agentChannels.get(to);
 						if (channel === undefined) throw new Error("non è attivo");
@@ -1669,6 +1681,9 @@ export async function startOwni(config: OwniConfig, options: OwniOptions = {}): 
 			// Like the Agenti page: nobody left to hear from, no channel.
 			if (left.length === 0) await runtime.registry.setEgress(tenant, other.id, { ...other.egress, channels: other.egress.channels.filter((c) => c !== AGENT_CHANNEL) });
 		}
+		// Out of the organigramma (ADR 0117): the links it gave are the ones just taken back.
+		const org = runtime.org(tenant);
+		if (org.saved()) org.update((current) => withoutAgent(current, id));
 	}
 
 	const server = createWebApp({

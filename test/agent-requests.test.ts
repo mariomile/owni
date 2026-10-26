@@ -305,7 +305,7 @@ describe("Vendite chiede ad Amministrazione la fattura di un preventivo accettat
 			const tenant = config.tenantId;
 			await owner("/api/instances", { id: "vendite", name: "Vendite" });
 			await owner("/api/instances", { id: "amministrazione", name: "Amministrazione" });
-			expect((await owner("/api/instances/amministrazione/agents", { from: ["vendite"] }, "PUT")).from).toEqual(["vendite"]);
+			expect((await owner("/api/org", { org: { teams: [], agents: { vendite: { reportsTo: "amministrazione" } } }, version: (await owner("/api/org")).version }, "PUT")).accepts.amministrazione).toEqual(["vendite"]);
 			// Anna approves for Vendite only.
 			const { link, person } = await owner("/api/people", { name: "Anna", role: "member" });
 			const everyone = ((await owner("/api/people")).people as { id: string }[]).map((p) => p.id);

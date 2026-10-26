@@ -414,36 +414,16 @@ function webActionsCard(inst, allowed) {
 	);
 }
 
-/** Which other agenti may write to this one (ADR 0042). Each tick saves at once. */
+/** Which other agenti may write to this one (ADR 0042): the organigramma decides it (ADR 0117). */
 function agentsCard(inst, settings) {
-	const others = state.instances.filter((i) => i.id !== inst.id && !i.hasSegreteria);
-	const allowed = new Set(settings.egress.channels.includes("agente") ? (settings.allowedUsers.agente ?? []) : []);
-	const boxes = others.map((o) => {
-		const box = h("input", { type: "checkbox", checked: allowed.has(o.id) || undefined });
-		box.onchange = async () => {
-			try {
-				const from = others.filter((x, i) => boxes[i].box.checked).map((x) => x.id);
-				await api(`/api/instances/${inst.id}/agents`, { method: "PUT", body: { from } });
-				toast(box.checked ? `${o.name} può scrivere a ${inst.name}` : `${o.name} non può più scrivere a ${inst.name}`);
-			} catch (error) {
-				box.checked = !box.checked;
-				toast(error.message, true);
-			}
-		};
-		return { box, row: h("label.row-gap", box, h("span", agentLabel(o))) };
-	});
-	const chip = h("span.chip");
-	const count = () => {
-		const n = boxes.filter((b) => b.box.checked).length;
-		chip.className = n ? "chip ok" : "chip";
-		chip.textContent = n === 0 ? "Nessuno" : n === 1 ? "1 agente" : `${n} agenti`;
-	};
-	for (const b of boxes) b.box.addEventListener("change", count);
-	count();
+	const from = settings.egress.channels.includes("agente") ? (settings.allowedUsers.agente ?? []) : [];
+	const names = from.map((id) => state.instances.find((i) => i.id === id)).filter(Boolean).map(agentLabel);
+	const chip = h(`span.chip${names.length ? ".ok" : ""}`, names.length === 0 ? "Nessuno" : names.length === 1 ? "1 agente" : `${names.length} agenti`);
 	return fold(
 		{ title: "Agenti che possono scrivergli", glyph: "agenti", lead: `Chi può chiedere aiuto a ${inst.name} mentre lavora.`, chip },
-		h("p.muted", `Un agente spuntato può chiedere aiuto a ${inst.name} mentre lavora: ${inst.name} risponde con i suoi strumenti e solo la memoria condivisa, e la risposta torna nella chat da cui era partita la domanda. Le conversazioni tra agenti non compaiono in chat; in Attività resta traccia di ogni messaggio. Per farli collaborare tutti insieme usa «Fate squadra» nella pagina Agenti.`),
-		others.length === 0 ? h("p.muted", "Non ci sono altri agenti: creane uno dalla pagina Agenti.") : boxes.map((b) => b.row),
+		h("p.muted", `Un agente che può scrivergli chiede aiuto a ${inst.name} mentre lavora: ${inst.name} risponde con i suoi strumenti e solo la memoria condivisa, e la risposta torna nella chat da cui era partita la domanda. Le conversazioni tra agenti non compaiono in chat; in Attività resta traccia di ogni messaggio. Chi può scrivere a chi lo decide l'organigramma.`),
+		names.length ? h("p", names.join(", ")) : h("p.muted", "Nessun agente può scrivergli."),
+		h("div.actions", h("a.btn.ghost", { href: "#/organigramma" }, "Apri l'organigramma")),
 	);
 }
 

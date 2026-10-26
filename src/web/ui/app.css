@@ -1378,6 +1378,28 @@ textarea.board-new-desc:focus { border-bottom-color: var(--border-2); }
 .room-agents .chip:not(:has(.face))::before { display: block; }
 .room-agents .chip.gone { opacity: 0.5; cursor: default; text-decoration: line-through; }
 
+/* Organigramma (ADR 0117): each squadra a band, the one who coordinates first */
+.org { display: grid; gap: 28px; }
+.org-first { margin: 0 0 18px; color: var(--fg-2); }
+.org-team { display: grid; gap: 12px; }
+.org-team-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+.org-team-head h2 { margin: 0; font-size: 15px; font-weight: 640; font-stretch: var(--display-stretch); letter-spacing: -0.01em; }
+.org-team-head p { margin: 3px 0 0; }
+.org-agents { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; }
+.card.org-agent { display: grid; grid-template-columns: 44px 1fr auto; gap: 14px; align-items: start; padding: 16px; }
+.card.org-agent.lead { border-color: color-mix(in srgb, var(--glow, var(--fg)) 35%, var(--border)); }
+.org-body { min-width: 0; }
+.org-body h3 { margin: 0; font-size: 14.5px; font-weight: 620; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.org-body h3 a { color: var(--fg); text-decoration: none; }
+.org-body h3 a:hover { text-decoration: underline; }
+.org-body p { margin: 4px 0 0; }
+.org-body .small { font-size: 12px; }
+.org-role { font-size: 13px; color: var(--fg-2); }
+.org-owns { margin: 6px 0 0; padding: 0 0 0 16px; font-size: 12.5px; color: var(--fg-2); display: grid; gap: 1px; }
+dialog.org-dialog { max-width: 540px; max-height: calc(100dvh - 48px); overflow-y: auto; }
+.org-members { display: grid; gap: 6px; max-height: 220px; overflow-y: auto; }
+.org-members small { margin-left: auto; }
+
 /* Squadre pronte (ADR 0068) */
 dialog.teams-form { max-width: 620px; }
 .teams { display: grid; gap: 10px; margin: 12px 0; }
