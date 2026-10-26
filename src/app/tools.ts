@@ -137,6 +137,7 @@ export async function assembleTools(w: ToolsWiring, record: InstanceRecord): Pro
 		policy,
 		audit: runtime.audit(record.tenantId),
 		log,
+		noStdio: w.config.cell.secret !== undefined,
 		oauth: w.mcpOAuth(),
 		payments: (w.connectorCatalog ?? CONNECTOR_CATALOG).filter((e) => e.category === "pagamenti").map((e) => e.url),
 		actions: { propose: (input) => w.proposeConnectorAction(record.id, input) },

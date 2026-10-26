@@ -18,9 +18,8 @@ export function runRoutes(route: AddRoute, { runtime, tenantId, access, channel 
 		const thread = await channel(instanceId).thread(threadId);
 		if (thread === undefined || thread.personId !== person.id) throw new HttpError(404, "No such thread");
 	};
-	route("GET", "/api/instances/:id/runs", "person", async ({ person, params, url }) => {
-		const p = person as Person;
-		const instanceId = params[0] as string;
+	route("GET", "/api/instances/:id/runs", "person", async ({ person: p, params, url }) => {
+		const instanceId = params[0];
 		await access(p, instanceId);
 		const threads = await channel(instanceId).threads(p.id);
 		const requested = url.searchParams.get("sources")?.split(",");
@@ -31,17 +30,17 @@ export function runRoutes(route: AddRoute, { runtime, tenantId, access, channel 
 		return { runs: runs.map(publicRun) };
 	});
 	route("GET", "/api/instances/:id/threads/:thread/runs", "person", async ({ person, params }) => {
-		const [instanceId, threadId] = params as [string, string];
-		await ownThread(person as Person, instanceId, threadId);
+		const [instanceId, threadId] = params;
+		await ownThread(person, instanceId, threadId);
 		const recent = await runtime.listRuns(tenantId, instanceId, { channel: "web", threadId, limit: 50 });
 		const active = await runtime.currentRuns(tenantId, instanceId, { channel: "web", threadId });
 		return { runs: [...new Map([...recent, ...active].map((run) => [run.id, run])).values()].map(publicRun) };
 	});
 	route("POST", "/api/instances/:id/threads/:thread/stop", "person", async ({ person, params }) => {
-		const [instanceId, threadId] = params as [string, string];
-		await ownThread(person as Person, instanceId, threadId);
+		const [instanceId, threadId] = params;
+		await ownThread(person, instanceId, threadId);
 		const result = await runtime.stopConversation(tenantId, instanceId, { channel: "web", threadId });
-		await runtime.audit(tenantId).append({ type: "agent.run.stopped", instanceId, personId: (person as Person).id, cancelled: result.cancelled });
+		await runtime.audit(tenantId).append({ type: "agent.run.stopped", instanceId, personId: person.id, cancelled: result.cancelled });
 		return { cancelled: result.cancelled, runs: result.runs.map(publicRun) };
 	});
 }

@@ -45,6 +45,8 @@ export const PHONE_PIN = /^\d{4,8}$/;
 export const PHONE_VOICE = /^[A-Za-z]+\.[\w-]+$/;
 const LANGUAGE = "it-IT";
 const PIN_TRIES = 3;
+/** Wrong codes on this number, across calls, before it takes none for an hour: a caller ID can be faked, and a short code guessed one call at a time. */
+const WRONG_PER_HOUR = 10;
 /** Calls remembered (to refuse a replayed start): two hours, at most this many. */
 const CALLS_KEPT = 1000;
 /** Webhooks that may wait on one number's reply at once. */
@@ -65,6 +67,8 @@ export class PhoneAdapter implements ChannelAdapter {
 	private readonly waiters = new Map<string, Set<() => void>>();
 	/** Calls seen, by CallSid: whether the code was typed, and how many times it was wrong. */
 	private readonly calls = new Map<string, { at: number; authed: boolean; tries: number }>();
+	/** When the last wrong codes were typed, on any call. */
+	private wrong: number[] = [];
 
 	constructor(private readonly options: PhoneOptions) {}
 
@@ -129,6 +133,10 @@ export class PhoneAdapter implements ChannelAdapter {
 		const step = query.get("step");
 		const turn = Math.max(0, Math.min(1000, Number(query.get("turn") ?? 0) || 0));
 		const seen = this.calls.get(call);
+		if (this.locked()) {
+			this.options.log?.(`phone: ${WRONG_PER_HOUR} wrong codes in an hour on ${this.options.instanceId}, calls refused for now`);
+			return twiml("<Reject/>");
+		}
 		if (step === null) {
 			// A start Twilio sends again (or someone replays) never opens a call twice.
 			if (seen !== undefined) return twiml("<Reject/>");
@@ -146,6 +154,7 @@ export class PhoneAdapter implements ChannelAdapter {
 				return this.listen(1, waiting.length > 0 ? ["Ti avevo lasciato una risposta.", ...waiting, "Dimmi pure."] : ["Dimmi pure."]);
 			}
 			seen.tries += 1;
+			this.wrong.push(Date.now());
 			this.options.log?.(`phone: wrong code on a call to ${this.options.instanceId} (${seen.tries} of ${PIN_TRIES})`);
 			if (seen.tries >= PIN_TRIES) return twiml(`${this.say(["Codice sbagliato. Ciao."])}<Hangup/>`);
 			return this.askCode("Codice sbagliato. Riprova, poi cancelletto.");
@@ -174,6 +183,12 @@ export class PhoneAdapter implements ChannelAdapter {
 	/** What Twilio says when the cell could not answer a webhook. */
 	apology(): string {
 		return twiml(`${this.say(["Scusa, qualcosa non va. Riprova tra poco."])}<Hangup/>`);
+	}
+
+	private locked(): boolean {
+		const hour = Date.now() - 3600_000;
+		this.wrong = this.wrong.filter((at) => at > hour);
+		return this.wrong.length >= WRONG_PER_HOUR;
 	}
 
 	private remember(call: string): void {
