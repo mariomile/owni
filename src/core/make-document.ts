@@ -3,7 +3,7 @@ import { makeDocx, type Picture } from "./make-docx.ts";
 import { makePdf, PdfMakeError } from "./make-pdf.ts";
 import { makeXlsx, SheetError, sheetOfCsv, sheetsOf } from "./make-xlsx.ts";
 import { type Block, markdownBlocks, plainText } from "./markdown-blocks.ts";
-import { jpegSize } from "./pdf-text.ts";
+import { jpegSize } from "./pdf-images.ts";
 import { pngSize } from "./png-read.ts";
 
 /**
