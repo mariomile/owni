@@ -192,7 +192,7 @@ describe("Google: scrivere con approvazione", () => {
 		for (const secret of ["luca@example.com", "Riunione", "giovedì", "anna@example.com"]) expect(audit).not.toContain(secret);
 	});
 
-	it("a reply goes to the sender, in the same Gmail thread; a draft is only saved", async () => {
+	it("a reply goes to the sender, in the same Gmail thread", async () => {
 		const { owner, thread, google } = await ready();
 		await reply(owner, thread.id, tool("google_mail_send", { reply_to: "m1", body: "Ve lo mandiamo venerdì.", reason: "Risposta a Rossi" }));
 		const [replyAction] = (await owner("/api/instances/owni/google-actions")).actions;
@@ -203,11 +203,43 @@ describe("Google: scrivere con approvazione", () => {
 		expect(rawOf(sent)).toContain("In-Reply-To: <abc@cliente.example>\r\nReferences: <abc@cliente.example>\r\n");
 		// The outcome notice lands in the thread on its own: wait for it, or the next reply() could take it for Owni's answer.
 		await owniSays(owner, thread.id, (t) => t.includes(`Esito della richiesta ${replyAction.id}`));
-		await reply(owner, thread.id, tool("google_mail_send", { to: ["luca@example.com"], subject: "Bozza", body: "Da rivedere", draft: true, reason: "Bozza per Luca" }));
-		const draft = (await owner("/api/instances/owni/google-actions")).actions.find((a: { kind: string }) => a.kind === "mail.draft");
-		expect((await owner(`/api/instances/owni/google-actions/${draft.id}/decision`, { decision: "approved" })).action.status).toBe("done");
-		expect(google.writes().at(-1)?.url.pathname).toBe("/gmail/v1/users/me/drafts");
-		expect(rawOf(google.writes().at(-1))).toContain("To: luca@example.com");
+	});
+
+	it("a draft is saved at once in Gmail, with no card; an event with no guests is created at once and tells nobody; with guests it waits; the audit keeps no content", async () => {
+		const { owner, thread, google, dataDir } = await ready();
+		const saved = await reply(owner, thread.id, tool("google_mail_send", { to: ["luca@example.com"], subject: "Bozza", body: "Da rivedere", draft: true, reason: "Bozza per Luca" }));
+		expect(saved).toContain("Nothing was sent; nobody was told.");
+		expect(google.writes().map((w) => `${w.method} ${w.url.pathname}`)).toEqual(["POST /gmail/v1/users/me/drafts"]);
+		expect(rawOf(google.writes()[0])).toContain("To: luca@example.com");
+		expect((await owner("/api/instances/owni/google-actions")).actions).toEqual([]);
+		// Even if the model says to notify, nobody is on the event to be told.
+		const created = await reply(owner, thread.id, tool("google_calendar_create", { summary: "Studio", start: "2026-10-21T09:00", end: "2026-10-21T10:00", notify: true, reason: "Blocco il tempo" }));
+		expect(created).toContain("https://www.google.com/calendar/event?eid=new1");
+		const [, post] = google.writes();
+		expect(`${post?.method} ${post?.url.pathname}`).toBe("POST /calendar/v3/calendars/primary/events");
+		expect(post?.url.searchParams.get("sendUpdates")).toBe("none");
+		expect(JSON.parse(post?.body ?? "{}")).not.toHaveProperty("attendees");
+		expect((await owner("/api/instances/owni/google-actions")).actions).toEqual([]);
+		// With guests it is a card, and nothing reaches Google until it is approved.
+		expect(await reply(owner, thread.id, tool("google_calendar_create", { summary: "Pranzo", start: "2026-10-22T13:00", end: "2026-10-22T14:00", attendees: ["luca@example.com"], reason: "Pranzo con Luca" }))).toMatch(/Richiesta [0-9a-f]{12} pronta/);
+		expect(google.writes()).toHaveLength(2);
+		expect((await owner("/api/instances/owni/google-actions")).actions).toHaveLength(1);
+		// Sending is still a card: draft is the only way to a draft.
+		expect(await reply(owner, thread.id, tool("google_mail_send", { to: ["luca@example.com"], subject: "Invio", body: "Ciao", reason: "Invio a Luca" }))).toMatch(/Richiesta [0-9a-f]{12} pronta/);
+		const audit = readFileSync(join(dataDir, "tenants", "default", "audit.jsonl"), "utf8");
+		expect(audit).toMatch(/"type":"google_action.direct"[^\n]*"kind":"mail.draft"/);
+		expect(audit).toMatch(/"type":"google_action.direct"[^\n]*"kind":"calendar.create"/);
+		for (const secret of ["luca@example.com", "Bozza", "Da rivedere", "Studio", "anna@example.com"]) expect(audit).not.toContain(secret);
+	});
+
+	it("Google not answering a draft is said as an unknown outcome and recorded; Google refusing it is an error", async () => {
+		const { owner, thread, google, dataDir } = await ready();
+		google.state.fail = 400;
+		expect(await reply(owner, thread.id, tool("google_mail_send", { to: ["luca@example.com"], subject: "Uno", body: "1", draft: true, reason: "Prova" }))).toContain("Errore");
+		google.state.fail = 503;
+		expect(await reply(owner, thread.id, tool("google_mail_send", { to: ["luca@example.com"], subject: "Due", body: "2", draft: true, reason: "Prova" }))).toContain("Google did not answer");
+		const audit = readFileSync(join(dataDir, "tenants", "default", "audit.jsonl"), "utf8");
+		expect(audit.match(/"type":"google_action.direct"/g)).toHaveLength(1);
 	});
 
 	it("calendar: create with invitations, change and delete an event, each approved, showing the event as it is", async () => {
@@ -295,16 +327,17 @@ describe("Google: scrivere con approvazione", () => {
 	it("calendar: all-day days are inclusive, a move keeps the length, guests are added and removed, deleting tells them, and the event must be unchanged", async () => {
 		const { owner, thread, google } = await ready();
 		expect(await reply(owner, thread.id, tool("google_calendar_events", {}))).toMatch(/id e1/);
+		// No guests: created at once, still with the days inclusive.
 		await reply(owner, thread.id, tool("google_calendar_create", { summary: "Fiera", start: "2026-10-20", end: "2026-10-20", reason: "Fiera" }));
+		expect(JSON.parse(google.writes()[0]?.body ?? "{}")).toMatchObject({ summary: "Fiera", start: { date: "2026-10-20" }, end: { date: "2026-10-21" } });
 		await reply(owner, thread.id, tool("google_calendar_update", { event_id: "e1", start: "2026-10-16T15:00", reason: "Spostare la call" }));
 		await reply(owner, thread.id, tool("google_calendar_update", { event_id: "e2_20261019", add_attendees: ["marco@example.com"], remove_attendees: ["luca@example.com"], reason: "Marco al posto di Luca" }));
 		await reply(owner, thread.id, tool("google_calendar_delete", { event_id: "e2_20261019", reason: "Niente ferie" }));
 		// A path instead of an id is refused before anything is asked.
 		expect(await reply(owner, thread.id, tool("google_calendar_delete", { event_id: "..", reason: "xyz" }))).toMatch(/Errore|Validation/);
 		const actions = (await owner("/api/instances/owni/google-actions")).actions;
-		expect(actions).toHaveLength(4);
-		const [fair, move, guests, remove] = actions;
-		expect(fair.event).toMatchObject({ start: { date: "2026-10-20" }, end: { date: "2026-10-21" } });
+		expect(actions).toHaveLength(3);
+		const [move, guests, remove] = actions;
 		expect(move.event).toMatchObject({ start: { dateTime: "2026-10-16T15:00:00" }, end: { dateTime: "2026-10-16T15:30:00" } });
 		expect(guests).toMatchObject({ notify: true, current: { occurrence: true, etag: '"etag-2"', attendees: ["luca@example.com", "anna@example.com"] }, event: { attendees: ["anna@example.com", "marco@example.com"] } });
 		expect(remove.notify).toBe(true);
@@ -313,7 +346,7 @@ describe("Google: scrivere con approvazione", () => {
 		expect(writes.filter((w) => w.url.pathname.endsWith("e2_20261019")).map((w) => w.url.searchParams.get("sendUpdates"))).toEqual(["all", "all"]);
 		expect(google.calls.filter((c) => c.method !== "GET" && c.url.pathname.endsWith("e2_20261019")).length).toBe(2);
 		// Google's link is kept only when it is Google Calendar's.
-		expect((await owner("/api/instances/owni/google-actions")).actions[2].result).toEqual({ done: "Modificare l'evento «Ferie»" });
+		expect((await owner("/api/instances/owni/google-actions")).actions[1].result).toEqual({ done: "Modificare l'evento «Ferie»" });
 	});
 
 	it("is done with the account the card named, while the instance allows Google; a token expired on the way is renewed once", async () => {

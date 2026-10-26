@@ -1,5 +1,7 @@
 # Collegamenti API per agente
 
+> Sostituita in parte dall'[ADR 0120](0120-approvazioni-per-rischio.md): `<id>__write` aspetta sempre l'approvazione, senza l'interruttore dell'owner. Il resto di questa decisione vale ancora.
+
 Un agente oggi raggiunge un servizio esterno in tre modi: i connettori integrati (Google, HubSpot), un server MCP (ADR 0003, 0024) o un tool proposto (ADR 0002). Molti servizi che un'azienda usa davvero (il gestionale, Fatture in Cloud, un CRM di nicchia, l'API interna) non hanno un server MCP. Un tool proposto non basta: raggiunge solo gli host dichiarati e non ha accesso ai segreti, quindi non può chiamare un'API con una chiave.
 
 ## Decisione

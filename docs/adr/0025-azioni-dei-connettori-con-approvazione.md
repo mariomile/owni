@@ -1,5 +1,7 @@
 # Azioni dei connettori con approvazione
 
+> Sostituita in parte dall'[ADR 0120](0120-approvazioni-per-rischio.md): l'approvazione dipende dal rischio dell'azione. Una scrittura che il server dichiara interna e non distruttiva parte subito, quello che esce, distrugge o non è descritto chiede sempre, e `approval: "none"` non esiste più (un valore salvato si legge come «per rischio»). Il resto di questa decisione vale ancora.
+
 Con i connettori in un clic (ADR 0024) Owni può creare issue su Linear, pagine su Notion, link di pagamento e rimborsi su Stripe. Fino alla settimana 29 lo faceva appena il modello lo decideva. Per un titolare è il rischio più grosso di tutto il prodotto: un'istruzione nascosta in una pagina letta, o un equivoco, diventa un'azione su un servizio vero.
 
 ## Come funziona

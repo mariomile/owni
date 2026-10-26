@@ -1,7 +1,7 @@
-import { type CalendarEvent, EVENT_ID_PATTERN, type EventTime, type GoogleClient, GoogleNotConnected, type GoogleService } from "../../connectors/google.ts";
+import { type CalendarEvent, EVENT_ID_PATTERN, type EventTime, type GoogleClient, GoogleNotConnected, type GoogleService, GoogleUncertain } from "../../connectors/google.ts";
 import { ConnectorHttpError } from "../../connectors/http.ts";
 import { EgressDenied } from "../errors.ts";
-import { type CurrentEvent, type EventDraft, eventTime, GOOGLE_ACTION_LIMITS, GoogleActionError, type GoogleAction, type GoogleActionStore, googleActionTitle, instant, type MailDraft, nextDay, validAddress } from "../google-actions.ts";
+import { type CurrentEvent, type EventDraft, eventTime, GOOGLE_ACTION_LIMITS, GoogleActionError, type GoogleAction, type GoogleActionResult, type GoogleActionStore, googleActionTitle, instant, type MailDraft, nextDay, validAddress } from "../google-actions.ts";
 import type { OwniTool, ToolContext } from "../engine.ts";
 import { ATTACHMENT_LIMITS, AttachmentError, attachFiles } from "../mail-attachments.ts";
 import type { Workspace } from "../workspace.ts";
@@ -27,6 +27,8 @@ export function createGoogleTools(options: {
 	/** Writing with approval, when the operator turned it on (OWNI_GOOGLE_WRITE). */
 	readonly write?: {
 		readonly store: GoogleActionStore;
+		/** Does at once what asks nobody (ADR 0120): a draft, an event with no guests. Nothing leaves the person's own account. */
+		readonly now: (draft: Pick<GoogleAction, "kind" | "personId" | "account" | "mail" | "event" | "notify">) => Promise<GoogleActionResult>;
 		/** The person's account and whether it granted writing (connected before it was asked, it did not). */
 		readonly account: (personId: string) => { readonly email: string; readonly canWrite: boolean } | undefined;
 		/** The instance's files: what a mail may attach. */
@@ -132,6 +134,18 @@ function writeTools(write: WriteOptions, withClient: WithClient, timeZone: strin
 			const account = write.account(personId);
 			if (account === undefined || !account.canWrite) return `Errore: questa persona ha collegato Google solo in lettura. Per farti ${service === "gmail" ? "scrivere mail" : "cambiare il calendario"} deve ricollegarlo dalla console (menu del suo account, Ricollega Google) e lasciare spuntati tutti i permessi.`;
 			const draft = await make(client, account.email);
+			// A draft stays in the person's Gmail and an event with no guests tells nobody: no card (ADR 0120).
+			if (draft.kind === "mail.draft" || (draft.kind === "calendar.create" && (draft.event?.attendees ?? []).length === 0)) {
+				const done = { ...draft, notify: false, personId, account: account.email };
+				try {
+					const result = await write.now(done);
+					if ("error" in result) return `Errore: ${result.error}`;
+					return `Fatto: ${lowerFirst(googleActionTitle(done))}.${result.link === undefined ? "" : ` ${result.link}`} Nothing was sent; nobody was told.`;
+				} catch (error) {
+					if (error instanceof GoogleUncertain) return "Google did not answer: the outcome is not known. Say so, do not retry.";
+					return `Errore: ${error instanceof Error ? error.message : String(error)}`;
+				}
+			}
 			const action = await write.store.propose({ ...draft, personId, account: account.email, ...(ctx.thread === undefined ? {} : { thread: ctx.thread }) }, new Date(), ctx.callId);
 			return `Richiesta ${action.id} pronta: ${lowerFirst(googleActionTitle(action))}. La persona la vede in una card qui in chat e decide lei (scade fra 24 ore). Dille in una frase cosa hai preparato; non dire che è fatto finché non arriva l'esito.`;
 		});
@@ -221,7 +235,7 @@ function writeTools(write: WriteOptions, withClient: WithClient, timeZone: strin
 			service: "gmail",
 			name: "google_mail_send",
 			description:
-				`Ask to send a mail from the Gmail of the person you are talking to, or to save it as a draft (draft: true). ${ASK} ` +
+				`Send a mail from the Gmail of the person you are talking to, or save it as a draft (draft: true). A draft is saved at once in the person's Gmail drafts and nothing leaves. Sending or replying waits: ${ASK} ` +
 				"Plain text, signed as the person. A quote to a customer goes with quotes op send and a payment reminder with invoices op reminder (they check and record it), not with this. To answer a mail give reply_to (its id from google_mail_search): it goes to the sender, in the same thread, with the same subject (subject is ignored); reply_all: true also to everyone else on it. " +
 				'To the person themselves («mandami per mail…»): to ["me"], their own account. ' +
 					`attachments: workspace paths of files to attach, at most ${ATTACHMENT_LIMITS.maxFiles}: PDF, Office, OpenDocument, RTF, CSV, text, PNG, JPG, XML and p7m; the card shows them with their sizes, and a file changed before approval is not sent. ` +
@@ -295,7 +309,7 @@ function writeTools(write: WriteOptions, withClient: WithClient, timeZone: strin
 		{
 			service: "calendar",
 			name: "google_calendar_create",
-			description: `Ask to create an event in the primary Google Calendar of the person you are talking to, with guests if given (they get an invitation). Several fiscal deadlines at once are fiscal_agenda export_ics, not many events. ${ASK}`,
+			description: `Create an event in the primary Google Calendar of the person you are talking to, with guests if given (they get an invitation). Without guests it is created at once in the person's calendar and nobody is told. With guests it waits: ${ASK} Several fiscal deadlines at once are fiscal_agenda export_ics, not many events.`,
 			parameters: {
 				type: "object",
 				properties: { summary: { type: "string", minLength: 1, maxLength: GOOGLE_ACTION_LIMITS.maxSubject }, start: when, end: when, location: { type: "string", maxLength: GOOGLE_ACTION_LIMITS.maxLocation }, description: { type: "string", maxLength: GOOGLE_ACTION_LIMITS.maxText }, attendees: addresses, notify, reason },

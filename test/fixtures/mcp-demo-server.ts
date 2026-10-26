@@ -7,7 +7,11 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 
-/** With `notes`, a third tool that writes (no read-only hint): create_note, recorded in the array. */
+/**
+ * With `notes`, three tools that write, recorded in the array. create_note says only that it is not
+ * destructive (it does not say it stays inside the service), tag_note says it is neither destructive nor
+ * open-world (a company write), delete_note says it is destructive.
+ */
 export function createDemoServer(identity: () => string, notes?: { text: string }[]): Server {
 	const server = new Server({ name: "demo", version: "1.0.0" }, { capabilities: { tools: {} } });
 	server.setRequestHandler(ListToolsRequestSchema, async () => ({
@@ -16,7 +20,11 @@ export function createDemoServer(identity: () => string, notes?: { text: string 
 			{ name: "whoami", description: "Who is calling", inputSchema: { type: "object", properties: {} }, annotations: { readOnlyHint: true } },
 			...(notes === undefined
 				? []
-				: [{ name: "create_note", description: "Create a note", inputSchema: { type: "object", properties: { text: { type: "string" } }, required: ["text"] }, annotations: { title: "Crea una nota", destructiveHint: false } }]),
+				: [
+						{ name: "create_note", description: "Create a note", inputSchema: { type: "object", properties: { text: { type: "string" } }, required: ["text"] }, annotations: { title: "Crea una nota", destructiveHint: false } },
+						{ name: "tag_note", description: "Tag a note", inputSchema: { type: "object", properties: { text: { type: "string" } }, required: ["text"] }, annotations: { title: "Etichetta una nota", destructiveHint: false, openWorldHint: false } },
+						{ name: "delete_note", description: "Delete a note", inputSchema: { type: "object", properties: { text: { type: "string" } }, required: ["text"] }, annotations: { title: "Cancella una nota", destructiveHint: true, openWorldHint: false } },
+					]),
 		],
 	}));
 	server.setRequestHandler(CallToolRequestSchema, async (request) => {
@@ -30,6 +38,11 @@ export function createDemoServer(identity: () => string, notes?: { text: string 
 			if (text === "fail") return { content: [{ type: "text", text: "note refused" }], isError: true };
 			notes.push({ text });
 			return { content: [{ type: "text", text: `note ${notes.length} created` }] };
+		}
+		if ((request.params.name === "tag_note" || request.params.name === "delete_note") && notes !== undefined) {
+			const { text } = request.params.arguments as { text: string };
+			notes.push({ text: `${request.params.name === "tag_note" ? "tag" : "delete"}:${text}` });
+			return { content: [{ type: "text", text: `note ${request.params.name === "tag_note" ? "tagged" : "deleted"}` }] };
 		}
 		return { content: [{ type: "text", text: "unknown tool" }], isError: true };
 	});

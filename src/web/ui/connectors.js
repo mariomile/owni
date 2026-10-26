@@ -112,10 +112,8 @@ export async function connectorsBody(inst) {
 			st?.tools?.length ? h("p.mono", st.tools.join("  ")) : null,
 			!st?.connected
 				? null
-				: c.approval === "none"
-					? h("p.muted", "Approvazione spenta: Owni usa tutti gli strumenti senza chiedere.")
-					: c.transport.type === "api"
-						? h("p.muted", "Legge subito; prima di creare, modificare o cancellare chiede l'approvazione.")
+				: c.transport.type === "api"
+					? h("p.muted", "Legge subito; per creare, modificare o cancellare chiede sempre l'approvazione.")
 					: !st.approval?.length
 						? h("p.muted", "Tutti gli strumenti leggono soltanto: Owni li usa senza chiedere.")
 						: st.approval.length === st.tools.length
@@ -192,9 +190,11 @@ function connectorForm(inst, existing) {
 	const secretValue = h("input", { type: "password", placeholder: "Valore (salvato nel secret store, mai mostrato)" });
 	const allowed = h("input", { type: "checkbox", checked: existing ? existing.allowed : true });
 	const enabled = h("input", { type: "checkbox", checked: existing ? existing.enabled : true });
-	const askBox = h("input", { type: "checkbox", checked: existing?.approval !== "none" });
+	const askBox = h("input", { type: "checkbox", checked: existing?.approval === "writes" });
 	const oauthBox = h("input", { type: "checkbox", checked: t?.type === "http" && t.auth === "oauth" });
 	const box = h("div");
+	const askRow = h("label.row-gap", askBox, h("span", "Chiedi l'approvazione anche per le modifiche ai dati dell'azienda"));
+	const askHelp = h("small.muted", "Owni legge subito. Invii, cancellazioni, pagamenti e strumenti che il servizio non descrive chiedono sempre. Le modifiche che il servizio dichiara interne e non distruttive partono subito, a meno che non spunti questa casella.");
 	const secretRow = h("div.field", h("span", "Header o variabile segreta (opzionale)"), h("div.row-gap", secretName, secretValue));
 	const apiFields = () => {
 		const named = authKind.value === "header" || authKind.value === "query";
@@ -218,6 +218,8 @@ function connectorForm(inst, existing) {
 					: h("label.field", h("span", "Comando"), command, h("small", "Gira sul server di Owni: solo comandi di cui ti fidi.")),
 		);
 		secretRow.hidden = type.value === "api";
+		askRow.hidden = type.value === "api";
+		askHelp.hidden = type.value === "api";
 	};
 	type.addEventListener("change", draw);
 	authKind.addEventListener("change", draw);
@@ -232,8 +234,8 @@ function connectorForm(inst, existing) {
 		secretRow,
 		h("label.row-gap", allowed, h("span", "Consenti nella egress policy")),
 		h("label.row-gap", enabled, h("span", "Acceso")),
-		h("label.row-gap", askBox, h("span", "Chiedi l'approvazione prima delle azioni che cambiano qualcosa")),
-		h("small.muted", "Consigliato. Per creare, modificare o cancellare, Owni chiede il via libera a chi ha fatto la richiesta o a un approvatore; gli strumenti che il servizio indica come di sola lettura li usa da sola (per un'API: le richieste GET). Se un server MCP non lo indica, chiede per tutti. Spegnilo solo per un servizio di cui ti fidi del tutto."),
+		askRow,
+		askHelp,
 		h(
 			"div.actions",
 			h(
@@ -259,7 +261,7 @@ function connectorForm(inst, existing) {
 												const [cmd, ...args] = command.value.trim().split(/\s+/);
 												return { type: "stdio", command: cmd, args, envSecrets: { ...(prev.type === "stdio" ? prev.envSecrets : {}), ...secrets } };
 											})();
-							const { status } = await api(`/api/instances/${inst.id}/connectors/${encodeURIComponent(cid)}`, { method: "PUT", body: { name: name.value.trim() || cid, transport, ...(type.value === "api" && key.value.trim() ? { key: key.value.trim() } : {}), enabled: enabled.checked, allowed: allowed.checked, ...(askBox.checked ? {} : { approval: "none" }) } });
+							const { status } = await api(`/api/instances/${inst.id}/connectors/${encodeURIComponent(cid)}`, { method: "PUT", body: { name: name.value.trim() || cid, transport, ...(type.value === "api" && key.value.trim() ? { key: key.value.trim() } : {}), enabled: enabled.checked, allowed: allowed.checked, ...(askBox.checked && type.value !== "api" ? { approval: "writes" } : {}) } });
 							dialog.close();
 							if (type.value === "http" && oauthBox.checked && status?.signIn && allowed.checked && enabled.checked) return await signInConnector(`/api/instances/${inst.id}/connectors/${encodeURIComponent(cid)}/sign-in`, name.value.trim() || cid);
 							toast(status?.connected ? `Collegato: ${status.tools.length} tool` : `Salvato${status?.error ? `, ma non collegato: ${status.error}` : ""}`, !status?.connected);

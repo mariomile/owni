@@ -452,7 +452,7 @@ Il file Markdown che Owni scrive quando le chiedono di approfondire un tema: pi�
 _Avoid_: deep research, ricerca profonda
 
 **Richiesta Google**:
-Una mail, una risposta, una bozza o un evento che Owni prepara sul Google di chi le scrive dalla console, e che succede solo quando quella persona la approva dalla card in chat o in Approvazioni. Una volta sola; l'esito torna nella conversazione.
+Una mail inviata, una risposta, un evento con invitati o una modifica o cancellazione di un evento che Owni prepara sul Google di chi le scrive dalla console, e che succede solo quando quella persona la approva dalla card in chat o in Approvazioni. Una volta sola; l'esito torna nella conversazione. Una bozza e un evento senza invitati non sono richieste: si fanno subito (ADR 0120).
 _Avoid_: azione Google, automazione
 
 **Azione sul web**:
@@ -477,8 +477,12 @@ _Avoid_: digest, report giornaliero, newsletter
 L'elenco di ciò che un'istanza può raggiungere: provider di modelli, canali, connettori. Tutto il resto è negato.
 _Avoid_: firewall, whitelist
 
+**Rischio di un'azione**:
+Cosa può perdere la persona se l'azione sbaglia: leggere non perde niente, scrivere nel proprio spazio o nei sistemi dell'azienda (se il servizio la dichiara interna e non distruttiva) si rimedia, uscire o distruggere no. Il rischio decide se un'azione parte subito o aspetta una persona. Vedi ADR 0120.
+_Avoid_: permesso, livello di fiducia
+
 **Approvazione**:
-La decisione di un approvatore su un'azione che l'istanza non può compiere da sola: inviare una mail, attivare un tool proposto, inviare un modulo sul web (questa la può decidere anche chi l'ha chiesta, nella sua conversazione privata). Le richieste sul Google di una persona le decide solo lei.
+La decisione di un approvatore su un'azione che l'istanza non può compiere da sola perché esce o distrugge: inviare una mail, attivare un tool proposto, inviare un modulo sul web (questa la può decidere anche chi l'ha chiesta, nella sua conversazione privata). Le richieste sul Google di una persona le decide solo lei. Cosa chiede l'approvazione lo decide il rischio dell'azione, non il connettore (ADR 0120).
 _Avoid_: conferma, ok
 
 **Audit**:
@@ -511,11 +515,11 @@ Un servizio del catalogo (Notion, Linear, Jira, Stripe, GitHub e altri) che l'ow
 _Avoid_: integrazione, plugin, app
 
 **Collegamento API**:
-Un connettore verso l'API di un servizio senza server MCP (un gestionale, un CRM, l'API interna): l'owner dà l'indirizzo base, come si entra, la chiave e cosa sa fare. L'agente legge subito e per scrivere chiede l'approvazione; la chiave è solo di quell'agente e non arriva mai al modello. Vedi ADR 0116.
+Un connettore verso l'API di un servizio senza server MCP (un gestionale, un CRM, l'API interna): l'owner dà l'indirizzo base, come si entra, la chiave e cosa sa fare. L'agente legge subito e per scrivere chiede sempre l'approvazione, senza interruttore; la chiave è solo di quell'agente e non arriva mai al modello. Vedi ADR 0116.
 _Avoid_: webhook, integrazione, http tool
 
 **Azione di un connettore**:
-Una chiamata a uno strumento di un servizio collegato che cambia qualcosa (crea, modifica, cancella). Owni la prepara come richiesta; parte, una volta, solo quando chi l'ha chiesta o un approvatore la approva. Gli strumenti che il servizio indica come di sola lettura partono subito. Vedi ADR 0025.
+Una chiamata a uno strumento di un servizio collegato che cambia qualcosa (crea, modifica, cancella). Se il servizio la dichiara interna e non distruttiva parte subito, a meno che l'owner non abbia alzato il connettore a «chiedi anche per le modifiche»; altrimenti Owni la prepara come richiesta e parte, una volta, solo quando chi l'ha chiesta o un approvatore la approva. Gli strumenti di sola lettura partono subito. Vedi ADR 0025 e ADR 0120.
 _Avoid_: tool call, operazione
 
 **Richiesta scaduta**:
