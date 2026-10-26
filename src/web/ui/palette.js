@@ -5,7 +5,7 @@ import { PAGES } from "./shell.js";
 // ---------- command palette (⌘K) ----------
 export function openPalette() {
 	if (!state.me || document.querySelector("dialog.palette")) return;
-	const items = PAGES.filter((p) => p.palette !== false && (!p.owner || state.me.role === "owner") && (!p.when || p.when(state.instance))).map((p) => ({ ...p, icon: p.id, to: [p.id] }));
+	const items = PAGES.filter((p) => p.palette !== false && (!p.owner || state.me.role === "owner") && (!p.when || p.when(state.instance))).map((p) => ({ ...p, icon: p.id, href: p.href?.(), to: [p.id] }));
 	// Conversations by name, once something is typed: the direct messages and the canali in the rail.
 	const dms = state.conversations.direct.flatMap((d) => {
 		const agent = state.instances.find((i) => i.id === d.instanceId);

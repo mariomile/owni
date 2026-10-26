@@ -5,7 +5,7 @@ Mario: «ora non si capisce nulla, né in termini di UX né di UI». Fino a oggi
 ## Decisione
 
 - **Richiede te è una pagina, `#/approvazioni`.** Ci sono le decisioni («Da decidere»: strumenti, moduli, azioni dei servizi, richieste tra agenti, Google, pratiche) con le loro schede complete, che si decidono lì, e gli incarichi da rivedere («Da rivedere»: il risultato che l'agente ha lasciato e «Rivedi il risultato», che apre l'incarico nella Board). Sotto, le decisioni precedenti. Un solo ingresso, nella barra laterale, con il conteggio di sempre.
-- **Lavori è la Board, `#/board`.** La voce «Lavori» della barra laterale apre gli incarichi in colonne; la barra di Lavori ha Incarichi, Automazioni e, se c'è, Pratiche.
+- **Lavori è la Board, `#/board`.** La voce «Lavori» della barra laterale apre gli incarichi in colonne; la barra di Lavori ha Incarichi, Automazioni e, se c'è, Pratiche. (Sostituito da [0123](0123-lavori-come-pagine-della-barra-laterale.md): sono pagine della barra laterale.)
 - **Le esecuzioni escono da Lavori.** Stanno nella sezione Attività del pannello dell'agente (ADR 0114), una per agente.
 - **La vecchia lista non c'è più**, né il suo indirizzo `#/lavori`. Nessun link generato dal server puntava lì.
 

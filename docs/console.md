@@ -60,7 +60,7 @@ Lo stato della conversazione resta sopra la casella su una riga compatta durante
 
 ## Lavori e automazioni
 
-**Lavori** apre la Board degli incarichi, in quattro colonne (Da fare, In corso, Da rivedere, Fatto), con i filtri della Board. La barra di Lavori ha Incarichi, Automazioni e, se c’è, Pratiche. Le esecuzioni di un agente sono nella sezione Attività del suo pannello ([ADR 0115](adr/0115-richiede-te-e-lavori.md)).
+Il lavoro sta in pagine proprie nella barra laterale, senza linguette interne ([ADR 0123](adr/0123-lavori-come-pagine-della-barra-laterale.md)): **Incarichi** apre la Board, in quattro colonne (Da fare, In corso, Da rivedere, Fatto), con i filtri della Board; **Automazioni**, con dentro Orari e pagine da controllare ed Eventi esterni; **Pratiche**, se un agente ha la Segreteria. Le esecuzioni di un agente sono nella sezione Attività del suo pannello ([ADR 0115](adr/0115-richiede-te-e-lavori.md)).
 
 **Richiede te** è una pagina sola, `#/approvazioni`: «Da decidere» con le schede complete delle azioni che la persona può autorizzare, che si decidono lì, e «Da rivedere» con gli incarichi il cui risultato aspetta lei, ognuno con il risultato lasciato dall’agente e «Rivedi il risultato», che apre l’incarico nella Board. Sotto, le decisioni precedenti. Le autorizzazioni sono aggregate dal server con le stesse regole del conteggio; ogni scheda conserva il suo agente e tipo. Le operazioni Google restano della persona proprietaria dell’account. Se la Board non si legge, la pagina mostra comunque le decisioni.
 
