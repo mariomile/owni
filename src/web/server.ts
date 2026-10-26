@@ -51,7 +51,7 @@ import { peopleRoutes } from "./people-routes.ts";
 import { roomError, roomsRoutes } from "./rooms-routes.ts";
 import { settingsRoutes } from "./settings-routes.ts";
 import { webhooks } from "./hooks.ts";
-import { type AddRoute, type Handler, HttpError, type Route, readJson, STREAMED, send } from "./http.ts";
+import { type AddRoute, type Handler, HttpError, pathPattern, type Route, readJson, STREAMED, send } from "./http.ts";
 import { screenRoutes } from "./screen-routes.ts";
 import { runRoutes } from "./run-routes.ts";
 import type { RoomEntry, Rooms } from "./rooms.ts";
@@ -215,7 +215,7 @@ export function createWebApp(options: WebAppOptions): Server {
 	const OPENUI: Record<string, string> = { "/openui/frame": "frame.html", "/openui/frame.js": "frame.js", "/openui/frame.css": "frame.css", "/openui/openui-bundle.min.js": "openui-bundle.min.js", "/openui/openui-styles.css": "openui-styles.css" };
 	const routes: Route[] = [];
 	const route: AddRoute = (method, path, auth, handler) =>
-		routes.push({ method, pattern: new RegExp(`^${path.replace(/:[a-z]+/g, "([^/]+)")}$`), auth, handler: handler as unknown as Handler });
+		routes.push({ method, pattern: pathPattern(path), auth, handler: handler as unknown as Handler });
 
 	// The agente of this id, or a 404.
 	const knownInstance = (id: string) =>
