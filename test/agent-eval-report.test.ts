@@ -3,8 +3,8 @@ import { evaluateRouting } from "../evals/agente/real-runner.ts";
 import { routingError, routingReport, routingSummary, scoreRouting, selectCases, type RoutingObservation } from "../evals/agente/report.ts";
 
 const selectedModel = { provider: "anthropic", model: "selected-model" };
-const c = { id: "calc", text: "Calcola", expect: ["calculate"] };
-const turn: RoutingObservation = { tools: ["calculate"], provider: "actual-provider", model: "actual-model", costUsd: 0.001, modelCalls: 2 };
+const c = { id: "calc", text: "Calcola", expect: ["code_run"] };
+const turn: RoutingObservation = { tools: ["code_run"], provider: "actual-provider", model: "actual-model", costUsd: 0.001, modelCalls: 2 };
 const build = (rows = [scoreRouting(c, turn)]) => routingReport({ selected: [c], rows, selectedModel });
 
 describe("routing report: first-tool accuracy is not outcome success", () => {
@@ -23,7 +23,7 @@ describe("routing report: first-tool accuracy is not outcome success", () => {
 		expect(scoreRouting(c, { ...turn, tools: [] }).status).toBe("failed");
 	});
 	it("ignores tool_search only when it is followed by an actual tool", () => {
-		expect(scoreRouting(c, { ...turn, tools: ["tool_search", "calculate"] }).status).toBe("passed");
+		expect(scoreRouting(c, { ...turn, tools: ["tool_search", "code_run"] }).status).toBe("passed");
 		expect(scoreRouting({ id: "hello", expect: [] }, { ...turn, tools: ["tool_search"] }).status).toBe("failed");
 	});
 	it("does not invent an accuracy for zero selected cases", () => {
@@ -59,7 +59,7 @@ describe("routing report: first-tool accuracy is not outcome success", () => {
 	});
 	it("applies the gate at exactly 80 percent", () => {
 		const selected = Array.from({ length: 5 }, (_, i) => ({ ...c, id: String(i) }));
-		const rows = selected.map((test, i) => scoreRouting(test, { ...turn, tools: i === 0 ? [] : ["calculate"] }));
+		const rows = selected.map((test, i) => scoreRouting(test, { ...turn, tools: i === 0 ? [] : ["code_run"] }));
 		expect(routingReport({ selected, rows, selectedModel })).toMatchObject({ status: "passed", firstToolAccuracy: 0.8 });
 	});
 });

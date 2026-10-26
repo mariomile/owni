@@ -757,7 +757,7 @@ describe("pnpm start (startOwni)", () => {
 
 describe("richieste di un altro agente nelle chat e al riavvio (ADR 0108)", () => {
 	const origin = { channel: "web", threadId: "t1" } as const;
-	const input = { tool: "calculate", args: { expression: "6 * 7" }, what: "calcolo", askedBy: { id: "helper", name: "Helper", request: "quanto fa 6 per 7?" }, thread: { channel: "agente", threadId: agentThreadId("helper", origin) }, origin };
+	const input = { tool: "code_run", args: { code: "print(6 * 7)" }, what: "calcolo", askedBy: { id: "helper", name: "Helper", request: "quanto fa 6 per 7?" }, thread: { channel: "agente", threadId: agentThreadId("helper", origin) }, origin };
 	const helper = { id: "helper", name: "Helper", model: FAUX_MODEL, egress: { modelProviders: ["faux"], channels: ["web"] } };
 
 	it("a Telegram tap: a long one is approved only in the console, a chat that does not approve is told so, an approver's yes runs it once", async () => {

@@ -14,6 +14,7 @@
     "@earendil-works/pi-durable": "1.3.0",
     "@modelcontextprotocol/sdk": "1.31.0",
     "playwright-core": "1.56.1",
+    "pyodide": "314.0.7",
     "tsx": "4.23.15"
   },
   "devDependencies": {
@@ -33,6 +34,7 @@
     "eval:agente:catalog": "tsx evals/agente/run.ts",
     "eval:agente:outcomes": "tsx evals/agente/outcome-run.ts",
     "eval:agente:real": "tsx evals/agente/real.ts",
+    "eval:agente:conti": "tsx evals/agente/conti.ts",
     "eval:segreteria": "tsx evals/segreteria/run.ts",
     "eval:segreteria:judge": "tsx evals/segreteria/judge.ts",
     "eval:segreteria:validate": "python3 evals/segreteria/scripts/validate_and_build.py",

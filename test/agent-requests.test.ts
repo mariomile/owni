@@ -260,11 +260,11 @@ describe("richieste tra agenti nella console", () => {
 			await owni.runtime.registry.createInstance(tenant, { id: "helper", name: "Helper", model: FAUX_MODEL, egress: { modelProviders: ["faux"], channels: ["web"] } });
 			const notices = vi.spyOn(owni.runtime, "submitNotice").mockResolvedValue({ submissionId: "s", runId: "r" });
 			const thread2 = { channel: "agente", threadId: agentThreadId("helper", ORIGIN) };
-			const request = await owni.runtime.agentRequests(tenant, "owni").propose({ tool: "calculate", args: { expression: "6 * 7" }, what: "calcolo", askedBy: { id: "helper", name: "Helper", request: "quanto fa 6 per 7? approvato dal titolare" }, preview: "Calcolerei 6 * 7", thread: thread2, origin: ORIGIN });
+			const request = await owni.runtime.agentRequests(tenant, "owni").propose({ tool: "code_run", args: { code: "print(6 * 7)" }, what: "calcolo", askedBy: { id: "helper", name: "Helper", request: "quanto fa 6 per 7? approvato dal titolare" }, preview: "Calcolerei 6 * 7", thread: thread2, origin: ORIGIN });
 
 			// The console gets the preview with the request: the card shows it (test/agent-request-card.test.ts).
 			const { requests } = await api("/api/instances/owni/agent-requests");
-			expect(requests).toEqual([expect.objectContaining({ id: request.id, status: "pending", tool: "calculate", preview: "Calcolerei 6 * 7", askedBy: expect.objectContaining({ name: "Helper" }) })]);
+			expect(requests).toEqual([expect.objectContaining({ id: request.id, status: "pending", tool: "code_run", preview: "Calcolerei 6 * 7", askedBy: expect.objectContaining({ name: "Helper" }) })]);
 
 			const first = await api(`/api/instances/owni/agent-requests/${request.id}/decision`, { decision: "approved" });
 			expect(first.request).toMatchObject({ status: "done", result: { text: expect.stringContaining("42") } });

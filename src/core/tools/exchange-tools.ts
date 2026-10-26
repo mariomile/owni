@@ -83,7 +83,7 @@ export function createExchangeTools(options: ExchangeToolsOptions): OwniTool[] {
 				"amount is a JSON number with a dot for decimals; Italian amounts use the dot for thousands and the comma for decimals: «1.250» is 1250, «1.250,50» is 1250.50, «1,2 milioni» is 1200000, «10k» is 10000. Several amounts at the same rate go in amounts, which also gives the total. " +
 				"For an invoice or a payment pass the invoice or operation date; on a day without rates the last working day before applies, and the tool says so. A date without a year is its latest occurrence not in the future; if unsure, ask. Without date it is the latest published. " +
 				"since gives the trend from that day (at most a year back) to date or today; list gives the currencies of the day. " +
-				"For VAT, discounts or totals pass calculate the converted amount the tool gave (already rounded to the cent), not amount × rate; use document_create for a quote in another currency. " +
+				"For VAT, discounts or totals pass code_run the converted amount the tool gave (already rounded to the cent), not amount × rate; use document_create for a quote in another currency. " +
 				"Say once per conversation, or when the person talks about paying or a bank, that banks and cards apply their own rate.",
 			parameters: {
 				type: "object",

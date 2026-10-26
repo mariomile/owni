@@ -7,6 +7,7 @@ pnpm eval:agente:outcomes                 # runtime, tool e store reali; modello
 pnpm eval:agente:outcomes artifact-roundtrip
 pnpm eval:agente:real                     # nightly: Anthropic, serve OWNI_JUDGE_MODEL_KEY
 pnpm eval:agente:real saluto              # solo i casi con questi id
+pnpm eval:agente:conti                    # sei domande di conti a un modello vero, con l'abbonamento di Claude Code (ADR 0119)
 ```
 
 `cases.jsonl`: una richiesta per riga, `{ id, text, expect }`. `expect` indica i tool accettabili come prima chiamata; `[]` significa nessuno. Selettori sconosciuti e cataloghi vuoti sono errori, anche senza chiave.
@@ -17,7 +18,7 @@ Il routing reale scrive sempre, salvo interruzioni forzate o errori di scrittura
 
 Gli **integration/outcome-contract checks** in `outcomes.ts` usano il runtime durevole e il modello `faux` esistenti, comandati con `/tool`, directory temporanee rimosse a fine scenario e il client Google con trasporto stub senza rete:
 
-- Calcolo decimale esatto e risposta persistita nell'outbox.
+- «Quanto ho fatturato a marzo?» su 1000 righe con `code_run`: totale esatto al centesimo e risposta persistita nell'outbox.
 - Creazione del file, verifica dei byte su disco e lettura in un turno successivo.
 - Memoria salvata, corretta eliminando il fatto precedente, riletta in una nuova conversazione e isolata da un'altra persona.
 - Proposta mail persistita con destinatario/contenuto esatti; zero invii prima dell'approvazione, decisione di un'altra persona respinta e rifiuto senza effetti.
