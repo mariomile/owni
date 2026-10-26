@@ -7,7 +7,8 @@ import { DocumentError, type DocumentText, documentExtension, documentKind, docu
 import { imageType } from "../images.ts";
 import { dispositionName, documentLimit, documentLinks, safeFileName, urlFileName, WEB_DOCUMENT_MAX_BYTES, webDocument } from "../web-documents.ts";
 import { CookieJar, checkedUrl, pageText, publicAddress, USER_AGENT, type WebPage, WebFetchRefused, webFetch } from "../web-fetch.ts";
-import { BrowseError, type BrowseSessions, type Browser, describeView, type Guard, guardContext, MAX_ELEMENTS, plainError, sessionKey, type View, type ViewOptions } from "../web-session.ts";
+import { guardContext } from "../web-guard.ts";
+import { BrowseError, type BrowseSessions, type Browser, describeView, type Guard, MAX_ELEMENTS, plainError, sessionKey, type View, type ViewOptions } from "../web-session.ts";
 import { describeForms, fillable, FormRefused, formBody, formFingerprint, pageForms, submitButtons } from "../web-forms.ts";
 import { WEB_SEARCH_CONNECTOR, type WebSearch, WebSearchError } from "../web-search.ts";
 import { untrusted } from "../untrusted.ts";
