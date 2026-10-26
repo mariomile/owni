@@ -40,6 +40,7 @@ const mocks = vi.hoisted(() => {
 		toast: vi.fn(),
 		confirmDialog: vi.fn(),
 		face: (agent: { name?: string }) => h("span.face", agent.name ?? ""),
+		agentStatus: (agent?: { statusText?: string; doing?: string }) => (agent?.statusText ? h("span.agent-status", h("span.chip", agent.statusText), agent.doing ? h("span.agent-doing", agent.doing) : null) : null),
 		icon: (name: string) => h("svg", name),
 		emptyNote: (spec: string, title: string, ...children: unknown[]) => h(spec, h("b", title), ...children),
 		fmt: { time: (at: string) => `alle ${at.slice(11, 16)}` },
@@ -132,7 +133,7 @@ describe("the agente's panel", () => {
 	});
 
 	it("opens at the section asked, says it to the page and closes with nothing left running", async () => {
-		mocks.api.mockImplementation(async (path: string) => (path === "/api/agents" ? { agents: [{ id: "sales", busy: true, busyFor: 40, doing: "Offerta Rossi" }] } : { runs: [] }));
+		mocks.api.mockImplementation(async (path: string) => (path === "/api/agents" ? { agents: [{ id: "sales", status: "al_lavoro", statusText: "Al lavoro", doing: "Offerta Rossi" }] } : { runs: [] }));
 		const onShow = vi.fn();
 		const onHide = vi.fn();
 		const panel = agentPanel(inst, { onShow, onHide });
@@ -145,7 +146,7 @@ describe("the agente's panel", () => {
 		expect(tabs.map((t) => t.textContent)).toEqual(["Attività", "Artifact", "Routine", "Memoria", "Documenti", "Procedure"]);
 		expect(tabs.filter((t) => t.attrs["aria-selected"] === "true").map((t) => t.textContent)).toEqual(["Memoria"]);
 		await tick();
-		expect(find(panel.el, "p.agent-panel-status")[0]!.textContent).toContain("Al lavoro da 40 s");
+		expect(find(panel.el, "p.agent-panel-status")[0]!.textContent).toContain("Al lavoro Offerta Rossi");
 		// Another tab: loaded once, and the page keeps the address.
 		(tabs[0]!.attrs.onclick as () => void)();
 		expect(onShow).toHaveBeenLastCalledWith("attivita");

@@ -1,5 +1,5 @@
 // Task page, with sentinelle and the morning brief.
-import { agentLabel, api, dmHref, emptyNote, fmt, h, head, icon, mount, needInstance, route, state, toast } from "../common.js";
+import { api, dmHref, emptyNote, fmt, h, head, icon, mount, needInstance, route, state, toast } from "../common.js";
 import { render } from "../shell.js";
 import { runHistory } from "../runs.js";
 
@@ -125,7 +125,7 @@ export async function viewTasks(main) {
 			: h("p.muted", `Per programmare un'istruzione devi poter scrivere a ${inst.name}: il risultato arriva in una chat.`)),
 	);
 	mount(main,
-		head(agentLabel(inst), h("h1", intent === "pagina" ? "Controlla una pagina" : intent === "orario" ? "A un orario" : "Orari e pagine da controllare"), `Scegli cosa deve fare ${inst.name} e dove ricevere il risultato.`),
+		head(inst.name, h("h1", intent === "pagina" ? "Controlla una pagina" : intent === "orario" ? "A un orario" : "Orari e pagine da controllare"), `Scegli cosa deve fare ${inst.name} e dove ricevere il risultato.`),
 		intent !== "pagina" && inst.canChat && briefState ? h("details.setup-optional", h("summary", "Parti dal brief del mattino"), briefCard(inst, briefState)) : null,
 		intent !== "pagina" ? scheduled : null,
 		intent !== "orario" ? watchSection(inst, watches, threads) : null,

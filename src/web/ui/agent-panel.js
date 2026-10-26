@@ -1,6 +1,6 @@
 // The agente's panel (ADR 0114): who it is and what it has, next to a conversation. Its
 // configuration stays on its own page, for the owner.
-import { api, channelName, confirmDialog, dmHref, emptyNote, face, fmt, h, icon, instanceHref, mount, state, toast } from "./common.js";
+import { agentStatus, api, channelName, confirmDialog, dmHref, emptyNote, face, fmt, h, icon, instanceHref, mount, state, toast } from "./common.js";
 import { filesSection, memorySection, skillsSection } from "./agent-materials.js";
 import { activeRun, runText } from "./runs.js";
 
@@ -154,9 +154,7 @@ export function agentPanel(inst, { onShow = () => {}, onHide = () => {}, openArt
 	const drawStatus = async () => {
 		const { agents } = await api("/api/agents").catch(() => ({ agents: [] }));
 		const now = agents.find((a) => a.id === inst.id);
-		if (!now) return mount(status);
-		const busyFor = now.busyFor === undefined ? "" : ` da ${now.busyFor < 90 ? `${now.busyFor} s` : `${Math.round(now.busyFor / 60)} min`}`;
-		mount(status, h(`span.chip${now.busy ? ".ok" : ""}`, now.busy ? `Al lavoro${busyFor}` : "Libero"), now.doing ? ` ${now.busy ? "su" : "scheda in corso:"} ${now.doing}` : "");
+		mount(status, agentStatus(now));
 	};
 	const show = (on, section) => {
 		if (!on) {

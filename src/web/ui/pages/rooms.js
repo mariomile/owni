@@ -25,7 +25,7 @@ export async function viewRooms(main) {
 			await refreshConversations();
 			go("canali", room.id);
 		});
-	const names = (r) => r.agents.map((a) => `${a.emoji ? `${a.emoji} ` : ""}${a.name}`).join(", ");
+	const names = (r) => r.agents.map((a) => a.name).join(", ");
 	mount(
 		main,
 		head(null, h("h1", "Canali"), "Tu e alcuni agenti nella stessa conversazione. Scrivi @nome per chiamarne uno, @tutti per tutti; senza nome risponde l'ultimo che ha parlato. Un agente può chiamare in causa un altro. I canali sono solo tuoi.", chatty.length > 1 ? h("button.btn.accent", { onclick: create }, icon("plus"), "Nuovo canale") : null),
@@ -58,7 +58,7 @@ export async function viewRooms(main) {
 function channelDialog(title, name, chosen, okLabel, onSave) {
 	const chatty = state.instances.filter((i) => i.canChat);
 	const input = h("input", { type: "text", maxlength: 80, placeholder: "Es. Bando regionale", value: name });
-	const boxes = chatty.map((i) => ({ id: i.id, box: h("input", { type: "checkbox", checked: chosen.includes(i.id) }), label: `${i.emoji ? `${i.emoji} ` : ""}${i.name}` }));
+	const boxes = chatty.map((i) => ({ id: i.id, box: h("input", { type: "checkbox", checked: chosen.includes(i.id) }), label: i.name }));
 	const save = async () => {
 		const agents = boxes.filter((b) => b.box.checked).map((b) => b.id);
 		if (agents.length < 2) return toast("Scegli almeno due agenti", true);
@@ -105,7 +105,7 @@ function roomMessage(room, entry, answer, slot) {
 	const agent = room.agents.find((a) => a.instanceId === entry.instanceId);
 	const by = entry.model ? h("span.by", { title: `${entry.model.provider} · ${entry.model.modelId}` }, entry.model.name ?? entry.model.modelId) : null;
 	// Each agente's name in the colour of its face, so that who is speaking reads at a glance.
-	const name = `${agent?.emoji ? `${agent.emoji} ` : ""}${agent?.name ?? entry.instanceId}`;
+	const name = agent?.name ?? entry.instanceId;
 	const known = state.instances.some((i) => i.id === entry.instanceId);
 	const who = known && openAgent ? h("button.who", { type: "button", title: `Apri ${agent?.name ?? "l'agente"}`, onclick: () => openAgent(entry.instanceId) }, name) : h("b.who", name);
 	who.style.setProperty("--agent", faceColor(agent ?? { id: entry.instanceId }));
@@ -166,7 +166,7 @@ function roomBox(room, send) {
 		input.focus();
 		fit();
 	};
-	const chips = h("div.room-agents", room.agents.map((a) => h(`button.chip${a.present ? "" : ".gone"}`, { onclick: () => call(a), disabled: !a.present, title: a.present ? `Chiama ${a.name}` : `${a.name} non è più disponibile` }, face(a, 18), `${a.emoji ? `${a.emoji} ` : ""}${a.name}`)), h("button.chip", { onclick: () => ((input.value = `@tutti ${input.value}`), input.focus(), fit()) }, "@tutti"));
+	const chips = h("div.room-agents", room.agents.map((a) => h(`button.chip${a.present ? "" : ".gone"}`, { onclick: () => call(a), disabled: !a.present, title: a.present ? `Chiama ${a.name}` : `${a.name} non è più disponibile` }, face(a, 18), a.name)), h("button.chip", { onclick: () => ((input.value = `@tutti ${input.value}`), input.focus(), fit()) }, "@tutti"));
 	// Each agente's skills, with its @name: picked from here, a skill reaches the agente that has it.
 	const commands = commandMenu(
 		input,

@@ -130,22 +130,25 @@ describe("pnpm start (startOwni)", () => {
 		expect((await again("/api/me")).person.role).toBe("owner");
 	});
 
-	it("agenti (ADR 0041): created with a face and a tone, listed with what they do, changed in Impostazioni", async () => {
+	it("agenti (ADR 0041): created with a tagline and a tone, listed with their status, changed in Impostazioni", async () => {
 		const dataDir = tempDataDir();
 		const { owni, base } = await boot(dataDir);
 		const api = await client(base, owni.ownerLink as string);
+		// An emoji from an older console is left out (ADR 0125).
 		const created = await api("/api/instances", { id: "ricerca", name: "Ricercatore", persona: { emoji: "🔎", tagline: "Cerca e confronta fornitori", tone: "conciso" } });
-		expect(created.instance).toMatchObject({ id: "ricerca", name: "Ricercatore", emoji: "🔎", tagline: "Cerca e confronta fornitori" });
-		expect((await api("/api/instances", { id: "brutta", name: "Brutta", persona: { emoji: "ciao" } })).error).toMatch(/emoji/);
+		expect(created.instance).toMatchObject({ id: "ricerca", name: "Ricercatore", tagline: "Cerca e confronta fornitori" });
+		expect(created.instance).not.toHaveProperty("emoji");
+		expect((await api("/api/instances", { id: "brutta", name: "Brutta", persona: { tone: "arrogante" } })).error).toMatch(/Tono/);
 		expect((await owni.runtime.registry.listInstances("default")).map((r) => r.id)).not.toContain("brutta");
 		// biome-ignore lint: test
 		const { agents } = (await api("/api/agents")) as { agents: any[] };
 		expect(agents.map((a) => a.id)).toEqual(["owni", "ricerca"]);
-		expect(agents[1]).toMatchObject({ emoji: "🔎", tone: "conciso", channels: ["web"], schedules: 0, watches: 0, memories: 0 });
+		expect(agents[1]).toMatchObject({ tone: "conciso", channels: ["web"], schedules: 0, watches: 0, memories: 0 });
+		expect(agents[1]).not.toHaveProperty("emoji");
 		expect(agents[1].model).toMatchObject({ provider: "faux" });
-		// Who is doing what (ADR 0109): nobody is working here.
-		expect(agents.map((a) => [a.busy, a.doing])).toEqual([[false, ""], [false, ""]]);
-		expect(agents[1]).not.toHaveProperty("busyFor");
+		// Who is doing what (ADR 0109), as one status (ADR 0125): nobody is working here.
+		expect(agents.map((a) => [a.status, a.statusText, a.doing])).toEqual([["libero", "Libero", ""], ["libero", "Libero", ""]]);
+		expect(agents[1]).not.toHaveProperty("busy");
 		const put = (body: unknown) => fetch(`${base}/api/instances/ricerca/settings`, { method: "PUT", headers: { "x-owni": "1", "content-type": "application/json", cookie: api.cookie }, body: JSON.stringify(body) }).then((r) => r.json() as Promise<{ ok?: boolean; error?: string }>);
 		expect((await put({ persona: { tone: "arrogante" } })).error).toMatch(/Tono/);
 		expect((await put({ name: "  ", persona: { emoji: "🧭", tone: "formale" } })).ok).toBe(true);
@@ -163,22 +166,27 @@ describe("pnpm start (startOwni)", () => {
 		const made = board.create({ title: "Fornitori carta", description: "Cliente Rossi SpA, 12.000 euro", assignee: "ricerca" }, { kind: "person", id: "owner-x" });
 		board.update(made.id, { status: "in_corso" }, { kind: "person", id: "owner-x" });
 		const mine = (await api("/api/agents")).agents[1];
-		expect(mine).toMatchObject({ busy: false, doing: "#1 Fornitori carta" });
+		expect(mine).toMatchObject({ status: "in_coda", statusText: "In coda", doing: "#1 Fornitori carta" });
 		expect(JSON.stringify(mine)).not.toMatch(/Rossi/);
-		expect((await member("/api/agents")).agents[0]).toMatchObject({ id: "ricerca", busy: false, doing: "#1 Fornitori carta" });
+		expect((await member("/api/agents")).agents[0]).toMatchObject({ id: "ricerca", status: "in_coda", doing: "#1 Fornitori carta" });
+		// To review: it waits for whoever reviews it, here the owner; the board shows the same status.
+		board.update(made.id, { status: "da_rivedere" }, { kind: "person", id: "owner-x" });
+		expect((await api("/api/agents")).agents[1]).toMatchObject({ status: "aspetta_te", statusText: "Aspetta te" });
+		expect((await api("/api/board")).agents.find((a: { id: string }) => a.id === "ricerca")).toMatchObject({ status: "aspetta_te", statusText: "Aspetta te" });
+		expect((await member("/api/agents")).agents[0]).toMatchObject({ status: "libero" });
 		// A runs.json that cannot be read leaves that agente idle; the page still loads.
 		writeFileSync(join(instanceDir(dataDir, toTenantId("default"), toInstanceId("ricerca")), "runs.json"), "{rotto");
-		const broken = (await api("/api/agents")).agents as { id: string; busy: boolean }[];
-		expect(broken.map((a) => [a.id, a.busy])).toEqual([["owni", false], ["ricerca", false]]);
+		const broken = (await api("/api/agents")).agents as { id: string; status: string }[];
+		expect(broken.map((a) => [a.id, a.status])).toEqual([["owni", "libero"], ["ricerca", "aspetta_te"]]);
 		const settings = (await api("/api/instances/ricerca/settings")).settings;
 		expect(settings.name).toBe("Ricercatore");
-		expect(settings.persona).toEqual({ emoji: "🧭", tone: "formale", named: true });
+		expect(settings.persona).toEqual({ tone: "formale", named: true });
 	});
 
 	it("agenti write to each other (ADR 0042): only those allowed, and the answer comes back to the conversation", async () => {
 		const { owni, base } = await boot(tempDataDir());
 		const api = await client(base, owni.ownerLink as string);
-		await api("/api/instances", { id: "ricerca", name: "Ricercatore", persona: { emoji: "🔎", tagline: "Cerca fornitori" } });
+		await api("/api/instances", { id: "ricerca", name: "Ricercatore", persona: { tagline: "Cerca fornitori" } });
 		const thread = (await api("/api/instances/owni/dm", {})).thread;
 		const entries = async () => (await api(`/api/instances/owni/threads/${thread.id}`)).entries as { from: string; text?: string }[];
 		const say = (text: string) => api(`/api/instances/owni/threads/${thread.id}/messages`, { text });
@@ -298,7 +306,7 @@ describe("pnpm start (startOwni)", () => {
 		const send = (method: string, path: string, body?: unknown, cookie = api.cookie) =>
 			// biome-ignore lint: test
 			fetch(`${base}${path}`, { method, headers: { "x-owni": "1", "content-type": "application/json", cookie }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) }).then(async (r) => ({ status: r.status, ...((await r.json()) as any) }));
-		expect((await api("/api/board", { title: "Report", repeat: { every: "giorno", time: "9:00" } })).error).toMatch(/affidata a un agente/);
+		expect((await api("/api/board", { title: "Report", repeat: { every: "giorno", time: "9:00" } })).error).toMatch(/affidato a un agente/);
 		expect((await api("/api/board", { title: "Report", assignee: "ricerca", repeat: { every: "settimana", time: "9:00" } })).error).toMatch(/giorno della settimana/);
 		const { routine } = await api("/api/board", { title: "Report vendite", description: "Le vendite della settimana", assignee: "ricerca", auto: true, repeat: { every: "settimana", time: "9:00", day: 1 } });
 		expect(routine).toMatchObject({ title: "Report vendite", whenText: "ogni lunedì alle 9:00", auto: true, assignee: "ricerca" });
@@ -352,7 +360,7 @@ describe("pnpm start (startOwni)", () => {
 	it("the board (ADR 0050): a scheda handed to an agente is worked in its conversation, reviewed and closed by a person", async () => {
 		const { owni, base, telegram } = await boot(tempDataDir());
 		const api = await client(base, owni.ownerLink as string);
-		await api("/api/instances", { id: "ricerca", name: "Ricercatore", persona: { emoji: "🔎" } });
+		await api("/api/instances", { id: "ricerca", name: "Ricercatore" });
 		await api("/api/instances", { id: "vendite", name: "Vendite" });
 		const send = (method: string, path: string, body?: unknown, cookie = api.cookie) =>
 			// biome-ignore lint: test
@@ -479,7 +487,7 @@ describe("pnpm start (startOwni)", () => {
 		// From the console: a sotto-scheda of a scheda the person sees.
 		const { card: mine } = await api("/api/board", { title: "Immagini", parent: card.id });
 		expect(mine.parent).toBe(card.id);
-		expect((await api("/api/board", { title: "x", parent: "c_nessuna" })).error).toMatch(/Scheda inesistente/);
+		expect((await api("/api/board", { title: "x", parent: "c_nessuna" })).error).toMatch(/Incarico inesistente/);
 	});
 
 	it("a task programmato of an instance created from the console runs without a restart", async () => {

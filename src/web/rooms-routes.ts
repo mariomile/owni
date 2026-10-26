@@ -28,7 +28,7 @@ export function roomsRoutes(route: AddRoute, options: RoomsRoutesDeps): void {
 		const agents = await Promise.all(
 			room.seats.map(async (s) => {
 				const record = records === undefined ? await runtime.registry.getInstance(tenantId, s.instanceId).catch(() => undefined) : records.get(s.instanceId);
-				return { instanceId: s.instanceId, name: record?.name ?? s.instanceId, ...(record?.persona?.emoji === undefined ? {} : { emoji: record.persona.emoji }), present: record !== undefined && canChatWith(record, p) };
+				return { instanceId: s.instanceId, name: record?.name ?? s.instanceId, present: record !== undefined && canChatWith(record, p) };
 			}),
 		);
 		// The @nome the console offers is one the stanza reads as that agente.

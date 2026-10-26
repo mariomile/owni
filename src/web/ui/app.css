@@ -296,10 +296,10 @@ main.is-page { width: 100%; max-width: 1080px; margin: 0 auto; padding: 0 clamp(
 .approval-history > .stack { margin-top: 14px; }
 .agent-profile-link { color: inherit; text-decoration: none; }
 .agent-profile-link:hover { text-decoration: underline; text-underline-offset: 4px; }
-.agent-team-options { margin-top: 22px; }
-.settings-save { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-top: 24px; }
-.settings-save p { margin: 0; max-width: 58ch; }
-.settings-save-note { margin: 12px 0 18px; }
+/* A field that saves on its own says so beside it (ADR 0125). */
+.save-note { font-size: 12px; color: var(--ok); }
+.save-note.bad { color: var(--bad); }
+.save-note:empty { display: none; }
 .settings-panel { margin-top: 20px; }
 [data-approval]:focus-visible { outline: 2px solid var(--fg-2); outline-offset: 4px; }
 @media (max-width: 650px) {
@@ -389,7 +389,7 @@ label.row-gap:has(> input[type="checkbox"]) > span { min-width: 0; }
 .settings-nav a:hover { background: var(--active); color: var(--fg); }
 .settings-nav a .icon { width: 14px; height: 14px; }
 .settings-nav ~ .grid-2 > .stack { min-width: 0; }
-.settings-nav ~ .grid-2 .name-row > input:not(.emoji-input) { min-width: 0; }
+.settings-nav ~ .grid-2 .name-row > input { min-width: 0; }
 .provider-settings, .computer-use-settings { margin-bottom: 20px; scroll-margin-top: 20px; }
 .settings-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 18px; }
 .settings-heading h2 { margin: 0; font-size: 17px; }
@@ -1102,6 +1102,7 @@ details > summary:hover { color: var(--fg); }
 #toasts.open { pointer-events: auto; }
 .toast { position: absolute; bottom: 0; left: 50%; z-index: var(--z, 1); width: max-content; max-width: 100%; display: flex; align-items: center; gap: 9px; padding: 10px 16px 10px 12px; border-radius: 14px; background: var(--fg); color: var(--bg); box-shadow: var(--shadow-lg); font-size: 13px; font-weight: 500; line-height: 1.4; pointer-events: auto; touch-action: none; user-select: none; -webkit-user-select: none; cursor: grab; translate: calc(-50% + var(--dx, 0px)) calc(var(--y, 0px) + var(--dy, 0px)); scale: var(--s, 1); transform-origin: 50% 100%; transition: translate 0.4s var(--ease), scale 0.4s var(--ease), opacity 0.3s var(--ease); animation: toast-in 0.45s var(--ease) backwards; }
 .toast .icon { flex: none; width: 16px; height: 16px; }
+.toast-action { color: inherit; font-weight: 600; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
 .toast.bad { background: var(--bad); color: var(--bg); }
 .toast.buried { opacity: 0; pointer-events: none; }
 .toast.out { opacity: 0; scale: calc(var(--s, 1) * 0.94); pointer-events: none; }
@@ -1238,7 +1239,13 @@ ol.steps .stack > .choices { margin-bottom: 2px; }
 .agent-body h2 { margin: 0; font-size: 17px; font-weight: 640; font-stretch: var(--display-stretch); letter-spacing: -0.01em; display: flex; align-items: center; gap: 8px; }
 .agent-body p { margin: 4px 0 0; }
 .agent-body .small { font-size: 12px; }
-.agent-actions { grid-column: 2; display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.agent-actions { grid-column: 2; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin-top: 10px; }
+/* A secondary way on, next to the one action: a link, not a second button. */
+.quiet-link { font-size: 12.5px; color: var(--fg-2); text-decoration: underline; text-decoration-color: var(--border-2); text-underline-offset: 3px; }
+.quiet-link:hover { color: var(--fg); text-decoration-color: currentColor; }
+/* The agente's status (ADR 0125): the same chip on every page, then what it is on. */
+.agent-status { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; min-width: 0; }
+.agent-doing { color: var(--fg-2); overflow-wrap: anywhere; }
 .tag { font-size: 11px; font-weight: 550; color: var(--fg-3); background: var(--hover); border-radius: 99px; padding: 2px 7px; }
 .templates { display: flex; flex-wrap: wrap; gap: 6px; }
 .pick { font: inherit; font-size: 13px; min-height: 30px; padding: 5px 12px; border-radius: 99px; border: 1px solid var(--border-2); background: transparent; color: var(--fg); cursor: pointer; transition: background 0.15s var(--ease), border-color 0.15s var(--ease); }
@@ -1247,7 +1254,6 @@ ol.steps .stack > .choices { margin-bottom: 2px; }
 .name-row { display: flex; gap: 8px; }
 .name-row > input { flex: 1 1 auto; min-width: 0; width: auto; }
 .name-face { flex: none; display: grid; place-items: center; width: 44px; }
-.name-row > input.emoji-input { flex: 0 0 56px; width: 56px; text-align: center; font-size: 18px; padding-left: 0; padding-right: 0; }
 .advanced summary { cursor: pointer; color: var(--fg-2); font-size: 13px; font-weight: 500; margin: 4px 0 8px; }
 
 /* board (ADR 0050) */
@@ -1301,6 +1307,7 @@ dialog.board-dialog:focus { outline: none; }
 .board-filters input[type="search"] { flex: 1 1 220px; width: auto; }
 .board-filters select { width: auto; }
 .board-chip { cursor: pointer; }
+button.chip.board-chip { min-height: 28px; padding-inline: 10px; }
 .board-chip[aria-pressed="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
 .board-checks.all { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, transparent); }
 .board-checks-box { margin: 10px 0; }
@@ -1390,13 +1397,14 @@ textarea.board-new-desc:focus { border-bottom-color: var(--border-2); }
 
 /* Organigramma (ADR 0117): each squadra a band, the one who coordinates first */
 .org { display: grid; gap: 28px; }
-.org-first { margin: 0 0 18px; color: var(--fg-2); }
 .org-team { display: grid; gap: 12px; }
 .org-team-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
 .org-team-head h2 { margin: 0; font-size: 15px; font-weight: 640; font-stretch: var(--display-stretch); letter-spacing: -0.01em; }
 .org-team-head p { margin: 3px 0 0; }
 .org-agents { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; }
-.card.org-agent { display: grid; grid-template-columns: 44px 1fr auto; gap: 14px; align-items: start; padding: 16px; }
+/* The text takes the width; Modifica sits under it, so a long role is not squeezed into a column. */
+.card.org-agent { display: grid; grid-template-columns: 44px 1fr; gap: 14px; align-items: start; padding: 16px; }
+.card.org-agent > .btn { grid-column: 2; justify-self: start; }
 .card.org-agent.lead { border-color: color-mix(in srgb, var(--glow, var(--fg)) 35%, var(--border)); }
 .org-body { min-width: 0; }
 .org-body h3 { margin: 0; font-size: 14.5px; font-weight: 620; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
@@ -1410,7 +1418,11 @@ dialog.org-dialog { max-width: 540px; max-height: calc(100dvh - 48px); overflow-
 .org-members { display: grid; gap: 6px; max-height: 220px; overflow-y: auto; }
 .org-members small { margin-left: auto; }
 /* The tree (ADR 0117): who answers to whom, top down, lines drawn by the boxes themselves; on a phone, indented. */
-.org-views { margin: 0 0 20px; }
+.org-bar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px 16px; margin: 0 0 20px; }
+.org-mode { margin-left: auto; }
+dialog.links-confirm { max-width: 540px; max-height: calc(100dvh - 48px); overflow-y: auto; }
+.links-list { margin: 0 0 16px; padding: 0 0 0 18px; display: grid; gap: 4px; font-size: 13.5px; }
+.links-list li.off { color: var(--fg-2); }
 .org-tree { overflow-x: auto; padding: 4px 0 24px; }
 .org-tree ul { display: flex; justify-content: center; margin: 0; padding: 22px 0 0; list-style: none; position: relative; }
 .org-tree > ul { width: max-content; min-width: 100%; padding: 0; }

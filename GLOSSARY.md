@@ -55,7 +55,7 @@ Un agente di un tenant, con il suo modello, le sue conversazioni, i suoi connett
 _Avoid_: bot, profilo; «istanza» nei testi per le persone
 
 **Agente**:
-Un'istanza vista da chi la usa: ha un nome, una faccia (un'emoji), un compito in una riga e un tono, e con loro la sua memoria, i suoi task, file, connettori e bot. Ognuno si presenta con il suo nome. L'owner lo elimina da Impostazioni scrivendone il nome (tranne il principale e la segreteria). Vedi ADR 0041 e 0046.
+Un'istanza vista da chi la usa: ha un nome, un volto, un compito in una riga e un tono, e con loro la sua memoria, i suoi task, file, connettori e bot. Ognuno si presenta con il suo nome. L'owner lo elimina da Impostazioni scrivendone il nome (tranne il principale e la segreteria). Vedi ADR 0041 e 0046.
 _Avoid_: bot, assistente (quando si intende uno degli agenti), GPT
 
 **Board**:

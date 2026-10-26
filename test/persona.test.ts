@@ -5,34 +5,29 @@ import { FAUX_MODEL, tempDataDir } from "./helpers.ts";
 
 describe("persona (ADR 0041)", () => {
 	it("keeps what a person typed, trimmed, and leaves out empty parts and the natural tone", () => {
-		expect(checkPersona({ emoji: " 🔎 ", tagline: "  Cerca   e confronta\nfornitori ", tone: "formale" })).toEqual({ emoji: "🔎", tagline: "Cerca e confronta fornitori", tone: "formale" });
-		expect(checkPersona({ emoji: "", tagline: "  ", tone: "naturale" })).toEqual({});
+		expect(checkPersona({ tagline: "  Cerca   e confronta\nfornitori ", tone: "formale" })).toEqual({ tagline: "Cerca e confronta fornitori", tone: "formale" });
+		expect(checkPersona({ tagline: "  ", tone: "naturale" })).toEqual({});
 		expect(checkPersona(undefined)).toEqual({});
-		expect(checkPersona({ emoji: "👩🏽‍💻" }).emoji).toBe("👩🏽‍💻");
-		expect(checkPersona({ emoji: "🇮🇹" }).emoji).toBe("🇮🇹");
-		expect(checkPersona({ emoji: "1️⃣" }).emoji).toBe("1️⃣");
 		// Never taken from a request: the server sets it.
-		expect(checkPersona({ emoji: "🙂", named: true })).toEqual({ emoji: "🙂" });
+		expect(checkPersona({ tone: "formale", named: true })).toEqual({ tone: "formale" });
+		// Agenti have no emoji any more (ADR 0125): one sent or stored is left out, never refused.
+		expect(checkPersona({ emoji: "🔎", tagline: "Cerca" })).toEqual({ tagline: "Cerca" });
+		expect(checkPersona({ emoji: "ciao" })).toEqual({});
 	});
 
-	it("refuses words for an emoji, an unknown tone and a long description", () => {
-		expect(() => checkPersona({ emoji: "ciao" })).toThrow(PersonaError);
-		expect(() => checkPersona({ emoji: "🔎 ciao" })).toThrow(/una sola emoji/);
+	it("refuses an unknown tone and a long description", () => {
 		expect(() => checkPersona({ tone: "arrogante" })).toThrow(/Tono/);
 		expect(() => checkPersona({ tagline: "x".repeat(121) })).toThrow(/120/);
 		expect(() => checkPersona("🔎")).toThrow(PersonaError);
-		expect(() => checkPersona({ emoji: "😀😀" })).toThrow(/una sola emoji/);
-		expect(() => checkPersona({ emoji: "🙂\u202E" })).toThrow(/una sola emoji/);
-		expect(() => checkPersona({ emoji: "<" })).toThrow(/una sola emoji/);
 	});
 
 	it("adds nothing to an instance never given a personality, so old conversations keep their instructions", () => {
 		expect(withPersona("Sei Owni.", "Owni", undefined)).toBe("Sei Owni.");
 		expect(withPersona("Sei Owni.", " owni ", { named: true })).toBe("Sei Owni.");
-		expect(withPersona(undefined, "Owni", { emoji: "🙂", named: true })).toBeUndefined();
+		expect(withPersona(undefined, "Owni", { named: true })).toBeUndefined();
 		// Named by a script, before agenti had names: it keeps presenting itself as before.
 		expect(withPersona("Sei Owni.", "Telegram (default)", undefined)).toBe("Sei Owni.");
-		expect(withPersona("Sei Owni.", "Segreteria (acme)", { emoji: "📮" })).toBe("Sei Owni.");
+		expect(withPersona("Sei Owni.", "Segreteria (acme)", {})).toBe("Sei Owni.");
 	});
 
 	it("keeps a name on one line, without our quote marks", () => {
@@ -61,7 +56,7 @@ describe("an agente opens with its persona", () => {
 		};
 		const runtime = new OwniRuntime({ dataDir: tempDataDir(), engine });
 		await runtime.registry.createTenant({ id: "acme", name: "acme" });
-		await runtime.registry.createInstance("acme", { id: "ricerca", name: "Ricercatore", model: FAUX_MODEL, egress: { modelProviders: ["faux"], channels: [] }, instructions: "Sei Owni.", persona: { emoji: "🔎", tone: "formale", named: true } });
+		await runtime.registry.createInstance("acme", { id: "ricerca", name: "Ricercatore", model: FAUX_MODEL, egress: { modelProviders: ["faux"], channels: [] }, instructions: "Sei Owni.", persona: { tone: "formale", named: true } });
 		await runtime.openInstance("acme", "ricerca");
 		expect(seen[0]).toContain("Il tuo nome è «Ricercatore»");
 		expect(seen[0]).toContain("dai del Lei");

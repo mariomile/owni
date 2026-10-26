@@ -28,7 +28,7 @@ function reader(over: { runs?: RunRecord[]; cards?: Card[]; threads?: Record<str
 
 describe("who is doing what (ADR 0109)", () => {
 	it("is idle with no active run, and busy for as long as the oldest one", async () => {
-		expect(await reader()("ricerca", { person: "p_owner" }, now)).toEqual({ busy: false, doing: "" });
+		expect(await reader()("ricerca", { person: "p_owner" }, now)).toEqual({ busy: false, running: false, open: false, doing: "" });
 		const busy = await reader({ runs: [run({ id: "a", startedAt: ago(30) }), run({ id: "b", startedAt: ago(90) })] })("ricerca", { person: "p_owner" }, now);
 		expect(busy).toMatchObject({ busy: true, busyFor: 90 });
 		// Queued: counted from when it was asked.
@@ -97,7 +97,7 @@ describe("agent_list and agent_message with activity (ADR 0109)", () => {
 				{ id: "vendite", name: "Vendite" },
 			],
 			post: async () => {},
-			...(activity === undefined ? {} : { activity }),
+			...(activity === undefined ? {} : { activity: async (agent: string) => ({ running: false, open: false, ...(await activity(agent)) }) }),
 		});
 	const list = (tools: ReturnType<typeof make>) => tools.find((t) => t.name === "agent_list")!.execute({}, context());
 	const send = (tools: ReturnType<typeof make>, agent: string) => tools.find((t) => t.name === "agent_message")!.execute({ agent, message: "ciao" }, context());

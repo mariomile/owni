@@ -1,5 +1,5 @@
 // Impostazioni page, with the cards for each capability and channel.
-import { agentHome, agentLabel, api, confirmDialog, face, go, h, head, icon, instanceHref, mount, needInstance, route, state, store, toast } from "../common.js";
+import { agentHome, api, confirmDialog, face, go, h, head, icon, instanceHref, mount, needInstance, route, state, store, toast } from "../common.js";
 import { connectorsBody } from "../connectors.js";
 import { copyBox, copyButton } from "../listen.js";
 import { chatModelCache, modelFacts, subscriptionState } from "../models.js";
@@ -421,7 +421,7 @@ function webCard(inst, hosts) {
 /** Which other agenti may write to this one (ADR 0042): the organigramma decides it (ADR 0117). */
 function agentsCard(inst, settings) {
 	const from = settings.egress.channels.includes("agente") ? (settings.allowedUsers.agente ?? []) : [];
-	const names = from.map((id) => state.instances.find((i) => i.id === id)).filter(Boolean).map(agentLabel);
+	const names = from.map((id) => state.instances.find((i) => i.id === id)).filter(Boolean).map((i) => i.name);
 	const chip = h(`span.chip${names.length ? ".ok" : ""}`, names.length === 0 ? "Nessuno" : names.length === 1 ? "1 agente" : `${names.length} agenti`);
 	return fold(
 		{ title: "Agenti che possono scrivergli", glyph: "agenti", lead: `Chi può chiedere aiuto a ${inst.name} mentre lavora.`, chip },
@@ -553,7 +553,7 @@ export async function viewSettings(main) {
 	if (needInstance(main)) return;
 	const inst = state.instance;
 	if (state.me.role !== "owner") {
-		mount(main, head(agentLabel(inst), "Configurazione", "La configurazione dell'agente è riservata all'owner.", h("a.btn", { href: agentHome(inst.id) }, `Apri ${inst.name}`)));
+		mount(main, head(null, `Configurazione di ${inst.name}`, "La configurazione dell'agente è riservata all'owner.", h("a.btn", { href: agentHome(inst.id) }, `Apri ${inst.name}`)));
 		return;
 	}
 	const [{ settings }, { people }, tg, wa, tel, { capabilities }, models, providers] = await Promise.all([
@@ -568,7 +568,6 @@ export async function viewSettings(main) {
 	]);
 	if (!main.isConnected || state.instance !== inst || state.me?.role !== "owner") return;
 	const name = h("input", { type: "text", value: settings.name, maxlength: "80", "aria-label": "Nome" });
-	const emoji = h("input.emoji-input", { type: "text", value: settings.persona.emoji ?? "", placeholder: "🙂", maxlength: "16", "aria-label": "Emoji" });
 	const tagline = h("input", { type: "text", value: settings.persona.tagline ?? "", maxlength: "120", placeholder: "Cosa fa, in una riga" });
 	const tone = h("select", TONES.map(([value, label]) => h("option", { value, selected: value === (settings.persona.tone ?? "naturale") ? "selected" : undefined }, label)));
 	const instructions = h("textarea", { rows: 9, value: settings.instructions });
@@ -579,22 +578,21 @@ export async function viewSettings(main) {
 		const a = h("input", { type: "checkbox", checked: approve.has(p.id), "aria-label": `${p.name} approva` });
 		return { p, c, a, row: h("tr", h("td", p.name, h("small.muted.person-role", p.role === "owner" ? "Owner" : "Membro", p.id === state.me.id ? " · tu" : "")), h("td", c), h("td", a)) };
 	});
-	const save = async () => {
-		try {
-			await api(`/api/instances/${inst.id}/settings`, { method: "PUT", body: { name: name.value, instructions: instructions.value, persona: { emoji: emoji.value, tagline: tagline.value, tone: tone.value }, webPeople: rows.filter((r) => r.c.checked).map((r) => r.p.id), webApprovers: rows.filter((r) => r.a.checked).map((r) => r.p.id) } });
-			toast("Identità e accessi salvati");
-			await refreshInstances();
-			render();
-		} catch (error) {
-			toast(error.message, true);
-		}
-	};
+	// Each field saves on its own when it changes (ADR 0125); the server takes partial bodies.
+	const put = (body) => api(`/api/instances/${inst.id}/settings`, { method: "PUT", body });
+	const persona = () => put({ persona: { tagline: tagline.value, tone: tone.value } });
+	// A new name shows in the sidebar and the title: the page is drawn again.
+	const nameNote = autosave("name", name, () => put({ name: name.value }), async () => (await refreshInstances(), render()));
+	const taglineNote = autosave("tagline", tagline, persona);
+	const toneNote = autosave("tone", tone, persona);
+	const instructionsNote = autosave("instructions", instructions, () => put({ instructions: instructions.value }));
+	const webNote = autosave("web", rows.flatMap((r) => [r.c, r.a]), () => put({ webPeople: rows.filter((r) => r.c.checked).map((r) => r.p.id), webApprovers: rows.filter((r) => r.a.checked).map((r) => r.p.id) }));
 	const e = settings.egress;
 	const caps = Object.fromEntries(capabilities.map((c) => [c.name, c]));
 	const capability = (name) => capabilityCard(inst, caps, e.web ?? [], CAPABILITY_CARDS.find((spec) => spec.name === name));
 	const modelEditor = providersCard(inst, providers, models);
 	modelEditor.classList.remove("card", "pad");
-	const modelDetails = fold({ title: "Cambia modello o gestisci provider", glyph: "spark", lead: "Abbonamenti, chiavi API e scelta del modello. Ogni modifica ha il suo comando." }, anchor("providers", modelEditor));
+	const modelDetails = fold({ title: "Cambia modello o gestisci provider", glyph: "spark", lead: "Abbonamenti, chiavi API e scelta del modello." }, anchor("providers", modelEditor));
 	// The services load on their own: a slow or broken one does not hold the rest of the page.
 	const services = h("div.stack", h("p.muted.small", "Caricamento…"));
 	connectorsBody(inst).then((nodes) => mount(services, nodes), (error) => mount(services, h("p.error", error.message)));
@@ -602,10 +600,11 @@ export async function viewSettings(main) {
 		{ id: "identita", label: "Identità", glyph: "agenti", anchors: ["personalita", "elimina"], content: [
 			anchor("personalita", h("div.card.pad",
 				h("h2", "Identità e istruzioni"),
-				h("div.field", h("span", "Nome"), h("div.name-row", h("span.name-face", face(inst, 40)), emoji, name)),
-				h("label.field", h("span", "Cosa fa, in una riga"), tagline),
-				h("label.field", h("span", "Tono"), tone),
-				h("label.field", h("span", "Istruzioni"), instructions, h("small", "Cosa sa fare e le sue regole. Nome, ruolo e tono gli arrivano dopo queste.")),
+				h("div.field", h("span", "Nome"), h("div.name-row", h("span.name-face", face(inst, 40)), name), nameNote),
+				h("label.field", h("span", "Cosa fa, in una riga"), tagline, taglineNote),
+				h("label.field", h("span", "Tono"), tone, toneNote),
+				h("label.field", h("span", "Istruzioni"), instructions, h("small", "Cosa sa fare e le sue regole. Nome, ruolo e tono gli arrivano dopo queste."), instructionsNote),
+				h("a.quiet-link", { href: "#/inizia", onclick: (event) => (event.preventDefault(), setupHidden(inst.id, false), go("inizia")) }, "Rivedi i primi passi"),
 			)),
 			settings.deletable ? fold({ title: "Elimina agente", glyph: "trash", lead: "Eliminazione definitiva, con conferma del nome." }, anchor("elimina", deleteCard(inst))) : null,
 		] },
@@ -628,19 +627,17 @@ export async function viewSettings(main) {
 		] },
 		{ id: "servizi", label: "Servizi", glyph: "connettori", anchors: [], content: [services] },
 		{ id: "canali", label: "Canali", glyph: "chat", anchors: ["telegram", "whatsapp", "telefono"], content: [
-			h("div.card.pad", h("h2", "Dove risponde"), h("p", e.channels.map((c) => CHANNEL_NAMES[c] ?? c).join(", ") || "Nessun canale attivo"), h("p.muted", "Telegram, WhatsApp e telefono sono facoltativi. Ogni canale salva i propri accessi con il pulsante nel suo modulo.")),
+			h("div.card.pad", h("h2", "Dove risponde"), h("p", e.channels.map((c) => CHANNEL_NAMES[c] ?? c).join(", ") || "Nessun canale attivo"), h("p.muted", "Telegram, WhatsApp e telefono sono facoltativi.")),
 			tg === undefined ? null : anchor("telegram", telegramCard(inst, tg.telegram)),
 			wa === undefined ? null : anchor("whatsapp", whatsappCard(inst, wa.whatsapp)),
 			tel === undefined ? null : anchor("telefono", phoneCard(inst, tel.phone)),
 		] },
 		{ id: "accessi", label: "Accessi", glyph: "persone", anchors: [], content: [
-			h("div.card", h("div.pad", h("h2", "Chi può scrivere e approvare"), h("p.muted", "Scrivere all'agente e approvare le sue azioni sono permessi distinti. Essere owner non aggiunge automaticamente il permesso di scrivere. Questi accessi riguardano la console web; gli altri canali hanno i propri elenchi.")), h("table.ledger", h("thead", h("tr", h("th", "Persona"), h("th", "Scrive"), h("th", "Approva"))), h("tbody", rows.map((r) => r.row)))),
+			h("div.card", h("div.pad", h("h2", "Chi può scrivere e approvare"), h("p.muted", "Scrivere all'agente e approvare le sue azioni sono permessi distinti. Essere owner non aggiunge automaticamente il permesso di scrivere. Questi accessi riguardano la console web; gli altri canali hanno i propri elenchi."), webNote), h("table.ledger", h("thead", h("tr", h("th", "Persona"), h("th", "Scrive"), h("th", "Approva"))), h("tbody", rows.map((r) => r.row)))),
 		] },
 	];
 	const requested = route().rest[0];
 	let active = groups.find((group) => group.id === requested || group.anchors.includes(requested))?.id ?? "identita";
-	const saveBar = h("div.card.pad.settings-save", h("p.muted.small", "Salva insieme nome, tono, istruzioni e accessi web, anche se li hai modificati in sezioni diverse."), h("button.btn.accent", { type: "button", onclick: save }, "Salva identità e accessi"));
-	const independentNote = h("p.muted.small.settings-save-note", "Questa sezione salva separatamente: Usa il pulsante del singolo modulo. Gli interruttori salvano subito.");
 	const panels = groups.map((group) => h("section.stack.settings-panel", { id: `settings-panel-${group.id}`, "aria-labelledby": `settings-section-${group.id}`, "data-settings-section": group.id }, group.content));
 	const show = (id) => {
 		active = id;
@@ -649,8 +646,6 @@ export async function viewSettings(main) {
 			if (link.dataset.settingsSection === active) link.setAttribute("aria-current", "page");
 			else link.removeAttribute("aria-current");
 		}
-		saveBar.hidden = active !== "identita" && active !== "accessi";
-		independentNote.hidden = !saveBar.hidden;
 	};
 	const nav = h("nav.settings-nav", { "aria-label": "Sezioni della configurazione" }, groups.map((group) => h("a", {
 		id: `settings-section-${group.id}`,
@@ -660,17 +655,48 @@ export async function viewSettings(main) {
 		onclick: (event) => {
 			if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
 			event.preventDefault();
-			// No hashchange: the existing form nodes keep every unsaved input across sections.
+			// No hashchange: the page is not drawn again, a field being typed in stays as it is.
 			history.replaceState(null, "", instanceHref("impostazioni", [group.id], inst.id));
 			show(group.id);
 		},
 	}, icon(group.glyph), group.label)));
 	show(active);
 	mount(main,
-		head(agentLabel(inst), h("h1", `Configurazione di ${inst.name}`), "Una sezione alla volta. Quello che sa e che fa è nel suo pannello, accanto alla conversazione.", h("button.btn.ghost", { onclick: () => (setupHidden(inst.id, false), go("inizia")) }, "Primi passi")),
-		nav, saveBar, independentNote, panels,
+		head(null, h("h1", `Configurazione di ${inst.name}`), "Una sezione alla volta. Ogni modifica si salva da sola. Quello che sa e che fa è nel suo pannello, accanto alla conversazione."),
+		nav, panels,
 	);
 	if (requested === "modello") modelDetails.open = true;
+}
+
+/** The field saved last, so its «Salvato» is still there after a save that draws the page again. */
+let justSaved = null;
+
+/**
+ * Save a field as soon as it changes (ADR 0125): the note returned goes next to it and says
+ * «Salvato», or what went wrong. `after` runs once the server has it.
+ */
+function autosave(key, inputs, send, after) {
+	const note = h("small.save-note", { role: "status" });
+	const show = (text, bad = false) => ((note.textContent = text), note.classList.toggle("bad", bad));
+	if (justSaved === key) {
+		justSaved = null;
+		show("Salvato");
+	}
+	for (const input of [inputs].flat())
+		input.addEventListener("change", async () => {
+			show("Salvataggio…");
+			try {
+				await send();
+				show("Salvato");
+				if (after) {
+					justSaved = key;
+					await after();
+				}
+			} catch (error) {
+				show(error.message, true);
+			}
+		});
+	return note;
 }
 
 /** Where people reach an agente, as they call it. */
@@ -696,10 +722,13 @@ function telegramCard(inst, t) {
 	const allowed = h("input", { type: "text", class: "mono", value: list(t.allowedUsers), placeholder: "123456789, 987654321" });
 	const approvers = h("input", { type: "text", class: "mono", value: list(t.approvers), placeholder: "123456789" });
 	const ids = (input) => input.value.split(/[\s,]+/).filter(Boolean);
+	const people = () => api(`/api/instances/${inst.id}/telegram`, { method: "PUT", body: { allowedUsers: ids(allowed), approvers: ids(approvers) } });
+	const allowedNote = t.connected ? autosave("telegram-allowed", allowed, people) : null;
+	const approversNote = t.connected ? autosave("telegram-approvers", approvers, people) : null;
 	const save = async () => {
 		try {
 			await api(`/api/instances/${inst.id}/telegram`, { method: "PUT", body: { ...(token.value.trim() ? { token: token.value.trim() } : {}), allowedUsers: ids(allowed), approvers: ids(approvers) } });
-			toast(t.connected ? "Telegram aggiornato" : "Bot collegato");
+			toast(t.connected ? "Token aggiornato" : "Bot collegato");
 			render();
 		} catch (error) {
 			toast(error.message, true);
@@ -715,9 +744,9 @@ function telegramCard(inst, t) {
 		{ title: "Telegram", glyph: "plane", lead: `${inst.name} risponde in un bot tutto suo.`, chip: t.connected ? h("span.chip.ok", t.username ? `@${t.username}` : "Collegato") : h("span.chip", "Non collegato") },
 		t.connected ? null : h("p.muted", "Crea un bot con @BotFather su Telegram e incolla qui il suo token. Ogni persona ammessa apre il bot e preme Start."),
 		h("label.field", h("span", t.connected ? "Token" : "Token del bot"), token),
-		h("label.field", h("span", "Chi può scrivere"), allowed, h("small", "ID numerici di Telegram, separati da virgole. Chi non è in elenco non riceve risposta. Per sapere il tuo ID scrivi a @userinfobot su Telegram.")),
-		h("label.field", h("span", "Chi approva"), approvers, h("small", "Ricevono su Telegram le schede dei tool da approvare.")),
-		h("div.actions", h("button.btn.accent", { onclick: save }, t.connected ? "Salva" : "Collega"), t.connected ? h("button.btn.danger", { onclick: disconnect }, "Scollega") : null),
+		h("label.field", h("span", "Chi può scrivere"), allowed, h("small", "ID numerici di Telegram, separati da virgole. Chi non è in elenco non riceve risposta. Per sapere il tuo ID scrivi a @userinfobot su Telegram."), allowedNote),
+		h("label.field", h("span", "Chi approva"), approvers, h("small", "Ricevono su Telegram le richieste da approvare."), approversNote),
+		h("div.actions", h("button.btn.accent", { onclick: save }, t.connected ? "Cambia il token" : "Collega"), t.connected ? h("button.btn.danger", { onclick: disconnect }, "Scollega") : null),
 	);
 }
 
@@ -733,15 +762,17 @@ function whatsappCard(inst, w) {
 	const templateName = h("input", { type: "text", class: "mono", value: w.template?.name ?? "", placeholder: "owni_aggiornamento" });
 	const templateLanguage = h("input", { type: "text", class: "mono", value: w.template?.language ?? "", placeholder: "it" });
 	const numbers = (input) => input.value.split(/[\s,]+/).map((n) => n.replace(/^\+/, "")).filter(Boolean);
+	const people = () => api(`/api/instances/${inst.id}/whatsapp`, { method: "PUT", body: { allowedUsers: numbers(allowed), approvers: numbers(approvers) } });
+	const template = () => api(`/api/instances/${inst.id}/whatsapp`, { method: "PUT", body: { templateName: templateName.value.trim(), templateLanguage: templateLanguage.value.trim(), allowedUsers: numbers(allowed), approvers: numbers(approvers) } });
+	const allowedNote = w.connected ? autosave("whatsapp-allowed", allowed, people) : null;
+	const approversNote = w.connected ? autosave("whatsapp-approvers", approvers, people) : null;
+	const templateNote = w.connected ? autosave("whatsapp-template", [templateName, templateLanguage], template) : null;
 	const save = async () => {
 		try {
 			const given = { accessToken: accessToken.value.trim(), phoneNumberId: phoneNumberId.value.trim(), appSecret: appSecret.value.trim() };
-			// The template only when it changed: otherwise saving the people list does not need Meta.
-			const changed = w.connected && (templateName.value.trim() !== (w.template?.name ?? "") || templateLanguage.value.trim() !== (w.template?.language ?? ""));
-			const template = changed ? { templateName: templateName.value.trim(), templateLanguage: templateLanguage.value.trim() } : {};
-			const body = { ...Object.fromEntries(Object.entries(given).filter(([, v]) => v)), ...template, allowedUsers: numbers(allowed), approvers: numbers(approvers) };
+			const body = { ...Object.fromEntries(Object.entries(given).filter(([, v]) => v)), allowedUsers: numbers(allowed), approvers: numbers(approvers) };
 			await api(`/api/instances/${inst.id}/whatsapp`, { method: "PUT", body });
-			toast(w.connected ? "WhatsApp aggiornato" : "Numero collegato");
+			toast(w.connected ? "Credenziali aggiornate" : "Numero collegato");
 			render();
 		} catch (error) {
 			toast(error.message, true);
@@ -769,17 +800,18 @@ function whatsappCard(inst, w) {
 					h("small.muted", "Poi iscriviti al campo «messages»."),
 				)
 			: null,
-		h("label.field", h("span", "Chi può scrivere"), allowed, h("small", "Numeri con prefisso internazionale, separati da virgole. Chi non è in elenco non riceve risposta.")),
-		h("label.field", h("span", "Chi approva"), approvers, h("small", "Ricevono su WhatsApp le schede dei tool da approvare.")),
+		h("label.field", h("span", "Chi può scrivere"), allowed, h("small", "Numeri con prefisso internazionale, separati da virgole. Chi non è in elenco non riceve risposta."), allowedNote),
+		h("label.field", h("span", "Chi approva"), approvers, h("small", "Ricevono su WhatsApp le richieste da approvare."), approversNote),
 		w.connected
 			? h(
 					"div.stack",
 					h("h3.section-title", "Oltre le 24 ore"),
 					h("p.muted", "WhatsApp lascia scrivere liberamente solo entro 24 ore dall'ultimo messaggio della persona. Dopo, Owni tiene da parte i messaggi e li consegna appena la persona scrive. Con un template approvato da Meta (una variabile {{1}} nel testo) la avvisa subito, con un estratto."),
 					h("div.grid-2", h("label.field", h("span", "Nome del template"), templateName), h("label.field", h("span", "Lingua"), templateLanguage)),
+					templateNote,
 				)
 			: null,
-		h("div.actions", h("button.btn.accent", { onclick: save }, w.connected ? "Salva" : "Collega"), w.connected ? h("button.btn.danger", { onclick: disconnect }, "Scollega") : null),
+		h("div.actions", h("button.btn.accent", { onclick: save }, w.connected ? "Cambia le credenziali" : "Collega"), w.connected ? h("button.btn.danger", { onclick: disconnect }, "Scollega") : null),
 	);
 }
 
@@ -792,11 +824,12 @@ function phoneCard(inst, p) {
 	const allowed = h("input", { type: "text", class: "mono", value: p.allowedUsers.join(", "), placeholder: "+393331234567, +393479876543" });
 	// No "+" added here: 3331234567 would become a French number. The server asks for the prefix.
 	const numbers = (input) => input.value.split(/[\s,]+/).filter(Boolean);
+	const allowedNote = p.connected ? autosave("phone-allowed", allowed, () => api(`/api/instances/${inst.id}/phone`, { method: "PUT", body: { allowedUsers: numbers(allowed) } })) : null;
 	const save = async () => {
 		try {
 			const given = { accountSid: accountSid.value.trim(), authToken: authToken.value.trim(), number: number.value.trim(), pin: pin.value.trim() };
 			await api(`/api/instances/${inst.id}/phone`, { method: "PUT", body: { ...Object.fromEntries(Object.entries(given).filter(([, v]) => v)), allowedUsers: numbers(allowed) } });
-			toast(p.connected ? "Telefono aggiornato" : "Numero collegato");
+			toast(p.connected ? "Credenziali aggiornate" : "Numero collegato");
 			render();
 		} catch (error) {
 			toast(error.message, true);
@@ -816,8 +849,8 @@ function phoneCard(inst, p) {
 		h("label.field", h("span", "Auth token"), authToken, h("small", "Serve anche a controllare che le chiamate arrivino davvero da Twilio.")),
 		h("label.field", h("span", "Numero"), number),
 		h("label.field", h("span", "Codice"), pin, h("small", "Chi chiama lo digita all'inizio di ogni chiamata: il numero di chi chiama da solo si può falsificare. Dallo solo alle persone in elenco.")),
-		h("label.field", h("span", "Chi può chiamare"), allowed, h("small", "Numeri con + e prefisso internazionale, separati da virgole. Le chiamate da altri numeri vengono rifiutate.")),
-		h("div.actions", h("button.btn.accent", { onclick: save, disabled: !p.https && !p.connected }, p.connected ? "Salva" : "Collega"), p.connected ? h("button.btn.danger", { onclick: disconnect }, "Scollega") : null),
+		h("label.field", h("span", "Chi può chiamare"), allowed, h("small", "Numeri con + e prefisso internazionale, separati da virgole. Le chiamate da altri numeri vengono rifiutate."), allowedNote),
+		h("div.actions", h("button.btn.accent", { onclick: save, disabled: !p.https && !p.connected }, p.connected ? "Cambia le credenziali" : "Collega"), p.connected ? h("button.btn.danger", { onclick: disconnect }, "Scollega") : null),
 	);
 }
 

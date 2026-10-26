@@ -1,5 +1,7 @@
 # Agenti: più agenti per tenant, ognuno con la sua personalità
 
+> Aggiornata dall'[ADR 0125](0125-stato-unico-degli-agenti-e-console-piu-chiara.md): `persona` non ha più `emoji`; un'emoji mandata o salvata prima viene lasciata fuori. La pagina Agenti mostra lo stato dell'agente e i conteggi diversi da zero.
+
 Mario (17 ottobre 2026): «si devono poter creare più Agenti, ognuno con la propria memoria, personalità, automazioni». Come Grok bot, dove ogni bot ha un nome e un carattere.
 
 Quasi tutto c'era già: un'istanza è un agente con il suo modello, le sue conversazioni, la sua memoria (`memory.json` nella cartella dell'istanza), i suoi task programmati e sentinelle, i suoi file, i suoi connettori e il suo bot su Telegram, WhatsApp e telefono. L'owner ne creava di nuove da «Nuova istanza». Mancavano tre cose: un nome che l'agente usa davvero (ogni istanza nuova si presentava come Owni, perché le istruzioni predefinite dicono «Sei Owni»), una personalità che non fosse un muro di istruzioni, e un posto dove vederli tutti.

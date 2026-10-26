@@ -1,5 +1,7 @@
 # Squadre pronte
 
+> Aggiornata dall'[ADR 0125](0125-stato-unico-degli-agenti-e-console-piu-chiara.md): i membri non hanno più un'emoji, e prima di creare la squadra la console elenca i permessi tra agenti che cambiano. «Squadre pronte» sta solo nella pagina Agenti.
+
 > Aggiornata da [ADR 0117](0117-organigramma-degli-agenti.md): una squadra pronta entra nell'organigramma con chi la coordina, i ruoli, le responsabilità e chi risponde a chi. Le istruzioni dei membri tengono solo il loro lavoro, chi parla con chi lo decide l'organigramma e «Fate squadra» non c'è più. Il resto di questa decisione vale ancora.
 
 Owni ha già tutti i pezzi per far lavorare più agenti insieme: agenti con un compito ciascuno ([ADR 0041](0041-agenti.md)), che si chiedono aiuto ([ADR 0042](0042-agenti-che-si-scrivono.md)), stanze dove la persona li chiama tutti ([ADR 0063](0063-stanze.md)) e sotto-schede per dividere il lavoro sulla board ([ADR 0066](0066-sotto-schede.md)). Montarli a mano però vuol dire creare tre agenti, scrivere tre istruzioni che si citano a vicenda, spuntare chi scrive a chi e aprire una stanza. Le alternative a Grok Bot che abbiamo guardato partono da squadre già fatte; da noi chi non conosce questi pezzi non li trova.

@@ -17,7 +17,7 @@ import { NotFound } from "../core/errors.ts";
 import { SHARED, subjectOf } from "../core/memory.ts";
 import { checkPersona, cleanName, type Persona, PersonaError } from "../core/persona.ts";
 import { AGENT_CHANNEL } from "../core/agent-messages.ts";
-import { runtimeActivity } from "../core/agent-activity.ts";
+import { AGENT_STATUS, agentStatus, runtimeActivity } from "../core/agent-activity.ts";
 import type { BoardStore } from "../core/board.ts";
 import type { ScreenViews } from "../core/screen-views.ts";
 import type { RoutineStore } from "../core/board-routines.ts";
@@ -323,7 +323,6 @@ export function createWebApp(options: WebAppOptions): Server {
 		isApprover: await isApprover(runtime, tenantId, r.id, approverOf(p)),
 		hasSegreteria: options.segreterie?.has(r.id) ?? false,
 		...(r.id === options.main ? { main: true } : {}),
-		...(r.persona?.emoji === undefined ? {} : { emoji: r.persona.emoji }),
 		...(r.persona?.tagline === undefined ? {} : { tagline: r.persona.tagline }),
 	});
 	/**
@@ -343,14 +342,23 @@ export function createWebApp(options: WebAppOptions): Server {
 		const visible = all.filter((r) => p.role === "owner" || (r.allowedUsers.web ?? []).includes(p.id));
 		return { instances: await Promise.all(visible.map((r) => describeInstance(r, p))) };
 	});
+	const activity = runtimeActivity({ runtime, tenant: tenantId, board: options.board, channel: (id) => options.channels.get(id) });
+	/**
+	 * Who is doing what (ADR 0109) as one status (ADR 0125), computed only here for the Agenti page,
+	 * the organigramma, the board and the agente's panel. The line says what this person already sees.
+	 */
+	const agentNow = async (r: InstanceRecord, p: Person) => {
+		const [now, waiting] = await Promise.all([activity(r.id, { person: p.id }), waitsOn(p, r)]);
+		const status = agentStatus(now, waiting);
+		return { status, statusText: AGENT_STATUS[status], doing: now.doing };
+	};
 	// The page «Agenti» (ADR 0041): each agente with its face, its model and what it does by itself.
 	route("GET", "/api/agents", "person", async ({ person: p }) => {
 		const all = await runtime.registry.listInstances(tenantId);
 		const visible = all.filter((r) => p.role === "owner" || (r.allowedUsers.web ?? []).includes(p.id));
-		const activity = runtimeActivity({ runtime, tenant: tenantId, board: options.board, channel: (id) => options.channels.get(id) });
 		const agents = await Promise.all(
 			visible.map(async (r) => {
-				const [schedules, watches, now] = await Promise.all([runtime.schedules(tenantId, r.id).list(), runtime.watches(tenantId, r.id).list(), activity(r.id, { person: p.id })]);
+				const [schedules, watches, now] = await Promise.all([runtime.schedules(tenantId, r.id).list(), runtime.watches(tenantId, r.id).list(), agentNow(r, p)]);
 				// Like their pages: a member counts only what acts for them.
 				const owner = p.role === "owner";
 				return {
@@ -358,10 +366,7 @@ export function createWebApp(options: WebAppOptions): Server {
 					model: named(r.model),
 					tone: r.persona?.tone ?? "naturale",
 					channels: r.egress.channels,
-					// Who is doing what (ADR 0109): the schede and chats this person already sees.
-					busy: now.busy,
-					...(now.busyFor === undefined ? {} : { busyFor: now.busyFor }),
-					doing: now.doing,
+					...now,
 					schedules: owner ? schedules.length : schedules.filter((s) => mine(s, p)).length,
 					watches: owner ? watches.length : watches.filter((w) => mineWatch(w, p)).length,
 					memories: runtime.memory(tenantId, r.id).list().filter((m) => m.about === SHARED || m.about === subjectOf("web", p.id)).length,
@@ -433,7 +438,7 @@ export function createWebApp(options: WebAppOptions): Server {
 	});
 
 	// --- the board (ADR 0050) ---
-	boardRoutes(route, { runtime, tenantId, people: options.people, board: options.board, segreterie: options.segreterie });
+	boardRoutes(route, { runtime, tenantId, people: options.people, board: options.board, segreterie: options.segreterie, agentNow });
 	capabilityRoutes(route, { runtime, tenantId, knownInstance, voice: options.voice, speech: options.speech, images: options.images, search: options.search, computer: options.computer, desktop: options.desktop, google: options.google });
 
 	// --- the organigramma (ADR 0117): who does what, and who writes to whom ---
@@ -449,7 +454,7 @@ export function createWebApp(options: WebAppOptions): Server {
 		await runtime.audit(tenantId).append({ type: "agents.allowed", instanceId: id, personId: person.id, allowed: from.length, from: from.join(",") });
 		return from;
 	};
-	const saveOrg = orgRoutes(route, {
+	const org = orgRoutes(route, {
 		store: runtime.org(tenantId),
 		agents: async () =>
 			(await runtime.registry.listInstances(tenantId))
@@ -464,7 +469,8 @@ export function createWebApp(options: WebAppOptions): Server {
 		canCreate: options.createInstance !== undefined,
 		exists: agentExists,
 		make: (person, input) => makeAgent(person, { ...input, persona: personaOf(input.persona) }),
-		place: saveOrg,
+		place: org.save,
+		preview: org.preview,
 		room: async (person, title, agents) => {
 			if (options.rooms === undefined) return undefined;
 			const room = await options.rooms.create(person.id, title, agents).catch(roomError);
@@ -497,7 +503,7 @@ export function createWebApp(options: WebAppOptions): Server {
 	scheduleRoutes(route, { runtime, tenantId, defaultTimeZone: options.defaultTimeZone, google: options.google, watchRead: options.watchRead, instanceAccess, channelOf });
 
 	// --- what waits for a decision: tools proposti, forms, connector calls, Google writes, pratiche; the inbox ---
-	approvalRoutes(route, { runtime, tenantId, segreterie: options.segreterie, sendWebAction: options.sendWebAction, runConnectorAction: options.runConnectorAction, google: options.google, board: options.board, log: options.log, instanceAccess, approverOf, usageSummary });
+	const waitsOn = approvalRoutes(route, { runtime, tenantId, segreterie: options.segreterie, sendWebAction: options.sendWebAction, runConnectorAction: options.runConnectorAction, google: options.google, board: options.board, log: options.log, instanceAccess, approverOf, usageSummary });
 
 	// --- owner: an instance's computer and screen, settings, primi passi, the sites it reads ---
 	settingsRoutes(route, { runtime, tenantId, computer: options.computer, desktop: options.desktop, people: options.people, defaultInstructions: options.defaultInstructions, browser: options.browser, connectedChannels: options.connectedChannels, connectors: options.connectors, search: options.search, voice: options.voice, speech: options.speech, images: options.images, knownInstance, instanceAccess, channelOf, personaOf, deletable });

@@ -1,5 +1,5 @@
 // Primi passi page.
-import { agentLabel, api, dmHref, go, h, head, icon, mount, needInstance, state, store, toast } from "../common.js";
+import { api, dmHref, go, h, head, icon, mount, needInstance, state, store, toast } from "../common.js";
 import { providerOverview } from "../models.js";
 import { setupLeft, setupSteps } from "../setup.js";
 import { appleTouch, install, installOffer } from "../pwa.js";
@@ -107,7 +107,7 @@ export async function viewStart(main) {
 	mount(
 		main,
 		head(
-			agentLabel(inst),
+			inst.name,
 			h("h1", "Primi passi"),
 			`${done} di ${essential.length} passi per provare ${inst.name}. Collega il modello, poi affida un primo lavoro. Il resto si configura quando serve.`,
 			h(
@@ -116,7 +116,7 @@ export async function viewStart(main) {
 					onclick: () => {
 						setupHidden(inst.id, true);
 						state.setupLeft = 0;
-						toast("Li ritrovi in Impostazioni, in alto");
+						toast("Li ritrovi nella configurazione dell'agente, in Identità: Rivedi i primi passi");
 						location.hash = dmHref(inst.id);
 					},
 				},

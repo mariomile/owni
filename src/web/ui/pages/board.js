@@ -1,5 +1,5 @@
 // Board page.
-import { api, confirmDialog, dmHref, face, fmt, h, head, icon, mount, route, instanceHref, state, store, toast } from "../common.js";
+import { agentStatus, api, confirmDialog, dmHref, face, fmt, h, head, icon, mount, route, instanceHref, state, store, toast } from "../common.js";
 import { refreshInstances, refreshSetup } from "../session.js";
 import { render } from "../shell.js";
 
@@ -72,14 +72,14 @@ export async function viewBoard(main) {
 		const moved = c.events.findLastIndex((e) => e.kind === "status" && e.status === "da_rivedere");
 		return moved < 0 ? undefined : c.events.slice(moved).find((e) => e.kind === "comment" && e.by.kind === "agent");
 	};
-	const whenDone = (cards) => (cards.length === 1 ? `quando #${cards[0].n} è fatta` : cards.length ? `quando ${nums(cards)} sono fatte` : "quando le schede prima sono fatte");
-	const started = (card) => (card.queued ? `Parte da sola ${whenDone(waitsOn(card))}` : `${agentOf(card.assignee)?.name ?? "L'agente"} ci sta lavorando`);
+	const whenDone = (cards) => (cards.length === 1 ? `quando #${cards[0].n} è fatto` : cards.length ? `quando ${nums(cards)} sono fatti` : "quando gli incarichi prima sono fatti");
+	const started = (card) => (card.queued ? `Parte da solo ${whenDone(waitsOn(card))}` : `${agentOf(card.assignee)?.name ?? "L'agente"} ci sta lavorando`);
 	const aloneLabel = `Lavora da solo fino alla fine, senza aspettare le tue risposte (al massimo ${data.auto.replies} risposte o ${data.auto.hours} ore, poi va in «Da rivedere»)`;
 	// Dragged to another column (ADR 0051): the same moves as the buttons of the scheda.
 	const moveTo = async (c, status) => {
 		if (status === c.status) return;
 		if (status === "in_corso" && c.status === "da_fare") {
-			if (!c.assignee || !agentOf(c.assignee)?.canAssign) return toast("Affidala prima a un agente a cui puoi scrivere", true);
+			if (!c.assignee || !agentOf(c.assignee)?.canAssign) return toast("Affidalo prima a un agente a cui puoi scrivere", true);
 			try {
 				const { card } = await api(`/api/board/${c.id}/start`, { method: "POST" });
 				toast(started(card));
@@ -91,7 +91,7 @@ export async function viewBoard(main) {
 		}
 		// Sent back from review: with what to change, written in the scheda.
 		if (status === "in_corso" && c.status === "da_rivedere") return cardDialog(c, true);
-		await save(c, { status }, `Scheda #${c.n} in «${BOARD_COLUMNS.find(([v]) => v === status)[1]}»`);
+		await save(c, { status }, `Incarico #${c.n} in «${BOARD_COLUMNS.find(([v]) => v === status)[1]}»`);
 	};
 	const tile = (c) =>
 		h(
@@ -119,9 +119,10 @@ export async function viewBoard(main) {
 			c.status === "da_rivedere" && resultOf(c) ? h("span.board-result-snip", resultOf(c).text) : null,
 			h(
 				"span.board-meta",
-				c.assignee ? [faceOf(c.assignee, c.status === "in_corso" ? "thinking" : "idle"), h("span", agentOf(c.assignee)?.name ?? "agente eliminato")] : h("span.muted", "Non assegnata"),
+				// What the agente is up to now (ADR 0125), while the incarico is still open.
+				c.assignee ? [faceOf(c.assignee, c.status === "in_corso" ? "thinking" : "idle"), h("span", agentOf(c.assignee)?.name ?? "agente eliminato"), c.status === "fatto" ? null : agentStatus(agentOf(c.assignee) && { ...agentOf(c.assignee), doing: "" })] : h("span.muted", "Non assegnato"),
 				c.priority === "normale" ? null : h("span.tag", `priorità ${c.priority}`),
-				waitsOn(c).length ? h("span.tag.board-after", { title: c.queued ? `Parte da sola ${whenDone(waitsOn(c))}` : `Viene dopo ${nums(waitsOn(c))}` }, `${c.queued ? "parte " : ""}dopo ${nums(waitsOn(c))}`) : null,
+				waitsOn(c).length ? h("span.tag.board-after", { title: c.queued ? `Parte da solo ${whenDone(waitsOn(c))}` : `Viene dopo ${nums(waitsOn(c))}` }, `${c.queued ? "parte " : ""}dopo ${nums(waitsOn(c))}`) : null,
 				c.checklist?.length ? h(`span.tag.board-checks${c.checklist.every((i) => i.done) ? ".all" : ""}`, { title: "Lista di controllo" }, `☑ ${c.checklist.filter((i) => i.done).length}/${c.checklist.length}`) : null,
 				c.due && c.status !== "fatto" ? h(`span.tag.board-due.${dueInfo(c.due).level}`, { title: `Scadenza: ${dueInfo(c.due).label}` }, dueInfo(c.due).text) : null,
 				c.auto && c.status === "in_corso" ? h("span.tag", { title: `Lavora da solo: risposta ${c.auto.rounds} di ${data.auto.replies}` }, "da solo") : null,
@@ -170,19 +171,19 @@ export async function viewBoard(main) {
 					},
 				},
 				h("h2", h("span.board-col-name", h("i.board-dot", { "aria-hidden": "true" }), label), h("span.board-count", String(cards.length))),
-				cards.length ? cards.map(tile) : h("p.muted.small", filtering() ? "Nessuna scheda con questi filtri" : status === "da_rivedere" ? "Qui arrivano le schede finite dagli agenti, da approvare." : "Nessuna scheda"),
+				cards.length ? cards.map(tile) : h("p.muted.small", filtering() ? "Nessun incarico con questi filtri" : status === "da_rivedere" ? "Le decisioni e i risultati che aspettano te" : "Nessun incarico"),
 			);
 			return col;
 		}),
 	);
 	let columns = lanes();
-	const search = h("input", { type: "search", value: filter.q, placeholder: "Cerca nelle schede", "aria-label": "Cerca nelle schede" });
+	const search = h("input", { type: "search", value: filter.q, placeholder: "Cerca negli incarichi", "aria-label": "Cerca negli incarichi" });
 	const agentFilter = h(
 		"select",
 		{ "aria-label": "Agente" },
 		h("option", { value: "" }, "Tutti gli agenti"),
-		h("option", { value: "-", selected: filter.agent === "-" ? "selected" : undefined }, "Non assegnate"),
-		data.agents.map((a) => h("option", { value: a.id, selected: filter.agent === a.id ? "selected" : undefined }, a.emoji ? `${a.emoji} ${a.name}` : a.name)),
+		h("option", { value: "-", selected: filter.agent === "-" ? "selected" : undefined }, "Non assegnati"),
+		data.agents.map((a) => h("option", { value: a.id, selected: filter.agent === a.id ? "selected" : undefined }, a.name)),
 	);
 	const toggleChip = (key, label) => {
 		const b = h("button.chip.board-chip", { type: "button", "aria-pressed": String(filter[key]) }, label);
@@ -228,7 +229,7 @@ export async function viewBoard(main) {
 	const cardDialog = (c, sendBack = false) => {
 		const mine = c.work?.personId === state.me.id;
 		const assignable = data.agents.filter((a) => a.canAssign || a.id === c.assignee);
-		const assignee = h("select", { "aria-label": "Assegnata a" }, h("option", { value: "" }, "Nessuno"), assignable.map((a) => h("option", { value: a.id, selected: a.id === c.assignee ? "selected" : undefined }, a.emoji ? `${a.emoji} ${a.name}` : a.name)));
+		const assignee = h("select", { "aria-label": "Assegnato a" }, h("option", { value: "" }, "Nessuno"), assignable.map((a) => h("option", { value: a.id, selected: a.id === c.assignee ? "selected" : undefined }, a.name)));
 		// «In corso» comes from Avvia, which hands the scheda to the agente; not from a list.
 		const status = h(
 			"select",
@@ -236,8 +237,8 @@ export async function viewBoard(main) {
 			BOARD_COLUMNS.filter(([v]) => v !== "in_corso" || c.status !== "da_fare").map(([v, l]) => h("option", { value: v, selected: v === c.status ? "selected" : undefined }, l)),
 		);
 		const due = h("input", { type: "date", value: c.due ?? "", "aria-label": "Scadenza" });
-		const after = h("input", { type: "text", value: nums(beforeOf(c)), placeholder: "Es. #3, #5", "aria-label": "Viene dopo le schede" });
-		const comment = h("textarea", { rows: 2, placeholder: c.status === "da_rivedere" ? "Cosa va cambiato, se la rimandi indietro" : mine && c.status === "in_corso" ? "Arriva anche all'agente, nella conversazione" : "Un commento" });
+		const after = h("input", { type: "text", value: nums(beforeOf(c)), placeholder: "Es. #3, #5", "aria-label": "Viene dopo gli incarichi" });
+		const comment = h("textarea", { rows: 2, placeholder: c.status === "da_rivedere" ? "Cosa va cambiato, se lo rimandi indietro" : mine && c.status === "in_corso" ? "Arriva anche all'agente, nella conversazione" : "Un commento" });
 		const events = c.events.filter((e) => e.kind !== "edited" || e.due !== undefined || e.after !== undefined).slice(-30);
 		// Lista di controllo (ADR 0075): each tick is saved at once.
 		const checkList = h("ul.board-checklist");
@@ -304,12 +305,12 @@ export async function viewBoard(main) {
 				h(
 					"div.ev-text",
 					e.kind === "created"
-						? "ha creato la scheda"
+						? "ha creato l'incarico"
 						: e.kind === "status"
-							? `l'ha spostata in «${BOARD_COLUMNS.find(([v]) => v === e.status)?.[1] ?? e.status}»`
+							? `l'ha spostato in «${BOARD_COLUMNS.find(([v]) => v === e.status)?.[1] ?? e.status}»`
 							: e.kind === "assigned"
 								? e.assignee
-									? `l'ha assegnata a ${agentOf(e.assignee)?.name ?? "un agente"}`
+									? `l'ha assegnato a ${agentOf(e.assignee)?.name ?? "un agente"}`
 									: `ha tolto l'assegnazione${e.text ? ` (${e.text})` : ""}`
 								: e.kind === "check"
 									? e.removed
@@ -322,7 +323,7 @@ export async function viewBoard(main) {
 									: e.kind === "edited" && e.after
 										? e.after.length
 											? `ha messo che viene dopo ${e.after.map((n) => `#${n}`).join(", ")}`
-											: "ha tolto le schede da aspettare"
+											: "ha tolto gli incarichi da aspettare"
 									: e.kind === "edited"
 									? e.due
 										? `ha messo la scadenza a ${dueInfo(e.due).label}`
@@ -363,7 +364,7 @@ export async function viewBoard(main) {
 								comment.focus();
 								return toast("Scrivi cosa va cambiato", true);
 							}
-							void act({ status: "in_corso", comment: comment.value }, mine ? `Scheda #${c.n} rimandata a ${agentOf(c.assignee)?.name ?? "l'agente"}` : `Scheda #${c.n} rimandata in «Da fare»: premi Avvia per lavorarci con l'agente`)();
+							void act({ status: "in_corso", comment: comment.value }, mine ? `Incarico #${c.n} rimandato a ${agentOf(c.assignee)?.name ?? "l'agente"}` : `Incarico #${c.n} rimandato in «Da fare»: premi Avvia per lavorarci con l'agente`)();
 						},
 					},
 					"Rimanda indietro",
@@ -417,7 +418,7 @@ export async function viewBoard(main) {
 			children.length
 				? h(
 						"div.board-children",
-						h("span.muted.small", `Sotto-schede: ${children.filter((x) => x.status === "fatto").length} di ${children.length} fatte`),
+						h("span.muted.small", `Sotto-incarichi: ${children.filter((x) => x.status === "fatto").length} di ${children.length} fatti`),
 						h(
 							"ul",
 							children.map((x) =>
@@ -430,13 +431,13 @@ export async function viewBoard(main) {
 						),
 					)
 				: null,
-			h("div.board-fields", h("label.field", h("span", "Assegnata a"), assignee), h("label.field", h("span", "Colonna"), status), c.status === "fatto" ? null : h("label.field", h("span", "Scadenza"), due), c.status === "fatto" ? null : h("label.field", h("span", "Viene dopo"), after)),
+			h("div.board-fields", h("label.field", h("span", "Assegnato a"), assignee), h("label.field", h("span", "Colonna"), status), c.status === "fatto" ? null : h("label.field", h("span", "Scadenza"), due), c.status === "fatto" ? null : h("label.field", h("span", "Viene dopo"), after)),
 			waitsOn(c).length
 				? h(
 						"p.small.board-after-line",
 						"Aspetta ",
 						waitsOn(c).flatMap((x, i) => [i ? ", " : "", h("a", { href: "#", onclick: (e) => (e.preventDefault(), dialog.close(), cardDialog(x)) }, `#${x.n} ${x.title}`)]),
-						c.queued ? `: poi parte da sola con ${c.queued.personId === state.me.id ? "te" : (data.people[c.queued.personId] ?? "chi l'ha avviata")}.` : c.status === "da_fare" && c.assignee ? ": se premi Avvia, parte da sola appena sono fatte." : ".",
+						c.queued ? `: poi parte da solo con ${c.queued.personId === state.me.id ? "te" : (data.people[c.queued.personId] ?? "chi l'ha avviato")}.` : c.status === "da_fare" && c.assignee ? ": se premi Avvia, parte da solo appena sono fatti." : ".",
 					)
 				: null,
 			c.due && c.status !== "fatto" ? h(`p.small.board-due-line.${dueInfo(c.due).level}`, `${dueInfo(c.due).text[0].toUpperCase()}${dueInfo(c.due).text.slice(1)}.`) : null,
@@ -460,7 +461,7 @@ export async function viewBoard(main) {
 							const wanted = after.value.match(/\d+/g) ?? [];
 							if (c.status !== "fatto" && wanted.join() !== beforeOf(c).map((x) => String(x.n)).join()) body.after = wanted.length ? wanted : null;
 							if (Object.keys(body).length === 0) return dialog.close();
-							void act(body, "Scheda aggiornata")();
+							void act(body, "Incarico aggiornato")();
 						},
 					},
 					"Salva",
@@ -470,14 +471,14 @@ export async function viewBoard(main) {
 					? h(
 							"button.icon-btn.board-delete",
 							{
-								title: "Elimina la scheda",
-								"aria-label": `Elimina la scheda #${c.n}`,
+								title: "Elimina l'incarico",
+								"aria-label": `Elimina l'incarico #${c.n}`,
 								onclick: async () => {
-									if (!confirm(`Eliminare la scheda #${c.n}?`)) return;
+									if (!confirm(`Eliminare l'incarico #${c.n}?`)) return;
 									try {
 										await api(`/api/board/${c.id}`, { method: "DELETE" });
 										dialog.close();
-										toast("Scheda eliminata");
+										toast("Incarico eliminato");
 										render();
 									} catch (error) {
 										toast(error.message, true);
@@ -509,14 +510,14 @@ export async function viewBoard(main) {
 	const newCard = (intent) => {
 		const title = h("input.board-new-title", { type: "text", maxlength: 120, placeholder: "Titolo dell’incarico", "aria-label": "Titolo" });
 		const description = h("textarea.board-new-desc", { rows: 4, placeholder: "Cosa fare e quando è finito: l'agente vede solo questo", "aria-label": "Descrizione" });
-		const assignee = h("select", h("option", { value: "" }, "Nessuno, per ora"), data.agents.filter((a) => a.canAssign).map((a) => h("option", { value: a.id }, a.emoji ? `${a.emoji} ${a.name}` : a.name)));
+		const assignee = h("select", h("option", { value: "" }, "Nessuno, per ora"), data.agents.filter((a) => a.canAssign).map((a) => h("option", { value: a.id }, a.name)));
 		if (route().instanceId && data.agents.some((a) => a.id === route().instanceId && a.canAssign)) assignee.value = route().instanceId;
 		const priority = h("select", PRIORITIES.map(([v, l]) => h("option", { value: v, selected: v === "normale" ? "selected" : undefined }, l)));
 		const due = h("input", { type: "date", "aria-label": "Scadenza" });
 		const parents = data.cards.filter((x) => !x.parent && x.status !== "fatto").sort((a, b) => a.n - b.n);
-		const parent = h("select", h("option", { value: "" }, "Nessuna"), parents.map((x) => h("option", { value: x.id }, `#${x.n} ${x.title}`)));
+		const parent = h("select", h("option", { value: "" }, "Nessuno"), parents.map((x) => h("option", { value: x.id }, `#${x.n} ${x.title}`)));
 		const opens = data.cards.filter((x) => x.status !== "fatto").sort((a, b) => a.n - b.n);
-		const after = h("select", h("option", { value: "" }, "Nessuna, parte subito"), opens.map((x) => h("option", { value: x.id }, `#${x.n} ${x.title}`)));
+		const after = h("select", h("option", { value: "" }, "Nessuno, parte subito"), opens.map((x) => h("option", { value: x.id }, `#${x.n} ${x.title}`)));
 		const alone = h("input", { type: "checkbox" });
 		const aloneRow = h("label.board-alone", { hidden: true }, alone, h("span", aloneLabel));
 		// «Si ripete» (ADR 0069): only for a scheda handed to an agente.
@@ -544,11 +545,11 @@ export async function viewBoard(main) {
 		const ok = h("button.btn.accent", "Crea");
 		const parentRow = parents.length ? h("label.field", h("span", "Fa parte di"), parent) : null;
 		const dueRow = h("label.field", h("span", "Scadenza"), due);
-		const afterRow = opens.length ? h("label.field", h("span", "Viene dopo la scheda"), after) : null;
+		const afterRow = opens.length ? h("label.field", h("span", "Viene dopo l'incarico"), after) : null;
 		// What most schede do not need folds away: a date, a parent, one to wait for.
 		const more = h(
 			"details.board-new-more",
-			h("summary", h("span", `Scadenza${parentRow ? (afterRow ? ", sotto-scheda" : " e sotto-scheda") : ""}${afterRow ? " e ordine" : ""}`), h("small", "facoltativi"), h("span.fold-chevron", icon("down"))),
+			h("summary", h("span", `Scadenza${parentRow ? (afterRow ? ", sotto-incarico" : " e sotto-incarico") : ""}${afterRow ? " e ordine" : ""}`), h("small", "facoltativi"), h("span.fold-chevron", icon("down"))),
 			h("div.board-fields", dueRow, parentRow),
 			afterRow,
 		);
@@ -560,7 +561,7 @@ export async function viewBoard(main) {
 			h("div.board-fields", h("label.field", h("span", "Affida a"), assignee), h("label.field", h("span", "Priorità"), priority)),
 			repeatRow,
 			more,
-			h("p.muted.small", "Se la affidi a un agente, ci lavora subito in una conversazione con te e la sposta in «Da rivedere» quando ha finito. Se si ripete, ogni volta nasce una scheda nuova che parte con te, come se premessi Avvia."),
+			h("p.muted.small", "Se lo affidi a un agente, ci lavora subito in una conversazione con te e lo sposta in «Da rivedere» quando ha finito. Se si ripete, ogni volta nasce un incarico nuovo che parte con te, come se premessi Avvia."),
 			aloneRow,
 			h("div.actions", ok, h("button.btn.ghost", { onclick: () => dialog.close() }, "Annulla")),
 		);
@@ -578,7 +579,7 @@ export async function viewBoard(main) {
 				if (due.validity.badInput) throw new Error("La scadenza non è una data completa");
 				const { card } = await api("/api/board", { method: "POST", body: { title: title.value, description: description.value, priority: priority.value, ...(assignee.value ? { assignee: assignee.value, auto: alone.checked } : {}), ...(parent.value ? { parent: parent.value } : {}), ...(due.value ? { due: due.value } : {}), ...(after.value ? { after: [after.value] } : {}) } });
 				dialog.close();
-				toast(card.status === "in_corso" ? `Scheda #${card.n} affidata a ${agentOf(card.assignee)?.name}` : card.queued ? `Scheda #${card.n}: ${started(card).toLowerCase()}` : `Scheda #${card.n} creata`);
+				toast(card.status === "in_corso" ? `Incarico #${card.n} affidato a ${agentOf(card.assignee)?.name}` : card.queued ? `Incarico #${card.n}: ${started(card).toLowerCase()}` : `Incarico #${card.n} creato`);
 				render();
 			} catch (error) {
 				ok.disabled = false;
@@ -606,14 +607,14 @@ export async function viewBoard(main) {
 		const toggle = async () => {
 			try {
 				await api(`/api/board/routines/${r.id}`, { method: "PUT", body: { paused: !r.paused } });
-				toast(r.paused ? "Riparte alla prossima volta" : "In pausa: non nascono schede finché non la riprendi");
+				toast(r.paused ? "Riparte alla prossima volta" : "In pausa: non nascono incarichi finché non lo riprendi");
 				render();
 			} catch (error) {
 				toast(error.message, true);
 			}
 		};
 		const remove = () =>
-			confirmDialog("Non ripeterla più?", `«${r.title}» non crea più schede. Quelle già create restano sulla board.`, "Togli", () =>
+			confirmDialog("Non ripeterlo più?", `«${r.title}» non crea più incarichi. Quelli già creati restano.`, "Togli", () =>
 				api(`/api/board/routines/${r.id}`, { method: "DELETE" })
 					.then(() => {
 						toast("Non si ripete più");
@@ -630,9 +631,9 @@ export async function viewBoard(main) {
 				h("b", r.title),
 				h(
 					"p.muted.small",
-					[agent ? agent.name : "agente non disponibile", r.whenText, r.personId === state.me.id ? null : `impostata da ${data.people[r.personId] ?? "una persona"}`, r.paused ? "in pausa" : `la prossima ${whenNext(r.next)}`, r.auto ? "da solo" : null, last ? `ultima #${last.n}` : null].filter(Boolean).join(" · "),
+					[agent ? agent.name : "agente non disponibile", r.whenText, r.personId === state.me.id ? null : `impostato da ${data.people[r.personId] ?? "una persona"}`, r.paused ? "in pausa" : `la prossima ${whenNext(r.next)}`, r.auto ? "da solo" : null, last ? `ultimo #${last.n}` : null].filter(Boolean).join(" · "),
 				),
-				r.problem ? h("p.small.board-routine-problem", `L'ultima volta non è partita: ${r.problem}.`) : null,
+				r.problem ? h("p.small.board-routine-problem", `L'ultima volta non è partito: ${r.problem}.`) : null,
 			),
 			h("div.row-gap", h("button.btn.small.ghost", { onclick: toggle }, r.paused ? "Riprendi" : "Pausa"), h("button.btn.small.ghost", { onclick: remove }, "Togli")),
 		);

@@ -1,5 +1,7 @@
 # 0109: Chi sta facendo cosa
 
+> Aggiornata dall'[ADR 0125](0125-stato-unico-degli-agenti-e-console-piu-chiara.md): la console non mostra più occupato o libero con la durata, ma uno stato solo calcolato dal server: Al lavoro, Aspetta te, In coda, Libero.
+
 `agent_list` ([ADR 0042](0042-agenti-che-si-scrivono.md)) dava solo nome, ID e una riga sul mestiere di ogni collega. Un agente non poteva sapere che il collega era occupato, né su cosa, e scriveva alla cieca; la pagina Agenti non diceva all'owner chi stava lavorando. I dati c'erano già: lo stato di ogni esecuzione ([ADR 0105](0105-stato-stop-e-storico-del-lavoro.md)) e le schede «In corso» assegnate agli agenti ([ADR 0050](0050-board.md), [0061](0061-agenti-da-soli.md)).
 
 ## Decisione

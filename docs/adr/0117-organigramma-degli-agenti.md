@@ -1,5 +1,7 @@
 # Organigramma degli agenti
 
+> Aggiornata dall'[ADR 0125](0125-stato-unico-degli-agenti-e-console-piu-chiara.md): prima del primo salvataggio la console elenca i permessi che cambiano e chiede conferma; un segno dice sempre se i permessi sono decisi a mano o dall'organigramma.
+
 Mario (26 ottobre 2026): «sarebbe figo definire un organigramma in cui definiamo ruoli e team, ownership su attività» e «stiamo creando un'azienda di agenti AI». Ogni agente ha già le sue cose: istruzioni e tono (ADR 0041), memoria, procedure, connettori, task e sentinelle, raccolti nel suo pannello (ADR 0114). Mancava il loro insieme. Le squadre pronte (ADR 0068) scrivevano chi coordina dentro le istruzioni al momento della creazione, e chi parla con chi era una lista di caselle per agente (ADR 0042): niente diceva chi fa cosa nell'azienda, chi risponde a chi, a chi passare una richiesta che non è tua.
 
 ## Decisione

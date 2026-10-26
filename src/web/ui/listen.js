@@ -62,13 +62,13 @@ export function boardNote(entry) {
 			h("div.meta", fmt.time(entry.at)),
 			h(
 				"div.brief-card",
-				h("a.brief-head", { href: "#/board" }, h("span.fold-glyph", icon("board")), h("span.brief-text", h("small", `Scheda #${n} dalla board`), h("b", title))),
-				rest ? h("details.brief-more", h("summary", h("span", "Cosa ha chiesto la board"), h("span.fold-chevron", icon("down"))), h("div.body", rest)) : null,
+				h("a.brief-head", { href: "#/board" }, h("span.fold-glyph", icon("board")), h("span.brief-text", h("small", `Incarico #${n}`), h("b", title))),
+				rest ? h("details.brief-more", h("summary", h("span", "Cosa chiede l'incarico"), h("span.fold-chevron", icon("down"))), h("div.body", rest)) : null,
 			),
 		);
 	}
 	const goOn = /^\[Scheda #(\d+)\] Vai avanti da solo/.exec(text);
-	if (goOn) return h("div.msg.board-step", { title: text }, icon("board"), h("span", `Scheda #${goOn[1]}: la board ha detto di andare avanti`), h("span.when", fmt.time(entry.at)));
+	if (goOn) return h("div.msg.board-step", { title: text }, icon("board"), h("span", `Incarico #${goOn[1]}: va avanti da solo`), h("span.when", fmt.time(entry.at)));
 	return null;
 }
 
