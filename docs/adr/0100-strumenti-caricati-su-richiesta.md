@@ -1,6 +1,6 @@
 # Gli strumenti dei registri caricati su richiesta
 
-> Sostituito dall'[ADR 0121](0121-registri-sostituiti-da-code-run-e-file.md): i registri non ci sono più e `tool_search` è stato tolto: gli strumenti non si caricano più su richiesta.
+> Sostituito dall'[ADR 0121](0121-registri-sostituiti-da-code-run-e-file.md): i registri non ci sono più. Il meccanismo resta per gli strumenti dei connettori: [ADR 0122](0122-strumenti-dei-connettori-caricati-su-richiesta.md).
 
 L'agente generale riceveva 76 strumenti a ogni richiesta al modello. I 25 dei registri dell'attività (fatture, preventivi, spese, clienti, magazzino, IVA e gli altri) da soli pesano circa 140 mila caratteri di schema, circa 35 mila token: pagati a ogni turno, anche per un saluto o una mail.
 

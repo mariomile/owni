@@ -22,6 +22,10 @@ describe("routing report: first-tool accuracy is not outcome success", () => {
 		expect(scoreRouting({ id: "hello", expect: [] }, { ...turn, tools: [] }).status).toBe("passed");
 		expect(scoreRouting(c, { ...turn, tools: [] }).status).toBe("failed");
 	});
+	it("ignores tool_search only when it is followed by an actual tool", () => {
+		expect(scoreRouting(c, { ...turn, tools: ["tool_search", "code_run"] }).status).toBe("passed");
+		expect(scoreRouting({ id: "hello", expect: [] }, { ...turn, tools: ["tool_search"] }).status).toBe("failed");
+	});
 	it("does not invent an accuracy for zero selected cases", () => {
 		const report = routingReport({ selected: [], rows: [], selectedModel });
 		expect(report).toMatchObject({ status: "error", measuredCases: 0, firstToolAccuracy: null, actualModels: [] });

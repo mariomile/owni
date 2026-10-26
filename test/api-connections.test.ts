@@ -63,7 +63,14 @@ async function boot() {
 	};
 	const thread = (await api("/api/instances/owni/dm", {})).thread;
 	const entries = async () => (await api(`/api/instances/owni/threads/${thread.id}`)).entries as { from: string; text?: string }[];
+	const loaded = new Set<string>();
 	const reply = async (text: string, count = 1): Promise<string> => {
+		// Connector tools are deferred (ADR 0122): the first call of one loads it, as the model does.
+		const name = /^\/tool (\w+__\w+) /.exec(text)?.[1];
+		if (name !== undefined && !loaded.has(name)) {
+			loaded.add(name);
+			await reply(`/tool tool_search ${JSON.stringify({ query: name })}`);
+		}
 		const before = (await entries()).filter((e) => e.from === "owni").length;
 		if (text !== "") await api(`/api/instances/owni/threads/${thread.id}/messages`, { text });
 		for (const start = Date.now(); Date.now() - start < 20_000; ) {

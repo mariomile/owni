@@ -63,7 +63,7 @@ import { checkedUrl, publicAddress, WebFetchRefused } from "./core/web-fetch.ts"
 import { readPage } from "./core/watches.ts";
 import { skillMenuEntry } from "./core/skills.ts";
 import { webHostAllowed } from "./core/policy.ts";
-import type { DurableEngine } from "./core/engine.ts";
+import type { DurableEngine, OwniTool } from "./core/engine.ts";
 import { EgressDenied, NotFound, UserNotAllowed } from "./core/errors.ts";
 import { instanceId as toInstanceId, tenantId as toTenantId } from "./core/ids.ts";
 import { readJsonFile, updateJsonFile } from "./core/locked-json.ts";
@@ -735,7 +735,11 @@ export async function startOwni(config: OwniConfig, options: OwniOptions = {}): 
 					policy: policyOf(record),
 					onProposed: (proposal) => notifyApprovers(record.id, proposal),
 				})),
-				...(await mcp.connect(await connectorStore(record.id).list())),
+				// Connector tools reach the model only once it loads them with tool_search (ADR 0122).
+				// The not-connected placeholder stays in sight, so the model can say a sign-in is needed.
+				...(await mcp.connect(await connectorStore(record.id).list())).map(
+					(tool): OwniTool => (tool.name.endsWith("__non_collegato") ? tool : { ...tool, deferred: true }),
+				),
 			];
 			return { tools: readOnlyInBriefs(tools, isBriefThread), close: () => mcp.close() };
 		},

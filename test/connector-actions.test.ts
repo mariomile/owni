@@ -65,7 +65,7 @@ async function boot(url: string, category: CatalogEntry["category"] = "lavoro") 
 	const chat = async (as: typeof api) => {
 		const thread = (await as("/api/instances/owni/dm", {})).thread;
 		const entries = async () => (await as(`/api/instances/owni/threads/${thread.id}`)).entries as { from: string; text?: string }[];
-		const reply = async (text: string, count = 1): Promise<string> => {
+		const answer = async (text: string, count = 1): Promise<string> => {
 			const before = (await entries()).filter((e) => e.from === "owni").length;
 			if (text !== "") await as(`/api/instances/owni/threads/${thread.id}/messages`, { text });
 			for (const start = Date.now(); Date.now() - start < 20_000; ) {
@@ -75,7 +75,17 @@ async function boot(url: string, category: CatalogEntry["category"] = "lavoro") 
 			}
 			throw new Error("no reply");
 		};
-		return { reply };
+		const loaded = new Set<string>();
+		const reply = async (text: string, count = 1): Promise<string> => {
+			// Connector tools are deferred (ADR 0122): the first call of one loads it, as the model does.
+			const name = /^\/tool (\w+__\w+) /.exec(text)?.[1];
+			if (name !== undefined && !loaded.has(name)) {
+				loaded.add(name);
+				await answer(`/tool tool_search ${JSON.stringify({ query: name })}`);
+			}
+			return answer(text, count);
+		};
+		return { reply, answer };
 	};
 	return { owni, api, loginWith, chat, dataDir: config.dataDir };
 }
@@ -83,6 +93,19 @@ async function boot(url: string, category: CatalogEntry["category"] = "lavoro") 
 const NOTE = (text: string) => `/tool demo__create_note ${JSON.stringify({ text, owni_reason: "Segno la nota che mi hai chiesto" })}`;
 
 describe("connector tools that change something wait for a person (ADR 0025)", () => {
+	it("a connector tool reaches the model only once tool_search loads it, and stays (ADR 0122)", async () => {
+		const d = await demo();
+		const { api, chat } = await boot(d.url);
+		const { answer } = await chat(api);
+		const add = '/tool demo__add {"a":2,"b":3}';
+		expect(await answer(add)).not.toContain("Fatto. 5");
+		expect(d.calls).toEqual([]);
+		expect(await answer('/tool tool_search {"query":"demo__add"}')).toContain("Caricati: demo__add");
+		expect(await answer(add)).toBe("Fatto. 5");
+		expect(await answer(add)).toBe("Fatto. 5");
+		expect(d.calls).toHaveLength(2);
+	});
+
 	it("read-only tools run at once; a write is asked, approved once and run once, without Owni's reason", async () => {
 		const d = await demo();
 		const { owni, api, chat } = await boot(d.url);
@@ -237,7 +260,8 @@ describe("connector tools that change something wait for a person (ADR 0025)", (
 		expect(audit.filter((e) => e.type === "connector_action.expired")).toEqual([expect.objectContaining({ told: false, reason: "stale" })]);
 		const thread = (await api("/api/instances/owni/threads")).threads[0];
 		const entries = (await api(`/api/instances/owni/threads/${thread.id}`)).entries as { from: string }[];
-		expect(entries.filter((e) => e.from === "owni")).toHaveLength(1);
+		// The tool loaded and the request asked: no notice after them.
+		expect(entries.filter((e) => e.from === "owni")).toHaveLength(2);
 	});
 
 	it("another person can neither see nor decide someone's request; the owner can", async () => {
