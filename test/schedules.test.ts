@@ -3,7 +3,7 @@ import { piDurableEngine } from "../src/core/adapters/pi-durable.ts";
 import { BRIEF_INSTRUCTION } from "../src/core/brief.ts";
 import { OwniRuntime, type Reply } from "../src/core/index.ts";
 import { Scheduler } from "../src/core/scheduler.ts";
-import { ScheduleError, ScheduleStore } from "../src/core/schedules.ts";
+import { SCHEDULE_LIMITS, ScheduleError, ScheduleStore } from "../src/core/schedules.ts";
 import { createScheduleTools } from "../src/core/tools/schedule-tools.ts";
 import { FAUX_MODEL, tempDataDir, waitFor } from "./helpers.ts";
 
@@ -113,6 +113,20 @@ describe("tasks programmati", () => {
 		await expect(store.create({ ...base, instruction: " ", when: { at: "2026-10-16T08:00:00Z" } }, now)).rejects.toThrow("Empty");
 		await expect(store.create({ ...base, when: { cron: "0 0 31 2 *", timeZone: "UTC" } }, now)).rejects.toThrow(ScheduleError);
 		await expect(store.create({ ...base, when: { cron: "0,59 0,23 * * *", timeZone: "UTC" } }, now)).rejects.toThrow("more often than every 5 minutes");
+	});
+
+	it("the cap counts the tasks still to run, so ended ones never block a new one", async () => {
+		const store = new ScheduleStore(tempDataDir());
+		const base = { instruction: "x", channel: "test", threadId: "t", createdBy: { kind: "instance" } as const };
+		const now = new Date("2026-10-15T08:00:00Z");
+		const made = [];
+		for (let i = 0; i < SCHEDULE_LIMITS.maxPerInstance; i++) made.push(await store.create({ ...base, when: { at: "2026-10-16T08:00:00Z" } }, now));
+		await expect(store.create({ ...base, when: { at: "2026-10-16T08:00:00Z" } }, now)).rejects.toThrow(`At most ${SCHEDULE_LIMITS.maxPerInstance}`);
+		await store.advance(made[0]!, "2026-10-16T08:00:00Z", new Date("2026-10-16T08:00:01Z"));
+		await store.disable(made[1]!, "gone");
+		await store.create({ ...base, when: { at: "2026-10-17T08:00:00Z" } }, now);
+		await store.create({ ...base, when: { at: "2026-10-17T08:00:00Z" } }, now);
+		expect(await store.list()).toHaveLength(SCHEDULE_LIMITS.maxPerInstance + 2);
 	});
 
 	it("a daily 02:30 runs once on the night the clocks go back", async () => {

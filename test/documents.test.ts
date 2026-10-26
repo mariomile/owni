@@ -389,7 +389,9 @@ describe("signed files (.p7m)", () => {
 		expect(documentKind("x.p7m", opaque)).toBeUndefined();
 	});
 
-	it("a small signed text or CSV is read as text, the signature said; anything else is not", () => {
+	it("a small signed text, CSV or XML is read as text, the signature said; anything else is not", () => {
+		const fattura = '<?xml version="1.0"?><p:FatturaElettronica versione="FPR12"><ImportoTotaleDocumento>122.00</ImportoTotaleDocumento></p:FatturaElettronica>';
+		expect(signedPlainText("IT01234567890_00001.xml.p7m", p7m(Buffer.from(fattura)))).toEqual({ text: fattura, note: SIGNED_NOTE });
 		expect(signedPlainText("elenco.csv.p7m", p7m(Buffer.from("﻿nome;importo\nRossi;12,50\n")))).toEqual({ text: "nome;importo\nRossi;12,50\n", note: SIGNED_NOTE });
 		expect(signedPlainText("nota.TXT.p7m", p7m(Buffer.from("perché", "latin1")))?.text).toBe("perché");
 		expect(signedPlainText("nota.pdf.p7m", p7m(Buffer.from("testo")))).toBeUndefined();

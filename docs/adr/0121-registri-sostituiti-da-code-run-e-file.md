@@ -22,9 +22,9 @@ I 25 registri e tutto quello che esisteva solo per loro non ci sono più.
 
 Resta, perché serve anche senza registri:
 
-- **I file firmati `.p7m`** si aprono come il documento che contengono (`p7m.ts`), con la firma segnalata e non verificata. Un `.p7m` che contiene una fattura XML non ha più il riepilogo.
+- **I file firmati `.p7m`** si aprono come il documento che contengono (`p7m.ts`), con la firma segnalata e non verificata. Un `.p7m` che contiene una fattura XML si legge come testo dell'XML, senza riepilogo.
 - **`vat_check`** per controllare una partita IVA.
-- **I promemoria e le attività programmate** (`schedule_*`), con il brief del mattino.
+- **I promemoria e le attività programmate** (`schedule_*`), con il brief del mattino. Il limite di 50 conta solo quelle ancora da fare: i promemoria dei ricontatti già salvati scattano una volta, restano finiti e non lo occupano.
 - **«Chi ha chiesto»** sulle card di approvazione: se la richiesta viene da un altro agente, la card lo dice.
 - **Gli allegati nelle mail** ([ADR 0056](0056-allegati-nelle-mail.md)): si allegano file del workspace.
 

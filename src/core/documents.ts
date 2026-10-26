@@ -170,11 +170,11 @@ export function unsignedData(data: Uint8Array): Uint8Array {
 const SIGNED_TEXT_BYTES = 1024 * 1024;
 
 /**
- * The text of a small signed text or CSV file (note.txt.p7m, elenco.csv.p7m), with the signature
+ * The text of a small signed text, CSV or XML file (note.txt.p7m, elenco.csv.p7m, a fattura elettronica .xml.p7m), with the signature
  * said, not verified; undefined for anything else, a broken envelope included.
  */
 export function signedPlainText(name: string, data: Uint8Array): { text: string; note: string } | undefined {
-	if (!/\.(txt|csv)\.p7m$/i.test(name) || data.length > SIGNED_TEXT_BYTES || !isSignedEnvelope(data)) return undefined;
+	if (!/\.(txt|csv|xml)\.p7m$/i.test(name) || data.length > SIGNED_TEXT_BYTES || !isSignedEnvelope(data)) return undefined;
 	let inner: Uint8Array;
 	try {
 		inner = signedContent(data);

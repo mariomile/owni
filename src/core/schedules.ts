@@ -31,7 +31,7 @@ export type NewSchedule = {
 	readonly kind?: "brief";
 };
 
-/** Limits that keep a runaway instance from flooding itself. */
+/** Limits that keep a runaway instance from flooding itself. The cap counts the tasks still to run: one ended or stopped is kept to be seen, not counted. */
 export const SCHEDULE_LIMITS = { maxPerInstance: 50, minIntervalMinutes: 5, maxInstructionChars: 2000 } as const;
 
 export class ScheduleError extends Error {
@@ -46,7 +46,7 @@ export class ScheduleStore {
 		if (input.instruction.trim() === "") throw new ScheduleError("Empty instruction");
 		if (input.instruction.length > SCHEDULE_LIMITS.maxInstructionChars) throw new ScheduleError(`Instruction over ${SCHEDULE_LIMITS.maxInstructionChars} characters`);
 		const all = await this.list();
-		if (all.length >= SCHEDULE_LIMITS.maxPerInstance) throw new ScheduleError(`At most ${SCHEDULE_LIMITS.maxPerInstance} schedules per instance`);
+		if (all.filter((s) => s.nextRunAt !== null).length >= SCHEDULE_LIMITS.maxPerInstance) throw new ScheduleError(`At most ${SCHEDULE_LIMITS.maxPerInstance} schedules per instance`);
 		const nextRunAt = firstRun(input.when, now);
 		const schedule: Schedule = { ...input, id: randomBytes(6).toString("hex"), nextRunAt, createdAt: now.toISOString() };
 		await this.save(schedule);

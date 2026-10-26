@@ -526,7 +526,7 @@ export async function startOwni(config: OwniConfig, options: OwniOptions = {}): 
 			// The brief's thread: read-only tools only, and vat_check on paper (its numbers would come from mail).
 			const briefs = runtime.schedules(record.tenantId, record.id);
 			const isBriefThread = async (thread: { channel: string; threadId: string }) => thread.channel === "web" && (await briefs.list()).some((s) => s.kind === "brief" && s.threadId === thread.threadId);
-						const tools = [
+			const tools = [
 				...createWorkspaceTools({ workspace: runtime.workspace(record.tenantId, record.id), sendFile: (f) => runtime.sendFile(record.tenantId, record.id, f) }),
 				...createDocumentTools({ workspace: runtime.workspace(record.tenantId, record.id) }),
 				...createChartTools({ workspace: runtime.workspace(record.tenantId, record.id), sendFile: (f) => runtime.sendFile(record.tenantId, record.id, f) }),

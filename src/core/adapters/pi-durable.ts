@@ -586,7 +586,7 @@ class GatedRequest extends AssistantMessageEventStream {
  *
  * Check at streamSimple, after Pi's asynchronous transcript/hooks/session preparation, separately
  * for each outgoing request. A mismatch resets only this generation to prepare: completed tools,
- * their memos, loaded deferred tools and billing stay intact. Polls check after their sleep; a
+ * their memos and billing stay intact. Polls check after their sleep; a
  * stale remote response is never applied to the conversation.
  */
 function currentRequestRegistry(registry: RegistryReader, models: MutableModels, options: EngineOpenOptions, ownModel: OwnModel, stopped: ReadonlySet<string>): RegistryReader {
