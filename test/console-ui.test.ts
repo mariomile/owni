@@ -43,7 +43,7 @@ describe("console served from the UI directory", () => {
 		for (const a of running.splice(0)) await a.stop();
 	});
 
-	it("serves every script with no-cache, so the modules of one deploy load together", async () => {
+	it("serves every script and the stylesheet with no-cache, so the files of one deploy load together", async () => {
 		const config = loadOwniConfig({ OWNI_DATA_DIR: tempDataDir(), OWNI_MODEL_PROVIDER: "faux", OWNI_WEB_PORT: "1" });
 		const owni = await startOwni({ ...config, web: { ...config.web, port: 0 } }, { schedulerIntervalMs: 3_600_000, log: () => {} });
 		running.push(owni);
@@ -54,7 +54,8 @@ describe("console served from the UI directory", () => {
 			expect(res.headers.get("cache-control"), file).toBe("no-cache");
 			expect(res.headers.get("content-type"), file).toContain("text/javascript");
 		}
-		expect((await fetch(`${base}/app.css`)).headers.get("cache-control")).toBe("public, max-age=300");
+		// A page drawn by a new script with the old stylesheet comes out unstyled (the organigramma after the 0.10.0 update).
+		expect((await fetch(`${base}/app.css`)).headers.get("cache-control")).toBe("no-cache");
 		expect((await fetch(`${base}/fonts/archivo-latin.woff2`)).status).toBe(200);
 		expect((await fetch(`${base}/login`)).headers.get("content-type")).toContain("text/html");
 	});
