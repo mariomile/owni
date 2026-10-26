@@ -1,6 +1,7 @@
 import { makeDocumentFile } from "../document-reader.ts";
 import { DocumentError, documentKind } from "../documents.ts";
-import type { OwniTool } from "../engine.ts";
+import { Type } from "typebox";
+import { defineOwniTool, type OwniTool } from "../engine.ts";
 import { MAKE_LIMITS, type MakeFormat, picturePaths } from "../make-document.ts";
 import { type Workspace, WorkspaceError } from "../workspace.ts";
 
@@ -15,7 +16,7 @@ const FORMATS: Record<string, { format: MakeFormat; label: string }> = { docx: {
 export function createDocumentTools(options: DocumentToolsOptions): OwniTool[] {
 	const { workspace } = options;
 	return [
-		{
+		defineOwniTool({
 			name: "document_create",
 			description:
 				"Create a Word (.docx), Excel (.xlsx) or PDF file in your workspace: a letter, a report, a price list, a table. Then send it with file_send in the same turn. " +
@@ -27,29 +28,27 @@ export function createDocumentTools(options: DocumentToolsOptions): OwniTool[] {
 				"amounts as € 1.200,00, percentages as 15%, dates as 2026-10-17 or 17/10/2026, formulas starting with = in English or Italian (=SUM(B2:B9), =SOMMA(B2:B9;C2)); start a cell with ' to keep it as text. " +
 				"Rows count from the top of the sheet: a sheet that starts with its table has the header in row 1 and data from row 2; text above a table moves it down. " +
 				"Instead of content, source converts a Markdown or CSV file already in the workspace (a CSV to Excel, a report to PDF).",
-			parameters: {
-				type: "object",
-				properties: {
-					path: { type: "string", description: "Where to save it, ending in .docx, .xlsx or .pdf, e.g. preventivi/rossi.pdf", minLength: 1, maxLength: 300 },
-					content: { type: "string", description: "The document in Markdown", maxLength: MAX_TEXT },
-					source: { type: "string", description: "Instead of content: a .md, .txt or .csv file in the workspace to convert", minLength: 1, maxLength: 300 },
+			parameters: Type.Object(
+				{
+					path: Type.String({ description: "Where to save it, ending in .docx, .xlsx or .pdf, e.g. preventivi/rossi.pdf", minLength: 1, maxLength: 300 }),
+					content: Type.Optional(Type.String({ description: "The document in Markdown", maxLength: MAX_TEXT })),
+					source: Type.Optional(Type.String({ description: "Instead of content: a .md, .txt or .csv file in the workspace to convert", minLength: 1, maxLength: 300 })),
 				},
-				required: ["path"],
-				additionalProperties: false,
-			},
+				{ additionalProperties: false },
+			),
 			replaySafe: true,
 			async execute(args) {
-				const path = String(args.path);
+				const path = args.path;
 				const kind = FORMATS[/\.([a-z]+)$/i.exec(path)?.[1]?.toLowerCase() ?? ""];
 				if (kind === undefined) return "Errore: il nome del file deve finire con .docx (Word), .xlsx (Excel) o .pdf.";
-				const hasContent = typeof args.content === "string" && args.content.trim() !== "";
-				const hasSource = typeof args.source === "string";
+				const hasContent = args.content !== undefined && args.content.trim() !== "";
+				const source = args.source;
+				const hasSource = source !== undefined;
 				if (hasContent === hasSource) return "Errore: dammi il testo in content oppure un file del workspace in source (uno dei due).";
 				try {
 					let text: string;
 					let csv = false;
 					if (hasSource) {
-						const source = String(args.source);
 						const data = await workspace.read(source);
 						if (documentKind(source, data) !== undefined) return `Errore: ${source} è già un documento: converto solo testo Markdown o CSV. Leggilo con file_read e scrivi il nuovo documento in content.`;
 						if (data.includes(0)) return `Errore: ${source} non è un file di testo.`;
@@ -74,7 +73,7 @@ export function createDocumentTools(options: DocumentToolsOptions): OwniTool[] {
 					throw error;
 				}
 			},
-		},
+		}),
 	];
 }
 

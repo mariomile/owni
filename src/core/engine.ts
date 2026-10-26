@@ -1,3 +1,4 @@
+import type { Static, TSchema } from "typebox";
 import type { ModelSelection } from "./registry.ts";
 import type { TurnOrigin } from "./turn-origin.ts";
 import type { LocalProviders } from "./local-providers.ts";
@@ -122,11 +123,14 @@ export type ToolResult = string | { readonly text: string; readonly images: read
 
 export type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
 
-/** An engine-agnostic tool. `parameters` is a JSON Schema object. */
-export type OwniTool = {
+/**
+ * An engine-agnostic tool. `parameters` is a TypeBox schema (a JSON Schema object): the engine
+ * checks the model's arguments against it before `execute`, which receives them typed.
+ */
+export type OwniTool<S extends TSchema = TSchema> = {
 	readonly name: string;
 	readonly description: string;
-	readonly parameters: Record<string, unknown>;
+	readonly parameters: S;
 	/**
 	 * true: after a crash mid-call the tool runs again, and finished `step()`s return their
 	 * stored result instead of running again. false: the model gets an "interrupted" result.
@@ -134,8 +138,13 @@ export type OwniTool = {
 	readonly replaySafe: boolean;
 	/** true: not offered to the model until it loads it with tool_search (ADR 0122). */
 	readonly deferred?: true;
-	execute(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult>;
+	execute(args: Static<S>, ctx: ToolContext): Promise<ToolResult>;
 };
+
+/** Writes a tool so `execute` gets the arguments typed by `parameters`; the result fits any list of tools. */
+export function defineOwniTool<S extends TSchema>(tool: OwniTool<S>): OwniTool {
+	return tool;
+}
 
 export type ToolContext = {
 	/**

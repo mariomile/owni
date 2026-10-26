@@ -1,4 +1,5 @@
-import type { OwniTool } from "../engine.ts";
+import { Type } from "typebox";
+import { defineOwniTool, type OwniTool } from "../engine.ts";
 import { hashIdempotency, type PracticeStore } from "../practice.ts";
 import type { CrmAdapter } from "../../connectors/types.ts";
 
@@ -10,18 +11,13 @@ export function createCrmTools(options: {
 }): OwniTool[] {
 	const { tenantId, crm, practices } = options;
 
-	const upsertLead: OwniTool = {
+	const upsertLead = defineOwniTool({
 		name: "crm_upsert_lead",
 		description: "Create or update a CRM lead for a pratica (idempotent on mailMessageId).",
-		parameters: {
-			type: "object",
-			properties: { praticaId: { type: "string" } },
-			required: ["praticaId"],
-			additionalProperties: false,
-		},
+		parameters: Type.Object({ praticaId: Type.String() }, { additionalProperties: false }),
 		replaySafe: true,
 		async execute(args, ctx) {
-			const praticaId = String(args.praticaId);
+			const praticaId = args.praticaId;
 			return ctx.step(`crm_upsert:${praticaId}`, async () => {
 				const pratica = await practices.get(praticaId);
 				if (!pratica) return JSON.stringify({ ok: false, error: "pratica_not_found" });
@@ -62,7 +58,7 @@ export function createCrmTools(options: {
 				}
 			});
 		},
-	};
+	});
 
 	return [upsertLead];
 }

@@ -1,6 +1,8 @@
 import { EgressDenied } from "../core/errors.ts";
 import { ConnectorActionError, ConnectorActionUncertain, CONNECTOR_ACTION_LIMITS } from "../core/connector-actions.ts";
-import type { OwniTool } from "../core/engine.ts";
+import { Type } from "typebox";
+import { StringEnum } from "../core/tool-schema.ts";
+import { defineOwniTool, type OwniTool } from "../core/engine.ts";
 import type { EgressPolicy } from "../core/policy.ts";
 import { egressFetch } from "./http.ts";
 
@@ -177,7 +179,8 @@ function said(name: string, response: ApiResponse): string {
 	return `Errore da ${name}: HTTP ${response.status}.${key}\n${response.text.slice(0, 4_000)}`;
 }
 
-const QUERY_SCHEMA = { type: "object", description: "Address parameters, name → value (text, number, boolean, or a list of these)", additionalProperties: true };
+// An open object: Type.Record would say patternProperties instead.
+const QUERY_SCHEMA = Type.Unsafe<Query>({ type: "object", description: "Address parameters, name → value (text, number, boolean, or a list of these)", additionalProperties: true });
 
 export type ApiToolsOptions = {
 	readonly connector: { readonly id: string; readonly name: string; readonly transport: ApiTransport };
@@ -192,38 +195,35 @@ export function apiTools({ connector, caller, toolName, propose }: ApiToolsOptio
 	const t = connector.transport;
 	const host = new URL(t.baseUrl).hostname;
 	const about = `[${connector.name}] HTTP API at ${t.baseUrl}.${t.notes ? ` What the owner says about it: ${t.notes}` : ""} Owni adds the key: never ask for it, never put it in path, query or body.`;
-	const read: OwniTool = {
+	const read = defineOwniTool({
 		name: toolName("read"),
 		description: `${about} Read: one GET request; returns the HTTP status and the body.`,
-		parameters: {
-			type: "object",
-			properties: { path: { type: "string", maxLength: API_LIMITS.maxPathChars, description: `Path under ${t.baseUrl}, e.g. "/customers/42". No host, no "?"` }, query: QUERY_SCHEMA },
-			additionalProperties: false,
-		},
+		parameters: Type.Object(
+			{ path: Type.Optional(Type.String({ maxLength: API_LIMITS.maxPathChars, description: `Path under ${t.baseUrl}, e.g. "/customers/42". No host, no "?"` })), query: Type.Optional(QUERY_SCHEMA) },
+			{ additionalProperties: false },
+		),
 		replaySafe: true,
 		execute: async (args, ctx) => {
 			try {
-				return said(connector.name, await caller.send({ method: "GET", path: args.path as string | undefined, query: args.query as Query | undefined }, ctx.signal));
+				return said(connector.name, await caller.send({ method: "GET", path: args.path, query: args.query }, ctx.signal));
 			} catch (error) {
 				return failure(connector.name, host, error);
 			}
 		},
-	};
-	const writeProperties = {
-		method: { type: "string", enum: [...WRITE_METHODS] },
-		path: { type: "string", maxLength: API_LIMITS.maxPathChars, description: `Path under ${t.baseUrl}. No host, no "?"` },
-		query: QUERY_SCHEMA,
-		body: { description: "JSON body (object or array); a string is sent as plain text" },
-	};
-	const write: OwniTool = {
+	});
+	const write = defineOwniTool({
 		name: toolName("write"),
 		description: `${about} Write: one POST, PUT, PATCH or DELETE request. Needs a person's approval: nothing happens until they approve this exact call; you get the outcome later in this conversation. Only when the person you are talking to asked for it. Put in owni_reason one sentence for the approver.`,
-		parameters: {
-			type: "object",
-			properties: { ...writeProperties, owni_reason: { type: "string", minLength: 3, maxLength: 300, description: "For the person approving: what this does and for whom, in Italian, plain words, no tool names" } },
-			required: ["method", "path", "owni_reason"],
-			additionalProperties: false,
-		},
+		parameters: Type.Object(
+			{
+				method: StringEnum(WRITE_METHODS),
+				path: Type.String({ maxLength: API_LIMITS.maxPathChars, description: `Path under ${t.baseUrl}. No host, no "?"` }),
+				query: Type.Optional(QUERY_SCHEMA),
+				body: Type.Optional(Type.Unknown({ description: "JSON body (object or array); a string is sent as plain text" })),
+				owni_reason: Type.String({ minLength: 3, maxLength: 300, description: "For the person approving: what this does and for whom, in Italian, plain words, no tool names" }),
+			},
+			{ additionalProperties: false },
+		),
 		replaySafe: true,
 		execute: async (args, ctx) => {
 			if (propose === undefined) return `Errore: ${connector.name} chiede l'approvazione per scrivere, ma qui non si può approvare.`;
@@ -236,10 +236,10 @@ export function apiTools({ connector, caller, toolName, propose }: ApiToolsOptio
 			} catch (error) {
 				return failure(connector.name, host, error);
 			}
-			const reason = typeof args.owni_reason === "string" && args.owni_reason.trim() !== "" ? args.owni_reason.trim() : `${call.method} su ${connector.name}`;
+			const reason = args.owni_reason.trim() !== "" ? args.owni_reason.trim() : `${call.method} su ${connector.name}`;
 			return ctx.step("propose", () => propose({ tool: "write", toolTitle: `${call.method} ${call.path}`, args: { ...call }, reason, destructive: call.method === "DELETE" }, ctx));
 		},
-	};
+	});
 	return [read, write];
 }
 
