@@ -12,15 +12,32 @@ starts here in the background and is waited for in slices, and files go in and o
   read PATH OFFSET LENGTH   base64 of up to LENGTH bytes from OFFSET
   idle SECONDS              the machine's first process: returns (and the machine stops) after
                             SECONDS with no call and no command running
+  egress apply nft|legacy   as root: only the public internet out (below), then checked
+  egress check              exit 0 only if those rules are the ones in place
+  egress rules              the rules for this /etc/resolv.conf, as JSON (for tests)
+  guard nft|legacy          the Docker computer's first process: egress apply, `ready`, then idles
 
 Run as root it drops to uid 1000 for everything that touches /work, and walks /work without
-following links. A command starts only once the machine's first process has sealed it off the
-network: the file `sealed`, written by owni-fly-init; on a machine ("rules" in it) the firewall
-is checked again, and the command gets no socket that the firewall does not see (vsock, packet).
+following links. A command starts only once the machine's first process has closed Fly's API
+inside it and put the egress rules in place: the file `ready`, written by owni-fly-init. The
+machine reaches the internet (ADR 0124), not the network around it: on a machine ("machine" in
+`ready`) the rules are checked again before each command, and a command gets no vsock socket,
+which talks to the host, no packet socket, which ordinary internet use never needs, no io_uring
+and no user namespace (no_side_sockets).
+
+The egress rules are the same for both providers: out to anything but loopback, link-local
+(the cloud's metadata endpoint, 169.254.169.254, hands out the host's credentials), private and
+CGNAT ranges (Alibaba's metadata is 100.100.100.200), Azure's host endpoint 168.63.129.16, "this
+network", benchmarking, documentation, multicast and reserved addresses, IPv6 unique-local (Fly's
+private network, AWS's metadata at fd00:ec2::254), site-local, and the IPv6 prefixes that wrap an
+IPv4 address (NAT64, 6to4, Teredo). IPv6 Neighbor Discovery stays allowed on the link. A resolver in /etc/resolv.conf at one of those addresses (Fly's fdaa::3, a cloud's
+VPC resolver) stays reachable on port 53 only. TCP is refused with a reset, which gVisor handles
+(its ICMP reject can hang a connect); the rest is dropped.
 """
 import base64
 import binascii
 import ctypes
+import ipaddress
 import json
 import os
 import resource
@@ -43,8 +60,27 @@ MAX_FILE = 1024 * 1024 * 1024
 FULL_FILE = 2048 * 512
 MAX_READ = 4 * 1024 * 1024
 MAX_PROCESSES = 128
-ENV = {"HOME": "/tmp", "MPLCONFIGDIR": "/tmp", "MPLBACKEND": "Agg", "LANG": "C.UTF-8", "PATH": "/usr/local/bin:/usr/bin:/bin"}
+# As the image's ENV (docker/computer.Dockerfile): pip install goes to /work/.local.
+ENV = {"HOME": "/tmp", "MPLCONFIGDIR": "/tmp", "MPLBACKEND": "Agg", "LANG": "C.UTF-8", "PYTHONUSERBASE": WORK + "/.local", "PATH": WORK + "/.local/bin:/usr/local/bin:/usr/bin:/bin"}
 AF_PACKET, AF_VSOCK = 17, 40
+CLONE_NEWUSER = 0x10000000
+RESOLV = os.environ.get("OWNI_RUN_RESOLV", "/etc/resolv.conf")
+DENY = "OWNI-DENY"
+DENIED = {
+    "iptables": [
+        "0.0.0.0/8", "10.0.0.0/8", "100.64.0.0/10", "168.63.129.16/32", "169.254.0.0/16", "172.16.0.0/12",
+        "192.0.0.0/24", "192.0.2.0/24", "192.168.0.0/16", "198.18.0.0/15", "198.51.100.0/24", "203.0.113.0/24",
+        "224.0.0.0/4", "240.0.0.0/4",
+    ],
+    # NAT64, 6to4 and Teredo carry an IPv4 address inside an IPv6 one: a way around the IPv4 list.
+    "ip6tables": ["64:ff9b::/96", "64:ff9b:1::/48", "2001::/32", "2002::/16", "fc00::/7", "fe80::/10", "fec0::/10", "ff00::/8"],
+}
+# IPv6 needs Neighbor Discovery (router and neighbor solicitations and advertisements) and the
+# errors that go with it, link-local and to the link's multicast only; without it a machine
+# loses its neighbors, and Fly's resolver with them, when the cache expires.
+NDP_TYPES = (1, 2, 3, 4, 133, 134, 135, 136)
+NDP_TO = ("fe80::/10", "ff02::/16")
+BACKENDS = ("nft", "legacy")
 
 
 class Refused(Exception):
@@ -109,11 +145,11 @@ def touch():
     os.utime(os.path.join(STATE, "last"))
 
 
-def strict():
-    """A real machine: owni-fly-init wrote "rules" in `sealed`."""
+def on_machine():
+    """A real machine: owni-fly-init wrote "machine" in `ready`."""
     try:
-        with open(os.path.join(STATE, "sealed")) as f:
-            return f.read().strip() == "rules"
+        with open(os.path.join(STATE, "ready")) as f:
+            return f.read().strip() == "machine"
     except FileNotFoundError:
         return False
 
@@ -143,12 +179,24 @@ def drop():
 
 
 def no_side_sockets():
-    """No vsock to the host and no raw packets: sockets the firewall would not see."""
+    """
+    No vsock (it talks to the host, not the internet) and no raw packets (spoofing and sniffing,
+    never needed to use the internet). No io_uring either: its own socket and connect operations
+    would open those sockets past this filter. And no user namespaces, the way into most of the
+    kernel's attack surface (nf_tables among it), whose bugs would let a command take the egress
+    rules or Fly's API: clone3 says ENOSYS, its flags being out of a filter's reach, and libc
+    falls back to clone, where CLONE_NEWUSER is refused.
+    """
     import seccomp  # python3-seccomp, in the fly image
 
     f = seccomp.SyscallFilter(defaction=seccomp.ALLOW)
     for family in (AF_VSOCK, AF_PACKET):
         f.add_rule(seccomp.ERRNO(97), "socket", seccomp.Arg(0, seccomp.EQ, family))  # EAFNOSUPPORT
+    for call in ("io_uring_setup", "io_uring_enter", "io_uring_register"):
+        f.add_rule(seccomp.ERRNO(1), call)  # EPERM
+    for call in ("unshare", "clone"):
+        f.add_rule(seccomp.ERRNO(1), call, seccomp.Arg(0, seccomp.MASKED_EQ, CLONE_NEWUSER, CLONE_NEWUSER))
+    f.add_rule(seccomp.ERRNO(38), "clone3")  # ENOSYS
     f.load()
 
 
@@ -188,16 +236,88 @@ def disk_kb():
     return total // 1024
 
 
-def firewall_holds():
-    """The seal still there: every OUTPUT policy is DROP."""
-    for table in ("/usr/sbin/iptables", "/usr/sbin/ip6tables"):
-        try:
-            rules = subprocess.run([table, "-S", "OUTPUT"], capture_output=True, text=True, timeout=10).stdout
-        except (OSError, subprocess.TimeoutExpired):
-            return False
-        if "-P OUTPUT DROP" not in rules.splitlines():
-            return False
+def nameservers():
+    found = []
+    try:
+        with open(RESOLV) as f:
+            for line in f:
+                parts = line.split()
+                if len(parts) >= 2 and parts[0] == "nameserver":
+                    try:
+                        found.append(ipaddress.ip_address(parts[1].split("%")[0]))
+                    except ValueError:
+                        pass
+    except FileNotFoundError:
+        pass
+    return found
+
+
+def egress_rules(servers):
+    """Per table, the OUTPUT chain and the deny chain exactly as `iptables -S CHAIN` prints them."""
+    rules = {}
+    for table, denied in DENIED.items():
+        version = 4 if table == "iptables" else 6
+        nets = [ipaddress.ip_network(n) for n in denied]
+        output = ["-P OUTPUT ACCEPT", "-A OUTPUT -o lo -j ACCEPT"]
+        for server in servers:
+            if server.version == version and any(server in net for net in nets):
+                for proto in ("udp", "tcp"):
+                    output.append(f"-A OUTPUT -d {server}/{server.max_prefixlen} -p {proto} -m {proto} --dport 53 -j ACCEPT")
+        if version == 6:
+            output += [f"-A OUTPUT -d {net} -p ipv6-icmp -m icmp6 --icmpv6-type {kind} -j ACCEPT" for net in NDP_TO for kind in NDP_TYPES]
+        output +=[f"-A OUTPUT -d {net} -j {DENY}" for net in denied]
+        deny = [f"-N {DENY}", f"-A {DENY} -p tcp -j REJECT --reject-with tcp-reset", f"-A {DENY} -j DROP"]
+        rules[table] = {"OUTPUT": output, DENY: deny}
+    return rules
+
+
+def restore_input(chains):
+    """The filter table for iptables-restore, applied in one step."""
+    lines = ["*filter", ":INPUT ACCEPT [0:0]", ":FORWARD ACCEPT [0:0]", ":OUTPUT ACCEPT [0:0]", f":{DENY} - [0:0]"]
+    lines += [rule for rule in chains["OUTPUT"] + chains[DENY] if rule.startswith("-A ")]
+    return "\n".join(lines + ["COMMIT"]) + "\n"
+
+
+def egress_apply(backend):
+    if backend not in BACKENDS:
+        fail("usage: owni-run egress apply nft|legacy")
+    for table, chains in egress_rules(nameservers()).items():
+        done = subprocess.run([f"/usr/sbin/{table}-{backend}-restore"], input=restore_input(chains), capture_output=True, text=True, timeout=30)
+        if done.returncode != 0:
+            fail(f"egress: {table}-{backend}-restore failed: {done.stderr.strip()[-500:]}")
+    with open(os.path.join(STATE, "egress"), "w") as f:
+        f.write(backend)
+    if not egress_holds():
+        fail("egress: the rules in place are not the ones applied")
+
+
+def egress_holds():
+    """The egress rules still the ones in place, with the backend that applied them."""
+    try:
+        with open(os.path.join(STATE, "egress")) as f:
+            backend = f.read().strip()
+    except FileNotFoundError:
+        return False
+    if backend not in BACKENDS:
+        return False
+    for table, chains in egress_rules(nameservers()).items():
+        for chain, expected in chains.items():
+            try:
+                shown = subprocess.run([f"/usr/sbin/{table}-{backend}", "-S", chain], capture_output=True, text=True, timeout=10)
+            except (OSError, subprocess.TimeoutExpired):
+                return False
+            if shown.returncode != 0 or shown.stdout.splitlines() != expected:
+                return False
     return True
+
+
+def guard(backend):
+    """The Docker computer's first process, as root with only NET_ADMIN: the rules, `ready`, then nothing."""
+    egress_apply(backend)
+    with open(os.path.join(STATE, "ready"), "w") as f:
+        f.write("container")
+    while True:
+        signal.pause()
 
 
 def supervised(here):
@@ -218,10 +338,10 @@ def jobs():
 
 
 def start(name, timeout_s, full):
-    if not os.path.exists(os.path.join(STATE, "sealed")):
-        fail("not sealed: the computer is not cut off from the network")
-    if strict() and not firewall_holds():
-        fail("not sealed: the computer is not cut off from the network (the firewall is gone)")
+    if not os.path.exists(os.path.join(STATE, "ready")):
+        fail("not ready: the machine's first process has not closed Fly's API and set the egress rules yet")
+    if on_machine() and not egress_holds():
+        fail("not ready: the egress rules are not in place")
     command = sys.stdin.read()
     here = job(name)
     # A command of before still running (its kill lost) is ended first: its last sweep would end this one.
@@ -259,7 +379,7 @@ def start(name, timeout_s, full):
 
 def supervise(here, command, timeout_s, full):
     oom_score(-1000)
-    sealed = strict()
+    machine = on_machine()
 
     def limits():
         size = FULL_FILE if full else MAX_FILE
@@ -267,7 +387,7 @@ def supervise(here, command, timeout_s, full):
         oom_score(1000)
         if ROOT:
             resource.setrlimit(resource.RLIMIT_NPROC, (MAX_PROCESSES, MAX_PROCESSES))
-        if sealed:
+        if machine:
             no_side_sockets()
         drop()
 
@@ -456,7 +576,7 @@ def number(text):
 
 def main(argv):
     if len(argv) < 2:
-        fail("usage: owni-run start|wait|kill|write|stat|read|idle ...")
+        fail("usage: owni-run start|wait|kill|write|stat|read|idle|egress|guard ...")
     what, args = argv[1], argv[2:]
     touch()
     try:
@@ -474,13 +594,22 @@ def main(argv):
             return read(args[0], number(args[1]), number(args[2]))
         if what == "idle" and len(args) == 1:
             return idle(number(args[0]))
+        if what == "egress" and args[:1] == ["apply"] and len(args) == 2:
+            egress_apply(args[1])
+            return out({"ok": True})
+        if what == "egress" and args == ["check"]:
+            return out({"ok": True}) if egress_holds() else fail("egress: the rules are not in place")
+        if what == "egress" and args == ["rules"]:
+            return out(egress_rules(nameservers()))
+        if what == "guard" and len(args) == 1:
+            return guard(args[0])
     except Refused as refused:
         fail(str(refused))
     except OSError as error:
         if error.errno == 40:  # ELOOP: a link where a file or folder was expected
             fail("not a file")
         fail(f"{type(error).__name__}: {error.strerror or error}")
-    fail("usage: owni-run start|wait|kill|write|stat|read|idle ...")
+    fail("usage: owni-run start|wait|kill|write|stat|read|idle|egress|guard ...")
 
 
 if __name__ == "__main__":

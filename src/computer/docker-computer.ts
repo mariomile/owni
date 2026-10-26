@@ -41,12 +41,14 @@ const FULL_FILE_BLOCKS = 2048;
 type Exec = { stdout: string; stderr: string; truncated: boolean; cut: boolean; exitCode: number | null };
 
 /**
- * A computer per instance as a container on this Docker host (ADR 0013): no network at all,
- * read-only root except /work (the instance's volume) and /tmp, no capabilities, no privilege
- * escalation, memory, CPU, process and file size limits, and optionally gVisor. Commands go in
- * with `docker exec` as uid 1000; the container itself idles as another user, so after each
- * command `kill -9 -1` ends everything the command left behind. Files go in and out with
- * Docker's archive API: the container has no interface to talk to.
+ * A computer per instance as a container on this Docker host (ADR 0013, ADR 0124): on Docker's
+ * default bridge, so it reaches the public internet and no published port reaches it, while its
+ * first process (root with only NET_ADMIN) refuses everything private: the cloud's metadata
+ * endpoint, the LAN, the host. No secrets in it, read-only root except /work (the instance's
+ * volume) and /tmp, no capabilities for commands, no privilege escalation, memory, CPU, process
+ * and file size limits, and optionally gVisor. Commands go in with `docker exec` as uid 1000; the
+ * first process is another user, so after each command `kill -9 -1` ends everything the command
+ * left behind. Files go in and out with Docker's archive API: nothing in the container listens.
  */
 export class DockerComputerProvider implements ComputerProvider {
 	private readonly locks = new PerKey();
@@ -219,24 +221,62 @@ export class DockerComputerProvider implements ComputerProvider {
 			}
 		}
 		if (info?.State?.Running !== true) await this.api("POST", `/containers/${name(key)}/start`, undefined, [204, 304]);
+		await this.ready(key);
 		this.touch(key);
+	}
+
+	/**
+	 * No command before the egress rules are in place: the first process applies them, and an
+	 * exec as root (which has NET_ADMIN, unlike uid 1000) reads them back. A first process that
+	 * could not apply them ends, and the container with it.
+	 */
+	private async ready(key: string): Promise<void> {
+		const check = ["/usr/local/bin/owni-run", "egress", "check"];
+		for (let i = 0; i < 50; i++) {
+			const out = await this.exec(key, check, API_TIMEOUT_MS, undefined, "0:0").catch((error: unknown) => {
+				if (/HTTP (404|409)/.test(message(error))) return undefined;
+				throw error;
+			});
+			if (out?.exitCode === 0) return this.noCapabilities(key);
+			if (out === undefined) break;
+			await new Promise((resolve) => setTimeout(resolve, 200));
+		}
+		const gvisor = this.gvisor() ? " (con gVisor serve runsc con --net-raw, vedi il runbook)" : "";
+		throw new ComputerError(`il computer non è partito: non ha potuto chiudere la strada verso gli indirizzi privati${gvisor}. L'operatore controlla il log di Docker del container ${name(key)}`);
+	}
+
+	/** Commands hold none of the first process's NET_ADMIN, or the rules would be theirs to remove: checked, not assumed. */
+	private async noCapabilities(key: string): Promise<void> {
+		const out = await this.exec(key, ["grep", "-E", "^Cap(Prm|Eff|Amb):", "/proc/self/status"], API_TIMEOUT_MS);
+		const sets = out.stdout.trim().split("\n").map((line) => line.split(/\s+/)[1]);
+		if (out.exitCode === 0 && sets.length === 3 && sets.every((set) => set !== undefined && /^0+$/.test(set))) return;
+		throw new ComputerError(`il computer non è partito: i comandi avrebbero delle capability e potrebbero togliere le regole di rete. L'operatore controlla il runtime di Docker e l'immagine ${this.options.image}`);
+	}
+
+	/** gVisor implements only the legacy iptables interface, through raw sockets. */
+	private gvisor(): boolean {
+		return this.options.runtime?.startsWith("runsc") === true;
 	}
 
 	private spec(key: string): Record<string, unknown> {
 		const memory = (this.options.memoryMb ?? 1024) * 1024 * 1024;
 		return {
 			Image: this.options.image,
-			// The container idles as nobody; commands run as 1000 and cannot signal it.
-			User: "65534:65534",
-			Cmd: ["sleep", "infinity"],
+			// The first process is root with only NET_ADMIN (and NET_RAW for gVisor's iptables): it
+			// applies the egress rules and idles. Commands run as 1000: they cannot signal it, and
+			// with no file capabilities and no setuid programs they hold none of its capabilities.
+			User: "0:0",
+			Cmd: ["/usr/local/bin/owni-run", "guard", this.gvisor() ? "legacy" : "nft"],
 			WorkingDir: "/work",
-			NetworkDisabled: true,
 			HostConfig: {
-				NetworkMode: "none",
+				// Out to the public internet (pip install, curl, git clone), not to private addresses
+				// (the guard's rules); no port published, so nothing comes in.
+				NetworkMode: "bridge",
 				Binds: [`${name(key)}:/work`],
 				ReadonlyRootfs: true,
-				Tmpfs: { "/tmp": "rw,nosuid,nodev,size=256m" },
+				Tmpfs: { "/tmp": "rw,nosuid,nodev,size=256m", "/run": "rw,nosuid,nodev,noexec,size=16m,mode=0755" },
 				CapDrop: ["ALL"],
+				CapAdd: this.gvisor() ? ["NET_ADMIN", "NET_RAW"] : ["NET_ADMIN"],
 				SecurityOpt: ["no-new-privileges:true"],
 				// An init as pid 1 reaps what commands leave behind.
 				Init: true,
@@ -269,12 +309,12 @@ export class DockerComputerProvider implements ComputerProvider {
 		return this.full.has(key);
 	}
 
-	/** A command in the computer as uid 1000, in /work, with its output and exit code. */
-	private async exec(key: string, cmd: string[], timeoutMs: number, signal?: AbortSignal): Promise<Exec> {
+	/** A command in the computer as uid 1000 (root only for the egress check), in /work, with its output and exit code. */
+	private async exec(key: string, cmd: string[], timeoutMs: number, signal?: AbortSignal, user = "1000:1000"): Promise<Exec> {
 		const created = (await this.api(
 			"POST",
 			`/containers/${name(key)}/exec`,
-			{ Cmd: cmd, AttachStdout: true, AttachStderr: true, Tty: false, User: "1000:1000", WorkingDir: "/work", Env: ["HOME=/tmp", "MPLCONFIGDIR=/tmp", "LANG=C.UTF-8"] },
+			{ Cmd: cmd, AttachStdout: true, AttachStderr: true, Tty: false, User: user, WorkingDir: "/work", Env: ["HOME=/tmp", "MPLCONFIGDIR=/tmp", "LANG=C.UTF-8"] },
 			[201],
 		)) as { Id?: string } | undefined;
 		const id = created?.Id;
