@@ -28,8 +28,7 @@ import { type BoardStore, dueText } from "../core/board.ts";
 import type { ScreenViews } from "../core/screen-views.ts";
 import type { RoutineStore } from "../core/board-routines.ts";
 import type { BoardReview, BoardWork } from "../core/board-work.ts";
-import { DEV_PROVIDER, MODEL_PROVIDERS, type ModelInfo, modelProvider, subscriptionProvider } from "../core/model-providers.ts";
-import { LocalProviderError } from "../core/local-providers.ts";
+import { DEV_PROVIDER, type ModelInfo } from "../core/model-providers.ts";
 import { WEB_HOST_PATTERN, withChannel, withConnector } from "../core/policy.ts";
 import { type GoogleAccounts, GoogleConsentError, type GoogleOAuth, type GoogleService, googleReturnQuery } from "../connectors/google.ts";
 import { ConnectorHttpError } from "../connectors/http.ts";
@@ -37,7 +36,6 @@ import { instanceId } from "../core/ids.ts";
 import type { InstanceRecord, ModelSelection } from "../core/registry.ts";
 import { type ChatModelChoice, ChatModelRefused, ChatModels } from "../core/chat-models.ts";
 import type { OwniRuntime } from "../core/runtime.ts";
-import { modelApiKeySecret } from "../core/secrets.ts";
 import { fence } from "../core/untrusted.ts";
 import { DEFAULT_COST_CAPS, type UsageLedger } from "../core/usage.ts";
 import { IMAGE_LIMITS, IMAGE_TOO_BIG, imageProblem } from "../core/images.ts";
@@ -53,6 +51,7 @@ import { filesRoutes, workspaceCall } from "./files-routes.ts";
 import { mine, mineWatch, scheduleRoutes } from "./schedule-routes.ts";
 import { approvalRoutes } from "./approval-routes.ts";
 import { channelRoutes } from "./channel-routes.ts";
+import { modelRoutes } from "./model-routes.ts";
 import { type AddRoute, type Handler, HttpError, type Route, readBody, readJson, STREAMED, send } from "./http.ts";
 import { screenRoutes } from "./screen-routes.ts";
 import { publicRun, runRoutes } from "./run-routes.ts";
@@ -302,6 +301,8 @@ export function createWebApp(options: WebAppOptions): Server {
 		if (thread === undefined || thread.personId !== person.id) throw new HttpError(404, "No such thread");
 		return record;
 	};
+	// The models of the console's chats (ADR 0036), with the instance's and the owner's keys.
+	const chats = new ChatModels(runtime, tenantId, { models: (provider) => options.models?.(provider) ?? [], serverModelKeys: options.serverModelKeys ?? [] });
 	const usageSummary = async () => ({ todayUsd: await options.usage.todaySpent(), softUsd: DEFAULT_COST_CAPS.softUsdPerDay, hardUsd: DEFAULT_COST_CAPS.hardUsdPerDay });
 
 	// --- session ---
@@ -1083,36 +1084,7 @@ export function createWebApp(options: WebAppOptions): Server {
 		return { ok: true };
 	});
 	// --- the model (ADR 0032): any provider Owni offers, with the server's key or the owner's ---
-	const chats = new ChatModels(runtime, tenantId, { models: (provider) => options.models?.(provider) ?? [], serverModelKeys: options.serverModelKeys ?? [] });
-	const keyOf = (provider: string) => chats.keyOf(provider);
-	const localProviders = runtime.localProviders(tenantId);
-	const providerStatus = async () => ({
-		localEnabled: localProviders !== undefined,
-		providers: [...(localProviders?.list() ?? []), ...(await Promise.all(MODEL_PROVIDERS.map(async (p) => ({ ...p, kind: "api-key", key: await keyOf(p.id) }))))],
-	});
-	route("GET", "/api/providers", "owner", providerStatus);
-	route("POST", "/api/providers/detect", "owner", async () => {
-		if (localProviders !== undefined) await localProviders.detect();
-		return providerStatus();
-	});
-	route("POST", "/api/providers/:provider/connect", "owner", async ({ params }) => {
-		const id = params[0];
-		if (localProviders === undefined || subscriptionProvider(id) === undefined) throw new HttpError(404, "Provider locale non disponibile");
-		try { return { provider: await localProviders.connect(id) }; }
-		catch (error) { if (error instanceof LocalProviderError) throw new HttpError(409, error.message); throw error; }
-	});
-	route("DELETE", "/api/providers/:provider", "owner", async ({ params }) => {
-		const id = params[0];
-		if (localProviders === undefined || subscriptionProvider(id) === undefined) throw new HttpError(404, "Provider locale non disponibile");
-		const users = (await runtime.registry.listInstances(tenantId)).filter((r) => r.model.provider === id);
-		if (users.length > 0) throw new HttpError(409, `Lo usa ${users.map((r) => r.name).join(", ")}: prima scegli un altro modello`);
-		localProviders.disconnect(id);
-		return { removed: true };
-	});
-	const offeredModels = (provider: string) => {
-		if (modelProvider(provider) === undefined || options.models === undefined || (subscriptionProvider(provider) !== undefined && localProviders === undefined)) throw new HttpError(404, "Provider non disponibile");
-		return options.models(provider);
-	};
+	modelRoutes(route, { runtime, tenantId, models: options.models, chats, knownInstance });
 	// A chat's own model (ADR 0036): the same choices as from Telegram and WhatsApp.
 	const chatProviders = (record: InstanceRecord, person: Person) => chats.providers(record, person.role === "owner");
 	const named = (model: ModelSelection) => chats.named(model);
@@ -1182,48 +1154,6 @@ export function createWebApp(options: WebAppOptions): Server {
 			// Disallowed, or its key removed, since the check.
 			throw error instanceof EgressDenied ? new HttpError(409, "Questo provider non è più disponibile per le chat") : error;
 		});
-	route("GET", "/api/instances/:id/model", "owner", async ({ params }) => {
-		const record = await knownInstance(params[0]);
-		return { model: record.model, providers: [...(localProviders?.list() ?? []), ...(await Promise.all(MODEL_PROVIDERS.map(async (p) => ({ ...p, key: await keyOf(p.id) }))))] };
-	});
-	route("GET", "/api/models/:provider", "owner", async ({ params }) => ({ models: offeredModels(params[0]) }));
-	route("PUT", "/api/instances/:id/model", "owner", async ({ params, req }) => {
-		const id = params[0];
-		await knownInstance(id);
-		const body = (await readJson(req)) as { provider?: unknown; modelId?: unknown; apiKey?: unknown };
-		const provider = typeof body.provider === "string" ? modelProvider(body.provider) : undefined;
-		if (provider === undefined || (subscriptionProvider(provider.id) !== undefined && localProviders === undefined)) throw new HttpError(400, "Scegli un provider dall'elenco");
-		const modelId = typeof body.modelId === "string" ? body.modelId : "";
-		if (!offeredModels(provider.id).some((m) => m.id === modelId)) throw new HttpError(400, `${provider.label} non ha il modello «${modelId}»`);
-		const apiKey = typeof body.apiKey === "string" ? body.apiKey.trim() : "";
-		const key = await keyOf(provider.id);
-		if (subscriptionProvider(provider.id) !== undefined) {
-			if (apiKey !== "") throw new HttpError(400, "Questo provider usa il tuo abbonamento, senza chiave API");
-			if (key !== "local") throw new HttpError(409, "Collega prima il tuo abbonamento nelle impostazioni Provider");
-		} else if (apiKey !== "") {
-			if (key === "server") throw new HttpError(400, `La chiave di ${provider.label} la mette il server: non serve la tua`);
-			if (!/^\S{8,500}$/.test(apiKey)) throw new HttpError(400, "La chiave non sembra giusta: incollala intera, senza spazi");
-			await runtime.secrets(tenantId).set(modelApiKeySecret(provider.id), apiKey);
-			// A key is the whole account's, not this instance's.
-			await runtime.audit(tenantId).append({ type: "secret.set", name: modelApiKeySecret(provider.id) });
-		} else if (key === "missing") {
-			throw new HttpError(400, `Serve la chiave di ${provider.label}`);
-		}
-		const record = await runtime.registry.setModel(tenantId, id, { provider: provider.id, modelId });
-		await runtime.reopen(tenantId, id);
-		return { model: record.model };
-	});
-	route("DELETE", "/api/model-keys/:provider", "owner", async ({ params }) => {
-		const provider = modelProvider(params[0]);
-		const key = provider === undefined ? "missing" : await keyOf(provider.id);
-		if (provider === undefined || key === "missing") throw new HttpError(404, "Nessuna chiave salvata per questo provider");
-		if (key === "server") throw new HttpError(409, `La chiave di ${provider.label} è del server: la toglie chi lo gestisce`);
-		const users = (await runtime.registry.listInstances(tenantId)).filter((r) => r.model.provider === provider.id);
-		if (users.length > 0) throw new HttpError(409, `La usa ${users.map((r) => r.name).join(", ")}: prima scegli un altro modello`);
-		await runtime.secrets(tenantId).delete(modelApiKeySecret(provider.id));
-		await runtime.audit(tenantId).append({ type: "secret.deleted", name: modelApiKeySecret(provider.id) });
-		return { removed: true };
-	});
 	// --- primo avvio: what is left to make the instance useful, checked from the real settings ---
 	route("GET", "/api/instances/:id/setup", "owner", async ({ person, params }) => {
 		const me = person;
