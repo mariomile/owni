@@ -24,25 +24,25 @@ import { applyTheme, refreshSetup } from "./session.js";
 /**
  * Every page of the console, in the order of the sidebar and of the command palette. `sidebar`: reached
  * from the sidebar (the rest sits in the account menu). `owner`: only for the owner. `when(instance)`:
- * shown only then. `count()`: the number beside it. A new page is its file in pages/, one row here and
- * one line in sw.js.
+ * shown only then. `href()`: where its link goes, when not `#/id`. `under`: the sidebar page it belongs
+ * to. `count()`: the number beside it. A new page is its file in pages/, one row here and one line in sw.js.
  */
 export const PAGES = [
-	{ id: "dm", label: "Messaggi diretti", group: "Lavoro", workspace: "conversations", palette: false, view: viewDm },
-	{ id: "canali", label: "Canali", group: "Lavoro", workspace: "conversations", when: () => state.instances.filter((i) => i.canChat).length > 1, view: viewRooms },
-	{ id: "board", label: "Lavori", group: "Lavoro", workspace: "work", sidebar: true, view: viewBoard },
-	{ id: "programmi", label: "Automazioni", group: "Lavoro", workspace: "work", view: viewPrograms },
-	{ id: "segreteria", label: "Pratiche commerciali", group: "Lavoro", workspace: "work", when: (i) => i?.hasSegreteria, view: viewSegreteria },
+	{ id: "dm", label: "Messaggi diretti", group: "Lavoro", palette: false, view: viewDm },
+	{ id: "canali", label: "Canali", group: "Lavoro", when: () => state.instances.filter((i) => i.canChat).length > 1, view: viewRooms },
+	{ id: "board", label: "Incarichi", group: "Lavoro", sidebar: true, view: viewBoard },
+	{ id: "programmi", label: "Automazioni", group: "Lavoro", sidebar: true, view: viewPrograms },
+	{ id: "segreteria", label: "Pratiche", group: "Lavoro", sidebar: true, when: () => state.instances.some((i) => i.hasSegreteria), href: () => instanceHref("segreteria", [], state.instances.find((i) => i.hasSegreteria)?.id), view: viewSegreteria },
 	{ id: "approvazioni", label: "Richiede te", group: "Lavoro", view: viewApprovals },
-	{ id: "task", label: "Orari e pagine da controllare", group: "Lavoro", workspace: "work", view: viewTasks },
-	{ id: "automazioni", label: "Eventi esterni", group: "Lavoro", workspace: "work", view: viewAutomations },
-	{ id: "agenti", label: "Agenti", group: "Gestione", workspace: "agents", view: viewAgents },
-	{ id: "organigramma", label: "Organigramma", group: "Gestione", workspace: "agents", owner: true, view: viewOrg },
-	{ id: "impostazioni", label: "Configurazione dell'agente", group: "Gestione", workspace: "agents", owner: true, view: viewSettings },
-	{ id: "inizia", label: "Primi passi", group: "Gestione", workspace: "agents", owner: true, view: viewStart },
-	{ id: "gestione", label: "Gestione", group: "Gestione", workspace: "management", view: viewManagement },
-	{ id: "persone", label: "Persone e accessi", group: "Gestione", workspace: "management", owner: true, view: viewPeople },
-	{ id: "attivita", label: "Attività e spesa", group: "Gestione", workspace: "management", view: viewActivity },
+	{ id: "task", label: "Orari e pagine da controllare", group: "Lavoro", under: "programmi", view: viewTasks },
+	{ id: "automazioni", label: "Eventi esterni", group: "Lavoro", under: "programmi", view: viewAutomations },
+	{ id: "agenti", label: "Agenti", group: "Gestione", view: viewAgents },
+	{ id: "organigramma", label: "Organigramma", group: "Gestione", owner: true, view: viewOrg },
+	{ id: "impostazioni", label: "Configurazione dell'agente", group: "Gestione", owner: true, view: viewSettings },
+	{ id: "inizia", label: "Primi passi", group: "Gestione", owner: true, view: viewStart },
+	{ id: "gestione", label: "Gestione", group: "Gestione", view: viewManagement },
+	{ id: "persone", label: "Persone e accessi", group: "Gestione", owner: true, view: viewPeople },
+	{ id: "attivita", label: "Attività e spesa", group: "Gestione", view: viewActivity },
 ];
 
 /** On the Mac app, which has no title bar, a band that moves the window (docs/desktop.md). */
@@ -51,11 +51,6 @@ export const windowDrag = () => document.documentElement.dataset.desktop === "ma
 function workspaceNav(item) {
 	const { view } = route();
 	const link = (label, href, active) => h("a", { href, "aria-current": active ? "page" : undefined }, label);
-	if (item.workspace === "work") return h("nav.workspace-nav", { "aria-label": "Lavori", ...windowDrag() },
-		link("Incarichi", "#/board", view === "board"),
-		link("Automazioni", "#/programmi", ["programmi", "task", "automazioni"].includes(view)),
-		state.instances.some((i) => i.hasSegreteria) ? link("Pratiche", instanceHref("segreteria", [], state.instances.find((i) => i.hasSegreteria)?.id), view === "segreteria") : null,
-	);
 	if ((item.id === "agenti" || item.id === "organigramma") && state.me.role === "owner") return h("nav.workspace-nav", { "aria-label": "Agenti", ...windowDrag() },
 		link("Agenti", "#/agenti", view === "agenti"),
 		link("Organigramma", "#/organigramma", view === "organigramma"),
@@ -185,7 +180,7 @@ export function renderRail() {
 	for (const item of items) {
 		const count = item.count?.() ?? 0;
 		const label = count > 0 ? `${item.label} (${count})` : item.label;
-		nav.append(h("a", { href: `#/${item.id}`, "aria-current": PAGES.find((p) => p.id === view)?.workspace === item.workspace ? "page" : undefined, "aria-label": label, title: label, onclick: closeRailOnPhone }, icon(item.id), h("span.label", item.label), count > 0 ? h("span.count", { "aria-hidden": "true" }, String(count)) : null));
+		nav.append(h("a", { href: item.href?.() ?? `#/${item.id}`, "aria-current": view === item.id || PAGES.find((p) => p.id === view)?.under === item.id ? "page" : undefined, "aria-label": label, title: label, onclick: closeRailOnPhone }, icon(item.id), h("span.label", item.label), count > 0 ? h("span.count", { "aria-hidden": "true" }, String(count)) : null));
 	}
 	// The rail like a team chat (ADR 0113): the canali, then a direct conversation per agente.
 	const row = (href, current, unread, mark, name, label) =>
