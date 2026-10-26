@@ -147,6 +147,24 @@ describe("fenced code and accessible copying", () => {
 		expect(tags(root, "img")).toHaveLength(0);
 	});
 
+	it("draws an openui-lang fence as a sandboxed frame, with the plain code block kept for when it draws nothing (ADR 0118)", () => {
+		const listeners: string[] = [];
+		vi.stubGlobal("addEventListener", (event: string) => void listeners.push(event));
+		vi.stubGlobal("MutationObserver", class { observe() {} });
+		vi.stubGlobal("document", { ...documentStub, documentElement: { dataset: {} }, querySelectorAll: () => [] });
+		const source = 'root = Card([CardHeader("Conti")])';
+		const root = renderMarkdown(`Ecco:\n\n\`\`\`openui-lang\n${source}\n\`\`\`\n\n\`\`\`openui\n${source}\n\`\`\``);
+		const boxes = all(root).filter((node) => node.className === "openui");
+		expect(boxes).toHaveLength(2);
+		expect(only(boxes[0]!, "iframe").attrs).toEqual({ src: "/openui/frame", sandbox: "allow-scripts", referrerpolicy: "no-referrer", title: "Risposta interattiva" });
+		expect(only(boxes[0]!, "iframe").className).toBe("openui-frame");
+		// The block reaches the frame by message, never as markup in the page.
+		expect(tags(root, "code")).toHaveLength(0);
+		expect(listeners).toEqual(["message"]);
+		// Other languages stay code, even with openui in their name.
+		expect(tags(renderMarkdown("```openuix\nx\n```\n\n```js openui\ny\n```"), "code").map((node) => node.textContent)).toEqual(["x", "y"]);
+	});
+
 	it("supports tilde fences, unclosed streaming fences and untrusted language metadata", () => {
 		const root = renderMarkdown("~~~python\nprint('ok')\n~~~\n\n```<svg/onload=alert(1)>\n**still code**");
 		expect(tags(root, "code").map((node) => node.textContent)).toEqual(["print('ok')", "**still code**"]);

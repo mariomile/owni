@@ -77,6 +77,7 @@ import { syncServerModelKeys, TenantSecrets } from "./core/secrets.ts";
 import { createCustomTools } from "./core/tools/custom-tools.ts";
 import { createChartTools } from "./core/tools/chart-tools.ts";
 import { createArtifactTools } from "./core/tools/artifact-tools.ts";
+import { createOpenuiTools } from "./core/tools/openui-tools.ts";
 import { TranscriptionNotAllowed } from "./core/recordings.ts";
 import { createDataTools } from "./core/tools/data-tools.ts";
 import { createDateTools } from "./core/tools/date-tools.ts";
@@ -686,6 +687,7 @@ export async function startOwni(config: OwniConfig, options: OwniOptions = {}): 
 								};
 					},
 				}),
+				...createOpenuiTools(),
 				...createDataTools({ workspace: runtime.workspace(record.tenantId, record.id) }),
 				...createDateTools({ timeZone: config.timeZone }),
 				...registerTools({ runtime, record, config, mail, quotes, expenses, schedules, invoiceScanner, isBriefThread, recurringEnv, subjects: { seam: subjectSeam(record), log } }),

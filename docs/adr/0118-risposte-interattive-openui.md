@@ -1,0 +1,36 @@
+# 0118: Risposte interattive nella chat (OpenUI)
+
+Un agente risponde con testo e tabelle in Markdown. Per alcune risposte serve di più: cifre da confrontare in un grafico o in schede, una scelta fra opzioni da cliccare, un modulo breve con i dettagli di una richiesta. Un artifact ([ADR 0112](0112-artifact-html-nella-conversazione.md)) è una pagina intera accanto alla conversazione, troppo per «quale dei tre preventivi mando?». [OpenUI](https://www.openui.com) è un linguaggio compatto per descrivere un'interfaccia (card, tabelle, grafici, bottoni, moduli) e una libreria che la disegna: il modello scrive il linguaggio dentro la risposta, la console lo disegna lì. Anche il linguaggio è scritto dal modello, quindi va trattato come codice non fidato.
+
+## Decisione
+
+- **Un blocco ```` ```openui-lang ```` nella risposta.** Il renderer Markdown della console riconosce il fence `openui-lang` (anche `openui`) e al posto del blocco di codice mette una risposta interattiva; il testo prima e dopo resta chat normale. Ogni blocco è un programma intero.
+- **Disegnato in un iframe sandbox su `/openui/frame`.** La pagina del riquadro è servita con `Content-Security-Policy: sandbox allow-scripts; default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src data: blob:; font-src 'self'; connect-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors 'self'`, senza `X-Frame-Options`. L'iframe ha `sandbox="allow-scripts"` e `referrerpolicy="no-referrer"`, mai `allow-same-origin`: origine opaca, niente cookie della sessione, niente chiamate alle API, niente rete. Script e stili vengono solo dal server di Owni.
+- **Si parlano solo per messaggi.** La console manda al riquadro il blocco e il tema (`openui-draw`, `openui-theme`); il riquadro manda indietro solo che è pronto, la sua altezza, che ha disegnato o che non ha disegnato niente, e le azioni (`openui-ready`, `openui-height`, `openui-drawn`, `openui-empty`, `openui-action`). La console accetta un messaggio solo dalla finestra di un suo riquadro. Il riquadro è alto quanto quello che disegna, fino a 4000 px, senza scroll interno, e si accorcia quando il disegno si accorcia.
+- **Un click scrive il messaggio successivo nella casella, non lo manda.** Un bottone con `@ToAssistant`, o l'invio di un modulo, mette nella casella della persona le parole dell'azione, poi i campi compilati (`- cliente: Rossi Srl`), poi il contesto; solo stringhe, al massimo 4000 caratteri, dopo quello che stava scrivendo. La persona lo legge e lo manda lei: nei messaggi diretti, nei thread e nei canali. Le parole dell'azione le sceglie il modello e possono essere diverse dall'etichetta del bottone, e il contesto non si vede nel riquadro: mandarle da sole farebbe dire alla persona cose che non ha visto, e un agente che ha letto una mail ostile potrebbe usarle per scavalcare le regole su consenso e memoria. In un canale il messaggio porta davanti `@nome` dell'agente che ha scritto la risposta, perché arrivi a lui e non all'ultimo che ha parlato.
+- **I link nel testo li apre la console.** Il riquadro non può aprire finestre: un click su un link nel testo della risposta arriva alla console come `@OpenUrl`.
+- **`@OpenUrl` apre solo pagine web.** La console apre l'indirizzo in una nuova scheda con `noopener,noreferrer`, e solo se è `http` o `https`.
+- **Il tool `openui_guide` insegna il linguaggio.** La guida è lunga, quindi non sta nel prompt: l'agente la legge quando gli serve. Viene da `generateSystemPrompt` di OpenUI per i componenti che il bundle disegna, con l'apertura e le regole di Owni al posto di quelle per un'app intera: mai dati inventati, etichette nella lingua della persona, niente immagini (dal riquadro non si caricano), `Query()` e `Mutation()` non disponibili, un esempio di modulo in italiano senza immagini. La genera `scripts/openui-guide.mjs` in `src/core/openui-guide.ts`, da rigenerare quando cambia il bundle. Il tool funziona solo in una conversazione della console; altrove risponde all'agente di usare il testo.
+- **OpenUI è incluso nel repo, non è una dipendenza.** `src/web/openui/` ha il bundle per il browser 0.2.1 (React incluso) e i suoi stili, con la licenza MIT di Thesys; il bundle si chiede con `?v=0.2.1` e resta in cache `immutable`, la pagina del riquadro e il suo script sono `no-cache`. Il NOTICE lo cita. L'app per Mac lo copia con il server (`bundle-server.sh`), l'immagine Docker con `src`; il service worker non lo mette nella shell.
+- **Colori e caratteri di Owni.** `frame.css` riporta OpenUI al bianco e nero della console, chiaro o scuro come il tema scelto, con Archivo e Monaspace Neon. I font del riquadro hanno un indirizzo loro (`?frame`) con `Access-Control-Allow-Origin: *`, perché una copia già in cache senza quell'intestazione non vale per un'origine opaca; le scorciatoie tipografiche di OpenUI nominano Inter, e un override le riporta ad Archivo.
+- **Se non disegna niente, torna codice.** Un blocco che OpenUI non sa leggere si vede come il blocco di codice che era, e così un riquadro che dopo 15 secondi non ha ancora detto di aver disegnato (il bundle non si è caricato, il browser ha rifiutato i suoi script).
+
+## Rispetto agli artifact
+
+Un artifact è una pagina autonoma da tenere aperta, con versioni, download e una scheda sua; una risposta interattiva è un pezzo della risposta, che si usa lì e finisce in un messaggio. Il primo è HTML libero con i CDN, la seconda è un linguaggio con componenti fissi e nessuno script del modello. La descrizione di `openui_guide` lo dice al modello.
+
+## Alternative scartate
+
+- **Componenti nostri e un formato nostro.** Owni dovrebbe inventare il linguaggio, insegnarlo al modello e disegnarlo: OpenUI è già fatto per questo, ha la guida per il modello e una licenza MIT.
+- **`srcdoc` nell'iframe.** Prenderebbe il CSP della console, che non permette script inline; una rotta vera ha il suo CSP e un indirizzo che si mette in cache.
+- **Disegnare OpenUI nella pagina della console.** Il blocco lo scrive il modello: con l'origine della console un difetto della libreria o del linguaggio arriverebbe alla sessione della persona.
+- **`Query()` e `Mutation()` di OpenUI**, cioè il blocco che chiama dei tool da solo. Vorrebbe dire aprire al riquadro una strada verso Owni; l'agente fa il lavoro con i suoi tool, approvazioni comprese, e poi mostra il risultato.
+
+## Conseguenze
+
+- Niente dati dal vivo: quello che il blocco mostra è quello che l'agente ci ha scritto. Le regole della guida chiedono che ogni numero venga dalla conversazione, da un file o da un tool.
+- Il riquadro non manda niente fuori: niente rete, niente moduli verso altri indirizzi, niente immagini esterne. Restano i link `@OpenUrl`, che apre la persona con un click, come un link in chat.
+- Un'azione è un messaggio della persona, con i suoi diritti: un modulo non fa niente che la persona non potesse scrivere, e niente parte senza che lei lo mandi. Costa un tocco in più su Invio.
+- Sui canali esterni (Telegram, Slack, posta) il blocco non si disegna; il tool lo dice all'agente.
+- Il bundle pesa 3,2 MB più 400 KB di stili, scaricati la prima volta che compare una risposta interattiva e poi tenuti in cache.
+- I test automatici disegnano il riquadro in Chromium. L'app per Mac usa WebKit (WKWebView): il CSP del riquadro va guardato lì a mano.

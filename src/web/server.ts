@@ -265,6 +265,9 @@ export function createWebApp(options: WebAppOptions): Server {
 		const name = file.split(sep).join("/");
 		if (extname(name) in TYPES) STATIC[`/${name}`] = name;
 	}
+	// The OpenUI frame (ADR 0118), next to the UI and outside the service worker's shell.
+	const openuiDir = join(options.uiDir, "..", "openui");
+	const OPENUI: Record<string, string> = { "/openui/frame": "frame.html", "/openui/frame.js": "frame.js", "/openui/frame.css": "frame.css", "/openui/openui-bundle.min.js": "openui-bundle.min.js", "/openui/openui-styles.css": "openui-styles.css" };
 	const routes: Route[] = [];
 	const automationRate = new AutomationRate();
 	const route = (method: string, path: string, auth: Route["auth"], handler: Handler) =>
@@ -2387,6 +2390,7 @@ export function createWebApp(options: WebAppOptions): Server {
 		// the control plane, which checks sleep and subscription first.
 		if (options.cell !== undefined && !sameSecret(String(req.headers["x-owni-proxy"] ?? ""), cellProxyToken)) return send(res, 404, { error: "Not found" });
 		if (req.method === "GET" && url.pathname in STATIC) return serveStatic(res, STATIC[url.pathname] as string);
+		if (req.method === "GET" && Object.hasOwn(OPENUI, url.pathname)) return serveOpenui(res, OPENUI[url.pathname] as string);
 		const hook = /^\/hooks\/telegram\/([a-z0-9_-]+)$/.exec(url.pathname);
 		if (req.method === "POST" && hook !== null) return telegramHook(req, res, hook[1] as string);
 		const phone = /^\/hooks\/phone\/([a-z0-9_-]+)$/.exec(url.pathname);
@@ -2613,7 +2617,22 @@ export function createWebApp(options: WebAppOptions): Server {
 		const data = await readFile(join(options.uiDir, name));
 		// Scripts are checked at every visit (and the service worker with them): the modules of one deploy must load together, never a mix with an older cached one.
 		const cache = name === "index.html" ? "no-store" : extname(name) === ".js" ? "no-cache" : name.startsWith("fonts/") ? "public, max-age=31536000, immutable" : "public, max-age=300";
-		res.writeHead(200, { "content-type": TYPES[extname(name)] ?? "application/octet-stream", "cache-control": cache });
+		// A font is always fetched with CORS: the OpenUI frame, with no origin of its own, may use them too.
+		res.writeHead(200, { "content-type": TYPES[extname(name)] ?? "application/octet-stream", "cache-control": cache, ...(name.startsWith("fonts/") ? { "access-control-allow-origin": "*" } : {}) });
+		res.end(data);
+	}
+
+	/** A file of the OpenUI frame: the page itself sandboxed by its CSP, the bundle cached for its version. */
+	async function serveOpenui(res: ServerResponse, name: string): Promise<void> {
+		const data = await readFile(join(openuiDir, name));
+		if (name === "frame.html") {
+			res.removeHeader("x-frame-options");
+			res.writeHead(200, { "content-type": TYPES[".html"] as string, "content-security-policy": OPENUI_CSP, "cache-control": "no-cache" });
+			res.end(data);
+			return;
+		}
+		const cache = name.startsWith("openui-") ? "public, max-age=31536000, immutable" : "no-cache";
+		res.writeHead(200, { "content-type": TYPES[extname(name)] as string, "cache-control": cache });
 		res.end(data);
 	}
 
@@ -2655,6 +2674,12 @@ const ARTIFACT_CSP =
 	"script-src 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://unpkg.com https://cdnjs.cloudflare.com; " +
 	"style-src 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com https://cdnjs.cloudflare.com https://fonts.googleapis.com; " +
 	"font-src https://fonts.gstatic.com data:; img-src data: blob: https://cdn.jsdelivr.net https://unpkg.com https://cdnjs.cloudflare.com; media-src data: blob:; connect-src 'none'; form-action 'none'; frame-ancestors 'self'";
+
+/**
+ * The OpenUI frame (ADR 0118): an opaque origin like an artifact, but it runs only Owni's own files
+ * (the vendored bundle and the frame script), loads no pictures or fonts from elsewhere, and sends nothing out.
+ */
+const OPENUI_CSP = "sandbox allow-scripts; default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src data: blob:; font-src 'self'; connect-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors 'self'";
 
 function sandboxedHtml(res: ServerResponse, data: Buffer, download?: string): typeof STREAMED {
 	res.removeHeader("x-frame-options");
