@@ -69,9 +69,8 @@ export function boardRoutes(route: AddRoute, { runtime, tenantId, people, board,
 		return r;
 	};
 	const routineView = (r: Routine) => ({ ...r, whenText: describeWhen(r.when) });
-	route("GET", "/api/board", "person", async ({ person }) => {
+	route("GET", "/api/board", "person", async ({ person: p }) => {
 		const { store, work, routines } = boardOf();
-		const p = person as Person;
 		const agents = await boardAgents();
 		const all = store.list();
 		const seen = await Promise.all(all.map((c) => work.visibleTo(c, p.id)));
@@ -87,9 +86,8 @@ export function boardRoutes(route: AddRoute, { runtime, tenantId, people, board,
 			auto: { replies: BOARD_LIMITS.autoRounds, hours: BOARD_LIMITS.autoMs / 3_600_000 },
 		};
 	});
-	route("POST", "/api/board", "person", async ({ person, req }) => {
+	route("POST", "/api/board", "person", async ({ person: p, req }) => {
 		const { work } = boardOf();
-		const p = person as Person;
 		const body = (await readJson(req)) as Record<string, unknown>;
 		const { priority, assignee, due, after: afterRefs } = cardBody(body);
 		const after = await afterOf(afterRefs, p);
@@ -115,10 +113,9 @@ export function boardRoutes(route: AddRoute, { runtime, tenantId, people, board,
 		await runtime.audit(tenantId).append({ type: "board.card_created", cardId: card.id, personId: p.id, ...(card.assignee === undefined ? {} : { assignee: card.assignee }), ...(card.parent === undefined ? {} : { parent: card.parent }) });
 		return { card };
 	});
-	route("PUT", "/api/board/:id", "person", async ({ person, params, req }) => {
+	route("PUT", "/api/board/:id", "person", async ({ person: p, params, req }) => {
 		const { work } = boardOf();
-		const p = person as Person;
-		const card = await visibleCard(params[0] as string, p);
+		const card = await visibleCard(params[0], p);
 		const body = (await readJson(req)) as Record<string, unknown>;
 		const { priority, status, assignee, due, check, after: afterRefs } = cardBody(body);
 		const after = await afterOf(afterRefs, p);
@@ -140,19 +137,17 @@ export function boardRoutes(route: AddRoute, { runtime, tenantId, people, board,
 		return { card: changed };
 	});
 	// Avvia: the work on a scheda waiting in «Da fare» starts, with whoever presses it.
-	route("POST", "/api/board/:id/start", "person", async ({ person, params, req }) => {
+	route("POST", "/api/board/:id/start", "person", async ({ person: p, params, req }) => {
 		const { work } = boardOf();
-		const p = person as Person;
-		const card = await visibleCard(params[0] as string, p);
+		const card = await visibleCard(params[0], p);
 		const body = (await readJson(req)) as { auto?: unknown };
 		const started = await work.startWaiting(card.id, p.id, { kind: "person", id: p.id }, body.auto === true).catch(boardError);
 		await runtime.audit(tenantId).append({ type: "board.card_started", cardId: card.id, personId: p.id, assignee: started.assignee ?? "", auto: started.auto !== undefined });
 		return { card: started };
 	});
-	route("PUT", "/api/board/routines/:id", "person", async ({ person, params, req }) => {
+	route("PUT", "/api/board/routines/:id", "person", async ({ person: p, params, req }) => {
 		const { work } = boardOf();
-		const p = person as Person;
-		const r = ownRoutine(params[0] as string, p);
+		const r = ownRoutine(params[0], p);
 		const body = (await readJson(req)) as { paused?: unknown };
 		if (typeof body.paused !== "boolean") throw new HttpError(400, "paused: true o false");
 		const pausing = body.paused;
@@ -173,9 +168,8 @@ export function boardRoutes(route: AddRoute, { runtime, tenantId, people, board,
 		await runtime.audit(tenantId).append({ type: "board.routine_changed", routineId: r.id, personId: p.id, paused: pausing });
 		return { routine: routineView(changed) };
 	});
-	route("DELETE", "/api/board/routines/:id", "person", async ({ person, params }) => {
-		const p = person as Person;
-		const r = ownRoutine(params[0] as string, p);
+	route("DELETE", "/api/board/routines/:id", "person", async ({ person: p, params }) => {
+		const r = ownRoutine(params[0], p);
 		try {
 			routinesOf().remove(r.id);
 		} catch (error) {
@@ -184,10 +178,9 @@ export function boardRoutes(route: AddRoute, { runtime, tenantId, people, board,
 		await runtime.audit(tenantId).append({ type: "board.routine_deleted", routineId: r.id, personId: p.id });
 		return { ok: true };
 	});
-	route("DELETE", "/api/board/:id", "person", async ({ person, params }) => {
+	route("DELETE", "/api/board/:id", "person", async ({ person: p, params }) => {
 		const { store, work } = boardOf();
-		const p = person as Person;
-		const card = await visibleCard(params[0] as string, p);
+		const card = await visibleCard(params[0], p);
 		if (p.role !== "owner" && !(card.createdBy.kind === "person" && card.createdBy.id === p.id)) throw new HttpError(403, "Solo chi l'ha creata o l'owner la elimina");
 		try {
 			store.remove(card.id);

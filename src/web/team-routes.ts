@@ -33,9 +33,8 @@ export function teamRoutes(route: AddRoute, deps: TeamRoutesDeps): void {
 	}));
 	// One squadra at a time: two at once would pick the same free IDs.
 	let queue: Promise<unknown> = Promise.resolve();
-	route("POST", "/api/teams", "owner", async ({ person, req }) => {
+	route("POST", "/api/teams", "owner", async ({ person: p, req }) => {
 		if (!deps.canCreate) throw new HttpError(501, "Questa installazione non crea agenti dalla console");
-		const p = person as Person;
 		const body = (await readJson(req)) as { team?: unknown };
 		const chosen = typeof body.team === "string" ? team(body.team) : undefined;
 		if (chosen === undefined) throw new HttpError(400, "Squadra sconosciuta");
