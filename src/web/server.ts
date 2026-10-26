@@ -7,7 +7,7 @@ import type { WebAction, WebActionResult } from "../core/web-actions.ts";
 import type { GoogleAction, GoogleActionResult } from "../core/google-actions.ts";
 import { desktopConnector, type DesktopPermission, type DesktopPermissions } from "../core/desktop.ts";
 import type { PhoneAdapter } from "../channels/phone.ts";
-import type { WhatsAppAdapter, WhatsAppTemplate, WhatsAppWebhook } from "../channels/whatsapp.ts";
+import type { WhatsAppAdapter, WhatsAppTemplate } from "../channels/whatsapp.ts";
 import type { CatalogEntry } from "../connectors/catalog.ts";
 import type { ConnectorStatus, ConnectorStore } from "../connectors/mcp.ts";
 import type { McpOAuth } from "../connectors/mcp-oauth.ts";
@@ -15,8 +15,6 @@ import { isApprover, OWNER, type Approver } from "../core/approvals.ts";
 import type { ConnectorAction, ConnectorActionResult } from "../core/connector-actions.ts";
 import { NotFound } from "../core/errors.ts";
 import { SHARED, subjectOf } from "../core/memory.ts";
-import { callAutomation } from "../core/automation-call.ts";
-import { AUTOMATION_LIMITS, AutomationRate } from "../core/automations.ts";
 import { checkPersona, cleanName, type Persona, PersonaError } from "../core/persona.ts";
 import { AGENT_CHANNEL } from "../core/agent-messages.ts";
 import { runtimeActivity } from "../core/agent-activity.ts";
@@ -52,7 +50,8 @@ import { connectorRoutes } from "./connector-routes.ts";
 import { peopleRoutes } from "./people-routes.ts";
 import { roomError, roomsRoutes } from "./rooms-routes.ts";
 import { settingsRoutes } from "./settings-routes.ts";
-import { type AddRoute, type Handler, HttpError, type Route, readBody, readJson, STREAMED, send } from "./http.ts";
+import { webhooks } from "./hooks.ts";
+import { type AddRoute, type Handler, HttpError, type Route, readJson, STREAMED, send } from "./http.ts";
 import { screenRoutes } from "./screen-routes.ts";
 import { runRoutes } from "./run-routes.ts";
 import type { RoomEntry, Rooms } from "./rooms.ts";
@@ -215,7 +214,6 @@ export function createWebApp(options: WebAppOptions): Server {
 	const openuiDir = join(options.uiDir, "..", "openui");
 	const OPENUI: Record<string, string> = { "/openui/frame": "frame.html", "/openui/frame.js": "frame.js", "/openui/frame.css": "frame.css", "/openui/openui-bundle.min.js": "openui-bundle.min.js", "/openui/openui-styles.css": "openui-styles.css" };
 	const routes: Route[] = [];
-	const automationRate = new AutomationRate();
 	const route: AddRoute = (method, path, auth, handler) =>
 		routes.push({ method, pattern: new RegExp(`^${path.replace(/:[a-z]+/g, "([^/]+)")}$`), auth, handler: handler as unknown as Handler });
 
@@ -267,6 +265,7 @@ export function createWebApp(options: WebAppOptions): Server {
 	/** An entry of a chat or a stanza with the name of the model that wrote it. */
 	const shown = <E extends WebEntry | RoomEntry>(entry: E): E => (entry.model === undefined ? entry : { ...entry, model: named(entry.model) });
 	const usageSummary = async () => ({ todayUsd: await options.usage.todaySpent(), softUsd: DEFAULT_COST_CAPS.softUsdPerDay, hardUsd: DEFAULT_COST_CAPS.hardUsdPerDay });
+	const { phoneHook, automationHook, whatsappHook, telegramHook } = webhooks({ runtime, tenantId, phoneHooks: options.phoneHooks, whatsappHooks: options.whatsappHooks, telegramHooks: options.telegramHooks, log: options.log });
 
 	// --- session ---
 	route("POST", "/api/login", "none", async ({ req, res }) => {
@@ -593,132 +592,6 @@ export function createWebApp(options: WebAppOptions): Server {
 		res.end();
 	}
 
-	/**
-	 * Twilio's webhook for an instance's phone number: a call starting, a phrase heard, a wait for
-	 * the reply. Signed with the account's auth token over our public URL and the parameters.
-	 * Answers TwiML.
-	 */
-	async function phoneHook(req: IncomingMessage, res: ServerResponse, url: URL, instance: string): Promise<void> {
-		const adapter = options.phoneHooks?.get(instance);
-		// A number still pointing here after it was disconnected: refused before it is answered, so it costs nothing.
-		if (adapter === undefined) {
-			res.writeHead(200, { "content-type": "text/xml; charset=utf-8" });
-			return void res.end('<?xml version="1.0" encoding="UTF-8"?><Response><Reject/></Response>');
-		}
-		let raw: Buffer;
-		try {
-			raw = await readBody(req, 64 * 1024);
-		} catch (error) {
-			if (error instanceof HttpError) return send(res, error.status, { error: error.message });
-			throw error;
-		}
-		const params = new URLSearchParams(raw.toString("utf8"));
-		if (!adapter.signed(adapter.hookUrl(url.search), params, req.headers["x-twilio-signature"] as string | undefined)) return send(res, 403, { error: "Forbidden" });
-		try {
-			// The caller hung up while the reply was awaited: Twilio closes the request.
-			const gone = new AbortController();
-			res.on("close", () => {
-				if (!res.writableFinished) gone.abort();
-			});
-			const xml = await adapter.handle(url.searchParams, params, gone.signal);
-			res.writeHead(200, { "content-type": "text/xml; charset=utf-8", "cache-control": "no-store" });
-			res.end(xml);
-		} catch (error) {
-			options.log?.(`phone webhook: not handled: ${error instanceof Error ? error.message : String(error)}`);
-			res.writeHead(200, { "content-type": "text/xml; charset=utf-8" });
-			res.end(adapter.apology());
-		}
-	}
-
-	/**
-	 * An automazione called by another service (ADR 0060). The token in `Authorization: Bearer`,
-	 * `X-Owni-Token` or `?token=`; anything wrong answers 404, so the address reveals nothing.
-	 */
-	async function automationHook(req: IncomingMessage, res: ServerResponse, url: URL, instance: string, id: string): Promise<void> {
-		let raw: Buffer;
-		try {
-			raw = await readBody(req, AUTOMATION_LIMITS.bodyBytes);
-		} catch (error) {
-			if (error instanceof HttpError) return send(res, error.status, { error: error.message });
-			throw error;
-		}
-		const bearer = /^Bearer\s+(\S+)$/i.exec(String(req.headers.authorization ?? ""))?.[1];
-		const token = bearer ?? String(req.headers["x-owni-token"] ?? url.searchParams.get("token") ?? "");
-		const key = req.headers["idempotency-key"] ?? req.headers["x-idempotency-key"];
-		let result;
-		try {
-			result = await callAutomation(runtime, { tenant: tenantId, instance, id, token, body: raw, contentType: req.headers["content-type"], key: typeof key === "string" ? key : undefined }, automationRate);
-		} catch (error) {
-			// Logged by path only: the query may hold the token.
-			options.log?.(`automazione ${instance}/${id}: not run: ${error instanceof Error ? error.message : String(error)}`);
-			return send(res, 503, { error: "Riprova più tardi" });
-		}
-		send(res, result.status, result.status === 202 ? { ok: true } : { error: result.error });
-	}
-
-	/**
-	 * Meta's webhook for an instance's WhatsApp number. GET: Meta checks the address, with our
-	 * verify token, and wants its challenge back as plain text. POST: messages, signed with the
-	 * Meta app's secret over the raw body. An error answer makes Meta deliver again; the core
-	 * dedupes by message id.
-	 */
-	async function whatsappHook(req: IncomingMessage, res: ServerResponse, url: URL, instance: string): Promise<void> {
-		const adapter = options.whatsappHooks?.get(instance);
-		if (adapter === undefined) return send(res, 404, { error: "Not found" });
-		if (req.method === "GET") {
-			const challenge = adapter.verify(url.searchParams);
-			if (challenge === undefined) return send(res, 403, { error: "Forbidden" });
-			res.writeHead(200, { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" });
-			return void res.end(challenge);
-		}
-		let raw: Buffer;
-		try {
-			raw = await readBody(req, MAX_WHATSAPP_BODY);
-		} catch (error) {
-			if (error instanceof HttpError) return send(res, error.status, { error: error.message });
-			throw error;
-		}
-		if (!adapter.signed(raw, req.headers["x-hub-signature-256"] as string | undefined)) return send(res, 401, { error: "Unauthorized" });
-		let payload: WhatsAppWebhook;
-		try {
-			payload = JSON.parse(raw.toString("utf8")) as WhatsAppWebhook;
-		} catch {
-			return send(res, 400, { error: "JSON non valido" });
-		}
-		try {
-			await adapter.handleWebhook(payload);
-		} catch (error) {
-			options.log?.(`whatsapp webhook: not handled, Meta will retry: ${error instanceof Error ? error.message : String(error)}`);
-			return send(res, 500, { error: "retry" });
-		}
-		send(res, 200, { ok: true });
-	}
-
-	/**
-	 * An update Telegram pushes. Authenticated by the secret Telegram repeats in a header, not
-	 * by a session. An error answer makes Telegram deliver it again; the core dedupes by ID.
-	 */
-	async function telegramHook(req: IncomingMessage, res: ServerResponse, instance: string): Promise<void> {
-		const target = options.telegramHooks?.get(instance);
-		if (target === undefined) return send(res, 404, { error: "Not found" });
-		const given = String(req.headers["x-telegram-bot-api-secret-token"] ?? "");
-		if (!sameSecret(given, target.secret)) return send(res, 401, { error: "Unauthorized" });
-		let update: Record<string, unknown>;
-		try {
-			update = await readJson(req);
-		} catch (error) {
-			if (error instanceof HttpError) return send(res, error.status, { error: error.message });
-			throw error;
-		}
-		try {
-			await target.handle(update);
-		} catch (error) {
-			options.log?.(`telegram webhook: update not handled, Telegram will retry: ${error instanceof Error ? error.message : String(error)}`);
-			return send(res, 500, { error: "retry" });
-		}
-		send(res, 200, { ok: true });
-	}
-
 	const cellProxyToken = options.cell === undefined ? "" : proxyToken(options.cell.secret);
 
 	/** The control plane of Owni Cloud, with the cell's secret. */
@@ -800,5 +673,3 @@ function cookie(req: IncomingMessage, name: string): string | undefined {
 	}
 	return undefined;
 }
-
-const MAX_WHATSAPP_BODY = 1024 * 1024;
