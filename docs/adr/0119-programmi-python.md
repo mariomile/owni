@@ -16,7 +16,8 @@ Ogni numero che un agente dà a una persona deve venire da un conto vero: un tot
 
 Ogni esecuzione è un processo Node a parte, avviato da Owni con:
 
-- **il modello dei permessi di Node** (`--permission`): legge solo la cartella di Pyodide e quella del codice di Owni che serve al lettore di fogli; non scrive niente su disco, non avvia processi né worker, non carica moduli nativi;
+- **il modello dei permessi di Node** (`--permission`): legge solo la cartella di Pyodide e il proprio file (i fogli Excel diventano CSV prima, nel processo di Owni); non scrive niente su disco, non avvia processi né worker, non carica moduli nativi;
+- **solo il file system in memoria**: prima del programma spariscono da Pyodide i file system che portano al disco vero (`NODEFS` e gli altri) e si può montare solo `MEMFS`, così un programma non monta una cartella del server; il nome del file di Owni non arriva nemmeno nell'ambiente di Python;
 - **nessuna variabile d'ambiente**: le chiavi dei modelli, i token e i segreti restano nel processo di Owni;
 - **niente rete**: Node non ha un interruttore per la rete, quindi il processo, prima di caricare Pyodide, sostituisce le connessioni di `net`, `tls`, `dgram`, `dns`, `http`, `https` e `http2` con un errore e toglie `fetch` e `WebSocket`; Pyodide parte con `jsglobals` vuoto, e dopo l'avvio spariscono `require`, `process.binding`, `process.dlopen` e `process.getBuiltinModule`;
 - **niente codice da stringhe** (`--disallow-code-generation-from-strings`): `js.eval` e `run_js` di Pyodide non vanno;

@@ -4,11 +4,12 @@ import { createRequire } from "node:module";
 import { dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import type { ChildAnswer } from "./code-run-child.ts";
+import { spreadsheetRows } from "./documents.ts";
 
 /**
  * Python for the agente (ADR 0119): every number it gives a person comes from code that ran,
  * never from sums in its head. Pyodide runs in a Node process of its own per run, with the
- * permission model on: it reads only Pyodide and Owni's own reader of spreadsheets, writes
+ * permission model on: it reads only Pyodide and its own file (sheets become CSV here first), writes
  * nothing to disk, starts no process or worker, has no environment, no network (locked in
  * code-run-child.ts) and no code from strings. A run that takes too long is killed; memory has a
  * ceiling. At most `maxRuns` at once in the process; the others wait their turn.
@@ -74,23 +75,32 @@ export async function runCode(code: string, files: readonly CodeFile[], options:
 	if (running >= CODE_RUN_LIMITS.maxRuns) await turn(options.waitMs ?? CODE_RUN_LIMITS.waitMs);
 	running++;
 	try {
-		return await inChild(code, files, options.timeoutMs ?? CODE_RUN_LIMITS.timeoutMs, options.signal);
+		const given = new Set(files.map((f) => f.path));
+		const sheets = files.flatMap((f) => (/\.(xlsx|ods)$/i.test(f.path) ? sheetFiles(f) : [])).filter((s) => !given.has(s.path));
+		return await inChild(code, [...files, ...sheets], options.timeoutMs ?? CODE_RUN_LIMITS.timeoutMs, options.signal);
 	} finally {
 		running--;
 		waiting.shift()?.();
 	}
 }
 
+/** A sheet of an Excel or OpenDocument file, as a CSV Python reads with csv: «vendite.xlsx» → «vendite (Foglio1).csv». */
+function sheetFiles(file: CodeFile): CodeFile[] {
+	const sheets = spreadsheetRows(file.path, Buffer.from(file.data.buffer, file.data.byteOffset, file.data.byteLength), 200_000) ?? [];
+	const base = file.path.replace(/\.[^./]+$/, "");
+	const cell = (v: string) => (/[",\r\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
+	return sheets.map((s) => ({ path: `${base} (${s.name.replace(/[/\\]/g, "-")}).csv`, data: Buffer.from(s.rows.map((r) => r.map(cell).join(",")).join("\n"), "utf8") }));
+}
+
 function inChild(code: string, files: readonly CodeFile[], timeoutMs: number, signal?: AbortSignal): Promise<CodeRun> {
 	signal?.throwIfAborted();
 	pyodideDir ??= realpathSync(dirname(createRequire(import.meta.url).resolve("pyodide/package.json")));
-	const coreDir = realpathSync(here);
 	const child = spawn(
 		process.execPath,
 		[
 			"--permission",
 			`--allow-fs-read=${pyodideDir}`,
-			`--allow-fs-read=${coreDir}`,
+			`--allow-fs-read=${realpathSync(childFile)}`,
 			`--max-old-space-size=${CODE_RUN_LIMITS.heapMb}`,
 			`--wasm-max-mem-pages=${(CODE_RUN_LIMITS.wasmMb * 1024 * 1024) / 65_536}`,
 			"--disallow-code-generation-from-strings",
@@ -98,7 +108,7 @@ function inChild(code: string, files: readonly CodeFile[], timeoutMs: number, si
 			childFile,
 		],
 		// No environment: Owni's keys stay in Owni.
-		{ stdio: ["pipe", "pipe", "ignore"], env: {}, cwd: coreDir },
+		{ stdio: ["pipe", "pipe", "ignore"], env: {}, cwd: pyodideDir },
 	);
 	return new Promise<CodeRun>((resolve, reject) => {
 		let settled = false;

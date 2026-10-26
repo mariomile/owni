@@ -62,6 +62,12 @@ describe("the sandbox of code_run (ADR 0119)", () => {
 					"try:",
 					`    pyodide_js.FS.mkdir('/host'); pyodide_js.mountNodeFS('/host', ${JSON.stringify(process.cwd())}); print(os.listdir('/host')[:1])`,
 					"except Exception: print('mount blocked')",
+					// The red-team's escape: the raw Emscripten module, a host folder mounted with NODEFS.
+					"js.root = '.'",
+					"try:",
+					"    pyodide_js._module.FS.mkdir('/core'); pyodide_js._module.FS.mount(pyodide_js._module.FS.filesystems.NODEFS, js, '/core'); print(os.listdir('/core')[:1])",
+					"except Exception: print('nodefs blocked')",
+					"print(os.environ.get('_'))",
 					"try:",
 					"    js.eval('1')",
 					"except Exception: print('js.eval blocked')",
@@ -71,7 +77,7 @@ describe("the sandbox of code_run (ADR 0119)", () => {
 				].join("\n"),
 				[],
 			);
-			expect(run.stdout).toBe("[]\n/etc/passwd blocked\n/etc/hosts blocked\nmount blocked\njs.eval blocked\nrun_js blocked\n");
+			expect(run.stdout).toBe("[]\n/etc/passwd blocked\n/etc/hosts blocked\nmount blocked\nnodefs blocked\n./this.program\njs.eval blocked\nrun_js blocked\n");
 		} finally {
 			delete process.env.OWNI_TEST_SECRET;
 		}

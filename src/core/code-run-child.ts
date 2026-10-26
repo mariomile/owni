@@ -1,9 +1,8 @@
 import { constants } from "node:fs";
-import { spreadsheetRows } from "./documents.ts";
 
 /**
  * One code_run (ADR 0119), in a process of its own that code-run.ts starts with Node's permission
- * model (reads only Pyodide and these files, writes nothing, no child processes, no workers) and no
+ * model (reads only Pyodide and this file, writes nothing, no child processes, no workers) and no
  * code from strings. Node 24 has no switch for the network, so it is locked here before anything
  * the agente wrote runs. Reads its input as JSON on stdin, writes one JSON answer on stdout.
  * This file is run from source by Node: erasable TypeScript only.
@@ -28,6 +27,10 @@ const refuse = (): never => {
 	throw new Error("La rete non c'è in code_run");
 };
 
+const noMount = (): never => {
+	throw new Error("In code_run c'è solo /workspace");
+};
+
 async function lockNetwork(): Promise<void> {
 	const names = ["net", "tls", "dgram", "dns", "http", "https", "http2"];
 	const [net, tls, dgram, dns, http, https, http2] = (await Promise.all(names.map((m) => import(`node:${m}`)))).map((m) => m.default);
@@ -44,14 +47,6 @@ async function lockNetwork(): Promise<void> {
 	(await import("node:module")).syncBuiltinESMExports();
 }
 
-/** A sheet of an Excel or OpenDocument file, as a CSV Python reads with csv: «vendite.xlsx» → «vendite (Foglio1).csv». */
-function sheetFiles(file: FileIn, bytes: Buffer): FileIn[] {
-	const sheets = spreadsheetRows(file.path, bytes, 200_000) ?? [];
-	const base = file.path.replace(/\.[^./]+$/, "");
-	const cell = (v: string) => (/[",\r\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
-	return sheets.map((s) => ({ path: `${base} (${s.name.replace(/[/\\]/g, "-")}).csv`, data: Buffer.from(s.rows.map((r) => r.map(cell).join(",")).join("\n"), "utf8").toString("base64") }));
-}
-
 async function main(): Promise<void> {
 	const chunks: Buffer[] = [];
 	for await (const chunk of process.stdin) chunks.push(chunk as Buffer);
@@ -60,6 +55,8 @@ async function main(): Promise<void> {
 	await lockNetwork();
 	// The permission model refuses process.binding; Pyodide asks it only for the fs constants.
 	Object.assign(process, { binding: (name: string) => (name === "constants" ? { fs: constants } : refuse()) });
+	// Emscripten takes the program's name (env «_») from argv[1], the path of this file on the server.
+	process.argv.length = 1;
 	const { loadPyodide } = (await import(input.pyodide)) as typeof import("pyodide");
 	let stdout = "";
 	let cut = false;
@@ -80,12 +77,13 @@ async function main(): Promise<void> {
 		before.set(file.path, file.data);
 	};
 	py.FS.mkdirTree(DIR);
-	for (const file of input.files) {
-		const bytes = Buffer.from(file.data, "base64");
-		put(file);
-		if (/\.(xlsx|ods)$/i.test(file.path)) for (const sheet of sheetFiles(file, bytes)) if (!before.has(sheet.path)) put(sheet);
-	}
+	for (const file of input.files) put(file);
 	py.FS.chdir(DIR);
+	// Only the memory file system: no mount of a host folder (NODEFS) from the agente's code.
+	for (const name of Object.keys(py.FS.filesystems)) if (name !== "MEMFS") Reflect.deleteProperty(py.FS.filesystems, name);
+	for (const name of ["NODEFS", "NODERAWFS", "WORKERFS", "PROXYFS", "IDBFS"]) Reflect.deleteProperty((py as unknown as { _module: object })._module, name);
+	const mount = py.FS.mount.bind(py.FS);
+	py.FS.mount = (type: unknown, opts: unknown, at: string) => (type === py.FS.filesystems.MEMFS ? mount(type as never, opts as never, at) : noMount());
 
 	let error: string | undefined;
 	try {
