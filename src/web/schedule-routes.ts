@@ -231,4 +231,3 @@ function publicWatch(watch: Watch) {
 	const { last, pending: _p, candidate: _c, ...rest } = watch;
 	return { ...rest, ...(last === undefined ? {} : { last: { at: last.at, excerpt: last.excerpt, ...(last.price === undefined ? {} : { price: last.price }), ...(last.side === undefined ? {} : { side: last.side }) } }) };
 }
-
