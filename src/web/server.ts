@@ -62,7 +62,7 @@ import { WebChannel, type WebEntry, type WebEvent, type WebThread } from "./chan
 import { boardRoutes } from "./board-routes.ts";
 import { orgRoutes } from "./org-routes.ts";
 import { teamRoutes } from "./team-routes.ts";
-import { type AddRoute, type Handler, HttpError, type Route, readBody, readJson, STREAMED } from "./http.ts";
+import { type AddRoute, type Handler, HttpError, type Route, readBody, readJson, STREAMED, send } from "./http.ts";
 import { screenRoutes } from "./screen-routes.ts";
 import { publicRun, runRoutes } from "./run-routes.ts";
 import type { RunRecord } from "../core/run-store.ts";
@@ -2574,12 +2574,6 @@ function sandboxedHtml(res: ServerResponse, data: Buffer, download?: string): ty
 	});
 	res.end(data);
 	return STREAMED;
-}
-
-function send(res: ServerResponse, status: number, body: unknown): void {
-	const data = Buffer.from(JSON.stringify(body));
-	res.writeHead(status, { "content-type": "application/json; charset=utf-8", "content-length": data.length, "cache-control": "no-store" });
-	res.end(data);
 }
 
 function cookie(req: IncomingMessage, name: string): string | undefined {

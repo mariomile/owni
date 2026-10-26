@@ -42,19 +42,28 @@ export const MAX_JSON = 1024 * 1024;
 /** What a handler gives back when it wrote the answer itself (a picture, a stream). */
 export const STREAMED = Symbol("streamed");
 
-export async function readBody(req: IncomingMessage, max: number): Promise<Buffer> {
+/** The pattern of a path: each `:name` is one segment. */
+export const pathPattern = (path: string): RegExp => new RegExp(`^${path.replace(/:[a-z]+/g, "([^/]+)")}$`);
+
+export function send(res: ServerResponse, status: number, body: unknown): void {
+	const data = Buffer.from(JSON.stringify(body));
+	res.writeHead(status, { "content-type": "application/json; charset=utf-8", "content-length": data.length, "cache-control": "no-store" });
+	res.end(data);
+}
+
+export async function readBody(req: IncomingMessage, max: number, tooBig = `Troppo grande: oltre ${max} byte`): Promise<Buffer> {
 	const chunks: Buffer[] = [];
 	let size = 0;
 	for await (const chunk of req) {
 		size += (chunk as Buffer).length;
-		if (size > max) throw new HttpError(413, `Troppo grande: oltre ${max} byte`);
+		if (size > max) throw new HttpError(413, tooBig);
 		chunks.push(chunk as Buffer);
 	}
 	return Buffer.concat(chunks);
 }
 
-export async function readJson(req: IncomingMessage): Promise<Record<string, unknown>> {
-	const data = await readBody(req, MAX_JSON);
+export async function readJson(req: IncomingMessage, max = MAX_JSON, tooBig?: string): Promise<Record<string, unknown>> {
+	const data = await readBody(req, max, tooBig);
 	if (data.length === 0) return {};
 	try {
 		const value: unknown = JSON.parse(data.toString("utf8"));
