@@ -485,6 +485,19 @@ describe("bounded private history", () => {
 		expect(await store.all()).toHaveLength(RUN_HISTORY_LIMIT + 1);
 		expect((await store.all()).find((run) => run.id === "active")?.progress).toHaveLength(RUN_PROGRESS_LIMIT);
 	});
+
+	it("keeps its snapshot in memory, and still sees the file replaced from outside", async () => {
+		const dir = tempDataDir();
+		const store = new RunStore(dir);
+		const run = (id: string, status: RunRecord["status"]): RunRecord => ({ id, tenantId: "a", instanceId: "b", channel: "web", threadId: "t", origin: "person", source: "message", status, createdAt: "2026-10-26T10:00:00.000Z", updatedAt: "2026-10-26T10:00:00.000Z", progress: [] });
+		await store.change("r1", () => run("r1", "running"));
+		await store.change("r1", (r) => ({ ...r!, progress: [{ at: "now", kind: "tool", message: "uno" }] }));
+		expect((await store.all())[0]?.progress).toHaveLength(1);
+		// A recovery tool or a test writes the file itself: the next read is the file's.
+		await writeFileAtomic(join(dir, "runs.json"), JSON.stringify([run("r2", "succeeded")]));
+		expect((await store.all()).map((r) => r.id)).toEqual(["r2"]);
+		expect(JSON.parse(await readFile(join(dir, "runs.json"), "utf8"))).toHaveLength(1);
+	});
 });
 
 it("survives SIGKILL after Stop intent but before Pi abort: stopped tools never resume", async () => {

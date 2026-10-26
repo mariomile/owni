@@ -1,4 +1,4 @@
-import { mkdir, readFile, appendFile, truncate } from "node:fs/promises";
+import { mkdir, readFile, appendFile, stat, truncate } from "node:fs/promises";
 import { join } from "node:path";
 import { writeFileAtomic } from "./atomic-file.ts";
 import type { AuditLog } from "./audit.ts";
@@ -57,6 +57,19 @@ export function romeDayKey(date = new Date()): string {
 /** The record being written for each totals file: a ledger of the same tenant waits for it. */
 const recording = new SerialQueue();
 
+/** Each ledger file as last read or written in this process, by its identity on disk: parsed again only when that changes. */
+const ledgers = new Map<string, { readonly stamp: string; readonly size: bigint; readonly records: readonly UsageRecord[] }>();
+
+async function identity(path: string): Promise<{ stamp: string; size: bigint } | undefined> {
+	try {
+		const s = await stat(path, { bigint: true });
+		return { stamp: `${s.ino}:${s.size}:${s.mtimeNs}`, size: s.size };
+	} catch (err) {
+		if ((err as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+		throw err;
+	}
+}
+
 /**
  * Per-tenant daily usage ledger (append-only JSONL + day totals JSON).
  * Soft cap: warn; hard cap: reject new model calls (send-only Approva still allowed).
@@ -91,7 +104,24 @@ export class UsageLedger {
 
 	/** Every record written, oldest first: only whole lines, read between two records being written. */
 	records(): Promise<UsageRecord[]> {
-		return recording.run(this.totalsPath(), async () => parseRecords(await this.readLog(), this.usagePath()));
+		return recording.run(this.totalsPath(), async () => [...(await this.ledger(false))]);
+	}
+
+	/** The ledger's whole lines; `repair`: first drop a line a crash cut short, so the next record does not glue to it. */
+	private async ledger(repair: boolean): Promise<readonly UsageRecord[]> {
+		const path = this.usagePath();
+		const before = await identity(path);
+		if (before === undefined) return [];
+		const cached = ledgers.get(path);
+		if (cached?.stamp === before.stamp) return cached.records;
+		const log = await this.readLog();
+		const whole = log.lastIndexOf("\n") + 1;
+		if (repair && whole < log.length) await truncate(path, Buffer.byteLength(log.slice(0, whole)));
+		const records = parseRecords(log, path);
+		// Only a ledger that ends with a whole line is kept: a cut one is read again next time.
+		const after = await identity(path);
+		if (after !== undefined && after.size === BigInt(Buffer.byteLength(log.slice(0, whole)))) ledgers.set(path, { ...after, records });
+		return records;
 	}
 
 	private async readLog(): Promise<string> {
@@ -105,10 +135,7 @@ export class UsageLedger {
 
 	private async write(rec: UsageRecord, audit?: AuditLog): Promise<{ softExceeded: boolean; hardExceeded: boolean }> {
 		await this.ensure();
-		const log = await this.readLog();
-		const whole = log.lastIndexOf("\n") + 1;
-		// A line cut short by a crash would glue itself to this record: drop it first.
-		if (whole < log.length) await truncate(this.usagePath(), Buffer.byteLength(log.slice(0, whole)));
+		const log = await this.ledger(true);
 		const day = romeDayKey(new Date(rec.at));
 		const totals = await this.readTotals();
 		// A turn is billed once: a recovery that delivers it again finds it already on record (ADR 0098).
@@ -116,14 +143,22 @@ export class UsageLedger {
 			rec.role === "agent" &&
 			rec.instanceId !== undefined &&
 			rec.submissionId !== undefined &&
-			parseRecords(log, this.usagePath()).some((r) => r.role === "agent" && r.instanceId === rec.instanceId && r.submissionId === rec.submissionId);
+			log.some((r) => r.role === "agent" && r.instanceId === rec.instanceId && r.submissionId === rec.submissionId);
 		if (billed) {
 			const spent = totals[day] ?? 0;
 			return { softExceeded: spent >= this.caps.softUsdPerDay, hardExceeded: spent >= this.caps.hardUsdPerDay };
 		}
-		await appendFile(this.usagePath(), `${JSON.stringify(rec)}\n`, { mode: 0o600 });
+		const line = `${JSON.stringify(rec)}\n`;
+		const before = await identity(this.usagePath());
+		await appendFile(this.usagePath(), line, { mode: 0o600 });
+		// Known without reading it back, unless someone else wrote to it in between.
+		const after = await identity(this.usagePath());
+		const expected = (before?.size ?? 0n) + BigInt(Buffer.byteLength(line));
+		if (after !== undefined && after.size === expected && ledgers.get(this.usagePath())?.size === (before?.size ?? -1n)) ledgers.set(this.usagePath(), { ...after, records: [...log, rec] });
+		else ledgers.delete(this.usagePath());
 		totals[day] = (totals[day] ?? 0) + rec.estimatedUsd;
-		await writeFileAtomic(this.totalsPath(), `${JSON.stringify(totals, null, "\t")}\n`);
+		// The line above is not fsynced either: syncing the totals' folder would buy nothing on a power cut.
+		await writeFileAtomic(this.totalsPath(), `${JSON.stringify(totals, null, "\t")}\n`, { durable: false });
 		const spent = totals[day]!;
 		const softExceeded = spent >= this.caps.softUsdPerDay;
 		const hardExceeded = spent >= this.caps.hardUsdPerDay;
