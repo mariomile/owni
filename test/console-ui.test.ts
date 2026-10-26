@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync } from "node:fs";
+import { readdirSync, readFileSync, statSync } from "node:fs";
 import type { AddressInfo } from "node:net";
 import { join, sep } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -57,5 +57,20 @@ describe("console served from the UI directory", () => {
 		expect((await fetch(`${base}/app.css`)).headers.get("cache-control")).toBe("public, max-age=300");
 		expect((await fetch(`${base}/fonts/archivo-latin.woff2`)).status).toBe(200);
 		expect((await fetch(`${base}/login`)).headers.get("content-type")).toContain("text/html");
+	});
+
+	it("sends a script compressed, and nothing when the browser has this version already", async () => {
+		const config = loadOwniConfig({ OWNI_DATA_DIR: tempDataDir(), OWNI_MODEL_PROVIDER: "faux", OWNI_WEB_PORT: "1" });
+		const owni = await startOwni({ ...config, web: { ...config.web, port: 0 } }, { schedulerIntervalMs: 3_600_000, log: () => {} });
+		running.push(owni);
+		const base = `http://127.0.0.1:${(owni.server.address() as AddressInfo).port}`;
+		const first = await fetch(`${base}/app.js`, { headers: { "accept-encoding": "br" } });
+		expect(first.headers.get("content-encoding")).toBe("br");
+		expect(Number(first.headers.get("content-length"))).toBeLessThan(statSync(join(ui, "app.js")).size);
+		expect(await first.text()).toBe(readFileSync(join(ui, "app.js"), "utf8"));
+		const etag = first.headers.get("etag") as string;
+		const again = await fetch(`${base}/app.js`, { headers: { "if-none-match": etag } });
+		expect(again.status).toBe(304);
+		expect((await fetch(`${base}/fonts/archivo-latin.woff2`, { headers: { "accept-encoding": "br" } })).headers.get("content-encoding")).toBeNull();
 	});
 });

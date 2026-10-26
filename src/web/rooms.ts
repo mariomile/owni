@@ -98,8 +98,8 @@ export class RoomStore {
 			if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
 			throw error;
 		}
-		const out: Room[] = [];
-		for (const name of names) if (name.startsWith(`${personId}.`) && name.endsWith(".json")) out.push(JSON.parse(await readFile(join(this.dir, name), "utf8")) as Room);
+		const own = names.filter((name) => name.startsWith(`${personId}.`) && name.endsWith(".json"));
+		const out = await Promise.all(own.map(async (name) => JSON.parse(await readFile(join(this.dir, name), "utf8")) as Room));
 		return out.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 	}
 
@@ -180,6 +180,14 @@ export class Rooms {
 	async get(personId: string, roomId: string): Promise<Room | undefined> {
 		const room = await this.store.get(roomId);
 		return room?.personId === personId ? room : undefined;
+	}
+
+	/** The person's canali, each with the threads under its messages: one read of the folder for all. */
+	async listWithThreads(personId: string): Promise<{ readonly room: Room; readonly threads: readonly Room[] }[]> {
+		const all = await this.store.list(personId);
+		const under = new Map<string, Room[]>();
+		for (const r of all) if (r.parent !== undefined) under.set(r.parent.roomId, [...(under.get(r.parent.roomId) ?? []), r]);
+		return all.filter((r) => r.parent === undefined).map((room) => ({ room, threads: under.get(room.id) ?? [] }));
 	}
 
 	/** The threads under the messages of a canale. */

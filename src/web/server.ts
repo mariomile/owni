@@ -71,6 +71,7 @@ import { ABOUT_MAX, INSTRUCTIONS_MAX, ownInstructions, withAbout } from "./setup
 import { REPLY_CANCELLED, REPLY_FAILED } from "../gateway.ts";
 import { proxyToken, sameSecret } from "./compare.ts";
 import { otpauthUri } from "./totp.ts";
+import { sendAsset } from "./assets.ts";
 
 /** What a cell tells the control plane of Owni Cloud before being stopped. */
 export type CellState = {
@@ -1762,10 +1763,11 @@ export function createWebApp(options: WebAppOptions): Server {
 		return options.rooms;
 	};
 	const shownInRoom = (entry: RoomEntry): RoomEntry => (entry.model === undefined ? entry : { ...entry, model: named(entry.model) });
-	const roomView = async (room: Room, p: Person) => {
+	/** `records`: the tenant's instances when the caller already read them, so each seat is not read again. */
+	const roomView = async (room: Room, p: Person, records?: ReadonlyMap<string, InstanceRecord>) => {
 		const agents = await Promise.all(
 			room.seats.map(async (s) => {
-				const record = await runtime.registry.getInstance(tenantId, s.instanceId).catch(() => undefined);
+				const record = records === undefined ? await runtime.registry.getInstance(tenantId, s.instanceId).catch(() => undefined) : records.get(s.instanceId);
 				return { instanceId: s.instanceId, name: record?.name ?? s.instanceId, ...(record?.persona?.emoji === undefined ? {} : { emoji: record.persona.emoji }), present: record !== undefined && canChatWith(record, p) };
 			}),
 		);
@@ -1869,7 +1871,8 @@ export function createWebApp(options: WebAppOptions): Server {
 	// The console's rail (ADR 0113): a direct conversation for each agente the person can write to, the general one first, and their canali.
 	route("GET", "/api/conversations", "person", async ({ person }) => {
 		const p = person as Person;
-		const agents = (await runtime.registry.listInstances(tenantId)).filter((r) => canChatWith(r, p));
+		const instances = await runtime.registry.listInstances(tenantId);
+		const agents = instances.filter((r) => canChatWith(r, p));
 		agents.sort((a, b) => Number(b.id === options.main) - Number(a.id === options.main));
 		const direct = await Promise.all(
 			agents.map(async (r) => {
@@ -1879,9 +1882,10 @@ export function createWebApp(options: WebAppOptions): Server {
 				return { instanceId: r.id, ...(dm === undefined ? {} : { threadId: dm.id }), ...(updatedAt === undefined ? {} : { updatedAt }), unread: threads.some(unread) };
 			}),
 		);
-		const rooms = options.rooms === undefined ? [] : await options.rooms.list(p.id);
+		const rooms = options.rooms === undefined ? [] : await options.rooms.listWithThreads(p.id);
+		const records = new Map(instances.map((r) => [String(r.id), r]));
 		// A canale is unread when it or a thread under it is.
-		const channels = await Promise.all(rooms.map(async (r) => ({ ...(await roomView(r, p)), unread: unread(r) || (await options.rooms?.children(p.id, r.id))?.some(unread) === true })));
+		const channels = await Promise.all(rooms.map(async ({ room, threads }) => ({ ...(await roomView(room, p, records)), unread: unread(room) || threads.some(unread) })));
 		return { direct, channels: channels.sort((a, b) => a.title.localeCompare(b.title, "it")) };
 	});
 	route("DELETE", "/api/rooms/:room", "person", async ({ person, params }) => {
@@ -2353,7 +2357,7 @@ export function createWebApp(options: WebAppOptions): Server {
 		// A cell on a platform has a public address of its own: there it answers only what came through
 		// the control plane, which checks sleep and subscription first.
 		if (options.cell !== undefined && !sameSecret(String(req.headers["x-owni-proxy"] ?? ""), cellProxyToken)) return send(res, 404, { error: "Not found" });
-		if (req.method === "GET" && url.pathname in STATIC) return serveStatic(res, STATIC[url.pathname] as string);
+		if (req.method === "GET" && url.pathname in STATIC) return serveStatic(req, res, STATIC[url.pathname] as string);
 		if (req.method === "GET" && Object.hasOwn(OPENUI, url.pathname)) return serveOpenui(req, res, OPENUI[url.pathname] as string);
 		const hook = /^\/hooks\/telegram\/([a-z0-9_-]+)$/.exec(url.pathname);
 		if (req.method === "POST" && hook !== null) return telegramHook(req, res, hook[1] as string);
@@ -2577,19 +2581,17 @@ export function createWebApp(options: WebAppOptions): Server {
 		send(res, 200, { token });
 	}
 
-	async function serveStatic(res: ServerResponse, name: string): Promise<void> {
-		const data = await readFile(join(options.uiDir, name));
+	async function serveStatic(req: IncomingMessage, res: ServerResponse, name: string): Promise<void> {
 		// Scripts are checked at every visit (and the service worker with them): the modules of one deploy must load together, never a mix with an older cached one.
 		const cache = name === "index.html" ? "no-store" : extname(name) === ".js" ? "no-cache" : name.startsWith("fonts/") ? "public, max-age=31536000, immutable" : "public, max-age=300";
 		// A font is always fetched with CORS: the OpenUI frame, with no origin of its own, may use them too.
-		res.writeHead(200, { "content-type": TYPES[extname(name)] ?? "application/octet-stream", "cache-control": cache, ...(name.startsWith("fonts/") ? { "access-control-allow-origin": "*" } : {}) });
-		res.end(data);
+		await sendAsset(req, res, join(options.uiDir, name), { "content-type": TYPES[extname(name)] ?? "application/octet-stream", "cache-control": cache, ...(name.startsWith("fonts/") ? { "access-control-allow-origin": "*" } : {}) });
 	}
 
 	/** A file of the OpenUI frame: the page itself sandboxed by its CSP, the bundle cached for its version. */
 	async function serveOpenui(req: IncomingMessage, res: ServerResponse, name: string): Promise<void> {
-		const data = await readFile(join(openuiDir, name));
 		if (name === "frame.html") {
+			const data = await readFile(join(openuiDir, name));
 			res.removeHeader("x-frame-options");
 			const nonce = randomBytes(16).toString("base64");
 			res.writeHead(200, { "content-type": TYPES[".html"] as string, "content-security-policy": openuiCsp(nonce, req.headers.host), "cache-control": "no-cache" });
@@ -2597,8 +2599,7 @@ export function createWebApp(options: WebAppOptions): Server {
 			return;
 		}
 		const cache = name.startsWith("openui-") ? "public, max-age=31536000, immutable" : "no-cache";
-		res.writeHead(200, { "content-type": TYPES[extname(name)] as string, "cache-control": cache });
-		res.end(data);
+		await sendAsset(req, res, join(openuiDir, name), { "content-type": TYPES[extname(name)] as string, "cache-control": cache });
 	}
 
 	return server;
