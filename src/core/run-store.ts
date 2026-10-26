@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { writeFileAtomic } from "./atomic-file.ts";
 import { SerialQueue } from "./serial-queue.ts";
@@ -58,17 +58,34 @@ export function runRequestId(run: Pick<RunRecord, "channel" | "messageId" | "id"
 	return run.messageId === undefined ? `owni-run:${run.id}` : `${run.channel}:${run.messageId}`;
 }
 
+/** What a run is apart from its live progress: a change here must survive a power cut. */
+const settledPart = ({ progress: _progress, updatedAt: _updatedAt, ...rest }: RunRecord) => JSON.stringify(rest);
+
 /** One bounded, atomic snapshot per instance. Only the process holding its instance lock writes. */
 export class RunStore {
 	private readonly queue = new SerialQueue();
 	private readonly file: string;
+	/** The file as last read or written, by its identity on disk: parsed again only when that changes. */
+	private cached: { readonly stamp: string; readonly records: readonly RunRecord[] } | undefined;
 	constructor(instanceDir: string, private readonly emit: (event: RunEvent) => void = () => {}) {
 		this.file = join(instanceDir, "runs.json");
 	}
 
+	private async stamp(): Promise<string | undefined> {
+		try { const s = await stat(this.file, { bigint: true }); return `${s.ino}:${s.size}:${s.mtimeNs}`; }
+		catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined; throw error; }
+	}
+
 	async all(): Promise<RunRecord[]> {
-		try { return JSON.parse(await readFile(this.file, "utf8")) as RunRecord[]; }
+		const stamp = await this.stamp();
+		if (stamp === undefined) return [];
+		if (this.cached?.stamp === stamp) return [...this.cached.records];
+		let records: RunRecord[];
+		try { records = JSON.parse(await readFile(this.file, "utf8")) as RunRecord[]; }
 		catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return []; throw error; }
+		// Stamped before the read: a write in between shows up as a new stamp next time.
+		this.cached = { stamp, records };
+		return [...records];
 	}
 
 	async list(filter: RunFilter = {}): Promise<RunRecord[]> {
@@ -112,7 +129,12 @@ export class RunStore {
 			const all = [...others, next];
 			const active = all.filter(isActiveRun);
 			const settled = all.filter((run) => !isActiveRun(run)).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, RUN_HISTORY_LIMIT);
-			await writeFileAtomic(this.file, `${JSON.stringify([...active, ...settled])}\n`);
+			const kept = [...active, ...settled];
+			// A new progress line is shown live and lost harmlessly on a power cut: no fsync for it alone.
+			const durable = previous === undefined || settledPart(previous) !== settledPart(next) || kept.length !== records.length;
+			await writeFileAtomic(this.file, `${JSON.stringify(kept)}\n`, { durable });
+			const stamp = await this.stamp();
+			this.cached = stamp === undefined ? undefined : { stamp, records: kept };
 			try { this.emit({ type: "run.updated", run: next }); }
 			catch (error) { console.error(`owni: run event listener failed: ${String(error)}`); }
 			return next;

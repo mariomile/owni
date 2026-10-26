@@ -24,6 +24,18 @@ describe("the usage ledger (ADR 0098)", () => {
 		expect(await ledger.todaySpent()).toBe(8);
 	});
 
+	it("sees records another ledger of the same file wrote, without reading the file again when nothing changed", async () => {
+		const { dir, ledger } = ledgerIn();
+		const other = new UsageLedger(dir, { softUsdPerDay: 5, hardUsdPerDay: 20 });
+		await ledger.record(turn("s1"));
+		await other.record(turn("s2"));
+		await appendFile(join(dir, "usage.jsonl"), `${JSON.stringify(turn("s3"))}\n`);
+		expect((await ledger.records()).map((r) => r.submissionId)).toEqual(["s1", "s2", "s3"]);
+		// Written from outside: still billed once.
+		await ledger.record(turn("s3"));
+		expect(await ledger.records()).toHaveLength(3);
+	});
+
 	it("reads only whole lines, and the next record drops a line cut short", async () => {
 		const { dir, ledger } = ledgerIn();
 		await ledger.record(turn("s1"));

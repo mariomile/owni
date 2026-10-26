@@ -93,7 +93,7 @@ export class WebChannel implements ChannelAdapter {
 	async createThread(personId: string, title: string, kind: Pick<WebThread, "room" | "dm" | "parent"> = {}): Promise<WebThread> {
 		const now = new Date().toISOString();
 		const thread: WebThread = { id: `${personId}.${randomBytes(6).toString("hex")}`, personId, title: title.slice(0, 80), createdAt: now, updatedAt: now, readAt: now, ...kind };
-		await this.saveThread(thread);
+		await this.saveThread(thread, true);
 		return thread;
 	}
 
@@ -270,7 +270,8 @@ export class WebChannel implements ChannelAdapter {
 		await appendFile(join(this.dir, "messages", `${threadId}.jsonl`), `${JSON.stringify(entry)}\n`, { mode: 0o600 });
 	}
 
-	private saveThread(thread: WebThread): Promise<void> {
-		return writeFileAtomic(join(this.dir, "threads", `${thread.id}.json`), `${JSON.stringify(thread)}\n`);
+	/** Only a new thread is fsynced: later saves change a time or a read marker, and the words are in the transcript. */
+	private saveThread(thread: WebThread, durable = false): Promise<void> {
+		return writeFileAtomic(join(this.dir, "threads", `${thread.id}.json`), `${JSON.stringify(thread)}\n`, { durable });
 	}
 }
