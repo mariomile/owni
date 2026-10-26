@@ -21,7 +21,7 @@ import { GOOGLE_CONNECTOR, GOOGLE_HOSTS, GOOGLE_WRITE_SCOPE, GoogleAccounts, Goo
 import { ConnectorHttpError, egressFetch } from "./connectors/http.ts";
 import { ConnectorStore, connectorEgressName, McpConnections, type McpConnectionsOptions } from "./connectors/mcp.ts";
 import { McpOAuth, mcpOAuthSecret } from "./connectors/mcp-oauth.ts";
-import type { CatalogEntry } from "./connectors/catalog.ts";
+import { CONNECTOR_CATALOG, type CatalogEntry } from "./connectors/catalog.ts";
 import { readOnlyInBriefs } from "./core/brief.ts";
 import { type ComputerProvider, computerKey } from "./core/computer.ts";
 import { createComputerTools } from "./core/tools/computer-tools.ts";
@@ -462,7 +462,8 @@ export async function startOwni(config: OwniConfig, options: OwniOptions = {}): 
 							store: runtime.googleActions(record.tenantId, record.id),
 							// A draft or an event with no guests asks nobody (ADR 0120): done now, recorded with no addresses or text.
 							now: async (draft) => {
-								const audit = () => runtime.audit(record.tenantId).append({ type: "google_action.direct", instanceId: record.id, kind: draft.kind, personId: draft.personId });
+								// A write that happened is never told as failed because the audit could not be written.
+								const audit = () => runtime.audit(record.tenantId).append({ type: "google_action.direct", instanceId: record.id, kind: draft.kind, personId: draft.personId }).catch(() => log("google: direct write not audited"));
 								try {
 									const result = await runGoogleAction(record.id)(draft);
 									await audit();
@@ -650,6 +651,7 @@ export async function startOwni(config: OwniConfig, options: OwniOptions = {}): 
 				audit: runtime.audit(record.tenantId),
 				log,
 				oauth: mcpOAuth(),
+				payments: (options.connectorCatalog ?? CONNECTOR_CATALOG).filter((e) => e.category === "pagamenti").map((e) => e.url),
 				actions: { propose: (input) => proposeConnectorAction(record.id, input) },
 			});
 			connections.set(record.id, mcp);

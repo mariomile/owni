@@ -1439,7 +1439,7 @@ export function createWebApp(options: WebAppOptions): Server {
 			}
 			await store.save(connector);
 			await allow();
-			await runtime.audit(tenantId).append({ type: "connector.saved", instanceId: instance, connector: entry.id, transport: "http", allowed: true, catalog: true });
+			await runtime.audit(tenantId).append({ type: "connector.saved", instanceId: instance, connector: entry.id, transport: "http", allowed: true, catalog: true, approval: connector.approval ?? "risk" });
 			if (url !== undefined) return { url };
 			await runtime.reopen(tenantId, instance);
 			return { status: options.connectorStatus(instance).find((s) => s.id === entry.id) };
@@ -1451,7 +1451,7 @@ export function createWebApp(options: WebAppOptions): Server {
 		if (!replacing) {
 			await store.save(connector);
 			await allow();
-			await runtime.audit(tenantId).append({ type: "connector.saved", instanceId: instance, connector: entry.id, transport: "http", allowed: true, catalog: true });
+			await runtime.audit(tenantId).append({ type: "connector.saved", instanceId: instance, connector: entry.id, transport: "http", allowed: true, catalog: true, approval: connector.approval ?? "risk" });
 		}
 		await runtime.reopen(tenantId, instance);
 		return { status: options.connectorStatus(instance).find((s) => s.id === entry.id) };

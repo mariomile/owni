@@ -162,12 +162,29 @@ describe("connector tools that change something wait for a person (ADR 0025)", (
 		expect(d.notes).toEqual([]);
 		expect(await reply('/tool demo__tag_note {"text":"si"}')).toBe("Fatto. note tagged");
 		expect(d.notes).toEqual([{ text: "tag:si" }]);
+		// Done with no card, still on record: the connector and the tool, never what was written.
+		const audit = (await owni.runtime.audit("default").read()) as { type: string }[];
+		expect(audit.filter((e) => e.type === "connector.direct")).toMatchObject([{ connector: "demo", tool: "tag_note" }]);
+		expect(JSON.stringify(audit)).not.toContain("tag:si");
 	});
 
 	it("an entry of the payments category is saved asking for writes too", async () => {
 		const d = await demo();
 		const { api, chat } = await boot(d.url, "pagamenti");
 		expect((await api("/api/instances/owni/connectors")).connectors[0]).toMatchObject({ approval: "writes" });
+		const { reply } = await chat(api);
+		expect(await reply(`/tool demo__tag_note ${JSON.stringify({ text: "pagamento", owni_reason: "Segno il pagamento" })}`)).toMatch(/Richiesta [0-9a-f]{12} pronta/);
+		expect(d.notes).toEqual([]);
+	});
+
+	it("a payments service saved without the raise, by an older version or by hand, still asks for every write", async () => {
+		const d = await demo();
+		const { owni, api, chat, dataDir } = await boot(d.url, "pagamenti");
+		const [connector] = (await api("/api/instances/owni/connectors")).connectors;
+		const { approval: _, ...saved } = connector;
+		await new ConnectorStore(instanceDir(dataDir, tenantId("default"), instanceId("owni"))).save(saved);
+		await owni.runtime.reopen("default", "owni");
+		expect((await api("/api/instances/owni/connectors")).connectors[0].approval).toBeUndefined();
 		const { reply } = await chat(api);
 		expect(await reply(`/tool demo__tag_note ${JSON.stringify({ text: "pagamento", owni_reason: "Segno il pagamento" })}`)).toMatch(/Richiesta [0-9a-f]{12} pronta/);
 		expect(d.notes).toEqual([]);

@@ -101,6 +101,8 @@ export type McpConnectionsOptions = {
 	readonly callTimeoutMs?: number;
 	/** Sign-ins of connectors with OAuth; without it they do not connect. */
 	readonly oauth?: McpOAuth;
+	/** Addresses of payment services (catalog category "pagamenti"): their writes always wait, whatever the connector says (ADR 0120). */
+	readonly payments?: readonly string[];
 	/** Calls that change something wait here for a person; without it they are refused. */
 	readonly actions?: {
 		propose(input: { connector: McpConnector; server: string; tool: string; toolTitle: string; args: Record<string, unknown>; reason: string; destructive: boolean; thread?: { channel: string; threadId: string }; inputs?: () => Promise<readonly string[]>; callId: string }): Promise<string>;
@@ -195,13 +197,14 @@ export class McpConnections {
 				await client.connect(await this.transport(connector), { timeout: 20_000 });
 				this.clients.push({ id: connector.id, server: connectorServer(connector), call: (tool, args) => this.callTool(client, tool, args), close: () => client.close() });
 				const listed = await client.listTools(undefined, { timeout: 20_000 });
+				const rule = this.raised(connector);
 				const names: string[] = [];
 				const asked: string[] = [];
 				for (const tool of listed.tools.slice(0, MAX_TOOLS_PER_CONNECTOR) as ListedTool[]) {
 					const name = toolName(connector.id, tool.name);
 					names.push(name);
-					if (needsApproval(connector, tool)) asked.push(name);
-					tools.push(this.wrap(connector, client, name, tool));
+					if (needsApproval(rule, tool)) asked.push(name);
+					tools.push(this.wrap(rule, client, name, tool));
 				}
 				const left = listed.tools.length - names.length;
 				statuses.push({ id: connector.id, connected: true, tools: names, ...(left > 0 ? { left } : {}), ...(asked.length > 0 ? { approval: asked } : {}) });
@@ -337,6 +340,13 @@ export class McpConnections {
 		return { text, isError: result.isError === true };
 	}
 
+	/** A payments service can move money: asked for every write, also when saved before ADR 0120 or by hand. */
+	private raised(connector: McpConnector): McpConnector {
+		const t = connector.transport;
+		const payments = t.type === "http" && (this.options.payments ?? []).some((url) => URL.canParse(t.url) && new URL(url).origin === new URL(t.url).origin);
+		return payments ? { ...connector, approval: "writes" } : connector;
+	}
+
 	private wrap(connector: McpConnector, client: Client, name: string, tool: ListedTool): OwniTool {
 		const title = tool.annotations?.title ?? tool.title ?? tool.name;
 		if (needsApproval(connector, tool)) {
@@ -387,6 +397,8 @@ export class McpConnections {
 			// What a third-party tool does is unknown: never rerun it after a crash.
 			replaySafe: false,
 			execute: async (args, ctx) => {
+				// A change made with no card is still on record: which connector and tool, never the arguments.
+				if (changes !== "") await this.options.audit.append({ type: "connector.direct", instanceId: this.options.instanceId, connector: connector.id, tool: tool.name });
 				const result = await client.callTool({ name: tool.name, arguments: args }, undefined, { signal: ctx.signal, timeout: this.options.callTimeoutMs ?? 120_000 });
 				const text = resultText(result);
 				const bounded = text.length > MAX_RESULT ? `${text.slice(0, MAX_RESULT)}\n[... troncato]` : text;
