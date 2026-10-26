@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import { request } from "node:http";
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -84,7 +85,22 @@ describe("interactive answers in the chat (ADR 0118)", () => {
 		const nonce = /script-src 'nonce-([\w+/=]+)'(?:;|$)/.exec(csp)?.[1];
 		expect(nonce).toBeDefined();
 		expect(csp).not.toMatch(/script-src[^;]*('self'|https?:|\*|unsafe)/);
-		expect(csp).not.toMatch(/https?:\/\//);
+		// Owni's own stylesheets and fonts, from the host the frame was asked from and no other.
+		const host = new URL(base).host;
+		expect(csp).toContain(`style-src http://${host} https://${host} 'unsafe-inline';`);
+		expect(csp).toContain(`font-src http://${host} https://${host};`);
+		expect(csp.replaceAll(`http://${host}`, "").replaceAll(`https://${host}`, "")).not.toMatch(/https?:/);
+		// A Host header that is not a host leaves no stylesheet or font allowed, and adds nothing to the policy.
+		const forged = await new Promise<string>((done, fail) =>
+			request(`${base}/openui/frame`, { headers: { host: "evil.example; script-src *" } }, (res) => {
+				res.resume();
+				done(String(res.headers["content-security-policy"]));
+			})
+				.on("error", fail)
+				.end(),
+		);
+		expect(forged).toContain("font-src 'none';");
+		expect(forged).not.toContain("evil.example");
 		expect(frame.headers.get("x-frame-options")).toBeNull();
 		expect(frame.headers.get("cache-control")).toBe("no-cache");
 		const html = await frame.text();
