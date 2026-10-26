@@ -193,7 +193,7 @@ La voce passa da Twilio, che fa riconoscimento e sintesi: per i dati in UE scegl
 
 ## 6j. Il computer delle istanze
 
-Owni può eseguire comandi (Python, `jq`, `sqlite3`, `pandoc`, gli strumenti PDF) in un computer suo, un container per istanza senza rete ([ADR 0013](adr/0013-terminale-in-un-computer-senza-rete.md)). Serve Docker 20.10 o più recente sullo stesso server.
+Owni può eseguire comandi (Python, `jq`, `sqlite3`, `pandoc`, gli strumenti PDF) in un computer suo, un container per istanza collegato a internet e senza segreti ([ADR 0013](adr/0013-terminale-in-un-computer-senza-rete.md), [ADR 0124](adr/0124-il-computer-dell-agente-ha-la-rete.md)): può installare pacchetti, clonare repository, scaricare dati e chiamare API pubbliche. Serve Docker 20.10 o più recente sullo stesso server.
 
 **Prima di accenderlo: il socket di Docker equivale a root sul server.** Chi lo usa può creare un container che monta tutto il disco. Accendilo solo dove Owni è l'unico servizio della macchina, e mai in Owni Cloud: lì il computer gira solo su Fly (sotto, «Su Fly»).
 
@@ -203,7 +203,9 @@ Owni può eseguire comandi (Python, `jq`, `sqlite3`, `pandoc`, gli strumenti PDF
 4. `pnpm owni check` dice se Docker risponde e se l'immagine c'è; lo stesso controllo compare nella console (Impostazioni, Computer) e nel log all'avvio.
 5. L'owner accende il computer istanza per istanza (Impostazioni, Computer).
 
-Come gira: un container per istanza con rete `none`, file system in sola lettura tranne `/work` (un volume `owni-computer-<hash>`) e `/tmp` (256 MB in memoria), nessuna capability, niente escalation di privilegi, 128 processi, nessun file oltre 1 GB. I comandi girano come uid 1000 e il container come nobody: alla fine di ogni comando tutto quello che il comando ha lasciato acceso viene chiuso. Al massimo 8 computer accesi e 4 comandi alla volta; un computer senza comandi per 10 minuti si ferma. Quando `/work` supera la quota, Owni lo legge nel risultato, i nuovi file restano minuscoli finché non ne cancella e non si copiano altri file dentro. All'avvio Owni ferma i computer rimasti accesi da un avvio precedente: un solo Owni per server Docker, perché due installazioni sullo stesso Docker si fermerebbero i computer a vicenda.
+Come gira: un container per istanza sulla rete `bridge` di default di Docker (esce verso internet, nessuna porta pubblicata, quindi da fuori non entra niente), nessuna variabile d'ambiente di Owni, file system in sola lettura tranne `/work` (un volume `owni-computer-<hash>`) e `/tmp` (256 MB in memoria), nessuna capability, niente escalation di privilegi, 128 processi, nessun file oltre 1 GB. I comandi girano come uid 1000 e il container come nobody: alla fine di ogni comando tutto quello che il comando ha lasciato acceso viene chiuso. Al massimo 8 computer accesi e 4 comandi alla volta; un computer senza comandi per 10 minuti si ferma. Quando `/work` supera la quota, Owni lo legge nel risultato, i nuovi file restano minuscoli finché non ne cancella e non si copiano altri file dentro. All'avvio Owni ferma i computer rimasti accesi da un avvio precedente: un solo Owni per server Docker, perché due installazioni sullo stesso Docker si fermerebbero i computer a vicenda.
+
+**La rete**: dalla rete `bridge` il computer raggiunge internet, ma anche la rete locale del server e i servizi del server in ascolto su tutte le interfacce (l'indirizzo del bridge, di solito `172.17.0.1`). I servizi che il computer non deve vedere vanno in ascolto solo su `127.0.0.1`, o chiusi dal firewall del server verso `docker0`. Su Fly il problema non c'è: la macchina ha una rete privata sua.
 
 **gVisor** dà al computer un kernel suo invece di quello del server: installa `runsc` ([gvisor.dev](https://gvisor.dev/docs/user_guide/install/)), registralo in `/etc/docker/daemon.json` e imposta `OWNI_COMPUTER_RUNTIME=runsc`. Consigliato se più persone di fiducia diversa usano la stessa installazione.
 
@@ -213,7 +215,7 @@ Come gira: un container per istanza con rete `none`, file system in sola lettura
 
 ### Su Fly (micro-VM, anche per Owni Cloud)
 
-Una micro-VM Fly.io per istanza, con un kernel suo, sigillata dal primo processo prima di ogni comando ([ADR 0015](adr/0015-computer-su-micro-vm.md)). Non serve Docker sul server.
+Una micro-VM Fly.io per istanza, con un kernel suo, collegata a internet ma senza indirizzo pubblico né servizi; il primo processo chiude a root l'API di Fly dentro la macchina prima di ogni comando ([ADR 0015](adr/0015-computer-su-micro-vm.md), [ADR 0124](adr/0124-il-computer-dell-agente-ha-la-rete.md)). Non serve Docker sul server.
 
 1. L'immagine: il workflow `Image` pubblica a ogni merge su `main` `ghcr.io/<owner>/owni-computer:fly` (e `:fly-<commit>`), il target `fly` di `docker/computer.Dockerfile`. Rendi pubblico il pacchetto GHCR, o copia l'immagine nel registry di Fly (`registry.fly.io/<app>`). Meglio indicare il tag con il commit: ogni computer passa alla nuova immagine al comando dopo, con i suoi file.
 2. Il token dell'organizzazione ([chiavi](chiavi.md) §12).

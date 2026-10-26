@@ -1,6 +1,8 @@
 # Fase 3, quarto passo: il browser con clic, nel Chromium della cella
 
 > Aggiornata dall'[ADR 0015](0015-computer-su-micro-vm.md): il computer ora c'è anche in Owni Cloud, su micro-VM. Il browser resta nella cella: il computer continua a non avere rete.
+>
+> Aggiornata dall'[ADR 0124](0124-il-computer-dell-agente-ha-la-rete.md): il computer ora ha la rete. Il browser con clic resta nella cella, con i siti consentiti e l'approvazione per quello che invia.
 
 Owni apre una pagina in un browser che resta aperto per la conversazione (`web_browse`), clicca (`web_click`) e scrive nei campi (`web_type`), così usa i siti costruiti in JavaScript: menu, filtri, ricerche, schede, paginazione, pagine che senza clic non mostrano niente. Il browser è il Chromium della cella che già fa gli screenshot (ADR 0009), con le stesse regole: ogni richiesta della pagina passa dal fetch controllato, solo verso i siti che l'owner consente e mai verso un indirizzo interno.
 

@@ -6,8 +6,9 @@ import { type Backend, fakeFly, runProcess } from "./fake-fly.ts";
  * The computer of a micro-VM with the real image (ADR 0015).
  *
  * In CI (OWNI_TEST_FLY_IMAGE, the `fly` target built by the Image workflow): each machine is a
- * container of that image on Docker's default network, which reaches the internet, so the seal
- * of owni-fly-init is what keeps commands off it. Fly's API is the stand-in of fake-fly.ts.
+ * container of that image on Docker's default network, which reaches the internet as a Fly
+ * machine does (ADR 0124), with a /.fly folder for owni-fly-init to close. Fly's API is the
+ * stand-in of fake-fly.ts.
  *
  * Against Fly itself (FLY_API_TOKEN, OWNI_TEST_FLY_ORG and OWNI_TEST_FLY_IMAGE pushed to a
  * registry Fly can pull from): the same checks on a real machine, then the app is deleted.
@@ -17,18 +18,18 @@ const realFly = process.env.FLY_API_TOKEN !== undefined && process.env.OWNI_TEST
 const key = `live${process.pid}`;
 
 function checks(computer: () => FlyComputerProvider) {
-	it("runs as uid 1000 in /work, and nothing gets out by any socket", async () => {
+	it("runs as uid 1000 in /work, reaches the internet, and not Fly's API, the host or raw packets", async () => {
 		const who = await computer().run(key, "id -u; pwd", { timeoutS: 60 });
 		expect(who).toMatchObject({ exitCode: 0, stdout: "1000\n/work\n" });
-		const net = await computer().run(key, "python3 -c \"import socket; socket.create_connection(('1.1.1.1', 53), 3)\"", { timeoutS: 30 });
-		expect(net.exitCode).not.toBe(0);
-		const v6 = await computer().run(key, "python3 -c \"import socket; socket.create_connection(('2606:4700:4700::1111', 53), 3)\"", { timeoutS: 30 });
-		expect(v6.exitCode).not.toBe(0);
-		// uid 1000 cannot lift the seal: iptables is there, and refuses.
-		const lift = await computer().run(key, "/usr/sbin/iptables -P OUTPUT ACCEPT", { timeoutS: 30 });
-		expect(lift.exitCode).not.toBe(0);
-		expect(lift.stderr).toMatch(/[Pp]ermission denied|not permitted/);
-		// No side door the firewall does not see: packet and vsock sockets are refused.
+		const net = await computer().run(key, "python3 -c \"import socket; socket.create_connection(('1.1.1.1', 53), 5); print('fuori')\"", { timeoutS: 30 });
+		expect(net).toMatchObject({ exitCode: 0, stdout: "fuori\n" });
+		// pip installs for uid 1000, into /work/.local, where the package stays.
+		const pip = await computer().run(key, "pip install -q --no-deps six && python3 -c 'import six; print(six.__file__)'", { timeoutS: 120 });
+		expect(pip.exitCode).toBe(0);
+		expect(pip.stdout).toMatch(/^\/work\/\.local\//);
+		// Fly's API inside the machine answers without a token: uid 1000 cannot reach its socket.
+		expect((await computer().run(key, "ls /.fly", { timeoutS: 30 })).exitCode).not.toBe(0);
+		// vsock talks to the host, packet sockets forge and sniff: both refused.
 		for (const family of ["AF_PACKET, socket.SOCK_RAW", "AF_VSOCK, socket.SOCK_STREAM"]) {
 			const side = await computer().run(key, `python3 -c "import socket; socket.socket(socket.${family})"`, { timeoutS: 30 });
 			expect(side.stderr).toContain("Errno 97");
@@ -54,16 +55,18 @@ function checks(computer: () => FlyComputerProvider) {
 
 const docker = (args: string[], stdin = "") => runProcess("docker", args, stdin);
 
-/** Machines as containers of the image; `caps` false leaves out what the first process needs to seal it. */
+/** Machines as containers of the image; `caps` false leaves out what the first process needs to make it ready. */
 function containers(caps = true): Backend {
 	const name = (app: string) => `owni-fly-${app}`;
 	return {
 		async boot(app, config) {
 			const env = (config.env ?? {}) as Record<string, string>;
 			await docker(["rm", "-f", name(app)]);
-			// What Fly's root in a VM has: NET_ADMIN for the firewall, SYS_ADMIN (and no AppArmor profile) for its mounts.
-			const privileges = caps ? ["--cap-add", "NET_ADMIN", "--cap-add", "SYS_ADMIN", "--security-opt", "apparmor=unconfined"] : [];
-			const out = await docker(["run", "-d", "--name", name(app), ...privileges, "-v", `${name(app)}:/work`, ...Object.entries(env).flatMap(([k, v]) => ["-e", `${k}=${v}`]), String(config.image)]);
+			// What Fly's root in a VM has: SYS_ADMIN (and no AppArmor profile) for its mounts.
+			const privileges = caps ? ["--cap-add", "SYS_ADMIN", "--security-opt", "apparmor=unconfined"] : [];
+			// Fly's API folder, open to all as on a machine before owni-fly-init closes it.
+			const fly = ["--mount", "type=tmpfs,destination=/.fly,tmpfs-mode=0755"];
+			const out = await docker(["run", "-d", "--name", name(app), ...privileges, ...fly, "-v", `${name(app)}:/work`, ...Object.entries(env).flatMap(([k, v]) => ["-e", `${k}=${v}`]), String(config.image)]);
 			if (out.exit_code !== 0) throw new Error(out.stderr);
 		},
 		exec: (app, command, stdin) => docker(["exec", "-i", name(app), ...command], stdin),
@@ -86,21 +89,21 @@ describe.skipIf(image === undefined || realFly)("the computer of a micro-VM, as 
 		await fly.close();
 	});
 
-	it("is on a network that reaches the internet when not sealed, so the checks below mean something", async () => {
-		const out = await docker(["run", "--rm", "--entrypoint", "python3", image as string, "-c", "import socket; socket.create_connection(('1.1.1.1', 53), 5); print('fuori')"]);
-		expect(out.stdout).toBe("fuori\n");
+	it("leaves Fly's API folder open to all before owni-fly-init, so the check below means something", async () => {
+		const out = await docker(["run", "--rm", "--user", "1000", "--mount", "type=tmpfs,destination=/.fly,tmpfs-mode=0755", "--entrypoint", "ls", image as string, "-ld", "/.fly"]);
+		expect(out.stdout).toMatch(/^drwxr-xr-x/);
 	}, 120_000);
 
 	checks(() => provider);
 
-	it("runs nothing on a machine that could not be sealed", async () => {
-		const unsealed = await fakeFly(containers(false));
-		const c = new FlyComputerProvider({ token: "fly-test-token", org: "owni", region: "fra", image: image as string, apiUrl: unsealed.url, salt: "sale-di-prova-0123456789" });
+	it("runs nothing on a machine whose first process could not finish", async () => {
+		const unready = await fakeFly(containers(false));
+		const c = new FlyComputerProvider({ token: "fly-test-token", org: "owni", region: "fra", image: image as string, apiUrl: unready.url, salt: "sale-di-prova-0123456789" });
 		try {
-			await expect(c.run(`${key}x`, "echo fuori", { timeoutS: 30 })).rejects.toThrow(/start failed|not cut off/);
+			await expect(c.run(`${key}x`, "echo fuori", { timeoutS: 30 })).rejects.toThrow(/start failed|not ready/);
 		} finally {
 			await c.reset(`${key}x`);
-			await unsealed.close();
+			await unready.close();
 		}
 	}, 120_000);
 });

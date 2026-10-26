@@ -160,7 +160,7 @@ Owni risponde alle chiamate su un numero Twilio, a voce, un turno alla volta ([A
 
 ### 12. Il computer delle istanze: nessuna chiave con Docker, `FLY_API_TOKEN` con Fly
 
-Con Docker il terminale di Owni ([ADR 0013](adr/0013-terminale-in-un-computer-senza-rete.md)) non usa chiavi né domini: gira in un container senza rete sul server di Owni, con `OWNI_COMPUTER=docker` in `.env` ([runbook](runbook.md), 6j).
+Con Docker il terminale di Owni ([ADR 0013](adr/0013-terminale-in-un-computer-senza-rete.md)) non usa chiavi né domini: gira in un container sul server di Owni, collegato a internet ma senza segreti ([ADR 0124](adr/0124-il-computer-dell-agente-ha-la-rete.md)), con `OWNI_COMPUTER=docker` in `.env` ([runbook](runbook.md), 6j).
 
 Su micro-VM Fly.io ([ADR 0015](adr/0015-computer-su-micro-vm.md)), ed è l'unico modo in Owni Cloud, serve un token dell'organizzazione Fly:
 

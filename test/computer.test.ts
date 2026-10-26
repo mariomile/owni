@@ -201,7 +201,7 @@ describe("the computer's paths and archives", () => {
 });
 
 describe("Docker computer", () => {
-	it("is created locked down: no network, not root, read-only, no capabilities, limits, optional gVisor", async () => {
+	it("is created locked down: on the internet but with no secrets, not root, read-only, no capabilities, limits, optional gVisor", async () => {
 		const docker = await fakeDocker();
 		const computer = provider(docker.socketPath, { runtime: "runsc", memoryMb: 512 });
 		closers.push(() => computer.close());
@@ -212,10 +212,10 @@ describe("Docker computer", () => {
 			Image: "owni-computer:test",
 			// The container idles as nobody: commands, as 1000, cannot signal it.
 			User: "65534:65534",
-			NetworkDisabled: true,
 			Labels: { "owni.computer": "default-owni", "owni.computer.spec": expect.stringMatching(/^[0-9a-f]{16}$/) },
 			HostConfig: {
-				NetworkMode: "none",
+				// Docker's default bridge: out to the internet, no published port in.
+				NetworkMode: "bridge",
 				ReadonlyRootfs: true,
 				CapDrop: ["ALL"],
 				SecurityOpt: ["no-new-privileges:true"],
@@ -228,11 +228,15 @@ describe("Docker computer", () => {
 			},
 		});
 		expect(JSON.stringify(create)).not.toMatch(/PortBindings|Privileged|docker\.sock/);
+		// No secrets go in: the container gets no environment of Owni's.
+		expect(create).not.toHaveProperty("Env");
+		expect(create).not.toHaveProperty("NetworkDisabled");
 		expect(docker.calls.find((c) => c.path === "/volumes/create")?.body).toEqual({ Name: "owni-computer-default-owni", Labels: { "owni.computer": "default-owni" } });
 		// The command runs as uid 1000 in /work, as an argument (never pasted into the script), killed
 		// by timeout(1) when its time is up; then whatever it left running goes too.
 		const exec = docker.calls.find((c) => c.path.endsWith("/exec"))?.body;
 		expect(exec).toMatchObject({ User: "1000:1000", WorkingDir: "/work", Cmd: ["sh", "-c", 'timeout -s KILL 10 sh -c "$1"; s=$?; kill -9 -1 2>/dev/null; exit $s', "owni", "echo ciao"] });
+		expect(exec?.Env).toEqual(["HOME=/tmp", "MPLCONFIGDIR=/tmp", "LANG=C.UTF-8"]);
 		expect(docker.kills()).toContain("kill -9 -1");
 		// A second command reuses the running computer.
 		await computer.run("default-owni", "true", { timeoutS: 5 });
@@ -430,6 +434,13 @@ describe("computer_run", () => {
 		} as any;
 		return { run: run as NonNullable<typeof run>, ctx, workspace, events, docker, logs, calls: () => calls };
 	}
+
+	it("is never rerun after a crash: a command cut in the middle may already have sent something", async () => {
+		const { run } = await tool();
+		expect(run.replaySafe).toBe(false);
+		expect(run.description).toContain("It has the internet");
+		expect(run.description).not.toMatch(/NO network/);
+	});
 
 	it("is not offered without a computer, and refuses until the owner turns it on", async () => {
 		expect(createComputerTools({ computer: undefined, key: "k", policy: async () => ({ modelProviders: [], channels: [] }), workspace: new Workspace(tmpdir()), record: async () => {} })).toEqual([]);

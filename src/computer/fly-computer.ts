@@ -58,8 +58,9 @@ const TIMED_OUT = Symbol("timed out");
 /**
  * A computer per instance as a Fly.io Machine (ADR 0015): a micro-VM with a kernel of its own,
  * in an app of its own on a private network of its own, with no public address and no service,
- * and a volume for /work. Its first process seals it off the network (docker/owni-fly-init) and
- * stops it after a while with nothing to do. Commands and files go through Fly's exec API to
+ * and a volume for /work. It reaches the internet (ADR 0124); nothing reaches it. Its first
+ * process closes Fly's API inside it (docker/owni-fly-init) and stops it after a while with
+ * nothing to do. Commands and files go through Fly's exec API to
  * docker/owni-run, which runs them as uid 1000: a command starts in the background and is
  * waited for in slices, because an exec answers within 60 seconds.
  */
@@ -188,16 +189,16 @@ export class FlyComputerProvider implements ComputerProvider {
 		);
 	}
 
-	/** The command, started in the background. Right after a boot the machine may not be sealed yet: it is asked again. */
+	/** The command, started in the background. Right after a boot the machine may not be ready yet: it is asked again. */
 	private async startJob(key: string, machine: string, job: string, command: string, timeoutS: number): Promise<void> {
 		for (let attempt = 0; ; attempt++) {
 			const out = await this.exec(key, machine, [RUNNER, "start", job, String(timeoutS), this.full.has(key) ? "1" : "0"], 30, command);
 			if (out.exitCode === 0) return;
-			if (/not sealed/.test(out.stderr) && attempt < 10) {
+			if (/not ready/.test(out.stderr) && attempt < 10) {
 				await new Promise((resolve) => setTimeout(resolve, 500));
 				continue;
 			}
-			if (/not sealed/.test(out.stderr)) throw new Error("computer: the machine is not cut off from the network (owni-fly-init failed): no command runs there");
+			if (/not ready/.test(out.stderr)) throw new Error("computer: the machine is not ready, Fly's API inside it may be open (owni-fly-init failed): no command runs there");
 			throw new Error(`computer: start failed (${out.exitCode}): ${out.stderr.slice(0, 200)}`);
 		}
 	}

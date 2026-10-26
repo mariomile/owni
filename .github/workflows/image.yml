@@ -51,7 +51,7 @@ jobs:
           docker logs owni
           exit 1
 
-  # The instances' computers (ADR 0013): the image builds, and the provider works on a real daemon.
+  # The instances' computers (ADR 0013, ADR 0124): the image builds, and the provider works on a real daemon.
   computer:
     runs-on: ubuntu-latest
     timeout-minutes: 35
@@ -69,10 +69,10 @@ jobs:
         env:
           OWNI_TEST_COMPUTER_IMAGE: owni-computer:ci
         run: pnpm vitest run test/computer-docker.live.test.ts
-      # The micro-VM target (ADR 0015): its first process seals it off the network, then the same checks.
+      # The micro-VM target (ADR 0015, ADR 0124): on the internet, its first process closes Fly's API, then the same checks.
       - name: Build the micro-VM computer image
         run: docker build -f docker/computer.Dockerfile --target fly -t owni-computer:fly-ci docker
-      - name: The micro-VM computer, sealed, on Docker's network
+      - name: The micro-VM computer on Docker's network
         env:
           OWNI_TEST_FLY_IMAGE: owni-computer:fly-ci
         run: pnpm vitest run test/computer-fly.live.test.ts

@@ -41,12 +41,13 @@ const FULL_FILE_BLOCKS = 2048;
 type Exec = { stdout: string; stderr: string; truncated: boolean; cut: boolean; exitCode: number | null };
 
 /**
- * A computer per instance as a container on this Docker host (ADR 0013): no network at all,
+ * A computer per instance as a container on this Docker host (ADR 0013, ADR 0124): on Docker's
+ * default bridge, so it reaches the internet and no published port reaches it; no secrets in it,
  * read-only root except /work (the instance's volume) and /tmp, no capabilities, no privilege
  * escalation, memory, CPU, process and file size limits, and optionally gVisor. Commands go in
  * with `docker exec` as uid 1000; the container itself idles as another user, so after each
  * command `kill -9 -1` ends everything the command left behind. Files go in and out with
- * Docker's archive API: the container has no interface to talk to.
+ * Docker's archive API: nothing in the container listens for Owni.
  */
 export class DockerComputerProvider implements ComputerProvider {
 	private readonly locks = new PerKey();
@@ -230,9 +231,9 @@ export class DockerComputerProvider implements ComputerProvider {
 			User: "65534:65534",
 			Cmd: ["sleep", "infinity"],
 			WorkingDir: "/work",
-			NetworkDisabled: true,
 			HostConfig: {
-				NetworkMode: "none",
+				// Out to the internet (pip install, curl, git clone); no port published, so nothing comes in.
+				NetworkMode: "bridge",
 				Binds: [`${name(key)}:/work`],
 				ReadonlyRootfs: true,
 				Tmpfs: { "/tmp": "rw,nosuid,nodev,size=256m" },

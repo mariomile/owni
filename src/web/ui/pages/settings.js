@@ -105,7 +105,7 @@ const CAPABILITY_CARDS = [
 		name: "computer",
 		anchor: "computer",
 		title: "Computer",
-		text: () => "Owni esegue comandi in un computer suo, senza rete e senza segreti: elabora fogli e documenti, converte file, fa grafici. Usa copie dei file del workspace e rimette lì quelli che produce. Niente può uscire da quel computer, quindi i comandi non chiedono approvazione.",
+		text: () => "Owni esegue comandi in un computer suo, collegato a internet e senza segreti: elabora fogli e documenti, converte file, fa grafici, installa programmi, scarica dati e progetti. Usa copie dei file del workspace e rimette lì quelli che produce. I comandi non chiedono approvazione: come da un portatile, quello che Owni copia nel computer può finire in rete.",
 		before: (c) => (c.problem ? h("p.warn", `Il computer non è disponibile: ${c.problem}.`) : null),
 		label: "Consenti a Owni di usare il suo computer",
 		toast: (on) => (on ? "Owni può usare il suo computer" : "Computer spento"),

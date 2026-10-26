@@ -1,23 +1,16 @@
 #!/bin/sh
-# The computer's first process on a micro-VM (ADR 0015), as root. It cuts the machine off the
-# network before anything else: no packet goes out except on loopback and as a reply to a
-# connection that came in (a machine has no services, so none does). It takes away Fly's API
-# socket inside the machine, which no firewall sees. Only then does it mark the machine sealed;
-# owni-run starts no command on a machine that is not, checks the firewall again before each
-# one, and gives commands no vsock or packet socket. Then it waits: with no call and no command
-# for OWNI_IDLE_S seconds it returns, and the machine stops by itself, even if whoever started
-# it is gone. Any step failing ends it here (set -e): the machine stops, sealed or not at all.
+# The computer's first process on a micro-VM (ADR 0015, ADR 0124), as root. The machine reaches
+# the internet; nothing reaches it (no public address, no service). Before any command it takes
+# away Fly's API socket inside the machine, which answers without a token, and puts /tmp and its
+# own state in memory. Only then does it mark the machine ready; owni-run starts no command on a
+# machine that is not, and gives commands no vsock (the host) or packet socket. Then it waits:
+# with no call and no command for OWNI_IDLE_S seconds it returns, and the machine stops by
+# itself, even if whoever started it is gone. Any step failing ends it here (set -e): the machine
+# stops, ready or not at all.
 set -eu
-rm -f /run/owni/sealed
 mkdir -p /run/owni
-# State in memory: nothing of a previous boot, no stale seal.
+# State in memory: nothing of a previous boot, no stale mark.
 mount -t tmpfs -o mode=0700,nosuid,nodev,noexec,size=16m tmpfs /run/owni
-for table in iptables ip6tables; do
-	"$table" -P OUTPUT DROP
-	"$table" -F OUTPUT
-	"$table" -A OUTPUT -o lo -j ACCEPT
-	"$table" -A OUTPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
-done
 # Fly's API inside the machine (/.fly/api) answers without a token: root only.
 if [ -e /.fly ]; then
 	chmod 700 /.fly
@@ -27,5 +20,5 @@ fi
 mount -t tmpfs -o mode=1777,nosuid,nodev,size=256m tmpfs /tmp
 # The volume comes up owned by root; only its top folder changes hands.
 chown 1000:1000 /work
-echo rules > /run/owni/sealed
+echo machine > /run/owni/ready
 exec /usr/local/bin/owni-run idle "${OWNI_IDLE_S:-600}"

@@ -14,9 +14,10 @@ starts here in the background and is waited for in slices, and files go in and o
                             SECONDS with no call and no command running
 
 Run as root it drops to uid 1000 for everything that touches /work, and walks /work without
-following links. A command starts only once the machine's first process has sealed it off the
-network: the file `sealed`, written by owni-fly-init; on a machine ("rules" in it) the firewall
-is checked again, and the command gets no socket that the firewall does not see (vsock, packet).
+following links. A command starts only once the machine's first process has closed Fly's API
+inside it: the file `ready`, written by owni-fly-init. The machine reaches the internet (ADR
+0124); on a machine ("machine" in `ready`) a command still gets no vsock socket, which talks to
+the host, and no packet socket, which ordinary internet use never needs.
 """
 import base64
 import binascii
@@ -43,7 +44,8 @@ MAX_FILE = 1024 * 1024 * 1024
 FULL_FILE = 2048 * 512
 MAX_READ = 4 * 1024 * 1024
 MAX_PROCESSES = 128
-ENV = {"HOME": "/tmp", "MPLCONFIGDIR": "/tmp", "MPLBACKEND": "Agg", "LANG": "C.UTF-8", "PATH": "/usr/local/bin:/usr/bin:/bin"}
+# As the image's ENV (docker/computer.Dockerfile): pip install goes to /work/.local.
+ENV = {"HOME": "/tmp", "MPLCONFIGDIR": "/tmp", "MPLBACKEND": "Agg", "LANG": "C.UTF-8", "PYTHONUSERBASE": WORK + "/.local", "PATH": WORK + "/.local/bin:/usr/local/bin:/usr/bin:/bin"}
 AF_PACKET, AF_VSOCK = 17, 40
 
 
@@ -109,11 +111,11 @@ def touch():
     os.utime(os.path.join(STATE, "last"))
 
 
-def strict():
-    """A real machine: owni-fly-init wrote "rules" in `sealed`."""
+def on_machine():
+    """A real machine: owni-fly-init wrote "machine" in `ready`."""
     try:
-        with open(os.path.join(STATE, "sealed")) as f:
-            return f.read().strip() == "rules"
+        with open(os.path.join(STATE, "ready")) as f:
+            return f.read().strip() == "machine"
     except FileNotFoundError:
         return False
 
@@ -143,7 +145,7 @@ def drop():
 
 
 def no_side_sockets():
-    """No vsock to the host and no raw packets: sockets the firewall would not see."""
+    """No vsock (it talks to the host, not the internet) and no raw packets (spoofing and sniffing, never needed to use the internet)."""
     import seccomp  # python3-seccomp, in the fly image
 
     f = seccomp.SyscallFilter(defaction=seccomp.ALLOW)
@@ -188,18 +190,6 @@ def disk_kb():
     return total // 1024
 
 
-def firewall_holds():
-    """The seal still there: every OUTPUT policy is DROP."""
-    for table in ("/usr/sbin/iptables", "/usr/sbin/ip6tables"):
-        try:
-            rules = subprocess.run([table, "-S", "OUTPUT"], capture_output=True, text=True, timeout=10).stdout
-        except (OSError, subprocess.TimeoutExpired):
-            return False
-        if "-P OUTPUT DROP" not in rules.splitlines():
-            return False
-    return True
-
-
 def supervised(here):
     """A command still under way: no result yet, and its supervisor alive."""
     if os.path.exists(os.path.join(here, "result.json")):
@@ -218,10 +208,8 @@ def jobs():
 
 
 def start(name, timeout_s, full):
-    if not os.path.exists(os.path.join(STATE, "sealed")):
-        fail("not sealed: the computer is not cut off from the network")
-    if strict() and not firewall_holds():
-        fail("not sealed: the computer is not cut off from the network (the firewall is gone)")
+    if not os.path.exists(os.path.join(STATE, "ready")):
+        fail("not ready: the machine's first process has not closed Fly's API yet")
     command = sys.stdin.read()
     here = job(name)
     # A command of before still running (its kill lost) is ended first: its last sweep would end this one.
@@ -259,7 +247,7 @@ def start(name, timeout_s, full):
 
 def supervise(here, command, timeout_s, full):
     oom_score(-1000)
-    sealed = strict()
+    machine = on_machine()
 
     def limits():
         size = FULL_FILE if full else MAX_FILE
@@ -267,7 +255,7 @@ def supervise(here, command, timeout_s, full):
         oom_score(1000)
         if ROOT:
             resource.setrlimit(resource.RLIMIT_NPROC, (MAX_PROCESSES, MAX_PROCESSES))
-        if sealed:
+        if machine:
             no_side_sockets()
         drop()
 

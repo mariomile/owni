@@ -328,12 +328,12 @@ L'invio di un modulo di un sito consentito che l'istanza chiede e che parte solo
 _Avoid_: automazione, bot, compilazione automatica
 
 **Computer**:
-La macchina di un'istanza, separata dalla cella, senza rete e senza segreti, dove l'istanza esegue comandi su copie dei file del workspace e rimette lì quelli che produce. Un container sul server di Owni o una micro-VM su Fly.io; in Owni Cloud sempre una micro-VM, raggiunta attraverso il control plane. La accende l'owner; i suoi file restano finché l'owner non la azzera.
+La macchina di un'istanza, separata dalla cella, collegata a internet e senza segreti, dove l'istanza esegue comandi (anche installare pacchetti, clonare repository, chiamare API) su copie dei file del workspace e rimette lì quelli che produce. Un container sul server di Owni o una micro-VM su Fly.io; in Owni Cloud sempre una micro-VM, raggiunta attraverso il control plane. La accende l'owner; i suoi file restano finché l'owner non la azzera.
 _Avoid_: sandbox (è quella dei tool proposti), VM, server
 
 **Schermo**:
 Il desktop Linux di un agente, con Firefox, dove l'agente guarda lo schermo, clicca, scrive e apre programmi attraverso Cua. Un container sul server di Owni, senza internet se l'operatore non sceglie altrimenti, oppure un desktop che gira altrove e che tutti gli agenti che lo usano condividono. Lo accende l'owner agente per agente. Quello che l'agente fa sullo schermo non passa dalle approvazioni, e con internet il suo browser non segue i siti consentiti: prima di inviare o pagare chiede in chat. Nella console, accanto alla chat, il pannello Schermo mostra l'ultima schermata che l'agente ha preso in quella conversazione (ADR 0067).
-_Avoid_: computer (è il terminale senza rete), browser (è quello della cella), desktop remoto, VNC
+_Avoid_: computer (è il terminale), browser (è quello della cella), desktop remoto, VNC
 
 **Brief del mattino**:
 Il task programmato di una persona che ogni mattina le riassume impegni del giorno, mail che chiedono una risposta e quello che l'istanza ricorda di lei, leggendo senza cambiare niente.

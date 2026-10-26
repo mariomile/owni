@@ -32,8 +32,8 @@ const backend = {
 				chownSync(work, UID, UID);
 			}
 		}
-		// What owni-fly-init leaves once the machine is cut off the network.
-		writeFileSync(join(state, "sealed"), "");
+		// What owni-fly-init leaves once Fly's API inside the machine is closed.
+		writeFileSync(join(state, "ready"), "");
 	},
 	exec(app: string, command: readonly string[], stdin: string) {
 		const { state, work } = dirs(app);
@@ -172,11 +172,11 @@ describe("the computer on a Fly machine", () => {
 		expect(await computer({ token: "sbagliato" }).check()).toContain("token");
 	});
 
-	it("never runs a command on a machine that is not sealed off the network", async () => {
+	it("never runs a command on a machine whose first process has not closed Fly's API", async () => {
 		const c = computer();
 		await c.put("jjjj0000", [{ path: "x", data: Buffer.from("x") }]);
-		rmSync(join(dirs(appOf("jjjj0000")).state, "sealed"));
-		await expect(c.run("jjjj0000", "echo no", { timeoutS: 10 })).rejects.toThrow("not cut off from the network");
+		rmSync(join(dirs(appOf("jjjj0000")).state, "ready"));
+		await expect(c.run("jjjj0000", "echo no", { timeoutS: 10 })).rejects.toThrow("Fly's API inside it may be open");
 	}, 20_000);
 
 	it("uses a volume left free again, and grows the volume with the quota", async () => {
