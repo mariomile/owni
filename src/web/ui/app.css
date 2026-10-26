@@ -18,6 +18,8 @@
 	--active: light-dark(#e9e9e9, #2a2a2a);
 	--border: light-dark(#ebebeb, #1f1f1f);
 	--border-2: light-dark(#d9d9d9, #2e2e2e);
+	/* the edge of a form control: 3:1 against the page in both themes (--border and --border-2 stay for dividers) */
+	--control: color-mix(in srgb, var(--fg) 50%, var(--bg));
 	--fg: light-dark(#0d0d0d, #fcfcfc);
 	--fg-2: light-dark(#5d5d5d, #b4b4b4);
 	--fg-3: light-dark(#707070, #8c8c8c);
@@ -88,6 +90,10 @@ a { color: var(--fg); text-decoration-color: var(--border-2); text-underline-off
 a:hover { text-decoration-color: currentColor; }
 :focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 70%, transparent); outline-offset: 2px; }
 .icon { flex: none; display: block; }
+/* Moved by script after a navigation, not a control: no ring. */
+h1[tabindex="-1"]:focus, main:focus { outline: none; }
+.skip { position: fixed; left: 12px; top: 12px; z-index: 100; padding: 10px 16px; border-radius: 99px; background: var(--primary); color: var(--primary-fg); font-size: 13px; font-weight: 550; text-decoration: none; transform: translateY(-200%); }
+.skip:focus { transform: none; }
 .mono { font-family: var(--mono); font-size: 0.9em; }
 .muted { color: var(--fg-3); }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
@@ -190,7 +196,8 @@ button.who-id .icon { color: var(--fg-3); }
 .menu hr { border: 0; border-top: 1px solid var(--border); margin: 4px -5px; }
 .menu button { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 30px; padding: 5px 9px; border: 0; border-radius: 7px; background: transparent; color: var(--fg); font-size: 13px; text-align: left; cursor: default; }
 .menu button .icon { color: var(--fg-3); }
-.menu button:hover, .menu button:focus-visible { background: var(--hover); outline: none; }
+.menu button:hover { background: var(--hover); }
+.menu button:focus-visible { background: var(--hover); outline: 2px solid var(--fg); outline-offset: -2px; }
 .menu button[aria-current="page"] { background: var(--active); }
 .spend .row { display: flex; justify-content: space-between; font-size: 12px; color: var(--fg-2); }
 .spend .row b { color: var(--fg); font-weight: 500; }
@@ -324,10 +331,10 @@ main.is-page { width: 100%; max-width: 1080px; margin: 0 auto; padding: 0 clamp(
 .field > span { font-size: 13px; font-weight: 550; color: var(--fg); }
 .field small { color: var(--fg-3); font-size: 12px; }
 input[type="text"], input[type="search"], input[type="url"], input[type="number"], input[type="password"], input[type="datetime-local"], input[type="time"], input[type="date"], input[type="email"], input[type="tel"], select, textarea {
-	width: 100%; min-height: 34px; padding: 7px 11px; border: 1px solid var(--border-2); border-radius: 8px; background: var(--bg); font-size: 13.5px;
+	width: 100%; min-height: 34px; padding: 7px 11px; border: 1px solid var(--control); border-radius: 8px; background: var(--bg); font-size: 13.5px;
 	transition: border-color 0.15s var(--ease), box-shadow 0.15s var(--ease);
 }
-input:hover, select:hover, textarea:hover { border-color: color-mix(in srgb, var(--fg) 28%, var(--border-2)); }
+input:hover, select:hover, textarea:hover { border-color: color-mix(in srgb, var(--fg) 70%, var(--bg)); }
 input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); box-shadow: var(--ring); }
 input[disabled], select[disabled], textarea[disabled] { opacity: 0.5; cursor: not-allowed; }
 input[aria-invalid="true"], textarea[aria-invalid="true"] { border-color: var(--bad); }
@@ -335,7 +342,7 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); width
 /* Checkboxes drawn like the rest: a soft square that fills with the primary colour. */
 input[type="checkbox"] {
 	appearance: none; flex: none; display: inline-grid; place-content: center; width: 16px; height: 16px; margin: 0; cursor: pointer;
-	border: 1px solid color-mix(in srgb, var(--fg) 45%, var(--bg)); border-radius: 5px; background: var(--bg); transition: background 0.15s var(--ease), border-color 0.15s var(--ease);
+	border: 1px solid var(--control); border-radius: 5px; background: var(--bg); transition: background 0.15s var(--ease), border-color 0.15s var(--ease);
 }
 input[type="checkbox"]::after { content: ""; width: 9px; height: 5px; border: solid var(--primary-fg); border-width: 0 0 2px 2px; transform: translateY(-1px) rotate(-45deg) scale(0); transition: transform 0.15s cubic-bezier(.22, 1, .36, 1); }
 input[type="checkbox"]:checked { background: var(--primary); border-color: var(--primary); }
@@ -1035,7 +1042,7 @@ dialog.skill-dialog { max-width: 640px; max-height: calc(100dvh - 48px); overflo
 .hints.ideas button:nth-child(4) { animation-delay: 310ms; }
 .hints.ideas button:nth-child(5) { animation-delay: 350ms; }
 .hints.ideas button:nth-child(n + 6) { animation-delay: 390ms; }
-@keyframes chip-in { from { opacity: 0; transform: translateY(6px) scale(0.97); filter: blur(2px); } }
+@keyframes chip-in { from { opacity: 0; transform: translateY(6px) scale(0.97); } }
 
 /* ---------- segreteria ---------- */
 .pratiche { display: grid; grid-template-columns: 320px minmax(0, 1fr); gap: 16px; align-items: start; }
@@ -1091,7 +1098,7 @@ details > summary:hover { color: var(--fg); }
 /* ---------- toasts, dialogs, palette, login ---------- */
 /* Toasts: a dark pill at the bottom centre, in both themes, like a system notice. */
 /* A stack: the newest in front, older ones tucked behind; pointed at, it spreads out. */
-#toasts { position: fixed; left: 50%; bottom: 20px; translate: -50% 0; width: min(420px, calc(100vw - 32px)); height: var(--h, 0px); z-index: 70; pointer-events: none; transition: height 0.35s var(--ease); }
+#toasts { position: fixed; left: 50%; bottom: 20px; translate: -50% 0; width: min(420px, calc(100vw - 32px)); height: var(--h, 0px); z-index: 70; pointer-events: none; }
 #toasts.open { pointer-events: auto; }
 .toast { position: absolute; bottom: 0; left: 50%; z-index: var(--z, 1); width: max-content; max-width: 100%; display: flex; align-items: center; gap: 9px; padding: 10px 16px 10px 12px; border-radius: 14px; background: var(--fg); color: var(--bg); box-shadow: var(--shadow-lg); font-size: 13px; font-weight: 500; line-height: 1.4; pointer-events: auto; touch-action: none; user-select: none; -webkit-user-select: none; cursor: grab; translate: calc(-50% + var(--dx, 0px)) calc(var(--y, 0px) + var(--dy, 0px)); scale: var(--s, 1); transform-origin: 50% 100%; transition: translate 0.4s var(--ease), scale 0.4s var(--ease), opacity 0.3s var(--ease); animation: toast-in 0.45s var(--ease) backwards; }
 .toast .icon { flex: none; width: 16px; height: 16px; }
@@ -1099,7 +1106,7 @@ details > summary:hover { color: var(--fg); }
 .toast.buried { opacity: 0; pointer-events: none; }
 .toast.out { opacity: 0; scale: calc(var(--s, 1) * 0.94); pointer-events: none; }
 .toast.dragging { transition: none; cursor: grabbing; }
-@keyframes toast-in { from { opacity: 0; transform: translateY(18px) scale(0.94); filter: blur(4px); } }
+@keyframes toast-in { from { opacity: 0; transform: translateY(18px) scale(0.94); } }
 dialog { border: 1px solid var(--border); border-radius: 16px; background: var(--surface); color: var(--fg); padding: 24px; max-width: 520px; width: calc(100% - 32px); box-shadow: var(--shadow-lg); }
 dialog[open] { animation: pop 0.2s var(--ease); }
 dialog::backdrop { background: var(--backdrop); }
@@ -1159,8 +1166,12 @@ dialog.palette li.none { color: var(--fg-3); cursor: default; }
 	.letter .subject { margin: 0 -16px 12px; padding-left: 16px; padding-right: 16px; }
 	table.ledger { display: block; overflow-x: auto; }
 }
+/* No movement, but state still shows: short fades of opacity and colour stay, and what spins to say "working" becomes a still mark. */
 @media (prefers-reduced-motion: reduce) {
-	*, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+	*, *::before, *::after { animation: none !important; transition-property: opacity, color, background-color, border-color !important; transition-duration: 0.12s !important; transition-delay: 0s !important; scroll-behavior: auto !important; }
+	.board-col.in_corso:has(.board-card) .board-dot, .board-state.in_corso .board-dot { background: var(--fg); border-color: var(--fg); }
+	.run-task.now .task-mark { border-color: var(--fg); background: var(--fg); }
+	.orb::after { opacity: 0.8; }
 }
 
 /* brief del mattino */
@@ -1261,7 +1272,9 @@ ol.steps .stack > .choices { margin-bottom: 2px; }
 .board-count { font: 500 11.5px/1 var(--mono); color: var(--fg-3); padding: 3px 7px; border-radius: 99px; background: var(--hover); }
 .board-col .small { margin: 4px; font-size: 12px; }
 .board-card { text-align: left; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px; cursor: default; display: flex; flex-direction: column; gap: 10px; color: var(--fg); transition: border-color 0.15s var(--ease), opacity 0.15s var(--ease); }
-.board-card:hover { border-color: var(--border-2); }
+/* Dark: a card is #141414 on a #0a0a0a lane, so its edge has to do the separating. */
+.board-card { border-color: light-dark(var(--border), color-mix(in srgb, var(--fg) 20%, var(--bg-2))); }
+.board-card:hover { border-color: light-dark(var(--border-2), color-mix(in srgb, var(--fg) 38%, var(--bg-2))); }
 .board-card:active { cursor: grabbing; }
 .board-col.fatto .board-card { opacity: 0.72; }
 .board-col.fatto .board-card:hover { opacity: 1; }
@@ -1498,3 +1511,18 @@ a.room-row:hover { background: var(--hover); }
 .link-preview.on { opacity: 1; scale: 1; }
 .link-preview b { font-weight: 600; }
 .link-preview .source-mark { width: 28px; height: 28px; border-radius: 8px; font-size: 13px; box-shadow: none; }
+
+
+/* Touch: every control is at least 44px, the size of a fingertip. */
+@media (pointer: coarse) {
+	.icon-btn, .icon-btn.small { width: 44px; height: 44px; }
+	.btn, .btn.small { height: 44px; }
+	.rail-btn, nav.sections a, nav.rail-list > a, .roster-item, button.who-id, .menu button { min-height: 44px; }
+	.hints.ideas button { height: 44px; }
+	button.chip, a.chip, .chip[role="button"], .choices button, .seg button { min-height: 44px; }
+}
+
+.shortcut-list { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 12px 18px; align-items: baseline; margin: 16px 0 0; font-size: 13.5px; }
+.shortcut-list dt { display: flex; }
+.shortcut-list dd { margin: 0; color: var(--fg-2); }
+.keys { display: inline-flex; gap: 4px; }
