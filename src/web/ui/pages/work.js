@@ -1,10 +1,8 @@
-// Person-facing work and automation overviews. The source APIs remain the authority on visibility.
-import { api, dmHref, emptyNote, h, head, icon, instanceHref, mount, route, state } from "../common.js";
+// The automation overview, across agenti. The source APIs remain the authority on visibility.
+import { api, emptyNote, h, head, icon, instanceHref, mount, state } from "../common.js";
 
 const BOARD_STATUS = { da_fare: "Da fare", in_corso: "In corso", da_rivedere: "Da rivedere", fatto: "Fatto" };
 const RUN_STATUS = { queued: "In coda", running: "In corso", succeeded: "Risposta pronta", failed: "Non riuscita", cancelled: "Interrotta" };
-const RUN_SOURCE = { message: "Conversazione", schedule: "Lavoro programmato", brief: "Brief del mattino", watch: "Cambiamento di pagina", automation: "Evento esterno", notice: "Avviso", agent: "Passaggio tra agenti" };
-const FILTERS = [["tutti", "Tutti"], ["in_corso", "In corso"], ["attenzione", "Richiede te"], ["conclusi", "Conclusi"]];
 const CHANNEL = { web: "Console", telegram: "Telegram", whatsapp: "WhatsApp" };
 const PROGRAM_CHOICES = [
 	["orario", "A un orario", "Una data o una frequenza, con il suo fuso orario.", "task", ["orario"], "task"],
@@ -20,75 +18,14 @@ const romeClock = (at) => `${new Date(at).toLocaleString("it-IT", { timeZone: "E
 const short = (value, max = 220) => { const text = String(value ?? "").replace(/\s+/g, " ").trim(); return text.length > max ? `${text.slice(0, max - 1)}…` : text; };
 const counted = (count, one, many) => `${count} ${count === 1 ? one : many}`;
 const newest = (a, b) => String(b.at ?? "").localeCompare(String(a.at ?? ""));
-const hostOf = (url) => { try { return new URL(url).host; } catch { return "il sito indicato nel dettaglio"; } };
 const pageLabel = (url) => { try { const page = new URL(url); return `${page.host}${page.pathname === "/" ? "" : page.pathname}`; } catch { return "Pagina da controllare"; } };
 const activeRun = (run) => run.status === "queued" || run.status === "running";
-
-/** Same recipient rule as the console summary: being the owner does not take another person's review. */
-export function needsBoardReview(card, viewer) {
-	return card.status === "da_rivedere" && (card.work && card.work.agent === card.assignee ? card.work.personId === viewer.id : viewer.role === "owner");
-}
 
 export function runOutcome(run) {
 	if (run.cancelRequestedAt && activeRun(run)) return "Interruzione in corso";
 	const status = RUN_STATUS[run.status] ?? run.status;
 	if (run.status !== "succeeded") return status;
 	return `${status}${run.delivery === "failed" ? " · Consegna non riuscita" : run.delivery === "pending" ? " · Consegna in attesa" : run.delivery === "delivered" ? " · Consegnata" : ""}`;
-}
-
-function googleSummary(action) {
-	const mail = action.mail;
-	const recipients = [...(mail?.to ?? []), ...(mail?.cc ?? []).map((email) => `Cc: ${email}`)].join(", ");
-	if (action.kind === "mail.send" || action.kind === "mail.draft") return {
-		title: `${action.kind === "mail.send" ? "Invia la mail" : "Salva la bozza"}: ${mail?.subject ?? "Senza oggetto"}`,
-		consequence: `${action.kind === "mail.send" ? "Invia una mail" : "Salva una bozza in Gmail"} per ${recipients || "i destinatari nel dettaglio"} · Account ${action.account}.${mail?.attachments?.length ? ` Con ${mail.attachments.length} allegati.` : ""}`,
-	};
-	const verb = { "calendar.create": "Crea l'evento", "calendar.update": "Modifica l'evento", "calendar.delete": "Cancella l'evento" }[action.kind] ?? "Modifica Google";
-	return { title: `${verb}: ${action.current?.summary ?? action.event?.summary ?? "Leggi il dettaglio"}`, consequence: `${verb} su ${action.account}.${action.notify ? " Google avvisa gli invitati." : " Senza inviare avvisi agli invitati."}` };
-}
-
-/** Keep approval types and their exact targets; no approval is executed from this overview. */
-export function pendingApprovalRows(groups = []) {
-	return groups.flatMap((group) => {
-		const inst = group.instance;
-		const row = (type, item, title, consequence, extra = "") => ({ kind: "approval", id: `${type}:${inst.id}:${item.id ?? item.praticaId}`, agentId: inst.id, agentName: inst.name, type, title, consequence, detail: extra, status: "pending", statusLabel: "Decisione richiesta", attention: true, active: false, concluded: false, at: item.proposedAt ?? item.updatedAt ?? item.createdAt, href: instanceHref("approvazioni", [type, inst.id, item.id ?? item.praticaId], null), action: "Leggi e decidi" });
-		return [
-			...(group.proposals ?? []).filter((item) => item.status === "pending").map((item) => row("proposal", item, `Attiva lo strumento ${item.name}`, `Consente a ${inst.name} di usare custom_${item.name}${item.hosts?.length ? ` sui siti ${item.hosts.join(", ")}` : " senza accesso alla rete"}.`, short(item.description))),
-			...(group.webActions ?? []).filter((item) => item.status === "pending").map((item) => row("web", item, `Invia il modulo a ${hostOf(item.action)}`, "Invia una volta il modulo con i valori mostrati nel dettaglio.", short(item.reason))),
-			...(group.connectorActions ?? []).filter((item) => item.status === "pending").map((item) => row("connector", item, `${item.toolTitle || item.tool} · ${item.connectorName}`, `Esegue ${item.tool} su ${item.connectorName}.${item.destructive ? " Può cancellare o sovrascrivere dati." : ""}`, short(item.reason))),
-			...(group.agentRequests ?? []).filter((item) => item.status === "pending").map((item) => row("agent", item, item.what || item.tool, `${inst.name} esegue una volta ${item.tool}, richiesto da ${item.askedBy?.name ?? "un altro agente"}, con i valori nel dettaglio.`, short(item.preview))),
-			...(group.googleActions ?? []).filter((item) => item.status === "pending").map((item) => { const summary = googleSummary(item); return row("google", item, summary.title, summary.consequence, short(item.reason)); }),
-			...(group.pratiche ?? []).filter((item) => item.status === "draft_ready").map((item) => row("pratica", item, `Bozza commerciale: ${item.lead?.rawSubject ?? item.lead?.company ?? item.praticaId}`, `Leggi la bozza e decidi l'invio a ${item.lead?.email ?? item.lead?.fullName ?? "il cliente indicato nel dettaglio"}.`, short(item.lead?.company))),
-		];
-	}).sort(newest);
-}
-
-/** Board records stay separate from executions: a reply is not an accepted assignment. */
-export function workRows(board = {}, runGroups = [], viewer = {}) {
-	const cards = board.cards ?? [];
-	const byId = new Map(cards.map((card) => [card.id, card]));
-	const agents = new Map((board.agents ?? []).map((agent) => [agent.id, agent]));
-	const assignments = cards.map((card) => {
-		const waiting = card.status === "fatto" ? [] : (card.after ?? []).map((id) => byId.get(id)).filter((before) => !before || before.status !== "fatto");
-		const reviewIndex = (card.events ?? []).findLastIndex((event) => event.kind === "status" && event.status === "da_rivedere");
-		const result = reviewIndex < 0 || !["da_rivedere", "fatto"].includes(card.status) ? undefined : card.events.slice(reviewIndex).find((event) => event.kind === "comment" && event.by.kind === "agent")?.text;
-		const attention = needsBoardReview(card, viewer);
-		const blockers = waiting.length ? `In attesa di ${waiting.map((before) => before ? `#${before.n}` : "un incarico non visibile").join(", ")}${card.queued ? "; poi parte da solo" : ""}.` : card.queued ? "In attesa di avvio automatico." : "";
-		return { kind: "board", id: card.id, agentId: card.assignee ?? "", agentName: card.assignee ? agents.get(card.assignee)?.name ?? "Agente non disponibile" : "Non assegnato", title: `#${card.n} ${card.title}`, status: card.status, statusLabel: BOARD_STATUS[card.status] ?? card.status, attention, active: card.status === "in_corso", concluded: card.status === "fatto", at: card.updatedAt, detail: short(result ?? card.description), consequence: attention ? "Accettare il risultato chiude l'incarico. Gli invii richiedono la propria approvazione." : "", blockers, due: card.due, href: `#/board/${encodeURIComponent(card.id)}`, action: attention ? "Rivedi il risultato" : "Apri incarico" };
-	});
-	const executions = runGroups.flatMap(({ instance, runs = [], threads = [] }) => runs.map((run) => {
-		const thread = threads.find((item) => item.id === run.threadId);
-		const card = cards.find((item) => item.work?.agent === instance.id && item.work.threadId === run.threadId && item.work.personId === viewer.id);
-		const problem = run.status === "failed" || run.delivery === "failed";
-		// An old failed execution is an outcome, not a new decision waiting for the viewer.
-		return { kind: "run", id: `${instance.id}:${run.id}`, agentId: instance.id, agentName: instance.name, title: thread?.title || (card ? `#${card.n} ${card.title}` : `${RUN_SOURCE[run.source] ?? "Esecuzione"} · ${run.id.slice(0, 8)}`), status: run.status, statusLabel: runOutcome(run), attention: false, problem, active: activeRun(run), concluded: ["succeeded", "failed", "cancelled"].includes(run.status), at: run.updatedAt ?? run.createdAt, detail: run.status === "failed" ? "L'agente non ha completato questa esecuzione. Apri la conversazione per verificare il problema." : run.delivery === "failed" ? "La risposta è pronta, ma la consegna non è riuscita. Verifica la conversazione prima di riprovare." : run.status === "cancelled" ? "Esecuzione interrotta. Le azioni già effettuate restano." : run.status === "succeeded" ? "Apri la conversazione per leggere il risultato e verificare eventuali decisioni ancora necessarie." : "Il lavoro prosegue nella tua conversazione.", sourceLabel: RUN_SOURCE[run.source] ?? run.source, href: dmHref(instance.id, run.threadId), action: problem ? "Vedi problema" : "Apri conversazione" };
-	}));
-	return [...assignments, ...executions].sort(newest);
-}
-
-export function matchesWorkFilter(row, filter, agentId = "") {
-	if (agentId && (agentId === "__unassigned" ? row.kind !== "board" || row.agentId : row.agentId !== agentId)) return false;
-	return filter === "attenzione" ? row.attention : filter === "in_corso" ? row.active : filter === "conclusi" ? row.concluded : true;
 }
 
 // Each failed read keeps its last successful snapshot, visibly marked as partial until a retry succeeds.
@@ -123,70 +60,6 @@ function updateAgentOptions(select, instances, unassigned = false) {
 	const all = new Map(instances.map((instance) => [instance.id, instance]));
 	mount(select, h("option", { value: "" }, "Tutti gli agenti"), [...all.values()].sort((a, b) => a.name.localeCompare(b.name)).map((instance) => h("option", { value: instance.id }, instance.name)), unassigned ? h("option", { value: "__unassigned" }, "Non assegnati") : null);
 	select.value = all.has(previous) || (unassigned && previous === "__unassigned") ? previous : "";
-}
-
-function workRow(row) {
-	return h("li.task-row.work-row", h(`span.chip${row.problem ? ".bad" : row.attention ? ".warn" : row.concluded && row.status !== "failed" && row.status !== "cancelled" ? ".ok" : ""}`, row.statusLabel),
-		h("div.task-text", h("b", row.title), h("small", row.agentName, row.sourceLabel ? ` · ${row.sourceLabel}` : "", row.at ? ` · ${clock(row.at)}` : ""),
-			row.detail ? h("p.small.work-description", row.detail) : null, row.blockers ? h("p.small.work-blockers", row.blockers) : null,
-			row.due ? h("small", `Scadenza ${row.due}`) : null, row.consequence ? h("p.small.work-consequence", row.consequence) : null),
-		h("a.btn.small.ghost", { href: row.href }, row.action));
-}
-
-/** #/lavori and #/lavori/attenzione never inherit the conversation's selected agent. */
-export async function viewWork(main) {
-	const sources = new Map();
-	let filter = route().rest[0] === "attenzione" ? "attenzione" : "tutti";
-	let refreshing;
-	const agent = h("select", { "aria-label": "Filtra i lavori per agente", onchange: () => draw() }, h("option", { value: "" }, "Tutti gli agenti"));
-	const counts = h("p.muted.small", { role: "status", "aria-live": "polite" }, "Caricamento dei lavori…");
-	const content = h("div.stack");
-	const navigation = h("nav.row-gap.work-navigation", { "aria-label": "Viste dei lavori" });
-	const refresh = h("button.btn.ghost", { type: "button", onclick: () => void load() }, "Aggiorna");
-	const tabs = FILTERS.map(([value, label]) => h("button.chip", { type: "button", "aria-pressed": String(value === filter), onclick: () => { filter = value; draw(); } }, label));
-	mount(main, head(null, "Lavori", "Gli incarichi che puoi vedere e gli esiti nelle tue conversazioni, attraverso tutti gli agenti consentiti.", h("a.btn.accent", { href: "#/board/nuovo" }, icon("plus"), "Nuovo incarico"), refresh),
-		navigation, h("div.work-toolbar", h("div.row-gap.work-filters", { role: "group", "aria-label": "Stato dei lavori" }, tabs), h("label.field", h("span", "Agente"), agent)), counts, content);
-	function draw() {
-		if (!main.isConnected) return;
-		const board = sources.get("board")?.data ?? {};
-		const instances = sources.get("instances")?.data?.instances ?? [];
-		const groups = sources.get("approvals")?.data?.groups ?? [];
-		const runs = instances.map((instance) => ({ instance, runs: sources.get(`runs:${instance.id}`)?.data?.runs ?? [], threads: sources.get(`threads:${instance.id}`)?.data?.threads ?? [] }));
-		const all = [...workRows(board, runs, state.me), ...pendingApprovalRows(groups)].sort(newest);
-		const shown = all.filter((row) => matchesWorkFilter(row, filter, agent.value));
-		const partial = [...sources.values()].some((source) => source.error && (!agent.value || !source.agentId || source.agentId === agent.value));
-		tabs.forEach((tab, index) => { tab.setAttribute("aria-pressed", String(FILTERS[index][0] === filter)); if (FILTERS[index][0] === "attenzione") tab.textContent = `Richiede te · ${all.filter((row) => row.attention && matchesWorkFilter(row, "tutti", agent.value)).length}${partial || refreshing ? "+" : ""}`; });
-		counts.textContent = `${counted(shown.filter((row) => row.kind === "board").length, "incarico", "incarichi")} · ${counted(shown.filter((row) => row.kind === "approval").length, "decisione", "decisioni")} · ${counted(shown.filter((row) => row.kind === "run").length, "esecuzione recente", "esecuzioni recenti")}${partial ? " · Dati parziali" : ""}${refreshing ? " · Aggiornamento…" : ""}`;
-		const section = (kind, title, note) => { const rows = shown.filter((row) => row.kind === kind); return rows.length ? h("section.card.work-section", h("div.pad", h("h2", title), note ? h("p.small.muted", note) : null), h("ul.task-list", rows.map(workRow))) : null; };
-		mount(content, sourceErrors(sources, agent.value, () => void load()),
-			section("approval", "Decisioni da prendere", "Leggi il dettaglio prima di decidere: attivare uno strumento, inviare una mail e accettare un risultato hanno conseguenze diverse."),
-			section("board", "Incarichi"), section("run", "Esecuzioni nelle tue conversazioni", "Fino alle ultime 100 esecuzioni per agente. Una risposta pronta va verificata nella conversazione; non chiude un incarico."),
-			!shown.length && !refreshing ? emptyNote("div.card.empty", partial ? "Nessun elemento caricato per questo filtro" : filter === "attenzione" ? "Niente richiede il tuo intervento" : "Nessun lavoro per questo filtro", partial ? "Riprova le fonti per completare la vista." : filter === "tutti" ? "Affida un nuovo incarico per seguire obiettivo, agente e risultato." : "Gli altri lavori restano disponibili in Tutti.", filter === "tutti" ? h("a.btn", { href: "#/board/nuovo" }, "Nuovo incarico") : null) : null);
-	}
-	async function load() {
-		if (refreshing) return refreshing;
-		refresh.disabled = true;
-		refreshing = (async () => {
-			const previousInstances = sources.get("instances")?.data?.instances;
-			await Promise.all([readSource(sources, "board", "Incarichi", "/api/board", ["cards", "agents"]), readSource(sources, "approvals", "Decisioni", "/api/approvals", ["groups"]), readSource(sources, "instances", "Elenco agenti", "/api/instances", ["instances"])]);
-			invalidateBoardSnapshot(sources, previousInstances);
-			const instances = sources.get("instances")?.data?.instances ?? [];
-			const ids = new Set(instances.map((instance) => instance.id));
-			for (const [key, source] of sources) if (source.agentId && !ids.has(source.agentId)) sources.delete(key);
-			for (const instance of instances.filter((item) => item.hasSegreteria)) { sources.delete(`runs:${instance.id}`); sources.delete(`threads:${instance.id}`); }
-			await Promise.all(instances.flatMap((instance) => instance.hasSegreteria ? [] : [readSource(sources, `runs:${instance.id}`, `Esecuzioni · ${instance.name}`, `/api/instances/${encodeURIComponent(instance.id)}/runs`, ["runs"], instance.id), readSource(sources, `threads:${instance.id}`, `Titoli delle conversazioni · ${instance.name}`, `/api/instances/${encodeURIComponent(instance.id)}/threads`, ["threads"], instance.id)]));
-			updateAgentOptions(agent, instances, true);
-			mount(navigation, h("a.btn.ghost", { href: "#/board" }, icon("board"), "Vista Board"), instances.filter((instance) => instance.hasSegreteria).map((instance) => h("a.btn.ghost", { href: instanceHref("segreteria", [], instance.id) }, `Pratiche · ${instance.name}`)));
-		})().finally(() => { refreshing = undefined; refresh.disabled = false; draw(); });
-		draw();
-		return refreshing;
-	}
-	let live;
-	state.onRun = () => { if (!live) live = setTimeout(() => { live = undefined; if (main.isConnected) void load(); }, 300); return false; };
-	state.onRunsReconnect = () => { if (main.isConnected) void load(); };
-	state.onBoard = () => { if (main.isConnected) void load(); };
-	const timer = setInterval(() => { if (!main.isConnected) return clearInterval(timer); if (!document.hidden) void load(); }, 30_000);
-	await load();
 }
 
 function watchCondition(watch) {
@@ -257,7 +130,7 @@ export async function viewPrograms(main) {
 		dialog.showModal();
 		select.focus();
 	}
-	mount(main, head(null, "Automazioni", "Quando deve partire il lavoro: per orario, cambiamento di una pagina, evento esterno o incarico ricorrente.", h("a.btn.ghost", { href: "#/lavori" }, "Torna ai lavori"), refresh),
+	mount(main, head(null, "Automazioni", "Quando deve partire il lavoro: per orario, cambiamento di una pagina, evento esterno o incarico ricorrente.", refresh),
 		h("section.card.pad", h("h2", "Quando deve partire?"), h("div.work-program-choices", PROGRAM_CHOICES.map((choice) => h("button.work-program-choice", { type: "button", onclick: () => choose(choice) }, icon(choice[5]), h("b", choice[1]), h("span.small.muted", choice[2]))))),
 		h("div.work-toolbar", h("h2", "Automazioni configurate"), h("label.field", h("span", "Agente"), agent)), counts, h("p.small.muted", "Le configurazioni rispettano gli accessi di ogni agente. Gli esiti delle esecuzioni riguardano solo le tue conversazioni. Mettere in pausa una configurazione riguarda i prossimi avvii; le esecuzioni in corso si controllano dal lavoro."), content);
 	function draw() {

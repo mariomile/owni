@@ -20,13 +20,14 @@ Quello che un agente fa e sa, a destra della conversazione: attività, artifact,
 _Avoid_: scheda dell'agente, profilo
 
 **Lavori**:
-La vista degli incarichi consentiti, delle autorizzazioni e degli esiti nelle conversazioni della persona. Gli agenti si filtrano dentro la vista; cambiare agente nella chat non ne cambia implicitamente il perimetro.
+L'area degli incarichi e delle automazioni. Si apre sulla Board degli incarichi. Vedi ADR 0115.
 
 **Incarico**:
-Una scheda della board presentata come lavoro da affidare e seguire. Nel codice e nei tool rimane la scheda esistente; la Board è una vista alternativa, con gli stessi quattro stati e regole di revisione.
+Una scheda della Board presentata come lavoro da affidare e seguire. Nel codice e nei tool rimane la scheda esistente, con i suoi quattro stati e le regole di revisione.
 
 **Richiede te**:
-Filtro operativo sulle decisioni che competono alla persona: Autorizzare un’azione e accettare un risultato sono azioni distinte. Non sostituisce lo stato dell’incarico o dell’esecuzione.
+La pagina con quello che aspetta la persona: le azioni da autorizzare («Da decidere») e gli incarichi di cui accettare il risultato («Da rivedere»). Autorizzare un’azione e accettare un risultato restano azioni distinte. Vedi ADR 0115.
+_Avoid_: Autorizzazioni, approvazioni (come nome della pagina)
 
 **Procedure**:
 Il nome usato nella configurazione dell’agente per le skill esistenti. Comandi, bozze, import/export SKILL.md e diritti di modifica restano quelli delle skill.

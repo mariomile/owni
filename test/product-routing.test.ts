@@ -44,8 +44,8 @@ describe("agent context in product navigation", () => {
 		common.state.instance = { id: "sales" };
 		common.go("impostazioni", "servizi");
 		expect(common.route()).toMatchObject({ view: "impostazioni", rest: ["servizi"], instanceId: "sales" });
-		common.go("lavori", "attenzione");
-		expect(common.location.hash).toBe("#/lavori/attenzione");
+		common.go("approvazioni");
+		expect(common.location.hash).toBe("#/approvazioni");
 		expect(common.route().instanceId).toBeUndefined();
 	});
 
@@ -70,7 +70,7 @@ describe("agent context in product navigation", () => {
 		expect(moved("#/stanze/nuova")).toBe("#/canali/nuova");
 		expect(moved("#/canali/p_1.r2")).toBeUndefined();
 		expect(moved("#/dm/sales")).toBeUndefined();
-		expect(moved("#/lavori")).toBeUndefined();
+		expect(moved("#/board")).toBeUndefined();
 	});
 
 	it("sends the agent pages folded into its panel by ADR 0114 to the panel, and its services to its configuration", () => {

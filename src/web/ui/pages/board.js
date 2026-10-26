@@ -656,7 +656,7 @@ export async function viewBoard(main) {
 	const routines = data.routines?.length ? h("details.board-routines", { open: store("owni.board.routines") !== "0" ? "" : undefined, ontoggle: (e) => store("owni.board.routines", e.currentTarget.open ? "1" : "0") }, h("summary", `Si ripetono (${data.routines.length})`), h("ul", data.routines.map(routineRow))) : null;
 	mount(
 		main,
-		head(null, h("h1", "Board degli incarichi"), "Le cose da fare, affidate agli agenti. L'agente ci lavora in una conversazione con chi gliel'ha affidata e la sposta in «Da rivedere»; poi una persona la chiude, o la rimanda indietro con un commento. Puoi anche chiedere in chat: «mettilo in board per Ricercatore», e avviarla da qui.", h("button.btn.accent", { onclick: newCard }, icon("plus"), "Nuovo incarico")),
+		head(null, h("h1", "Incarichi"), "Le cose affidate agli agenti. Quando un agente finisce, l'incarico passa in «Da rivedere» e lo trovi anche in Richiede te.", h("button.btn.accent", { onclick: newCard }, icon("plus"), "Nuovo incarico")),
 		routines,
 		filters,
 		columns,

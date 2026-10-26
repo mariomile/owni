@@ -14,7 +14,7 @@ import { viewSegreteria } from "./pages/segreteria.js";
 import { viewSettings } from "./pages/settings.js";
 import { viewStart } from "./pages/start.js";
 import { viewTasks } from "./pages/tasks.js";
-import { viewPrograms, viewWork } from "./pages/work.js";
+import { viewPrograms } from "./pages/work.js";
 import { openPalette } from "./palette.js";
 import { install, installed, installOffer } from "./pwa.js";
 import { applyTheme, refreshSetup } from "./session.js";
@@ -27,13 +27,12 @@ import { applyTheme, refreshSetup } from "./session.js";
  * one line in sw.js.
  */
 export const PAGES = [
-	{ id: "lavori", label: "Lavori", group: "Lavoro", workspace: "work", sidebar: true, view: viewWork },
 	{ id: "dm", label: "Messaggi diretti", group: "Lavoro", workspace: "conversations", palette: false, view: viewDm },
 	{ id: "canali", label: "Canali", group: "Lavoro", workspace: "conversations", when: () => state.instances.filter((i) => i.canChat).length > 1, view: viewRooms },
-	{ id: "board", label: "Board degli incarichi", group: "Lavoro", workspace: "work", view: viewBoard },
+	{ id: "board", label: "Lavori", group: "Lavoro", workspace: "work", sidebar: true, view: viewBoard },
 	{ id: "programmi", label: "Automazioni", group: "Lavoro", workspace: "work", view: viewPrograms },
 	{ id: "segreteria", label: "Pratiche commerciali", group: "Lavoro", workspace: "work", when: (i) => i?.hasSegreteria, view: viewSegreteria },
-	{ id: "approvazioni", label: "Autorizzazioni", group: "Lavoro", workspace: "work", view: viewApprovals },
+	{ id: "approvazioni", label: "Richiede te", group: "Lavoro", view: viewApprovals },
 	{ id: "task", label: "Orari e pagine da controllare", group: "Lavoro", workspace: "work", view: viewTasks },
 	{ id: "automazioni", label: "Eventi esterni", group: "Lavoro", workspace: "work", view: viewAutomations },
 	{ id: "agenti", label: "Agenti", group: "Gestione", workspace: "agents", view: viewAgents },
@@ -51,8 +50,7 @@ function workspaceNav(item) {
 	const { view } = route();
 	const link = (label, href, active) => h("a", { href, "aria-current": active ? "page" : undefined }, label);
 	if (item.workspace === "work") return h("nav.workspace-nav", { "aria-label": "Lavori", ...windowDrag() },
-		link("Incarichi", "#/lavori", view === "lavori" && !route().rest[0]),
-		link("Richiede te", "#/lavori/attenzione", view === "approvazioni" || (view === "lavori" && route().rest[0] === "attenzione")),
+		link("Incarichi", "#/board", view === "board"),
 		link("Automazioni", "#/programmi", ["programmi", "task", "automazioni"].includes(view)),
 		state.instances.some((i) => i.hasSegreteria) ? link("Pratiche", instanceHref("segreteria", [], state.instances.find((i) => i.hasSegreteria)?.id), view === "segreteria") : null,
 	);
@@ -214,7 +212,7 @@ export function renderRail() {
 		h(
 			"div.rail-scroll",
 			nav,
-			h("a.rail-btn.attention-link", { href: "#/lavori/attenzione", onclick: closeRailOnPhone, title: "Richiede te" }, icon("approvazioni"), h("span.label", "Richiede te"), state.pendingApprovals + state.boardReview ? h("span.count", String(state.pendingApprovals + state.boardReview)) : null),
+			h("a.rail-btn.attention-link", { href: "#/approvazioni", "aria-current": view === "approvazioni" ? "page" : undefined, onclick: closeRailOnPhone, title: "Richiede te" }, icon("approvazioni"), h("span.label", "Richiede te"), state.pendingApprovals + state.boardReview ? h("span.count", String(state.pendingApprovals + state.boardReview)) : null),
 			canali,
 			dms,
 			h("nav.sections.rail-management", { "aria-label": "Gestione" }, h("a", { href: state.instances.length === 1 ? agentHome(state.instances[0].id) : "#/agenti", onclick: closeRailOnPhone, title: "Agenti" }, icon("agenti"), h("span.label", state.instances.length === 1 ? "Il tuo assistente" : "Agenti")), h("a", { href: "#/gestione", onclick: closeRailOnPhone, title: "Account e gestione" }, icon("gestione"), h("span.label", "Account e gestione"))),

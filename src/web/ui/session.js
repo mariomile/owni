@@ -174,8 +174,8 @@ function connectEvents() {
 	es.addEventListener("board", (e) => {
 		const event = JSON.parse(e.data);
 		void refreshCounters();
-		if (["lavori", "programmi"].includes(route().view)) return state.onBoard?.(event);
-		if (route().view === "board" && !document.querySelector("dialog[open]")) return render();
+		if (route().view === "programmi") return state.onBoard?.(event);
+		if (["board", "approvazioni"].includes(route().view) && !document.querySelector("dialog[open]")) return render();
 		toast(event.kind === "due" ? `Scheda #${event.n} ${event.text}: ${event.title}` : event.kind === "started" ? `Scheda #${event.n} partita da sola: ${event.title}` : `Scheda #${event.n} da rivedere: ${event.title}`);
 	});
 	state.events = es;
