@@ -1316,6 +1316,11 @@ export function createWebApp(options: WebAppOptions): Server {
 		if (transport.type === "http" && transport.auth === "oauth") transport = { type: "http", url: transport.url, auth: "oauth" };
 		const store = options.connectors(instance);
 		const before = (await store.list()).find((c) => c.id === id);
+		// Headers saved for one host never go to another: on a new origin only the ones given in this save stay.
+		if (transport.type === "http" && transport.headerSecrets !== undefined && before?.transport.type === "http" && URL.canParse(transport.url) && new URL(before.transport.url).origin !== new URL(transport.url).origin) {
+			const saved = before.transport.headerSecrets ?? {};
+			transport = { ...transport, headerSecrets: Object.fromEntries(Object.entries(transport.headerSecrets).filter(([header, secret]) => saved[header] !== secret)) };
+		}
 		// An API's key (ADR 0116): given here, kept by the server, never sent back. The connector names it.
 		const keySecret = catalogTokenSecret(instance, id);
 		let newKey: string | undefined;
