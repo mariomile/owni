@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
 import { type RunningOwni, startOwni } from "../src/app.ts";
@@ -204,4 +205,71 @@ describe("the organigramma's routes", () => {
 		// The old per-agente switch is gone: the organigramma is the one place.
 		expect((await api("/api/instances/conti/agents", { from: [] }, "PUT")).status).toBe(404);
 	}, 30_000);
+});
+
+// Match browser-file-chooser.test.ts: use the installed browser, never download one.
+const chrome = process.env.OWNI_CHROMIUM_PATH ?? (existsSync("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome") ? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" : undefined);
+
+describe.skipIf(chrome === undefined || !existsSync(chrome))("the organigramma as a tree, in real Chromium", () => {
+	const running: RunningOwni[] = [];
+	afterEach(async () => {
+		for (const a of running.splice(0)) await a.stop();
+	});
+
+	it("draws who answers to whom under the people, opens an agente's place on a click, and goes back to the squadre", async () => {
+		const config = loadOwniConfig({ OWNI_DATA_DIR: tempDataDir(), OWNI_MODEL_PROVIDER: "faux", OWNI_WEB_PORT: "1" });
+		const owni = await startOwni({ ...config, web: { ...config.web, port: 0 } }, { schedulerIntervalMs: 60_000, log: () => {} });
+		running.push(owni);
+		const base = `http://127.0.0.1:${(owni.server.address() as AddressInfo).port}`;
+		const token = (owni.ownerLink as string).split("#")[1];
+		const res = await fetch(`${base}/api/login`, { method: "POST", headers: { "x-owni": "1" }, body: JSON.stringify({ token }) });
+		const cookie = (res.headers.get("set-cookie") ?? "").split(";")[0] as string;
+		const api = (path: string, body: unknown, method = "POST") => fetch(`${base}${path}`, { method, headers: { cookie, "x-owni": "1", "content-type": "application/json" }, body: JSON.stringify(body) });
+		for (const [id, name] of NAMES) if (id !== "owni") await api("/api/instances", { id, name });
+		const { version } = (await (await fetch(`${base}/api/org`, { headers: { cookie, "x-owni": "1" } })).json()) as { version: string };
+		expect((await api("/api/org", { org: COMPANY, version }, "PUT")).status).toBe(200);
+
+		const { chromium } = await import("playwright-core");
+		const browser = await chromium.launch({ executablePath: chrome, args: ["--no-sandbox"] });
+		try {
+			const page = await browser.newPage();
+			const [name, value] = cookie.split("=") as [string, string];
+			await page.context().addCookies([{ name, value, url: base }]);
+			await page.goto(`${base}/#/organigramma/albero`);
+			await page.waitForSelector(".org-tree");
+			// Each node with what sits under it: the people at the root, then whoever answers to nobody.
+			const tree = await page.evaluate(`(() => {
+				const walk = (li) => ({ name: li.querySelector(":scope > .org-node b").textContent, below: [...li.querySelectorAll(":scope > ul > li")].map(walk) });
+				return walk(document.querySelector(".org-tree > ul > li"));
+			})()`);
+			expect(tree).toEqual({
+				name: "Le persone",
+				below: [
+					{ name: "Owni", below: [{ name: "Contabile", below: [] }, { name: "Responsabile vendite", below: [{ name: "Preventivi", below: [] }] }] },
+					{ name: "Assistente d'ufficio", below: [] },
+				],
+			});
+			// A screen reader hears what the box shows, not only the name.
+			expect(await page.getByRole("button", { name: "Responsabile vendite, Coordina Vendite: modifica il suo posto" }).innerText()).toContain("Coordina Vendite");
+			expect(await page.getByRole("button", { name: "Assistente d'ufficio, Ufficio, a disposizione di tutti: modifica il suo posto" }).count()).toBe(1);
+			await page.getByRole("button", { name: "Preventivi, Vendite: modifica il suo posto" }).click();
+			expect(await page.locator("dialog[open] h2").innerText()).toBe("Preventivi");
+			await page.keyboard.press("Escape");
+			await page.getByRole("button", { name: "Squadre", exact: true }).click();
+			await page.locator(".org-tree").waitFor({ state: "detached" });
+			expect(new URL(page.url()).hash).toBe("#/organigramma");
+			// The view drawn after the click keeps the focus on its button.
+			expect(await page.evaluate(`document.activeElement?.textContent`)).toBe("Squadre");
+			await page.getByRole("button", { name: "Albero", exact: true }).click();
+			await page.waitForSelector(".org-tree");
+			expect(await page.evaluate(`document.activeElement?.textContent`)).toBe("Albero");
+			// An agente created after the organigramma was saved has no place yet: it sits at the top, under the people.
+			await api("/api/instances", { id: "nuovo", name: "Nuovo" });
+			await page.reload();
+			await page.waitForSelector(".org-tree");
+			expect(await page.locator(".org-tree > ul > li > ul > li > .org-node b").allInnerTexts()).toEqual(["Nuovo", "Owni", "Assistente d'ufficio"]);
+		} finally {
+			await browser.close();
+		}
+	});
 });

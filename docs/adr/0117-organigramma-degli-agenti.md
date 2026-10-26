@@ -13,7 +13,7 @@ Un **organigramma** per installazione, deciso dall'owner nella pagina «Organigr
 - **Le squadre pronte entrano nell'organigramma.** Creare una squadra (ADR 0068) aggiunge la squadra, con chi coordina, i ruoli e le responsabilità di ognuno, e chi risponde a chi coordina. Le istruzioni dei membri tengono solo il loro lavoro: il resto lo dice la nota, che resta vera se l'owner sposta un agente.
 - **Eliminare un agente** lo toglie dall'organigramma: chi gli rispondeva non risponde più a nessuno, la sua squadra resta senza chi coordina, e chi parla con chi si ricalcola.
 
-La pagina «Organigramma» mostra le squadre con chi le coordina in testa, poi gli agenti senza squadra. Di ognuno: volto, ruolo, responsabilità, a chi risponde, con chi parla e cosa sta facendo adesso (ADR 0109). L'owner modifica un agente o una squadra da una finestra, e ogni salvataggio scrive l'intero organigramma.
+La pagina «Organigramma» mostra le squadre con chi le coordina in testa, poi gli agenti senza squadra. Di ognuno: volto, ruolo, responsabilità, a chi risponde, con chi parla e cosa sta facendo adesso (ADR 0109). L'owner modifica un agente o una squadra da una finestra, e ogni salvataggio scrive l'intero organigramma. La vista «Albero» (`#/organigramma/albero`) mostra gli stessi agenti come un albero di chi risponde a chi: in cima le persone, sotto gli agenti che non rispondono a nessun altro, e ognuno con chi gli risponde. Di ogni agente dice ruolo e squadra, se la coordina e se è a disposizione di tutti; un click apre la stessa finestra di modifica. Sul telefono l'albero diventa un elenco rientrato.
 
 ## Alternative scartate
 
