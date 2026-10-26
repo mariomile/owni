@@ -1,5 +1,7 @@
 # Scrivere su Gmail e Calendar, con approvazione
 
+> Sostituita in parte dall'[ADR 0120](0120-approvazioni-per-rischio.md): una bozza e un evento senza invitati si fanno subito, senza card. Mail inviate, risposte, eventi con invitati, modifiche e cancellazioni restano card. Il resto di questa decisione vale ancora.
+
 Fino alla settimana 25 Owni leggeva posta e calendario di chi le scrive, ma per rispondere a una mail o spostare un appuntamento la persona doveva aprire Gmail o Calendar da sola. Gli assistenti con cui Owni viene confrontata scrivono mail e prenotano eventi. Una mail inviata non si ritira, e un invito arriva a persone di fuori: niente deve partire perché lo dice un testo letto dal modello (una mail, una pagina).
 
 ## Come funziona

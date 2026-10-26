@@ -21,7 +21,7 @@ import { GOOGLE_CONNECTOR, GOOGLE_HOSTS, GOOGLE_WRITE_SCOPE, GoogleAccounts, Goo
 import { ConnectorHttpError, egressFetch } from "./connectors/http.ts";
 import { ConnectorStore, connectorEgressName, McpConnections, type McpConnectionsOptions } from "./connectors/mcp.ts";
 import { McpOAuth, mcpOAuthSecret } from "./connectors/mcp-oauth.ts";
-import type { CatalogEntry } from "./connectors/catalog.ts";
+import { CONNECTOR_CATALOG, type CatalogEntry } from "./connectors/catalog.ts";
 import { readOnlyInBriefs } from "./core/brief.ts";
 import { type ComputerProvider, computerKey } from "./core/computer.ts";
 import { createComputerTools } from "./core/tools/computer-tools.ts";
@@ -147,6 +147,9 @@ Quando ti arriva una registrazione senza dire cosa farne, trascrivila e chiedi s
 Se qualcuno ti chiede di rispondergli a voce, o di smettere, usa voice_replies quando ce l'hai; senza, spiega che le risposte a voce le attiva l'owner, e non promettere vocali.
 Se agent_list ti dà qualcuno, chiedi agli altri agenti dell'azienda (agent_list) quello che sanno o possono fare meglio di te, con strumenti o dati che tu non hai; la risposta arriva dopo, in questa conversazione.
 Non inventare dati: se non sai, dillo o usa un tool. Non compiere azioni irreversibili verso l'esterno senza che una persona lo chieda esplicitamente.`;
+
+/** What doing a Google action needs: a stored request has all of it, a draft or an event with no guests everything but `current`. */
+type GoogleActionToDo = Pick<GoogleAction, "kind" | "personId" | "account" | "mail" | "event" | "notify" | "current">;
 
 export type OwniOptions = {
 	/** Tests: official CLI process runner. Only used with config.localProviders explicitly on. */
@@ -457,6 +460,19 @@ export async function startOwni(config: OwniConfig, options: OwniOptions = {}): 
 				? {
 						write: {
 							store: runtime.googleActions(record.tenantId, record.id),
+							// A draft or an event with no guests asks nobody (ADR 0120): done now, recorded with no addresses or text.
+							now: async (draft) => {
+								// A write that happened is never told as failed because the audit could not be written.
+								const audit = () => runtime.audit(record.tenantId).append({ type: "google_action.direct", instanceId: record.id, kind: draft.kind, personId: draft.personId }).catch(() => log("google: direct write not audited"));
+								try {
+									const result = await runGoogleAction(record.id)(draft);
+									await audit();
+									return result;
+								} catch (error) {
+									if (error instanceof GoogleUncertain) await audit();
+									throw error;
+								}
+							},
 							workspace: runtime.workspace(record.tenantId, record.id),
 							account: (personId: string) => {
 								const account = googleAccounts.get(personId);
@@ -515,7 +531,7 @@ export async function startOwni(config: OwniConfig, options: OwniOptions = {}): 
 		};
 	};
 	/** Does an approved Google action, with the person's own account, if the instance still allows Google. */
-	const runGoogleAction = (instance: string) => async (action: GoogleAction): Promise<GoogleActionResult> => {
+	const runGoogleAction = (instance: string) => async (action: GoogleActionToDo): Promise<GoogleActionResult> => {
 		try {
 			return await doGoogleAction(instance, action);
 		} catch (error) {
@@ -527,7 +543,7 @@ export async function startOwni(config: OwniConfig, options: OwniOptions = {}): 
 			throw error;
 		}
 	};
-	const doGoogleAction = async (instance: string, action: GoogleAction): Promise<GoogleActionResult> => {
+	const doGoogleAction = async (instance: string, action: GoogleActionToDo): Promise<GoogleActionResult> => {
 		const record = await runtime.registry.getInstance(tenant, instance);
 		const client = googleClientFor(record, action.personId);
 		if (client === undefined) throw new Error("Google non è più collegato per questa persona");
@@ -635,6 +651,7 @@ export async function startOwni(config: OwniConfig, options: OwniOptions = {}): 
 				audit: runtime.audit(record.tenantId),
 				log,
 				oauth: mcpOAuth(),
+				payments: (options.connectorCatalog ?? CONNECTOR_CATALOG).filter((e) => e.category === "pagamenti").map((e) => e.url),
 				actions: { propose: (input) => proposeConnectorAction(record.id, input) },
 			});
 			connections.set(record.id, mcp);

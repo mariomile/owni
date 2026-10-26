@@ -180,12 +180,16 @@ describe("a collegamento API of an agente (ADR 0116)", () => {
 		expect(JSON.stringify(await owni.runtime.audit("default").read())).not.toContain(KEY);
 	});
 
-	it("with approval off, writes go at once", async () => {
+	it("an API write always waits: no approval setting turns it off or is kept for an API", async () => {
 		const s = await service();
 		const { api, reply } = await boot();
-		expect((await save(api, s.base, { approval: "none" })).status).not.toHaveProperty("approval");
-		expect(await reply(`/tool crm__write ${JSON.stringify({ method: "POST", path: "/clienti", body: { nome: "Verdi" } })}`)).toMatch(/^Fatto\. HTTP 201/);
-		expect(s.seen).toHaveLength(1);
+		for (const approval of ["none", "writes"]) {
+			const saved = await save(api, s.base, { approval });
+			expect(saved.status).toMatchObject({ connected: true, approval: ["crm__write"] });
+			expect((await api("/api/instances/owni/connectors")).connectors[0]).not.toHaveProperty("approval");
+			expect(await reply(`/tool crm__write ${JSON.stringify({ method: "POST", path: "/clienti", body: { nome: "Verdi" }, owni_reason: "Aggiungo il cliente" })}`)).toMatch(/Richiesta [0-9a-f]{12} pronta/);
+		}
+		expect(s.seen).toHaveLength(0);
 	});
 
 	it("keeps the key for the same service, asks it again for a new host, and drops it with the collegamento", async () => {

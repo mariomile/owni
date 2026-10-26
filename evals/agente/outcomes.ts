@@ -61,7 +61,7 @@ export async function runOutcome(id: OutcomeId, options: Options = {}): Promise<
 					...createGoogleTools({
 						personOf: async (thread) => rt.participant("acme", "ops", thread) === "test:u" ? "u" : undefined,
 						clientFor: async () => google, timeZone: "Europe/Rome", services: ["gmail"],
-						write: { store: rt.googleActions("acme", "ops"), account: () => ({ email: "owner@example.test", canWrite: true }) },
+						write: { store: rt.googleActions("acme", "ops"), now: async () => { result.externalCalls++; throw new Error("Direct Google writes are forbidden in outcome checks"); }, account: () => ({ email: "owner@example.test", canWrite: true }) },
 					}),
 				];
 				return options.wrapTools?.(tools, google) ?? tools;

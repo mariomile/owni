@@ -1367,7 +1367,7 @@ export function createWebApp(options: WebAppOptions): Server {
 				else throw new HttpError(400, "Manca la chiave");
 			}
 		}
-		const connector: McpConnector = { id, name: String(body.name ?? id), transport, enabled: body.enabled !== false, ...(body.approval === "none" ? { approval: "none" as const } : {}) };
+		const connector: McpConnector = { id, name: String(body.name ?? id), transport, enabled: body.enabled !== false, ...(body.approval === "writes" && transport.type !== "api" ? { approval: "writes" as const } : {}) };
 		try {
 			await store.save(connector);
 		} catch (error) {
@@ -1390,7 +1390,7 @@ export function createWebApp(options: WebAppOptions): Server {
 		const allowed = body.allowed !== false;
 		const next = allowed ? [...new Set([...current, name])] : current.filter((c) => c !== name);
 		if (next.join() !== current.join()) await runtime.registry.setEgress(tenantId, instance, { ...record.egress, connectors: next });
-		await runtime.audit(tenantId).append({ type: "connector.saved", instanceId: instance, connector: id, transport: connector.transport.type, allowed, approval: connector.approval ?? "writes" });
+		await runtime.audit(tenantId).append({ type: "connector.saved", instanceId: instance, connector: id, transport: connector.transport.type, allowed, approval: connector.approval ?? "risk" });
 		await runtime.reopen(tenantId, instance);
 		return { status: options.connectorStatus(instance).find((s) => s.id === id) };
 	});
@@ -1420,6 +1420,8 @@ export function createWebApp(options: WebAppOptions): Server {
 			name: entry.name,
 			transport: { type: "http", url: entry.url, ...(entry.auth === "token" ? { headerSecrets: { authorization: secret } } : {}), ...(entry.auth === "oauth" ? { auth: "oauth" as const } : {}) },
 			enabled: true,
+			// A payments service can move money: its writes always wait for a person (ADR 0120).
+			...(entry.category === "pagamenti" ? { approval: "writes" as const } : {}),
 		};
 		const allow = async () => {
 			const record = await runtime.registry.getInstance(tenantId, instance);
@@ -1437,7 +1439,7 @@ export function createWebApp(options: WebAppOptions): Server {
 			}
 			await store.save(connector);
 			await allow();
-			await runtime.audit(tenantId).append({ type: "connector.saved", instanceId: instance, connector: entry.id, transport: "http", allowed: true, catalog: true });
+			await runtime.audit(tenantId).append({ type: "connector.saved", instanceId: instance, connector: entry.id, transport: "http", allowed: true, catalog: true, approval: connector.approval ?? "risk" });
 			if (url !== undefined) return { url };
 			await runtime.reopen(tenantId, instance);
 			return { status: options.connectorStatus(instance).find((s) => s.id === entry.id) };
@@ -1449,7 +1451,7 @@ export function createWebApp(options: WebAppOptions): Server {
 		if (!replacing) {
 			await store.save(connector);
 			await allow();
-			await runtime.audit(tenantId).append({ type: "connector.saved", instanceId: instance, connector: entry.id, transport: "http", allowed: true, catalog: true });
+			await runtime.audit(tenantId).append({ type: "connector.saved", instanceId: instance, connector: entry.id, transport: "http", allowed: true, catalog: true, approval: connector.approval ?? "risk" });
 		}
 		await runtime.reopen(tenantId, instance);
 		return { status: options.connectorStatus(instance).find((s) => s.id === entry.id) };

@@ -180,19 +180,18 @@ function said(name: string, response: ApiResponse): string {
 const QUERY_SCHEMA = { type: "object", description: "Address parameters, name → value (text, number, boolean, or a list of these)", additionalProperties: true };
 
 export type ApiToolsOptions = {
-	readonly connector: { readonly id: string; readonly name: string; readonly approval?: "writes" | "none"; readonly transport: ApiTransport };
+	readonly connector: { readonly id: string; readonly name: string; readonly transport: ApiTransport };
 	readonly caller: ApiCaller;
 	readonly toolName: (tool: string) => string;
 	/** A write that waits for a person; without it writes are refused. */
 	readonly propose?: (input: { tool: string; toolTitle: string; args: Record<string, unknown>; reason: string; destructive: boolean }, ctx: Parameters<OwniTool["execute"]>[1]) => Promise<string>;
 };
 
-/** The two tools of a collegamento API: read (GET, at once) and write (waits for approval unless the owner turned it off). */
+/** The two tools of a collegamento API: read (GET, at once) and write (always waits for approval: the service has no annotations to tell a safe write, ADR 0120). */
 export function apiTools({ connector, caller, toolName, propose }: ApiToolsOptions): OwniTool[] {
 	const t = connector.transport;
 	const host = new URL(t.baseUrl).hostname;
 	const about = `[${connector.name}] HTTP API at ${t.baseUrl}.${t.notes ? ` What the owner says about it: ${t.notes}` : ""} Owni adds the key: never ask for it, never put it in path, query or body.`;
-	const asks = (connector.approval ?? "writes") === "writes";
 	const read: OwniTool = {
 		name: toolName("read"),
 		description: `${about} Read: one GET request; returns the HTTP status and the body.`,
@@ -216,48 +215,31 @@ export function apiTools({ connector, caller, toolName, propose }: ApiToolsOptio
 		query: QUERY_SCHEMA,
 		body: { description: "JSON body (object or array); a string is sent as plain text" },
 	};
-	const write: OwniTool = asks
-		? {
-				name: toolName("write"),
-				description: `${about} Write: one POST, PUT, PATCH or DELETE request. Needs a person's approval: nothing happens until they approve this exact call; you get the outcome later in this conversation. Only when the person you are talking to asked for it. Put in owni_reason one sentence for the approver.`,
-				parameters: {
-					type: "object",
-					properties: { ...writeProperties, owni_reason: { type: "string", minLength: 3, maxLength: 300, description: "For the person approving: what this does and for whom, in Italian, plain words, no tool names" } },
-					required: ["method", "path", "owni_reason"],
-					additionalProperties: false,
-				},
-				replaySafe: true,
-				execute: async (args, ctx) => {
-					if (propose === undefined) return `Errore: ${connector.name} chiede l'approvazione per scrivere, ma qui non si può approvare.`;
-					const call = writeCall(args);
-					if (typeof call === "string") return call;
-					// Checked now, so a person never approves a request that cannot go.
-					try {
-						apiUrl(t, call.path, call.query);
-						if (call.body !== undefined && JSON.stringify(call.body).length > API_LIMITS.maxBodyChars) throw new ApiRequestRefused(`corpo oltre ${API_LIMITS.maxBodyChars} caratteri`);
-					} catch (error) {
-						return failure(connector.name, host, error);
-					}
-					const reason = typeof args.owni_reason === "string" && args.owni_reason.trim() !== "" ? args.owni_reason.trim() : `${call.method} su ${connector.name}`;
-					return ctx.step("propose", () => propose({ tool: "write", toolTitle: `${call.method} ${call.path}`, args: { ...call }, reason, destructive: call.method === "DELETE" }, ctx));
-				},
+	const write: OwniTool = {
+		name: toolName("write"),
+		description: `${about} Write: one POST, PUT, PATCH or DELETE request. Needs a person's approval: nothing happens until they approve this exact call; you get the outcome later in this conversation. Only when the person you are talking to asked for it. Put in owni_reason one sentence for the approver.`,
+		parameters: {
+			type: "object",
+			properties: { ...writeProperties, owni_reason: { type: "string", minLength: 3, maxLength: 300, description: "For the person approving: what this does and for whom, in Italian, plain words, no tool names" } },
+			required: ["method", "path", "owni_reason"],
+			additionalProperties: false,
+		},
+		replaySafe: true,
+		execute: async (args, ctx) => {
+			if (propose === undefined) return `Errore: ${connector.name} chiede l'approvazione per scrivere, ma qui non si può approvare.`;
+			const call = writeCall(args);
+			if (typeof call === "string") return call;
+			// Checked now, so a person never approves a request that cannot go.
+			try {
+				apiUrl(t, call.path, call.query);
+				if (call.body !== undefined && JSON.stringify(call.body).length > API_LIMITS.maxBodyChars) throw new ApiRequestRefused(`corpo oltre ${API_LIMITS.maxBodyChars} caratteri`);
+			} catch (error) {
+				return failure(connector.name, host, error);
 			}
-		: {
-				name: toolName("write"),
-				description: `${about} Write: one POST, PUT, PATCH or DELETE request, sent at once (the owner turned approval off for this API). Only when the person you are talking to asked for it.`,
-				parameters: { type: "object", properties: writeProperties, required: ["method", "path"], additionalProperties: false },
-				// A write that may have reached the service is never sent twice.
-				replaySafe: false,
-				execute: async (args, ctx) => {
-					const call = writeCall(args);
-					if (typeof call === "string") return call;
-					try {
-						return said(connector.name, await caller.send(call, ctx.signal));
-					} catch (error) {
-						return failure(connector.name, host, error);
-					}
-				},
-			};
+			const reason = typeof args.owni_reason === "string" && args.owni_reason.trim() !== "" ? args.owni_reason.trim() : `${call.method} su ${connector.name}`;
+			return ctx.step("propose", () => propose({ tool: "write", toolTitle: `${call.method} ${call.path}`, args: { ...call }, reason, destructive: call.method === "DELETE" }, ctx));
+		},
+	};
 	return [read, write];
 }
 
