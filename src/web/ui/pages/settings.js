@@ -28,70 +28,149 @@ function fold({ title, glyph, chip, lead }, ...body) {
 	);
 }
 
-
-
-/** Owner: whether this instance may use people's Google accounts (its egress policy). */
-function googleCard(inst, allowed) {
-	const toggle = h("input", { type: "checkbox", checked: allowed });
-	toggle.addEventListener("change", async () => {
-		try {
-			await api(`/api/instances/${inst.id}/google`, { method: "PUT", body: { allowed: toggle.checked } });
-			toast(toggle.checked ? "Google consentito per questo agente" : "Google non più consentito per questo agente");
-			render();
-		} catch (error) {
-			toggle.checked = !toggle.checked;
-			toast(error.message, true);
-		}
-	});
-	return h(
-		"div.card.pad",
-		h("h2", "Google"),
-		h("p.muted", "Chi ha collegato il proprio Google (dal menu del suo account) può chiedere a questo agente di leggere la sua posta e il suo calendario, solo nelle sue conversazioni dalla console. Se il server lo permette, anche di preparare mail ed eventi: partono solo quando quella persona li approva."),
-		h("label.row-gap", toggle, h("span", "Consenti Google a questo agente")),
-	);
+/** Owner: let Owni open every public site, not only the allowed ones (the search card offers it). */
+async function openAllSites(inst) {
+	if (!confirm("Owni potrà leggere, fotografare e usare con il browser tutti i siti pubblici, non solo quelli trovati cercando. Una pagina con istruzioni nascoste potrebbe spingerla a cercare qualcosa che non deve. Continuare?")) return;
+	try {
+		await api(`/api/instances/${inst.id}/web`, { method: "PUT", body: { hosts: ["*"] } });
+		toast("Owni può aprire tutti i siti pubblici");
+		render();
+	} catch (error) {
+		toast(error.message, true);
+	}
 }
 
-/** Owner: replies as voice notes, made by the server's speech service (ADR 0020). */
-function speechCard(inst, host, allowed, understood) {
-	const toggle = h("input", { type: "checkbox", checked: allowed, disabled: !allowed && !understood });
-	toggle.addEventListener("change", async () => {
-		try {
-			await api(`/api/instances/${inst.id}/speech`, { method: "PUT", body: { allowed: toggle.checked } });
-			toast(toggle.checked ? `${inst.name} risponde a voce a chi manda un vocale` : "Risposte a voce spente per questo agente");
-			render();
-		} catch (error) {
-			toggle.checked = !toggle.checked;
-			toast(error.message, true);
-		}
-	});
-	return h(
-		"div.card.pad",
-		h("h2", "Risposte a voce"),
-		h("p.muted", `A chi le manda un vocale su Telegram o WhatsApp, Owni risponde con un vocale e con il testo. Ognuno può chiederle «rispondimi sempre a voce» o «niente vocali». La voce la fa ${host}: riceve solo il testo delle risposte da leggere, mai i vocali di chi le scrive.`),
-		understood ? null : h("p.chip.warn", "Per rispondere ai vocali Owni deve prima capirli: accendi anche Messaggi vocali."),
-		h("label.row-gap", toggle, h("span", "Rispondi a voce ai vocali")),
-	);
-}
+/**
+ * The agent's on/off capabilities, in page order. What the server reports for each comes from
+ * one GET; `before` and `after` are the card's own lines around the switch.
+ */
+const CAPABILITY_CARDS = [
+	{
+		name: "google",
+		anchor: "google",
+		title: "Google",
+		text: () => "Chi ha collegato il proprio Google (dal menu del suo account) può chiedere a questo agente di leggere la sua posta e il suo calendario, solo nelle sue conversazioni dalla console. Se il server lo permette, anche di preparare mail ed eventi: partono solo quando quella persona li approva.",
+		label: "Consenti Google a questo agente",
+		toast: (on) => (on ? "Google consentito per questo agente" : "Google non più consentito per questo agente"),
+	},
+	{
+		name: "voice",
+		anchor: "vocali",
+		title: "Messaggi vocali",
+		text: (c) => `I vocali di Telegram e WhatsApp vengono trascritti da ${c.host} e arrivano a Owni come testo. Solo quelli delle persone che possono scrivere; l'audio va solo a quel servizio.`,
+		label: "Trascrivi i vocali di questo agente",
+		toast: (on) => (on ? "Vocali trascritti per questo agente" : "Vocali non più trascritti per questo agente"),
+	},
+	{
+		name: "speech",
+		anchor: "voce",
+		title: "Risposte a voce",
+		text: (c) => `A chi le manda un vocale su Telegram o WhatsApp, Owni risponde con un vocale e con il testo. Ognuno può chiederle «rispondimi sempre a voce» o «niente vocali». La voce la fa ${c.host}: riceve solo il testo delle risposte da leggere, mai i vocali di chi le scrive.`,
+		// Owni answers voice notes only if it can first understand them.
+		blocked: ({ caps }) => caps.voice?.enabled !== true,
+		before: (c, { caps }) => (caps.voice?.enabled ? null : h("p.chip.warn", "Per rispondere ai vocali Owni deve prima capirli: accendi anche Messaggi vocali.")),
+		label: "Rispondi a voce ai vocali",
+		toast: (on, inst) => (on ? `${inst.name} risponde a voce a chi manda un vocale` : "Risposte a voce spente per questo agente"),
+	},
+	{
+		name: "search",
+		anchor: "ricerca",
+		title: "Ricerca sul web",
+		text: (c) => `Owni cerca notizie, prezzi, orari e tutto quello che cambia, e se glielo chiedi prepara un report di ricerca con le fonti numerate. Le ricerche vanno a ${c.host}, solo le parole cercate. Le pagine trovate le apre solo dai siti consentiti qui sotto.`,
+		label: "Consenti la ricerca a questo agente",
+		toast: (on, inst) => (on ? `${inst.name} può cercare sul web` : "Ricerca sul web spenta per questo agente"),
+		after: (c, { inst, hosts }) =>
+			c.enabled && !hosts.includes("*")
+				? h("p.muted", h("span", hosts.length === 0 ? "Per ora vede solo titoli ed estratti dei risultati. " : "Delle pagine trovate apre solo quelle dei siti consentiti. "), h("button.btn.small.ghost", { onclick: () => openAllSites(inst) }, "Fai aprire tutti i siti pubblici"))
+				: null,
+	},
+	{
+		name: "images",
+		anchor: "immagini",
+		title: "Immagini",
+		text: (c) => `Owni crea immagini quando gliele chiedono (un'illustrazione, un logo, un volantino) e ritocca le foto che le mandano. Le genera il servizio ${c.host}, che riceve la descrizione e, per un ritocco, la foto. L'immagine arriva in chat e resta tra i file. Al massimo ${c.maxPerDay} immagini al giorno per tutto l'account.`,
+		label: "Consenti le immagini a questo agente",
+		toast: (on, inst) => (on ? `${inst.name} può creare immagini` : "Immagini spente per questo agente"),
+	},
+	{
+		name: "web-actions",
+		anchor: "azioni-web",
+		title: "Azioni sul web",
+		fold: { glyph: "approvazioni", lead: "Moduli inviati solo dopo un'approvazione.", on: "Attive", off: "Spente" },
+		text: () => "Owni può chiedere di inviare un modulo di un sito consentito (un contatto, una prenotazione). Ogni invio aspetta l'approvazione di chi l'ha chiesto o di un approvatore, che vede destinazione e valori esatti; niente parte da solo.",
+		label: "Consenti le azioni sul web con approvazione",
+		toast: (on) => (on ? "Owni può chiedere di inviare moduli" : "Azioni sul web spente"),
+	},
+	{
+		name: "computer",
+		anchor: "computer",
+		title: "Computer",
+		text: () => "Owni esegue comandi in un computer suo, senza rete e senza segreti: elabora fogli e documenti, converte file, fa grafici. Usa copie dei file del workspace e rimette lì quelli che produce. Niente può uscire da quel computer, quindi i comandi non chiedono approvazione.",
+		before: (c) => (c.problem ? h("p.warn", `Il computer non è disponibile: ${c.problem}.`) : null),
+		label: "Consenti a Owni di usare il suo computer",
+		toast: (on) => (on ? "Owni può usare il suo computer" : "Computer spento"),
+		after: (c, { inst }) =>
+			h("div.actions", h("button.btn.ghost", {
+				onclick: () =>
+					confirmDialog("Azzerare il computer?", "Owni perde i file che ha nel suo computer (/work). Quelli copiati nel workspace restano.", "Azzera", async () => {
+						await api(`/api/instances/${inst.id}/computer`, { method: "DELETE" });
+						toast("Computer azzerato");
+					}),
+			}, "Azzera i file del computer")),
+	},
+	{
+		name: "desktop",
+		anchor: "schermo",
+		title: "Schermo remoto",
+		// The Mac's own screen has the Computer Use card instead.
+		skip: (c) => c.kind === "local",
+		missing: () => h("div.card.pad", h("h2", "Schermo remoto"), h("p.muted", "Lo schermo remoto non è attivo su questo server: chiedi a chi gestisce Owni di attivarlo.")),
+		text: (c, inst) => {
+			const network =
+				c.network === "internet"
+					? "Arriva a internet, e il suo browser non segue l'elenco dei siti consentiti."
+					: c.network === "none"
+						? "Non ha internet: usa solo i suoi programmi."
+						: "Gira altrove ed è lo stesso per tutti gli agenti che lo usano. Se arriva a internet, il suo browser non segue l'elenco dei siti consentiti.";
+			const many = c.shared ? "" : " Se più agenti usano lo schermo insieme, quello usato meno di recente si chiude per fare posto.";
+			return `${inst.name} ha un computer tutto suo, con un browser, dove guarda lo schermo, clicca e scrive. ${network} Quello che fa sullo schermo non chiede approvazione: prima di inviare, pagare o accedere a un account si ferma e chiede in chat.${many}`;
+		},
+		before: (c) => [c.problem ? h("p.warn", "Lo schermo per ora non funziona: chi gestisce Owni deve sistemarlo.") : null, c.problem ? h("details", h("summary", "Dettagli per chi gestisce Owni"), h("p.mono", c.problem)) : null],
+		label: "Consenti lo schermo a questo agente",
+		toast: (on, inst) => (on ? `${inst.name} può usare il suo schermo` : "Schermo spento"),
+		after: (c, { inst }) =>
+			c.shared
+				? null
+				: h("div.actions", h("button.btn.ghost", {
+						onclick: () =>
+							confirmDialog("Riavviare lo schermo?", "Si chiude tutto quello che è aperto sullo schermo di questo agente. Il workspace non cambia.", "Riavvia", async () => {
+								await api(`/api/instances/${inst.id}/desktop`, { method: "DELETE" });
+								toast("Schermo riavviato");
+							}),
+					}, "Riavvia lo schermo")),
+	},
+];
 
-/** Owner: pictures made on request for this instance, by the server's image service. */
-function imagesCard(inst, host, maxPerDay, allowed) {
-	const toggle = h("input", { type: "checkbox", checked: allowed });
+/** Owner: one capability of this instance: its switch, and whatever the server says about it. */
+function capabilityCard(inst, caps, hosts, spec) {
+	const c = caps[spec.name] ?? { available: false };
+	if (spec.skip?.(c)) return null;
+	if (!c.available) return spec.missing === undefined ? null : anchor(spec.anchor, spec.missing());
+	const ctx = { inst, caps, hosts };
+	const toggle = h("input", { type: "checkbox", checked: c.enabled || undefined, disabled: (!c.enabled && spec.blocked?.(ctx)) || undefined });
 	toggle.addEventListener("change", async () => {
 		try {
-			await api(`/api/instances/${inst.id}/images`, { method: "PUT", body: { allowed: toggle.checked } });
-			toast(toggle.checked ? `${inst.name} può creare immagini` : "Immagini spente per questo agente");
-			render();
+			await api(`/api/instances/${inst.id}/capabilities/${spec.name}`, { method: "PUT", body: { enabled: toggle.checked } });
+			toast(spec.toast(toggle.checked, inst));
+			if (spec.fold === undefined) render();
 		} catch (error) {
 			toggle.checked = !toggle.checked;
 			toast(error.message, true);
 		}
 	});
-	return h(
-		"div.card.pad",
-		h("h2", "Immagini"),
-		h("p.muted", `Owni crea immagini quando gliele chiedono (un'illustrazione, un logo, un volantino) e ritocca le foto che le mandano. Le genera il servizio ${host}, che riceve la descrizione e, per un ritocco, la foto. L'immagine arriva in chat e resta tra i file. Al massimo ${maxPerDay} immagini al giorno per tutto l'account.`),
-		h("label.row-gap", toggle, h("span", "Consenti le immagini a questo agente")),
-	);
+	const body = [h("p.muted", spec.text(c, inst)), spec.before?.(c, ctx), h("label.row-gap", toggle, h("span", spec.label)), spec.after?.(c, ctx)];
+	if (spec.fold === undefined) return anchor(spec.anchor, h("div.card.pad", h("h2", spec.title), ...body));
+	return anchor(spec.anchor, fold({ title: spec.title, glyph: spec.fold.glyph, lead: spec.fold.lead, chip: onOff(toggle, spec.fold.on, spec.fold.off) }, ...body));
 }
 
 /**
@@ -318,62 +397,6 @@ function modelLabel(m, withId, subscription = false) {
 	return `${withId ? `${m.name} (${m.id})` : m.name} · ${modelFacts(m, subscription)}`;
 }
 
-/** Owner: voice messages of this instance transcribed by the server's service. */
-function voiceCard(inst, host, allowed) {
-	const toggle = h("input", { type: "checkbox", checked: allowed });
-	toggle.addEventListener("change", async () => {
-		try {
-			await api(`/api/instances/${inst.id}/voice`, { method: "PUT", body: { allowed: toggle.checked } });
-			toast(toggle.checked ? "Vocali trascritti per questo agente" : "Vocali non più trascritti per questo agente");
-			render();
-		} catch (error) {
-			toggle.checked = !toggle.checked;
-			toast(error.message, true);
-		}
-	});
-	return h(
-		"div.card.pad",
-		h("h2", "Messaggi vocali"),
-		h("p.muted", `I vocali di Telegram e WhatsApp vengono trascritti da ${host} e arrivano a Owni come testo. Solo quelli delle persone che possono scrivere; l'audio va solo a quel servizio.`),
-		h("label.row-gap", toggle, h("span", "Trascrivi i vocali di questo agente")),
-	);
-}
-
-/** Owner: web search for this instance, through the server's search service (ADR 0017). */
-function searchCard(inst, host, allowed, hosts) {
-	const toggle = h("input", { type: "checkbox", checked: allowed });
-	toggle.addEventListener("change", async () => {
-		try {
-			await api(`/api/instances/${inst.id}/search`, { method: "PUT", body: { allowed: toggle.checked } });
-			toast(toggle.checked ? `${inst.name} può cercare sul web` : "Ricerca sul web spenta per questo agente");
-			render();
-		} catch (error) {
-			toggle.checked = !toggle.checked;
-			toast(error.message, true);
-		}
-	});
-	const everything = hosts.includes("*");
-	const openAll = async () => {
-		if (!confirm("Owni potrà leggere, fotografare e usare con il browser tutti i siti pubblici, non solo quelli trovati cercando. Una pagina con istruzioni nascoste potrebbe spingerla a cercare qualcosa che non deve. Continuare?")) return;
-		try {
-			await api(`/api/instances/${inst.id}/web`, { method: "PUT", body: { hosts: ["*"] } });
-			toast("Owni può aprire tutti i siti pubblici");
-			render();
-		} catch (error) {
-			toast(error.message, true);
-		}
-	};
-	return h(
-		"div.card.pad",
-		h("h2", "Ricerca sul web"),
-		h("p.muted", `Owni cerca notizie, prezzi, orari e tutto quello che cambia, e se glielo chiedi prepara un report di ricerca con le fonti numerate. Le ricerche vanno a ${host}, solo le parole cercate. Le pagine trovate le apre solo dai siti consentiti qui sotto.`),
-		h("label.row-gap", toggle, h("span", "Consenti la ricerca a questo agente")),
-		allowed && !everything
-			? h("p.muted", h("span", hosts.length === 0 ? "Per ora vede solo titoli ed estratti dei risultati. " : "Delle pagine trovate apre solo quelle dei siti consentiti. "), h("button.btn.small.ghost", { onclick: openAll }, "Fai aprire tutti i siti pubblici"))
-			: null,
-	);
-}
-
 /** Owner: the sites this instance may read and screenshot. */
 function webCard(inst, hosts) {
 	const list = h("textarea", { rows: 4, class: "mono", placeholder: "comune.roma.it\nagenziaentrate.gov.it\n* (tutti i siti pubblici)", value: hosts.join("\n") });
@@ -395,25 +418,6 @@ function webCard(inst, hosts) {
 	);
 }
 
-/** Owner: forms on the allowed sites, sent only after a person approves each one (ADR 0011). */
-function webActionsCard(inst, allowed) {
-	const toggle = h("input", { type: "checkbox", checked: allowed || undefined });
-	toggle.onchange = async () => {
-		try {
-			await api(`/api/instances/${inst.id}/web-actions-allowed`, { method: "PUT", body: { allowed: toggle.checked } });
-			toast(toggle.checked ? "Owni può chiedere di inviare moduli" : "Azioni sul web spente");
-		} catch (error) {
-			toggle.checked = !toggle.checked;
-			toast(error.message, true);
-		}
-	};
-	return fold(
-		{ title: "Azioni sul web", glyph: "approvazioni", lead: "Moduli inviati solo dopo un'approvazione.", chip: onOff(toggle, "Attive", "Spente") },
-		h("p.muted", "Owni può chiedere di inviare un modulo di un sito consentito (un contatto, una prenotazione). Ogni invio aspetta l'approvazione di chi l'ha chiesto o di un approvatore, che vede destinazione e valori esatti; niente parte da solo."),
-		h("label.row-gap", toggle, h("span", "Consenti le azioni sul web con approvazione")),
-	);
-}
-
 /** Which other agenti may write to this one (ADR 0042): the organigramma decides it (ADR 0117). */
 function agentsCard(inst, settings) {
 	const from = settings.egress.channels.includes("agente") ? (settings.allowedUsers.agente ?? []) : [];
@@ -427,73 +431,10 @@ function agentsCard(inst, settings) {
 	);
 }
 
-/** The instance's computer (ADR 0013): a terminal with no network. */
-function computerCard(inst, allowed, problem) {
-	const toggle = h("input", { type: "checkbox", checked: allowed || undefined });
-	toggle.onchange = async () => {
-		try {
-			await api(`/api/instances/${inst.id}/computer-allowed`, { method: "PUT", body: { allowed: toggle.checked } });
-			toast(toggle.checked ? "Owni può usare il suo computer" : "Computer spento");
-		} catch (error) {
-			toggle.checked = !toggle.checked;
-			toast(error.message, true);
-		}
-	};
-	const reset = () =>
-		confirmDialog("Azzerare il computer?", "Owni perde i file che ha nel suo computer (/work). Quelli copiati nel workspace restano.", "Azzera", async () => {
-			await api(`/api/instances/${inst.id}/computer`, { method: "DELETE" });
-			toast("Computer azzerato");
-		});
-	return h(
-		"div.card.pad",
-		h("h2", "Computer"),
-		h("p.muted", "Owni esegue comandi in un computer suo, senza rete e senza segreti: elabora fogli e documenti, converte file, fa grafici. Usa copie dei file del workspace e rimette lì quelli che produce. Niente può uscire da quel computer, quindi i comandi non chiedono approvazione."),
-		problem ? h("p.warn", `Il computer non è disponibile: ${problem}.`) : null,
-		h("label.row-gap", toggle, h("span", "Consenti a Owni di usare il suo computer")),
-		h("div.actions", h("button.btn.ghost", { onclick: reset }, "Azzera i file del computer")),
-	);
-}
-
-/** The agente's screen through Cua (ADR 0045): a desktop of its own where it clicks and types. */
-function desktopCard(inst, allowed, desktop) {
-	if (!desktop.available) return h("div.card.pad", h("h2", "Schermo remoto"), h("p.muted", "Lo schermo remoto non è attivo su questo server: chiedi a chi gestisce Owni di attivarlo."));
-	const toggle = h("input", { type: "checkbox", checked: allowed || undefined });
-	toggle.onchange = async () => {
-		try {
-			await api(`/api/instances/${inst.id}/desktop-allowed`, { method: "PUT", body: { allowed: toggle.checked } });
-			toast(toggle.checked ? `${inst.name} può usare il suo schermo` : "Schermo spento");
-		} catch (error) {
-			toggle.checked = !toggle.checked;
-			toast(error.message, true);
-		}
-	};
-	const reset = () =>
-		confirmDialog("Riavviare lo schermo?", "Si chiude tutto quello che è aperto sullo schermo di questo agente. Il workspace non cambia.", "Riavvia", async () => {
-			await api(`/api/instances/${inst.id}/desktop`, { method: "DELETE" });
-			toast("Schermo riavviato");
-		});
-	const network =
-		desktop.network === "internet"
-			? "Arriva a internet, e il suo browser non segue l'elenco dei siti consentiti."
-			: desktop.network === "none"
-				? "Non ha internet: usa solo i suoi programmi."
-				: "Gira altrove ed è lo stesso per tutti gli agenti che lo usano. Se arriva a internet, il suo browser non segue l'elenco dei siti consentiti.";
-	const many = desktop.shared ? "" : " Se più agenti usano lo schermo insieme, quello usato meno di recente si chiude per fare posto.";
-	return h(
-		"div.card.pad",
-		h("h2", "Schermo remoto"),
-		h("p.muted", `${inst.name} ha un computer tutto suo, con un browser, dove guarda lo schermo, clicca e scrive. ${network} Quello che fa sullo schermo non chiede approvazione: prima di inviare, pagare o accedere a un account si ferma e chiede in chat.${many}`),
-		desktop.problem ? h("p.warn", "Lo schermo per ora non funziona: chi gestisce Owni deve sistemarlo.") : null,
-		desktop.problem ? h("details", h("summary", "Dettagli per chi gestisce Owni"), h("p.mono", desktop.problem)) : null,
-		h("label.row-gap", toggle, h("span", "Consenti lo schermo a questo agente")),
-		desktop.shared ? null : h("div.actions", h("button.btn.ghost", { onclick: reset }, "Riavvia lo schermo")),
-	);
-}
-
 /** macOS permissions describe the host running Owni; the per-agent grant stays separate. */
-function computerUseCard(inst, initialAllowed, initialDesktop) {
+function computerUseCard(inst, initialDesktop) {
 	let desktop = initialDesktop;
-	let allowed = initialAllowed;
+	let allowed = initialDesktop.enabled;
 	let busy = false;
 	const content = h("div");
 	const message = h("p.muted.small", { role: "status", hidden: true });
@@ -516,7 +457,7 @@ function computerUseCard(inst, initialAllowed, initialDesktop) {
 			toggle.disabled = true;
 			problem.hidden = true;
 			try {
-				await api(`/api/instances/${inst.id}/desktop-allowed`, { method: "PUT", body: { allowed: wanted } });
+				await api(`/api/instances/${inst.id}/capabilities/desktop`, { method: "PUT", body: { enabled: wanted } });
 				allowed = wanted;
 				toast(allowed ? `${inst.name} può usare questo Mac` : `Computer Use disattivato per ${inst.name}`);
 			} catch (error) {
@@ -553,7 +494,7 @@ function computerUseCard(inst, initialAllowed, initialDesktop) {
 				message.textContent = "Completa il consenso in Impostazioni di Sistema, poi premi Controlla di nuovo. Se macOS lo richiede, riapri Owni.";
 				message.hidden = false;
 			}
-			desktop = await api("/api/desktop");
+			desktop = (await api(`/api/instances/${inst.id}/capabilities`)).capabilities.find((c) => c.name === "desktop");
 		} catch (error) {
 			problem.textContent = error.message;
 			problem.hidden = false;
@@ -615,20 +556,14 @@ export async function viewSettings(main) {
 		mount(main, head(agentLabel(inst), "Configurazione", "La configurazione dell'agente è riservata all'owner.", h("a.btn", { href: agentHome(inst.id) }, `Apri ${inst.name}`)));
 		return;
 	}
-	const [{ settings }, { people }, tg, wa, google, voice, search, tel, computer, speech, images, models, desktop, providers] = await Promise.all([
+	const [{ settings }, { people }, tg, wa, tel, { capabilities }, models, providers] = await Promise.all([
 		api(`/api/instances/${inst.id}/settings`),
 		api("/api/people"),
 		api(`/api/instances/${inst.id}/telegram`).catch(() => undefined),
 		api(`/api/instances/${inst.id}/whatsapp`).catch(() => undefined),
-		api("/api/google").catch(() => ({ available: false })),
-		api("/api/voice").catch(() => ({ available: false })),
-		api("/api/search").catch(() => ({ available: false })),
 		api(`/api/instances/${inst.id}/phone`).catch(() => undefined),
-		api("/api/computer").catch(() => ({ available: false })),
-		api("/api/speech").catch(() => ({ available: false })),
-		api("/api/images").catch(() => ({ available: false })),
+		api(`/api/instances/${inst.id}/capabilities`).catch(() => ({ capabilities: [] })),
 		api(`/api/instances/${inst.id}/model`).catch(() => undefined),
-		api("/api/desktop").catch(() => ({ available: false })),
 		api("/api/providers").catch((error) => ({ localEnabled: false, providers: [], error: error.message })),
 	]);
 	if (!main.isConnected || state.instance !== inst || state.me?.role !== "owner") return;
@@ -655,7 +590,8 @@ export async function viewSettings(main) {
 		}
 	};
 	const e = settings.egress;
-	const allowed = (id) => (e.connectors ?? []).includes(id);
+	const caps = Object.fromEntries(capabilities.map((c) => [c.name, c]));
+	const capability = (name) => capabilityCard(inst, caps, e.web ?? [], CAPABILITY_CARDS.find((spec) => spec.name === name));
 	const modelEditor = providersCard(inst, providers, models);
 	modelEditor.classList.remove("card", "pad");
 	const modelDetails = fold({ title: "Cambia modello o gestisci provider", glyph: "spark", lead: "Abbonamenti, chiavi API e scelta del modello. Ogni modifica ha il suo comando." }, anchor("providers", modelEditor));
@@ -678,16 +614,16 @@ export async function viewSettings(main) {
 			modelDetails,
 		] },
 		{ id: "capacita", label: "Capacità", glyph: "skill", anchors: ["computer-use", "google", "vocali", "voce", "ricerca", "immagini", "siti", "azioni-web", "agenti", "computer", "schermo"], content: [
-			google.available ? anchor("google", googleCard(inst, allowed("google"))) : null,
-			voice.available ? anchor("vocali", voiceCard(inst, voice.host, allowed("voice"))) : null,
-			speech.available ? anchor("voce", speechCard(inst, speech.host, allowed("speech"), voice.available && allowed("voice"))) : null,
-			search.available ? anchor("ricerca", searchCard(inst, search.host, allowed("web_search"), e.web ?? [])) : null,
-			images.available ? anchor("immagini", imagesCard(inst, images.host, images.maxPerDay, allowed("image_generation"))) : null,
+			capability("google"),
+			capability("voice"),
+			capability("speech"),
+			capability("search"),
+			capability("images"),
 			anchor("siti", webCard(inst, e.web ?? [])),
-			anchor("azioni-web", webActionsCard(inst, allowed("web-actions"))),
-			anchor("computer-use", computerUseCard(inst, allowed(desktop.connector ?? "schermo"), desktop)),
-			computer.available ? anchor("computer", computerCard(inst, allowed("computer"), computer.problem)) : null,
-			desktop.kind === "local" ? null : anchor("schermo", desktopCard(inst, allowed("schermo"), desktop)),
+			capability("web-actions"),
+			anchor("computer-use", computerUseCard(inst, caps.desktop ?? { available: false })),
+			capability("computer"),
+			capability("desktop"),
 			anchor("agenti", agentsCard(inst, settings)),
 		] },
 		{ id: "servizi", label: "Servizi", glyph: "connettori", anchors: [], content: [services] },

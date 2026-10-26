@@ -499,8 +499,8 @@ describe("the computer in an instance", () => {
 			const res = await fetch(`${base}${path}`, { method: method ?? (body === undefined ? "GET" : "POST"), headers: { cookie: as, "x-owni": "1" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
 			return { status: res.status, ...((await res.json()) as any) };
 		};
-		expect((await api("/api/computer")).available).toBe(true);
-		expect((await api("/api/computer", undefined, "GET", "")).status).toBe(401);
+		expect((await api("/api/instances/owni/capabilities")).capabilities.find((c: any) => c.name === "computer")).toMatchObject({ available: true, enabled: false });
+		expect((await api("/api/instances/owni/capabilities", undefined, "GET", "")).status).toBe(401);
 		const thread = (await api("/api/instances/owni/dm", {})).thread;
 		const reply = async (text: string) => {
 			const count = async () => ((await api(`/api/instances/owni/threads/${thread.id}`)).entries as { from: string; text?: string }[]).filter((e) => e.from === "owni");
@@ -515,7 +515,7 @@ describe("the computer in an instance", () => {
 		};
 		const ask = '/tool computer_run {"command":"echo dal computer"}';
 		expect(await reply(ask)).toContain("non ha acceso il computer");
-		expect((await api("/api/instances/owni/computer-allowed", { allowed: true }, "PUT")).allowed).toBe(true);
+		expect((await api("/api/instances/owni/capabilities/computer", { enabled: true }, "PUT")).enabled).toBe(true);
 		expect(await reply(ask)).toContain("dal computer");
 		expect((await api("/api/instances/owni/computer", undefined, "DELETE")).status).toBe(200);
 		expect(docker.containers.size).toBe(0);
@@ -532,8 +532,8 @@ describe("the computer in an instance", () => {
 		const base = `http://127.0.0.1:${(owni.server.address() as AddressInfo).port}`;
 		const login = await fetch(`${base}/api/login`, { method: "POST", headers: { "x-owni": "1" }, body: JSON.stringify({ token: (owni.ownerLink as string).split("#")[1] }) });
 		const cookie = (login.headers.get("set-cookie") ?? "").split(";")[0] as string;
-		const res = await fetch(`${base}/api/instances/owni/computer-allowed`, { method: "PUT", headers: { cookie, "x-owni": "1" }, body: JSON.stringify({ allowed: true }) });
+		const res = await fetch(`${base}/api/instances/owni/capabilities/computer`, { method: "PUT", headers: { cookie, "x-owni": "1" }, body: JSON.stringify({ enabled: true }) });
 		expect(res.status).toBe(501);
-		expect(await (await fetch(`${base}/api/computer`, { headers: { cookie, "x-owni": "1" } })).json()).toEqual({ available: false });
+		expect(((await (await fetch(`${base}/api/instances/owni/capabilities`, { headers: { cookie, "x-owni": "1" } })).json()) as any).capabilities.find((c: any) => c.name === "computer")).toEqual({ name: "computer", available: false, enabled: false });
 	});
 });

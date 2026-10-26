@@ -48,24 +48,24 @@ describe("the local Mac's separate permission boundary", () => {
 			const response = await fetch(`${base}${path}`, { method, headers: { cookie: as, "x-owni": "1" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
 			return { status: response.status, ...(await response.json() as Record<string, any>) };
 		};
-		expect(await api("/api/desktop")).toMatchObject({ status: 200, kind: "local", connector: "computer-use", permissions });
-		await api("/api/desktop");
+		expect((await api("/api/instances/owni/capabilities")).capabilities.find((c: any) => c.name === "desktop")).toMatchObject({ available: true, enabled: false, kind: "local", connector: "computer-use", permissions });
+		await api("/api/instances/owni/capabilities");
 		expect(checks).toBe(2); // Local checks never reuse the remote desktop's 30-second cache.
 		expect((await api("/api/desktop/permissions", "POST", { permission: "accessibility" }, "")).status).toBe(401);
 		expect((await api("/api/desktop/permissions", "POST", { permission: "shell" })).status).toBe(400);
 		expect((await api("/api/desktop/permissions", "POST", { permission: "screenRecording" })).status).toBe(200);
 		expect(requested).toEqual(["screenRecording"]);
-		expect((await api("/api/instances/owni/desktop-allowed", "PUT", { allowed: true })).status).toBe(409);
+		expect((await api("/api/instances/owni/capabilities/desktop", "PUT", { enabled: true })).status).toBe(409);
 		expect((await api("/api/instances/owni/setup")).setup).toMatchObject({ computerUse: false, can: { computerUse: true } });
 		permissions = { ...permissions, screenRecording: true, accessibility: true };
-		expect((await api("/api/instances/owni/desktop-allowed", "PUT", { allowed: true })).status).toBe(200);
+		expect((await api("/api/instances/owni/capabilities/desktop", "PUT", { enabled: true })).status).toBe(200);
 		const on = (await api("/api/instances/owni/settings")).settings.egress.connectors;
 		expect(on).toContain("computer-use");
 		expect(on).not.toContain("schermo");
 		expect((await api("/api/instances/owni/setup")).setup.computerUse).toBe(true);
 		// Revoking OS permissions never prevents the owner from disabling the grant.
 		permissions = { ...permissions, accessibility: false };
-		expect((await api("/api/instances/owni/desktop-allowed", "PUT", { allowed: false })).status).toBe(200);
+		expect((await api("/api/instances/owni/capabilities/desktop", "PUT", { enabled: false })).status).toBe(200);
 		expect((await api("/api/instances/owni/settings")).settings.egress.connectors).not.toContain("computer-use");
 	});
 });

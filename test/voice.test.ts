@@ -201,7 +201,7 @@ describe("voice messages", () => {
 			const login = await fetch(`${base}/api/login`, { method: "POST", headers: { "x-owni": "1" }, body: JSON.stringify({ token: (owni.ownerLink as string).split("#")[1] }) });
 			const cookie = (login.headers.get("set-cookie") ?? "").split(";")[0] as string;
 			const api = async (path: string, body?: unknown, method = "PUT") => (await fetch(`${base}${path}`, { method: body === undefined ? "GET" : method, headers: { cookie, "x-owni": "1" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) })).json() as Promise<any>;
-			expect(await api("/api/voice")).toEqual({ available: true, host: "api.mistral.ai" });
+			expect((await api("/api/instances/owni/capabilities")).capabilities.find((c: any) => c.name === "voice")).toEqual({ name: "voice", available: true, enabled: false, host: "api.mistral.ai" });
 			const connected = await api("/api/instances/owni/whatsapp", { accessToken: "EAAGtoken0123456789abcdef", phoneNumberId: "1110001", appSecret: "a".repeat(32), allowedUsers: ["393331234567"] });
 			expect(connected.whatsapp?.connected, JSON.stringify(connected)).toBe(true);
 			const voiceNote = (id: string) => {
@@ -216,7 +216,7 @@ describe("voice messages", () => {
 			expect((await voiceNote("wamid.1")).status).toBe(200);
 			expect(await answered(1)).toContain("non è attiva per questa istanza");
 			expect(service.received).toHaveLength(0);
-			expect(await api("/api/instances/owni/voice", { allowed: true })).toEqual({ allowed: true });
+			expect(await api("/api/instances/owni/capabilities/voice", { enabled: true })).toEqual({ enabled: true });
 			expect((await voiceNote("wamid.2")).status).toBe(200);
 			expect(await answered(2)).toContain("Ciao, richiamami domani");
 			expect(service.received).toHaveLength(1);

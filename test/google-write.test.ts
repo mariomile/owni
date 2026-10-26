@@ -138,7 +138,7 @@ async function ready(env: Record<string, string> = ENV) {
 	const booted = await boot(tempDataDir(), fakeGoogle(), env);
 	const owner = await client(booted.base, booted.owni.ownerLink as string);
 	await connect(booted.base, owner);
-	await owner("/api/instances/owni/google", { allowed: true }, "PUT");
+	await owner("/api/instances/owni/capabilities/google", { enabled: true }, "PUT");
 	const thread = (await owner("/api/instances/owni/dm", {})).thread as { id: string };
 	return { ...booted, owner, thread };
 }
@@ -155,7 +155,7 @@ describe("Google: scrivere con approvazione", () => {
 		// Fewer permissions than asked: kept for reading, not refused (and not revoked).
 		expect(done.status).toBe(200);
 		expect(await owner("/api/google")).toMatchObject({ write: true, account: { canWrite: false } });
-		await owner("/api/instances/owni/google", { allowed: true }, "PUT");
+		await owner("/api/instances/owni/capabilities/google", { enabled: true }, "PUT");
 		const thread = (await owner("/api/instances/owni/dm", {})).thread as { id: string };
 		expect(await reply(owner, thread.id, tool("google_calendar_delete", { event_id: "e1", reason: "Annullare" }))).toContain("solo in lettura");
 		expect(await reply(owner, thread.id, tool("google_calendar_events", {}))).toContain("Call con Rossi");
@@ -354,10 +354,10 @@ describe("Google: scrivere con approvazione", () => {
 		await reply(owner, thread.id, tool("google_calendar_delete", { event_id: "e1", reason: "Due" }));
 		await reply(owner, thread.id, tool("google_calendar_delete", { event_id: "e1", reason: "Tre" }));
 		const [one, two, three] = (await owner("/api/instances/owni/google-actions")).actions;
-		await owner("/api/instances/owni/google", { allowed: false }, "PUT");
+		await owner("/api/instances/owni/capabilities/google", { enabled: false }, "PUT");
 		const off = (await owner(`/api/instances/owni/google-actions/${one.id}/decision`, { decision: "approved" })).action;
 		expect(off).toMatchObject({ status: "failed", result: { error: expect.stringContaining("Impostazioni") } });
-		await owner("/api/instances/owni/google", { allowed: true }, "PUT");
+		await owner("/api/instances/owni/capabilities/google", { enabled: true }, "PUT");
 		google.state.email = "altro@example.com";
 		await connect(base, owner, "other");
 		expect((await owner(`/api/instances/owni/google-actions/${two.id}/decision`, { decision: "approved" })).action).toMatchObject({ status: "failed", result: { error: expect.stringContaining("anna@example.com") } });

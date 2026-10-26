@@ -171,12 +171,12 @@ describe("image generation in an instance", () => {
 	it("is off until the owner turns it on; then it makes the picture, saves it and sends it; the audit never has the request", async () => {
 		const service = await fakeImages();
 		const { owni, api, reply, entries, dataDir, base } = await boot(tempDataDir(), { OWNI_IMAGE_URL: service.url, OWNI_IMAGE_API_KEY: KEY, OWNI_IMAGE_MODEL: "gpt-image-1", OWNI_IMAGE_MAX_PER_DAY: "2" });
-		expect(await api("/api/images")).toMatchObject({ available: true, host: new URL(service.url).host, maxPerDay: 2 });
+		expect((await api("/api/instances/owni/capabilities")).capabilities.find((c: any) => c.name === "images")).toMatchObject({ available: true, enabled: false, host: new URL(service.url).host, maxPerDay: 2 });
 		const ask = '/tool image_generate {"prompt":"a red fox reading a newspaper, flat illustration","shape":"square"}';
 		expect(await reply(ask)).toContain("la generazione di immagini non è attiva per questa istanza");
 		expect(service.asked).toHaveLength(0);
-		expect((await api("/api/instances/owni/images", { allowed: "si" }, "PUT")).status).toBe(400);
-		expect((await api("/api/instances/owni/images", { allowed: true }, "PUT")).allowed).toBe(true);
+		expect((await api("/api/instances/owni/capabilities/images", { enabled: "si" }, "PUT")).status).toBe(400);
+		expect((await api("/api/instances/owni/capabilities/images", { enabled: true }, "PUT")).enabled).toBe(true);
 
 		const made = await reply(ask);
 		expect(made).toMatch(/^Fatto\. Immagine creata e inviata in questa conversazione: immagini\/a-red-fox-reading-a-newspaper-flat-[\w-]+\.png/);
@@ -209,7 +209,7 @@ describe("image generation in an instance", () => {
 		const { link } = await api("/api/people", { name: "Luca" });
 		const member = await fetch(`${base}/api/login`, { method: "POST", headers: { "x-owni": "1" }, body: JSON.stringify({ token: String(link).split("#")[1] }) });
 		const cookie = (member.headers.get("set-cookie") ?? "").split(";")[0] as string;
-		expect((await fetch(`${base}/api/instances/owni/images`, { method: "PUT", headers: { cookie, "x-owni": "1" }, body: JSON.stringify({ allowed: true }) })).status).toBe(403);
+		expect((await fetch(`${base}/api/instances/owni/capabilities/images`, { method: "PUT", headers: { cookie, "x-owni": "1" }, body: JSON.stringify({ enabled: true }) })).status).toBe(403);
 	});
 
 	it("a refusal of the service reaches the model in plain words and costs none of the day's pictures; variations come with their caption", async () => {
@@ -218,7 +218,7 @@ describe("image generation in an instance", () => {
 			refuse ? { status: 400, body: { error: { code: "moderation_blocked", message: "no" } } } : { body: { data: Array.from({ length: Number(asked.json?.n ?? 1) }, () => ({ b64_json: Buffer.from(PNG).toString("base64") })) } },
 		);
 		const { api, reply, entries } = await boot(tempDataDir(), { OWNI_IMAGE_URL: service.url, OWNI_IMAGE_API_KEY: KEY, OWNI_IMAGE_MODEL: "gpt-image-1", OWNI_IMAGE_MAX_PER_DAY: "2" });
-		await api("/api/instances/owni/images", { allowed: true }, "PUT");
+		await api("/api/instances/owni/capabilities/images", { enabled: true }, "PUT");
 		expect(await reply('/tool image_generate {"prompt":"something"}')).toMatch(/Errore: il servizio di immagini ha rifiutato la richiesta per i suoi limiti sui contenuti: riformula/);
 		expect(await reply('/tool image_generate {"prompt":"something"}')).toMatch(/limiti sui contenuti/);
 		refuse = false;
@@ -231,8 +231,8 @@ describe("image generation in an instance", () => {
 
 	it("is not offered by a server without an image service", async () => {
 		const { api, reply } = await boot(tempDataDir());
-		expect(await api("/api/images")).toMatchObject({ available: false });
-		expect((await api("/api/instances/owni/images", { allowed: true }, "PUT")).status).toBe(501);
+		expect((await api("/api/instances/owni/capabilities")).capabilities.find((c: any) => c.name === "images")).toEqual({ name: "images", available: false, enabled: false });
+		expect((await api("/api/instances/owni/capabilities/images", { enabled: true }, "PUT")).status).toBe(501);
 		expect(await reply('/tool image_generate {"prompt":"a cat"}')).toContain("Tool image_generate is not available");
 	});
 });

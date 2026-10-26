@@ -215,7 +215,7 @@ describe("web_submit in an instance", () => {
 		expect(read).not.toContain("Modulo 0");
 		const ask = `/tool web_submit {"page_url":"${s.base}/contact","form":1,"values":{"name":"Mario","email":"m@example.com"},"reason":"Chiedo un preventivo"}`;
 		expect(await reply(ask)).toContain("l'owner non ha acceso le azioni sul web");
-		expect((await api("/api/instances/owni/web-actions-allowed", { allowed: true }, "PUT")).allowed).toBe(true);
+		expect((await api("/api/instances/owni/capabilities/web-actions", { enabled: true }, "PUT")).enabled).toBe(true);
 		expect(await reply(`/tool web_submit {"page_url":"${s.base}/contact","form":1,"values":{"csrf":"x"},"reason":"prova"}`)).toContain("lo decide il sito");
 		expect(await reply(ask)).toMatch(/Richiesta [0-9a-f]{12} pronta/);
 		expect(s.posts).toHaveLength(0);
