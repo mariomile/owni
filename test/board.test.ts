@@ -76,7 +76,7 @@ describe("the board (ADR 0050)", () => {
 
 	it("nobody hands a scheda to an agente they could not talk to, nor to one that does not exist", async () => {
 		const { work, store, posts } = setup();
-		await expect(work.create({ title: "x", assignee: "vendite" }, anna, "p_anna")).rejects.toThrow(/Non puoi affidare schede a Vendite/);
+		await expect(work.create({ title: "x", assignee: "vendite" }, anna, "p_anna")).rejects.toThrow(/Non puoi affidare incarichi a Vendite/);
 		await expect(work.create({ title: "x", assignee: "nessuno" }, anna, "p_anna")).rejects.toThrow(/inesistente/);
 		const c = await work.create({ title: "y" }, anna, "p_anna");
 		await expect(work.change(c.id, { assignee: "vendite" }, anna, "p_anna")).rejects.toThrow(/Non puoi/);
@@ -102,7 +102,7 @@ describe("the board (ADR 0050)", () => {
 		await work.change(c.id, { status: "fatto" }, anna, "p_anna");
 		expect(posts).toHaveLength(3);
 		// Closed: the agente cannot reopen it.
-		await expect(work.change(c.id, { status: "da_rivedere" }, ricerca, undefined)).rejects.toThrow(/chiusa/);
+		await expect(work.change(c.id, { status: "da_rivedere" }, ricerca, undefined)).rejects.toThrow(/chiuso/);
 	});
 
 	it("week 68: «Approva» tapped in the chat is a person's own act, the owner's, with no model turn in between (ADR 0088)", async () => {
@@ -110,7 +110,7 @@ describe("the board (ADR 0050)", () => {
 		const c = await work.create({ title: "Fornitori", assignee: "ricerca" }, anna, "p_anna");
 		await work.change(c.id, { status: "da_rivedere" }, ricerca, undefined);
 		const people = { list: async () => [{ id: "p_owner", role: "owner" }] } as never;
-		expect(await approveFromChat(work, people, `board:${c.id}:fatto`)).toBe(`Scheda #${c.n} approvata e chiusa.`);
+		expect(await approveFromChat(work, people, `board:${c.id}:fatto`)).toBe(`Incarico #${c.n} approvato e chiuso.`);
 		const closed = store.get(c.id);
 		expect(closed?.status).toBe("fatto");
 		expect(closed?.events.at(-1)?.by).toEqual({ kind: "person", id: "p_owner" });
@@ -234,7 +234,7 @@ describe("the board (ADR 0050)", () => {
 		expect(await tool("owni", "board_show").execute({ card: "2" }, ctx("chat1"))).toMatch(/non trovata/);
 		// The week in a few lines (ADR 0081), of what she sees.
 		const summary = await tool("owni", "board_summary").execute({}, ctx("chat1"));
-		expect(summary).toMatch(/<<<dalla board [0-9a-f]+: .*>>>\nLa board, questa settimana\.\nNessuna scheda chiusa negli ultimi 7 giorni\.\nAperte: 0 da fare, 1 in corso, 0 da rivedere\.\n<<<fine board/);
+		expect(summary).toMatch(/<<<dalla board [0-9a-f]+: .*>>>\nLa board, questa settimana\.\nNessun incarico chiuso negli ultimi 7 giorni\.\nAperti: 0 da fare, 1 in corso, 0 da rivedere\.\n<<<fine board/);
 		expect(await tool("owni", "board_create").execute({ title: "x", assignee: "Ignoto" }, ctx("chat1"))).toMatch(/^Errore: nessun agente «Ignoto»/);
 		const listed = await tool("ricerca", "board_list").execute({ mine: true }, ctx());
 		expect(listed).toMatch(/<<<dalla board [0-9a-f]+: .*>>>\n#1 \[In corso\] Fornitori carta: assegnata a Ricercatore\n<<<fine board/);
@@ -405,7 +405,7 @@ describe("the board (ADR 0050)", () => {
 			const refused = await work.create({ title: "b", assignee: "vendite", parent: parent.id }, ricerca, undefined, parent.work?.threadId);
 			expect(refused).toMatchObject({ status: "da_fare", parent: parent.id });
 			expect(refused.work).toBeUndefined();
-			expect(refused.events.at(-1)?.text).toMatch(/^Non è partita: Non puoi affidare schede a Vendite/);
+			expect(refused.events.at(-1)?.text).toMatch(/^Non è partito: Non puoi affidare incarichi a Vendite/);
 			// The parent waiting in Da fare: no start either.
 			const waiting = await work.create({ title: "y" }, anna, "p_anna");
 			expect((await work.create({ title: "c", assignee: "ricerca", parent: waiting.id }, ricerca, undefined, parent.work?.threadId)).status).toBe("da_fare");
@@ -415,16 +415,16 @@ describe("the board (ADR 0050)", () => {
 			const { work, store } = setup();
 			const parent = store.create({ title: "x" }, anna);
 			const sub = store.create({ title: "s", parent: parent.id }, anna);
-			expect(() => store.create({ title: "ss", parent: sub.id }, anna)).toThrow(/già una sotto-scheda/);
+			expect(() => store.create({ title: "ss", parent: sub.id }, anna)).toThrow(/fa già parte di un altro/);
 			for (let i = 1; i < BOARD_LIMITS.children; i++) store.create({ title: `s${i}`, parent: parent.id }, anna);
-			expect(() => store.create({ title: "troppe", parent: parent.id }, anna)).toThrow(/già 10 sotto-schede aperte/);
+			expect(() => store.create({ title: "troppe", parent: parent.id }, anna)).toThrow(/già 10 incarichi aperti dentro/);
 			store.update(sub.id, { status: "fatto" }, anna);
 			expect(store.create({ title: "ora sì", parent: parent.id }, anna).parent).toBe(parent.id);
 			store.remove(parent.id);
 			expect(store.list().every((c) => c.parent === undefined)).toBe(true);
 			const closed = store.create({ title: "chiusa" }, anna);
 			store.update(closed.id, { status: "fatto" }, anna);
-			expect(() => store.create({ title: "z", parent: closed.id }, anna)).toThrow(/è chiusa/);
+			expect(() => store.create({ title: "z", parent: closed.id }, anna)).toThrow(/è chiuso/);
 			await expect(work.create({ title: "z", parent: "c_nessuna" }, anna, "p_anna")).rejects.toThrow(/non c'è/);
 		});
 
@@ -510,7 +510,7 @@ describe("the board (ADR 0050)", () => {
 			expect(await tool("ricerca", "board_list").execute({ mine: true }, ctx(threadId))).toContain("#1 [In corso] (lista 1/3) Fornitori carta");
 			const shown = await tool("ricerca", "board_show").execute({}, ctx(threadId));
 			expect(shown).toContain("Lista di controllo:\n1. [x] Trovare tre fornitori\n2. [ ] Chiedere i prezzi\n3. [ ] Confrontare le consegne");
-			expect(await tool("ricerca", "board_update").execute({ check_done: 7 }, ctx(threadId))).toMatch(/^Errore: La scheda #1 non ha la voce 7/);
+			expect(await tool("ricerca", "board_update").execute({ check_done: 7 }, ctx(threadId))).toMatch(/^Errore: L'incarico #1 non ha la voce 7/);
 			// Created by an agente with its steps: in the brief they are fenced.
 			expect(await tool("owni", "board_create").execute({ title: "Sotto", assignee: "ricerca", checklist: ["Uno"] }, ctx("chat1"))).toMatch(/^Scheda #2/);
 			await work.startWaiting(store.get("2")?.id as string, "p_anna", anna);
@@ -524,8 +524,8 @@ describe("the board (ADR 0050)", () => {
 			const a = store.create({ title: "Raccogli i dati" }, anna);
 			const b = store.create({ title: "Scrivi il report", after: ["#1"] }, anna);
 			expect(b.after).toEqual([a.id]);
-			expect(() => store.update(a.id, { after: [b.id] }, anna)).toThrow(/viene già dopo questa: si aspetterebbero a vicenda/);
-			expect(() => store.update(a.id, { after: ["1"] }, anna)).toThrow(/dopo sé stessa/);
+			expect(() => store.update(a.id, { after: [b.id] }, anna)).toThrow(/viene già dopo questo: si aspetterebbero a vicenda/);
+			expect(() => store.update(a.id, { after: ["1"] }, anna)).toThrow(/dopo sé stesso/);
 			expect(() => store.create({ title: "x", after: ["#99"] }, anna)).toThrow(/#99 non c'è/);
 			const c = store.create({ title: "Manda il report" }, anna);
 			// Through b: a loop too.
@@ -576,7 +576,7 @@ describe("the board (ADR 0050)", () => {
 			expect(await work.release()).toBe(1);
 			expect(store.get(other.id)?.status).toBe("in_corso");
 			expect(store.get(gone.id)).toMatchObject({ status: "da_fare" });
-			expect(store.get(gone.id)?.events.at(-1)?.text).toMatch(/^Non è partita da sola: Non puoi affidare schede a Vendite/);
+			expect(store.get(gone.id)?.events.at(-1)?.text).toMatch(/^Non è partito da solo: Non puoi affidare incarichi a Vendite/);
 			expect(store.get(waiting.id)?.status).toBe("da_fare");
 		});
 
@@ -696,12 +696,12 @@ describe("the board (ADR 0050)", () => {
 			const review = store.create({ title: "Bozza sito", assignee: "gone" }, anna);
 			store.update(review.id, { status: "da_rivedere" }, anna);
 			const text = digestText(store.list(), new Date(closedAt + 86_400_000), names);
-			expect(text).toMatch(/^La board, questa settimana\.\nUna scheda chiusa negli ultimi 7 giorni\.\nAperte: 2 da fare, 0 in corso, 1 da rivedere\.\n/);
+			expect(text).toMatch(/^La board, questa settimana\.\nUn incarico chiuso negli ultimi 7 giorni\.\nAperti: 2 da fare, 0 in corso, 1 da rivedere\.\n/);
 			expect(text).toMatch(/In ritardo:\n- #2 Fattura Bianchi \(Ricercatore\), in ritardo di \d+ giorni/);
 			expect(text).toContain("Da rivedere:\n- #4 Bozza sito (agente eliminato)");
 			expect(text).not.toContain("Più avanti");
 			// A week later the closed one is out of it.
-			expect(digestText(store.list(), new Date(closedAt + 8 * 86_400_000), names)).toContain("Nessuna scheda chiusa negli ultimi 7 giorni.");
+			expect(digestText(store.list(), new Date(closedAt + 8 * 86_400_000), names)).toContain("Nessun incarico chiuso negli ultimi 7 giorni.");
 			for (let i = 0; i < 6; i++) store.create({ title: `Vecchia ${i}`, due: "2020-02-01" }, anna);
 			expect(digestText(store.list(), new Date(closedAt), names)).toContain("- e altre 2");
 		});
@@ -715,9 +715,9 @@ describe("the board (ADR 0050)", () => {
 			// Already claimed for this Monday, even with nothing to say.
 			expect(await work.digest(new Date("2026-10-26T10:00:00Z"))).toBeUndefined();
 			expect(await work.digest(new Date("2026-11-02T07:30:00Z"))).toBeUndefined();
-			expect(await work.digest(new Date("2026-11-02T08:30:00Z"))).toContain("Aperte: 1 da fare");
+			expect(await work.digest(new Date("2026-11-02T08:30:00Z"))).toContain("Aperti: 1 da fare");
 			expect(await work.digest(new Date("2026-11-02T12:00:00Z"))).toBeUndefined();
-			expect(sent).toEqual([{ week: "2026-11-02", text: expect.stringContaining("Aperte: 1 da fare") }]);
+			expect(sent).toEqual([{ week: "2026-11-02", text: expect.stringContaining("Aperti: 1 da fare") }]);
 		});
 	});
 });

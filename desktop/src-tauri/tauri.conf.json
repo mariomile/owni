@@ -19,7 +19,10 @@
 		"category": "Productivity",
 		"shortDescription": "La tua assistente, con il modello AI che vuoi",
 		"icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico"],
-		"createUpdaterArtifacts": true
+		"createUpdaterArtifacts": true,
+		"macOS": {
+			"minimumSystemVersion": "12.0"
+		}
 	},
 	"plugins": {
 		"updater": {

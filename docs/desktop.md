@@ -6,6 +6,8 @@ Owni come app per Mac, Windows e Linux: una finestra sul tuo server Owni, l'icon
 
 L'app per Mac porta Owni con sé ([ADR 0096](adr/0096-owni-dentro-l-app-per-mac.md)): al primo avvio la accende su questo computer ed entra da sola. Riconosce gli abbonamenti già collegati alle CLI ufficiali di Claude Code e Codex. Puoi anche scegliere un provider con una chiave API in «Impostazioni → Provider». I dati restano in `~/Library/Application Support/app.owni.desktop/data`; se qualcosa non parte, il registro è in `~/Library/Logs/app.owni.desktop/server.log`.
 
+Serve macOS 12 o successivo, con Safari aggiornato almeno alla 17.5: la console usa i colori del tema chiaro e scuro che le versioni precedenti non conoscono.
+
 L'app non è ancora firmata. La prima volta: trascina Owni in Applicazioni, poi tasto destro sull'icona, **Apri**, e ancora **Apri**. Se macOS non mostra il pulsante, vai in Impostazioni di Sistema, Privacy e sicurezza, e premi **Apri comunque** accanto a Owni.
 
 ## Provider AI e abbonamenti

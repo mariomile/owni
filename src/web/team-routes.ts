@@ -38,17 +38,16 @@ export function teamRoutes(route: AddRoute, deps: TeamRoutesDeps): void {
 		if (chosen === undefined) throw new HttpError(400, "Squadra sconosciuta");
 		return chosen;
 	};
-	/** The IDs its agenti would get: theirs when free; otherwise -2, -3… */
+	/** The IDs its agenti would get: theirs when free; otherwise -2, -3…, and the name the same number, so two of them do not look alike. */
 	const idsOf = async (chosen: Team) => {
 		const members: { id: string; name: string }[] = [];
 		for (const m of chosen.members) {
-			let id: string | undefined;
-			for (let n = 1; n <= TRIES && id === undefined; n += 1) {
-				const candidate = n === 1 ? m.id : `${m.id}-${n}`;
-				if (!(await deps.exists(candidate))) id = candidate;
+			let free: number | undefined;
+			for (let n = 1; n <= TRIES && free === undefined; n += 1) {
+				if (!(await deps.exists(n === 1 ? m.id : `${m.id}-${n}`))) free = n;
 			}
-			if (id === undefined) throw new HttpError(409, `Ci sono già troppi agenti che si chiamano ${m.id}`);
-			members.push({ id, name: m.name });
+			if (free === undefined) throw new HttpError(409, `Ci sono già troppi agenti che si chiamano ${m.id}`);
+			members.push(free === 1 ? { id: m.id, name: m.name } : { id: `${m.id}-${free}`, name: `${m.name} ${free}` });
 		}
 		return members;
 	};

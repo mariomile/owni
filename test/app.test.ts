@@ -387,7 +387,7 @@ describe("pnpm start (startOwni)", () => {
 		await api(`/api/instances/ricerca/threads/${threadId}/messages`, { text: '/tool board_update {"status":"da_rivedere","comment":"Tre preventivi nel file"}' });
 		await until(async () => (await api("/api/board")).cards[0].status === "da_rivedere");
 		// The owner hears it in the chat with the main agente too (ADR 0051).
-		await until(async () => telegram.sent.some((m) => m.chat_id === "9" && m.text.startsWith("Scheda #1 da rivedere: Fornitori carta\nRicercatore l'ha finita: Tre preventivi nel file")));
+		await until(async () => telegram.sent.some((m) => m.chat_id === "9" && m.text.startsWith("Incarico #1 da rivedere: Fornitori carta\nRicercatore l'ha finito: Tre preventivi nel file")));
 		await api(`/api/instances/ricerca/threads/${threadId}/messages`, { text: '/tool board_update {"status":"fatto"}' });
 		await until(async () => (await entries()).some((e) => e.text?.includes("must be equal to one of the allowed values")));
 		expect((await api("/api/board")).cards[0].status).toBe("da_rivedere");
@@ -402,7 +402,7 @@ describe("pnpm start (startOwni)", () => {
 		expect(approve).toBe(`board:${card.id}:fatto`);
 		telegram.updates.push([{ update_id: 31, callback_query: { id: "cqb1", from: { id: 7 }, message: { message_id: 6, chat: { id: 7 } }, data: approve } }]);
 		telegram.updates.push([{ update_id: 32, callback_query: { id: "cqb2", from: { id: 9 }, message: { message_id: 6, chat: { id: 9 } }, data: approve } }]);
-		await until(async () => telegram.sent.some((m) => m.chat_id === "9" && m.text === "Scheda #1 approvata e chiusa."));
+		await until(async () => telegram.sent.some((m) => m.chat_id === "9" && m.text === "Incarico #1 approvato e chiuso."));
 		expect((await api("/api/board")).cards[0].status).toBe("fatto");
 		expect(telegram.sent.some((m) => m.chat_id === "7")).toBe(false);
 		telegram.updates.push([{ update_id: 33, callback_query: { id: "cqb3", from: { id: 9 }, message: { message_id: 6, chat: { id: 9 } }, data: approve } }]);
@@ -422,7 +422,7 @@ describe("pnpm start (startOwni)", () => {
 		// Monday morning the owner gets the week on the board (ADR 0081), once.
 		await owni.scheduler.tick(new Date("2027-01-04T09:00:00Z"));
 		await owni.scheduler.tick(new Date("2027-01-04T09:05:00Z"));
-		await until(async () => telegram.sent.some((m) => m.chat_id === "9" && m.text.startsWith("La board, questa settimana.") && m.text.includes("Aperte: 0 da fare, 1 in corso, 0 da rivedere.")));
+		await until(async () => telegram.sent.some((m) => m.chat_id === "9" && m.text.startsWith("La board, questa settimana.") && m.text.includes("Aperti: 0 da fare, 1 in corso, 0 da rivedere.")));
 		expect(telegram.sent.filter((m) => m.text.startsWith("La board, questa settimana.")).map((m) => m.chat_id)).toEqual(["9"]);
 
 		// A member sees only what concerns them, and hands nothing to an agente they cannot talk to.
@@ -431,7 +431,7 @@ describe("pnpm start (startOwni)", () => {
 		const theirs = await member("/api/board");
 		expect(theirs.cards).toEqual([]);
 		expect(theirs.agents.find((a: { id: string }) => a.id === "ricerca").canAssign).toBe(false);
-		expect((await member("/api/board", { title: "x", assignee: "ricerca" })).error).toMatch(/Non puoi affidare schede a Ricercatore/);
+		expect((await member("/api/board", { title: "x", assignee: "ricerca" })).error).toMatch(/Non puoi affidare incarichi a Ricercatore/);
 		expect((await send("PUT", `/api/board/${card.id}`, { comment: "ciao" }, member.cookie)).status).toBe(404);
 		await send("PUT", "/api/instances/ricerca/settings", { webPeople: [person.id] });
 		expect((await member("/api/board")).cards.map((c: { n: number }) => c.n)).toEqual([1, 2]);
@@ -461,7 +461,7 @@ describe("pnpm start (startOwni)", () => {
 		expect(goOn).toHaveLength(10);
 		const stopped = (await api("/api/board")).cards[0];
 		expect(stopped.events.at(-1)).toMatchObject({ kind: "comment", by: { kind: "agent", id: "ricerca" }, text: expect.stringMatching(/dopo 10 risposte/) });
-		await until(async () => telegram.sent.some((m) => m.chat_id === "9" && m.text.startsWith("Scheda #1 da rivedere: Fornitori carta")));
+		await until(async () => telegram.sent.some((m) => m.chat_id === "9" && m.text.startsWith("Incarico #1 da rivedere: Fornitori carta")));
 		// Nothing more is posted once it is in review.
 		await new Promise((r) => setTimeout(r, 300));
 		expect((await entries()).filter((e) => e.text?.startsWith("[Scheda #1] Vai avanti")).length).toBe(10);
