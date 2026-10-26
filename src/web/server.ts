@@ -20,10 +20,10 @@ import { AUTOMATION_LIMITS, AutomationRate } from "../core/automations.ts";
 import { checkPersona, cleanName, type Persona, PersonaError } from "../core/persona.ts";
 import { AGENT_CHANNEL } from "../core/agent-messages.ts";
 import { runtimeActivity } from "../core/agent-activity.ts";
-import { type BoardStore, dueText } from "../core/board.ts";
+import type { BoardStore } from "../core/board.ts";
 import type { ScreenViews } from "../core/screen-views.ts";
 import type { RoutineStore } from "../core/board-routines.ts";
-import type { BoardReview, BoardWork } from "../core/board-work.ts";
+import type { BoardWork } from "../core/board-work.ts";
 import type { ModelInfo } from "../core/model-providers.ts";
 import { withChannel } from "../core/policy.ts";
 import { type GoogleAccounts, type GoogleOAuth, type GoogleService, googleReturnQuery } from "../connectors/google.ts";
@@ -34,11 +34,12 @@ import type { OwniRuntime } from "../core/runtime.ts";
 import { DEFAULT_COST_CAPS, type UsageLedger } from "../core/usage.ts";
 import type { SegreteriaService } from "../segreteria/service.ts";
 import { type PeopleStore, type Person, publicPerson, type SessionStore } from "./auth.ts";
-import { WebChannel, type WebEntry, type WebEvent } from "./channel.ts";
+import { WebChannel, type WebEntry } from "./channel.ts";
 import { boardRoutes } from "./board-routes.ts";
 import { capabilityRoutes } from "./capability-routes.ts";
 import { orgRoutes } from "./org-routes.ts";
 import { teamRoutes } from "./team-routes.ts";
+import { eventsRoutes } from "./events-routes.ts";
 import { filesRoutes } from "./files-routes.ts";
 import { mine, mineWatch, scheduleRoutes } from "./schedule-routes.ts";
 import { approvalRoutes } from "./approval-routes.ts";
@@ -53,9 +54,8 @@ import { roomError, roomsRoutes } from "./rooms-routes.ts";
 import { settingsRoutes } from "./settings-routes.ts";
 import { type AddRoute, type Handler, HttpError, type Route, readBody, readJson, STREAMED, send } from "./http.ts";
 import { screenRoutes } from "./screen-routes.ts";
-import { publicRun, runRoutes } from "./run-routes.ts";
-import type { RunRecord } from "../core/run-store.ts";
-import type { RoomEntry, RoomEvent, Rooms } from "./rooms.ts";
+import { runRoutes } from "./run-routes.ts";
+import type { RoomEntry, Rooms } from "./rooms.ts";
 import { ABOUT_MAX, INSTRUCTIONS_MAX, withAbout } from "./setup.ts";
 import { proxyToken, sameSecret } from "./compare.ts";
 import { otpauthUri } from "./totp.ts";
@@ -488,76 +488,8 @@ export function createWebApp(options: WebAppOptions): Server {
 			return options.desktop !== undefined && (record.egress.connectors ?? []).includes(desktopConnector(options.desktop));
 		},
 	});
-	route("GET", "/api/events", "person", async ({ person: p, req, res }) => {
-		res.writeHead(200, { "content-type": "text/event-stream; charset=utf-8", "cache-control": "no-store", connection: "keep-alive", "x-accel-buffering": "no" });
-		res.write(": connected\n\n");
-		let disconnected = false;
-		let drainingRuns = false;
-		const pendingRuns = new Map<string, RunRecord>();
-		const drainRuns = async () => {
-			if (drainingRuns || disconnected) return;
-			drainingRuns = true;
-			try {
-				while (pendingRuns.size > 0 && !disconnected) {
-					const [id, run] = pendingRuns.entries().next().value as [string, RunRecord];
-					pendingRuns.delete(id);
-					// Recheck session, membership and thread ownership on each delivered event.
-					if (await options.sessions.personOf(cookie(req, COOKIE)) !== p.id) { res.end(); break; }
-					const currentPerson = await options.people.get(p.id);
-					if (currentPerson === undefined) { res.end(); break; }
-					try { await ownThread(currentPerson, run.instanceId, run.threadId); }
-					catch { continue; }
-					if (disconnected || res.writableEnded) break;
-					res.write(`event: run\ndata: ${JSON.stringify({ run: publicRun(run) })}\n\n`);
-					// A slow client reconnects and reads persisted state instead of retaining unbounded output.
-					if (res.writableLength > 512 * 1024) { res.end(); break; }
-				}
-			} catch { res.end(); }
-			finally { drainingRuns = false; }
-		};
-		const offRuns = runtime.onRunEvent(({ run }) => {
-			if (run.tenantId !== tenantId || run.channel !== "web" || WebChannel.ownerOf(run.threadId) !== p.id || disconnected) return;
-			pendingRuns.set(run.id, run);
-			if (pendingRuns.size > 200) { res.end(); return; }
-			void drainRuns();
-		});
-		req.once("close", () => { disconnected = true; pendingRuns.clear(); offRuns(); });
-		const listeners: [WebChannel, (e: WebEvent) => void][] = [];
-		const attach = (channel: WebChannel) => {
-			const listener = (event: WebEvent) => res.write(`event: entry\ndata: ${JSON.stringify({ ...event, entry: shown(event.entry) })}\n\n`);
-			channel.events.on(p.id, listener);
-			listeners.push([channel, listener]);
-		};
-		for (const channel of options.channels.values()) attach(channel);
-		streamAttachers.add(attach);
-		// A scheda of this person an agente finished (ADR 0051): the console tells them.
-		const review = ({ card, people }: BoardReview) => {
-			if (people.includes(p.id)) res.write(`event: board\ndata: ${JSON.stringify({ kind: "review", id: card.id, n: card.n, title: card.title })}\n\n`);
-		};
-		options.board?.work.events.on("review", review);
-		// A scheda of this person due today or late (ADR 0074).
-		const due = ({ card, people }: BoardReview) => {
-			if (people.includes(p.id) && card.due !== undefined) res.write(`event: board\ndata: ${JSON.stringify({ kind: "due", id: card.id, n: card.n, title: card.title, text: dueText(card.due) })}\n\n`);
-		};
-		options.board?.work.events.on("due", due);
-		// A scheda of this person that started by itself (ADR 0076).
-		const started = ({ card, people }: BoardReview) => {
-			if (people.includes(p.id)) res.write(`event: board\ndata: ${JSON.stringify({ kind: "started", id: card.id, n: card.n, title: card.title })}\n\n`);
-		};
-		options.board?.work.events.on("started", started);
-		const roomEntry = (event: RoomEvent) => res.write(`event: room\ndata: ${JSON.stringify({ roomId: event.roomId, entry: shown(event.entry), ...(event.parent === undefined ? {} : { parent: event.parent }) })}\n\n`);
-		options.rooms?.events.on(p.id, roomEntry);
-		const ping = setInterval(() => res.write(": ping\n\n"), 25_000);
-		await new Promise<void>((resolve) => req.on("close", resolve));
-		clearInterval(ping);
-		streamAttachers.delete(attach);
-		for (const [channel, listener] of listeners) channel.events.off(p.id, listener);
-		options.board?.work.events.off("review", review);
-		options.board?.work.events.off("due", due);
-		options.board?.work.events.off("started", started);
-		options.rooms?.events.off(p.id, roomEntry);
-		return STREAMED;
-	});
+	// --- the console's live stream ---
+	eventsRoutes(route, { runtime, tenantId, sessions: options.sessions, people: options.people, channels: options.channels, board: options.board, rooms: options.rooms, sessionOf: (req) => cookie(req, COOKIE), ownThread, shown, streamAttachers });
 
 	// --- files, and artifacts (ADR 0112) ---
 	filesRoutes(route, { runtime, tenantId, rooms: options.rooms, instanceAccess, channelOf, ownThread });
