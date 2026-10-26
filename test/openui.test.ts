@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import { request } from "node:http";
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -20,7 +21,12 @@ vi.unstubAllGlobals();
 
 // Match browser-file-chooser.test.ts: use the installed browser, never download one.
 const chrome = process.env.OWNI_CHROMIUM_PATH ?? (existsSync("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome") ? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" : undefined);
-const available = chrome !== undefined && existsSync(chrome);
+// Safari and the Mac app (WKWebView) draw with WebKit: Playwright's build of it is the stand-in, used when installed (`playwright-core install webkit`).
+const { chromium, webkit } = await import("playwright-core");
+const engines = [
+	{ name: "Chromium", available: chrome !== undefined && existsSync(chrome), launch: () => chromium.launch({ executablePath: chrome, args: ["--no-sandbox"] }) },
+	{ name: "WebKit", available: existsSync(webkit.executablePath()), launch: () => webkit.launch() },
+];
 
 const closers: (() => Promise<void>)[] = [];
 afterEach(async () => {
@@ -75,10 +81,33 @@ describe("interactive answers in the chat (ADR 0118)", () => {
 		expect(csp).toContain("connect-src 'none'");
 		expect(csp).toContain("form-action 'none'");
 		expect(csp).toContain("frame-ancestors 'self'");
-		expect(csp).not.toMatch(/https?:/);
+		// Scripts go by a nonce of this response (WebKit does not match 'self' in a sandboxed frame), no host and no 'self'.
+		const nonce = /script-src 'nonce-([\w+/=]+)'(?:;|$)/.exec(csp)?.[1];
+		expect(nonce).toBeDefined();
+		expect(csp).not.toMatch(/script-src[^;]*('self'|https?:|\*|unsafe)/);
+		// Owni's own stylesheets and fonts, from the host the frame was asked from and no other.
+		const host = new URL(base).host;
+		expect(csp).toContain(`style-src http://${host} https://${host} 'unsafe-inline';`);
+		expect(csp).toContain(`font-src http://${host} https://${host};`);
+		expect(csp.replaceAll(`http://${host}`, "").replaceAll(`https://${host}`, "")).not.toMatch(/https?:/);
+		// A Host header that is not a host leaves no stylesheet or font allowed, and adds nothing to the policy.
+		const forged = await new Promise<string>((done, fail) =>
+			request(`${base}/openui/frame`, { headers: { host: "evil.example; script-src *" } }, (res) => {
+				res.resume();
+				done(String(res.headers["content-security-policy"]));
+			})
+				.on("error", fail)
+				.end(),
+		);
+		expect(forged).toContain("font-src 'none';");
+		expect(forged).not.toContain("evil.example");
 		expect(frame.headers.get("x-frame-options")).toBeNull();
 		expect(frame.headers.get("cache-control")).toBe("no-cache");
-		expect(await frame.text()).toContain('<script src="/openui/frame.js"></script>');
+		const html = await frame.text();
+		expect(html).toContain(`<script nonce="${nonce}" src="/openui/frame.js"></script>`);
+		expect(html).toContain(`<script nonce="${nonce}" src="/openui/openui-bundle.min.js?v=0.2.1"></script>`);
+		expect(html).not.toContain("__NONCE__");
+		expect(((await fetch(`${base}/openui/frame`)).headers.get("content-security-policy") ?? "").includes(`'nonce-${nonce}'`)).toBe(false);
 		expect((await fetch(`${base}/openui/openui-bundle.min.js?v=0.2.1`)).headers.get("cache-control")).toBe("public, max-age=31536000, immutable");
 		expect((await fetch(`${base}/openui/frame.js`)).headers.get("cache-control")).toBe("no-cache");
 		expect((await fetch(`${base}/fonts/archivo-latin.woff2?frame`)).headers.get("access-control-allow-origin")).toBe("*");
@@ -86,11 +115,10 @@ describe("interactive answers in the chat (ADR 0118)", () => {
 	});
 });
 
-describe.skipIf(!available)("interactive answers, in real Chromium", () => {
-	it("draws the block, writes the click with the form's values in the box, opens links, fits its height, follows the theme, falls back to code, and reaches nothing", async () => {
+describe.for(engines)("interactive answers, in real $name", ({ available, launch }) => {
+	it.skipIf(!available)("draws the block, writes the click with the form's values in the box, opens links, fits its height, follows the theme, falls back to code, and reaches nothing", async () => {
 		const base = await server();
-		const { chromium } = await import("playwright-core");
-		const browser = await chromium.launch({ executablePath: chrome, args: ["--no-sandbox"] });
+		const browser = await launch();
 		closers.push(() => browser.close());
 		const page = await browser.newPage();
 		const errors: string[] = [];

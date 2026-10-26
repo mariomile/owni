@@ -204,7 +204,7 @@ describe("the organigramma's routes", () => {
 		expect((await api("/api/org", { org: now.org, version: now.version }, "PUT")).status).toBe(200);
 		// The old per-agente switch is gone: the organigramma is the one place.
 		expect((await api("/api/instances/conti/agents", { from: [] }, "PUT")).status).toBe(404);
-	}, 30_000);
+	});
 });
 
 // Match browser-file-chooser.test.ts: use the installed browser, never download one.

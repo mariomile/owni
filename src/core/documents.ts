@@ -443,9 +443,10 @@ function xlsxText(zip: Zip): { text: string; parts: number } {
 export type SheetRows = { readonly name: string; readonly hidden: boolean; readonly rows: string[][] };
 
 /**
- * The sheets of an Excel or OpenDocument workbook as rows of cells, with the values as stored, not
- * as the format rounds them (10,4 stays 10,4 under a «0» format), so sums are exact. `maxRows` stops
- * a sheet of repeated rows from growing without end.
+ * The sheets of an Excel or OpenDocument workbook as rows of cells, for programs (code_run): the
+ * values as stored, not as the format shows them. Numbers are plain decimals with a dot (10.4 stays
+ * 10.4 under a «0» format; no thousands, no € or %), percentages are the stored fraction (0.125 for
+ * 12,5%), dates are ISO. `maxRows` stops a sheet of repeated rows from growing without end.
  */
 export function spreadsheetRows(name: string, data: Uint8Array, maxRows: number): SheetRows[] | undefined {
 	const kind = documentKind(name, data);
@@ -462,7 +463,7 @@ export function spreadsheetRows(name: string, data: Uint8Array, maxRows: number)
 
 type XlsxSheet = { name: string; hidden: boolean; wide: boolean; rows: { number: number; cells: string[] }[] };
 
-/** Excel's sheets; with `exact` numbers keep every decimal stored, without grouping, and the format's unit. */
+/** Excel's sheets; with `exact` numbers are the stored value in plain decimal: a dot, no grouping, no unit. */
 function xlsxSheets(zip: Zip, exact: boolean): XlsxSheet[] {
 	const workbook = zip.text("xl/workbook.xml") ?? "";
 	const rels = relationships(zip, "xl", "xl/_rels/workbook.xml.rels");
@@ -601,7 +602,7 @@ function odsSheets(zip: Zip, maxRows: number): SheetRows[] {
 	return sheets;
 }
 
-/** A cell's stored value: numbers with every decimal and the decimal comma, the unit of money and percentages, dates as ISO. */
+/** A cell's stored value: numbers in plain decimal with every decimal they have, no unit, dates as ISO. */
 function odsValue(attrs: string): string | undefined {
 	const type = attribute(attrs, "office:value-type");
 	const raw = attribute(attrs, "office:value");
@@ -611,18 +612,12 @@ function odsValue(attrs: string): string | undefined {
 	}
 	if (raw === undefined || !Number.isFinite(Number(raw))) return undefined;
 	const n = Number(raw);
-	if (type === "percentage") return `${exactNumber(n * 100)}%`;
-	if (type === "currency") {
-		const currency = attribute(attrs, "office:currency");
-		return currency === "EUR" ? `${exactNumber(n)} €` : currency === "USD" ? `$${exactNumber(n)}` : exactNumber(n);
-	}
-	if (type === "float") return exactNumber(n);
-	return undefined;
+	return type === "percentage" || type === "currency" || type === "float" ? exactNumber(n) : undefined;
 }
 
-/** A number with every decimal it has and the decimal comma, never grouped: 1234,5. */
+/** A number with every decimal it has, a dot, never grouped: 1234.5. */
 function exactNumber(n: number): string {
-	return String(Number(n.toPrecision(15))).replace(".", ",");
+	return String(Number(n.toPrecision(15)));
 }
 
 /** Columns read in a sheet: A to SG. A sheet wider than this is data for the computer. */
@@ -691,17 +686,13 @@ function excelFormat(id: number, custom: Map<number, string>): ExcelFormat | und
 
 /**
  * A number as the format shows it; without a format, as written, with the Italian decimal comma.
- * `exact`: every stored decimal, ungrouped, with only the format's unit (for sums that must add up).
+ * `exact`: the stored value in plain decimal, a dot, every decimal, ungrouped, no unit (for programs).
  */
 function excelValue(n: number, format: ExcelFormat | undefined, raw: string, exact = false): string {
 	if (!Number.isFinite(n)) return xmlUnescape(raw);
 	if (format === undefined) return exact ? exactNumber(n) : italian(n, undefined, false);
 	if (format.kind === "date" || format.kind === "datetime" || format.kind === "time") return excelDate(n, format.kind);
-	if (exact) {
-		if (format.kind === "percent") return `${exactNumber(n * 100)}%`;
-		if (format.currency === undefined) return exactNumber(n);
-		return format.currency === "€" ? `${exactNumber(n)} €` : `${format.currency}${exactNumber(n).replace(/^-/, "")}`.replace(/^/, n < 0 ? "-" : "");
-	}
+	if (exact) return exactNumber(n);
 	if (format.kind === "percent") return `${italian(n * 100, format.decimals, false)}%`;
 	const shown = italian(n, format.decimals, format.grouping || format.currency !== undefined);
 	if (format.currency === undefined) return shown;

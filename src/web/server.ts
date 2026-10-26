@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { readdirSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
@@ -2370,7 +2370,7 @@ export function createWebApp(options: WebAppOptions): Server {
 		// the control plane, which checks sleep and subscription first.
 		if (options.cell !== undefined && !sameSecret(String(req.headers["x-owni-proxy"] ?? ""), cellProxyToken)) return send(res, 404, { error: "Not found" });
 		if (req.method === "GET" && url.pathname in STATIC) return serveStatic(res, STATIC[url.pathname] as string);
-		if (req.method === "GET" && Object.hasOwn(OPENUI, url.pathname)) return serveOpenui(res, OPENUI[url.pathname] as string);
+		if (req.method === "GET" && Object.hasOwn(OPENUI, url.pathname)) return serveOpenui(req, res, OPENUI[url.pathname] as string);
 		const hook = /^\/hooks\/telegram\/([a-z0-9_-]+)$/.exec(url.pathname);
 		if (req.method === "POST" && hook !== null) return telegramHook(req, res, hook[1] as string);
 		const phone = /^\/hooks\/phone\/([a-z0-9_-]+)$/.exec(url.pathname);
@@ -2603,12 +2603,13 @@ export function createWebApp(options: WebAppOptions): Server {
 	}
 
 	/** A file of the OpenUI frame: the page itself sandboxed by its CSP, the bundle cached for its version. */
-	async function serveOpenui(res: ServerResponse, name: string): Promise<void> {
+	async function serveOpenui(req: IncomingMessage, res: ServerResponse, name: string): Promise<void> {
 		const data = await readFile(join(openuiDir, name));
 		if (name === "frame.html") {
 			res.removeHeader("x-frame-options");
-			res.writeHead(200, { "content-type": TYPES[".html"] as string, "content-security-policy": OPENUI_CSP, "cache-control": "no-cache" });
-			res.end(data);
+			const nonce = randomBytes(16).toString("base64");
+			res.writeHead(200, { "content-type": TYPES[".html"] as string, "content-security-policy": openuiCsp(nonce, req.headers.host), "cache-control": "no-cache" });
+			res.end(data.toString("utf8").replaceAll("__NONCE__", nonce));
 			return;
 		}
 		const cache = name.startsWith("openui-") ? "public, max-age=31536000, immutable" : "no-cache";
@@ -2656,10 +2657,15 @@ const ARTIFACT_CSP =
 	"font-src https://fonts.gstatic.com data:; img-src data: blob: https://cdn.jsdelivr.net https://unpkg.com https://cdnjs.cloudflare.com; media-src data: blob:; connect-src 'none'; form-action 'none'; frame-ancestors 'self'";
 
 /**
- * The OpenUI frame (ADR 0118): an opaque origin like an artifact, but it runs only Owni's own files
- * (the vendored bundle and the frame script), loads no pictures or fonts from elsewhere, and sends nothing out.
+ * The OpenUI frame (ADR 0118): an opaque origin like an artifact, but it runs only Owni's own scripts
+ * (the vendored bundle and the frame script, pinned by a nonce per response), loads no pictures, and sends nothing out.
+ * WebKit (Safari, the Mac app) never matches 'self' from a sandboxed frame, so scripts go by nonce, and Owni's own
+ * stylesheets and fonts by the host the frame was asked from, never another one: a font from elsewhere could carry data out.
  */
-const OPENUI_CSP = "sandbox allow-scripts; default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src data: blob:; font-src 'self'; connect-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors 'self'";
+function openuiCsp(nonce: string, host: string | undefined): string {
+	const own = host !== undefined && /^([a-z0-9.-]+|\[[0-9a-f:]+\])(:\d+)?$/i.test(host) ? `http://${host} https://${host}` : "'none'";
+	return `sandbox allow-scripts; default-src 'none'; script-src 'nonce-${nonce}'; style-src ${own} 'unsafe-inline'; img-src data: blob:; font-src ${own}; connect-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors 'self'`;
+}
 
 function sandboxedHtml(res: ServerResponse, data: Buffer, download?: string): typeof STREAMED {
 	res.removeHeader("x-frame-options");

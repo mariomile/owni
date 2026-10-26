@@ -109,8 +109,18 @@ describe("the sandbox of code_run (ADR 0119)", () => {
 			'import csv\nfor name in ["ordini (Ordini).csv", "ordini (Note).csv"]: print(name, list(csv.reader(open(name)))[:2])',
 			[{ path: "ordini.xlsx", data: readFileSync(new URL("./fixtures/docs/ordini.xlsx", import.meta.url)) }],
 		);
-		expect(run.stdout).toBe("ordini (Ordini).csv [['Cliente', 'Importo', 'Data'], ['Bianchi', '1250,5', '2026-10-01']]\nordini (Note).csv [['Consegna urgente']]\n");
+		expect(run.stdout).toBe("ordini (Ordini).csv [['Cliente', 'Importo', 'Data'], ['Bianchi', '1250.5', '2026-10-01']]\nordini (Note).csv [['Consegna urgente']]\n");
 		expect(run.files).toEqual([]);
+	});
+
+	it("gives sheet cells as values Python reads as they are: plain decimals, no unit, ISO dates", async () => {
+		const code =
+			'import csv\nfrom datetime import date\nfrom decimal import Decimal\nrows = list(csv.reader(open("vendite (Vendite).csv")))\ncaffe, biscotti = rows[2], rows[4]\nprint(Decimal(caffe[1]) + Decimal(biscotti[1]), Decimal(caffe[2]), date.fromisoformat(caffe[3]).isoformat(), Decimal(biscotti[4]), float(caffe[8]))';
+		for (const name of ["vendite.xlsx", "vendite.ods"]) {
+			const run = await runCode(code, [{ path: name, data: readFileSync(new URL(`./fixtures/docs/${name}`, import.meta.url)) }]);
+			expect(run.error).toBeUndefined();
+			expect(run.stdout).toBe("1247.067 0.1 2026-07-01 1172.83865 1e-07\n");
+		}
 	});
 });
 
