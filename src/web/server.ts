@@ -1,12 +1,12 @@
-import { randomBytes, randomUUID } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import { readdirSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { extname, join, sep } from "node:path";
 import { ChannelRefused } from "../channels/types.ts";
 import { IMAGE_CONNECTOR } from "../core/image-generation.ts";
-import { type WebAction, type WebActionResult, WebActionError } from "../core/web-actions.ts";
-import { cardView, decideGoogleAction, type GoogleAction, GoogleActionError, type GoogleActionResult } from "../core/google-actions.ts";
+import type { WebAction, WebActionResult } from "../core/web-actions.ts";
+import type { GoogleAction, GoogleActionResult } from "../core/google-actions.ts";
 import { desktopConnector, type DesktopPermission, type DesktopPermissions } from "../core/desktop.ts";
 import { WEB_SEARCH_CONNECTOR } from "../core/web-search.ts";
 import { MissingPhoneField, PHONE_NUMBER, PHONE_PIN, type PhoneAdapter } from "../channels/phone.ts";
@@ -15,8 +15,8 @@ import { CONNECTOR_CATALOG, type CatalogEntry } from "../connectors/catalog.ts";
 import { apiTransportProblem } from "../connectors/api.ts";
 import { type ConnectorStatus, CONNECTOR_ID, type ConnectorStore, connectorEgressName, type McpConnector } from "../connectors/mcp.ts";
 import { type McpOAuth, McpOAuthError } from "../connectors/mcp-oauth.ts";
-import { connectorAction, decide, isApprover, NotAnApprover, OWNER, toolProposal, type Approver, webAction } from "../core/approvals.ts";
-import { type ConnectorAction, ConnectorActionError, type ConnectorActionResult } from "../core/connector-actions.ts";
+import { isApprover, OWNER, type Approver } from "../core/approvals.ts";
+import type { ConnectorAction, ConnectorActionResult } from "../core/connector-actions.ts";
 import { EgressDenied, NotFound, UserNotAllowed } from "../core/errors.ts";
 import { MemoryError, SHARED, subjectOf } from "../core/memory.ts";
 import { callAutomation } from "../core/automation-call.ts";
@@ -25,7 +25,6 @@ import { parseSkillMd, type Skill, SkillError, toSkillMd } from "../core/skills.
 import { checkPersona, cleanName, type Persona, PersonaError } from "../core/persona.ts";
 import { AGENT_CHANNEL } from "../core/agent-messages.ts";
 import { runtimeActivity } from "../core/agent-activity.ts";
-import type { Pratica } from "../core/practice.ts";
 import { type BoardStore, dueText } from "../core/board.ts";
 import type { ScreenViews } from "../core/screen-views.ts";
 import type { RoutineStore } from "../core/board-routines.ts";
@@ -53,6 +52,7 @@ import { orgRoutes } from "./org-routes.ts";
 import { teamRoutes } from "./team-routes.ts";
 import { filesRoutes, workspaceCall } from "./files-routes.ts";
 import { mine, mineWatch, scheduleRoutes } from "./schedule-routes.ts";
+import { approvalRoutes } from "./approval-routes.ts";
 import { type AddRoute, type Handler, HttpError, type Route, readBody, readJson, STREAMED, send } from "./http.ts";
 import { screenRoutes } from "./screen-routes.ts";
 import { publicRun, runRoutes } from "./run-routes.ts";
@@ -302,6 +302,7 @@ export function createWebApp(options: WebAppOptions): Server {
 		if (thread === undefined || thread.personId !== person.id) throw new HttpError(404, "No such thread");
 		return record;
 	};
+	const usageSummary = async () => ({ todayUsd: await options.usage.todaySpent(), softUsd: DEFAULT_COST_CAPS.softUsdPerDay, hardUsd: DEFAULT_COST_CAPS.hardUsdPerDay });
 
 	// --- session ---
 	route("POST", "/api/login", "none", async ({ req, res }) => {
@@ -797,66 +798,8 @@ export function createWebApp(options: WebAppOptions): Server {
 	// --- tasks programmati, automazioni (ADR 0060), brief del mattino, sentinelle (ADR 0018) ---
 	scheduleRoutes(route, { runtime, tenantId, defaultTimeZone: options.defaultTimeZone, google: options.google, watchRead: options.watchRead, instanceAccess, channelOf });
 
-	// --- tools proposti ---
-	route("GET", "/api/instances/:id/proposals", "person", async ({ person, params }) => {
-		await instanceAccess(person, params[0]);
-		return { proposals: await runtime.proposals(tenantId, params[0]).list() };
-	});
-	route("POST", "/api/instances/:id/proposals/:pid/decision", "person", async ({ person, params, req }) => {
-		await instanceAccess(person, params[0]);
-		const body = (await readJson(req)) as { decision?: string };
-		if (body.decision !== "approved" && body.decision !== "rejected") throw new HttpError(400, "decision: approved | rejected");
-		try {
-			return { proposal: await decide(toolProposal, runtime, tenantId, params[0], params[1], body.decision, approverOf(person)) };
-		} catch (error) {
-			if (error instanceof NotAnApprover) throw new HttpError(403, "Non sei un approvatore di questo agente");
-			throw error;
-		}
-	});
-
-	// --- forms Owni asked to send (web_submit): the person who asked, or an approver, decides ---
-	const mayDecideAll = async (p: Person, instanceId: string) => isApprover(runtime, tenantId, instanceId, approverOf(p));
-	route("GET", "/api/instances/:id/web-actions", "person", async ({ person: p, params }) => {
-		await instanceAccess(p, params[0]);
-		const all = await runtime.webActions(tenantId, params[0]).list();
-		const everyone = await mayDecideAll(p, params[0]);
-		return { actions: everyone ? all : all.filter((a) => a.requester === `web:${p.id}`) };
-	});
-	route("POST", "/api/instances/:id/web-actions/:aid/decision", "person", async ({ person: p, params, req }) => {
-		await instanceAccess(p, params[0]);
-		const body = (await readJson(req)) as { decision?: string };
-		if (body.decision !== "approved" && body.decision !== "rejected") throw new HttpError(400, "decision: approved | rejected");
-		if (options.sendWebAction === undefined) throw new HttpError(501, "Le azioni sul web non sono disponibili su questo server");
-		const by = (await mayDecideAll(p, params[0])) ? approverOf(p) : { channel: "web", userId: p.id };
-		try {
-			return { action: await decide(webAction(options.sendWebAction(params[0])), runtime, tenantId, params[0], params[1], body.decision, by) };
-		} catch (error) {
-			if (error instanceof NotAnApprover) throw new HttpError(403, "Questa richiesta la decide chi l'ha fatta o un approvatore");
-			if (error instanceof WebActionError) throw new HttpError(404, "Richiesta inesistente");
-			throw error;
-		}
-	});
-	// --- connector calls that change something (ADR 0025): the person who asked, or an approver, decides ---
-	route("GET", "/api/instances/:id/connector-actions", "person", async ({ person: p, params }) => {
-		await instanceAccess(p, params[0]);
-		const all = await runtime.connectorActions(tenantId, params[0]).list();
-		const everyone = await mayDecideAll(p, params[0]);
-		return { actions: everyone ? all : all.filter((a) => a.requester === `web:${p.id}`) };
-	});
-	route("POST", "/api/instances/:id/connector-actions/:aid/decision", "person", async ({ person: p, params, req }) => {
-		await instanceAccess(p, params[0]);
-		const body = (await readJson(req)) as { decision?: string };
-		if (body.decision !== "approved" && body.decision !== "rejected") throw new HttpError(400, "decision: approved | rejected");
-		if (options.runConnectorAction === undefined) throw new HttpError(501, "Le azioni dei connettori non sono disponibili su questo server");
-		const by = (await mayDecideAll(p, params[0])) ? approverOf(p) : { channel: "web", userId: p.id };
-		try {
-			return { action: await decide(connectorAction(options.runConnectorAction(params[0])), runtime, tenantId, params[0], params[1], body.decision, by) };
-		} catch (error) {
-			if (error instanceof NotAnApprover) throw new HttpError(403, "Questa richiesta la decide chi l'ha fatta o un approvatore");
-			if (error instanceof ConnectorActionError) throw new HttpError(404, "Richiesta inesistente");
-			throw error;
-		}
-	});
+	// --- what waits for a decision: tools proposti, forms, connector calls, Google writes, pratiche; the inbox ---
+	approvalRoutes(route, { runtime, tenantId, segreterie: options.segreterie, sendWebAction: options.sendWebAction, runConnectorAction: options.runConnectorAction, google: options.google, board: options.board, log: options.log, instanceAccess, approverOf, usageSummary });
 
 	// --- owner: the instance's computer (ADR 0013) ---
 	route("DELETE", "/api/instances/:id/computer", "owner", async ({ params }) => {
@@ -886,30 +829,6 @@ export function createWebApp(options: WebAppOptions): Server {
 		await options.desktop.reset(id);
 		await runtime.audit(tenantId).append({ type: "desktop.reset", instanceId: id });
 		return { ok: true };
-	});
-
-	// --- segreteria ---
-	const publicPractices = (all: readonly Pratica[]) => [...all].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).map(({ mail: _mail, ...p }) => p);
-	route("GET", "/api/instances/:id/pratiche", "person", async ({ person, params }) => {
-		await instanceAccess(person, params[0]);
-		const service = options.segreterie?.get(params[0]);
-		if (service === undefined) throw new HttpError(404, "Questo agente non è una segreteria");
-		const all = await service.practices.list();
-		return { pratiche: publicPractices(all) };
-	});
-	route("POST", "/api/instances/:id/pratiche/:pid/action", "person", async ({ person: p, params, req }) => {
-		await instanceAccess(p, params[0]);
-		const service = options.segreterie?.get(params[0]);
-		if (service === undefined) throw new HttpError(404, "Questo agente non è una segreteria");
-		if (!(await isApprover(runtime, tenantId, params[0], approverOf(p)))) throw new HttpError(403, "Non sei un approvatore di questo agente");
-		const body = (await readJson(req)) as { action?: string; text?: string; requestId?: string; draftVersion?: number };
-		if (body.action !== "approve" && body.action !== "edit" && body.action !== "discard") throw new HttpError(400, "action: approve | edit | discard");
-		const result = await service.act({ userId: `web:${p.id}` }, params[1], body.action, {
-			...(typeof body.text === "string" ? { text: body.text } : {}),
-			...(typeof body.draftVersion === "number" ? { draftVersion: body.draftVersion } : {}),
-			actionId: typeof body.requestId === "string" ? body.requestId.slice(0, 80) : randomUUID(),
-		});
-		return { result: result.kind === "handled" ? { kind: "handled", sent: result.sent, status: result.pratica.status } : result };
 	});
 
 	// --- owner: connectors, settings, people, audit ---
@@ -1572,26 +1491,6 @@ export function createWebApp(options: WebAppOptions): Server {
 		return { ok: true };
 	});
 
-	// --- writes to a person's Google account (ADR 0021): only that person sees and decides them ---
-	route("GET", "/api/instances/:id/google-actions", "person", async ({ person: p, params }) => {
-		await instanceAccess(p, params[0]);
-		return { actions: (await runtime.googleActions(tenantId, params[0]).list()).filter((a) => a.personId === p.id).map(cardView) };
-	});
-	route("POST", "/api/instances/:id/google-actions/:aid/decision", "person", async ({ person: p, params, req }) => {
-		await instanceAccess(p, params[0]);
-		const body = (await readJson(req)) as { decision?: string };
-		if (body.decision !== "approved" && body.decision !== "rejected") throw new HttpError(400, "decision: approved | rejected");
-		const run = options.google?.runAction;
-		if (run === undefined) throw new HttpError(501, "Google non può scrivere su questo server");
-		try {
-			return { action: cardView(await decideGoogleAction(runtime, tenantId, params[0], params[1], body.decision, p.id, run(params[0]), options.log)) };
-		} catch (error) {
-			// Someone else's request is, for this person, one that does not exist.
-			if (error instanceof GoogleActionError) throw new HttpError(404, "Richiesta inesistente");
-			throw error;
-		}
-	});
-
 	// --- owner: the sites an instance may read with its web tools ---
 	route("PUT", "/api/instances/:id/web", "owner", async ({ params, req }) => {
 		const id = params[0];
@@ -1793,55 +1692,7 @@ export function createWebApp(options: WebAppOptions): Server {
 		await runtime.audit(tenantId).append({ type: "person.removed", personId: params[0] });
 		return { removed };
 	});
-	const usageSummary = async () => ({ todayUsd: await options.usage.todaySpent(), softUsd: DEFAULT_COST_CAPS.softUsdPerDay, hardUsd: DEFAULT_COST_CAPS.hardUsdPerDay });
 	route("GET", "/api/usage", "person", async () => ({ usage: await usageSummary() }));
-	// The inbox and rail share the same eligible objects across every visible instance. Counts
-	// skip the public payload projections; no source failure is turned into an empty queue.
-	const collectApprovals = async (p: Person, includeGroups: boolean) => {
-		const visible = (await runtime.registry.listInstances(tenantId)).filter((r) => p.role === "owner" || (r.allowedUsers.web ?? []).includes(p.id));
-		const groups = [];
-		let pendingApprovals = 0;
-		const now = new Date();
-		for (const r of visible) {
-			const approver = await mayDecideAll(p, r.id);
-			const [allWeb, allConnectors, allGoogle, proposals, practices] = await Promise.all([
-				runtime.webActions(tenantId, r.id).list(now),
-				runtime.connectorActions(tenantId, r.id).list(now),
-				runtime.googleActions(tenantId, r.id).list(now),
-				approver ? runtime.proposals(tenantId, r.id).list() : [],
-				approver ? (options.segreterie?.get(r.id)?.practices.list() ?? []) : [],
-			]);
-			const webActions = approver ? allWeb : allWeb.filter((a) => a.requester === `web:${p.id}`);
-			const connectorActions = approver ? allConnectors : allConnectors.filter((a) => a.requester === `web:${p.id}`);
-			const googleActions = allGoogle.filter((a) => a.personId === p.id);
-			for (const items of [proposals, webActions, connectorActions, googleActions]) {
-				pendingApprovals += items.filter((a) => a.status === "pending").length;
-			}
-			pendingApprovals += practices.filter((a) => a.status === "draft_ready").length;
-			if (includeGroups) groups.push({
-				instance: { id: r.id, name: r.name, isApprover: approver },
-				proposals,
-				webActions,
-				connectorActions,
-				googleActions: googleActions.map(cardView),
-				pratiche: publicPractices(practices),
-			});
-		}
-		return { groups, pendingApprovals };
-	};
-	route("GET", "/api/approvals", "person", async ({ person }) => collectApprovals(person, true));
-	route("GET", "/api/console-summary", "person", async ({ person: p }) => {
-		const { pendingApprovals } = await collectApprovals(p, false);
-		let boardReview = 0;
-		if (options.board !== undefined) {
-			for (const card of options.board.store.list()) {
-				if (card.status !== "da_rivedere") continue;
-				const mine = card.work !== undefined && card.work.agent === card.assignee ? card.work.personId === p.id : p.role === "owner";
-				if (mine && await options.board.work.visibleTo(card, p.id)) boardReview++;
-			}
-		}
-		return { usage: await usageSummary(), pendingApprovals, boardReview };
-	});
 	route("GET", "/api/audit", "owner", async ({ url }) => {
 		const limit = Math.min(500, Math.max(1, Number(url.searchParams.get("limit") ?? 100)));
 		const all = await runtime.audit(tenantId).read();
