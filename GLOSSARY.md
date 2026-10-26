@@ -227,13 +227,9 @@ _Avoid_: export, report (il report di ricerca è un'altra cosa, ADR 0022), templ
 Un'immagine PNG a barre, a linee o a torta che Owni disegna con `chart_create` da numeri o da un CSV, in `grafici/`: la manda in chat come una foto o la mette in un documento. Vedi ADR 0030.
 _Avoid_: chart, plot, diagramma
 
-**Domanda a una tabella**:
-Una richiesta che Owni fa con `table_query` a un CSV, un Excel o un foglio OpenDocument del workspace: filtri, gruppi, totali, medie, classifiche, calcolati in codice e mai a mente. La risposta può essere salvata in un CSV per un grafico o un documento. Vedi ADR 0031.
-_Avoid_: query, analisi dati, pivot
-
-**Calcolo**:
-L'aritmetica che Owni fa con `calculate` (un preventivo, l'IVA, uno sconto, una divisione), riga per riga e con i nomi, al centesimo. Vedi ADR 0031.
-_Avoid_: calcolatrice, eval, formula
+**Programma Python**:
+Il codice che Owni scrive e fa girare con `code_run` per ogni numero che dà a una persona: un totale, l'IVA, uno sconto, una rata, una domanda a un CSV o a un Excel del workspace (filtri, gruppi, somme per mese). Gira in una sandbox senza rete, senza chiavi e senza il resto del disco; i file che scrive tornano nel workspace. Mai conti a mente. Vedi ADR 0119.
+_Avoid_: script, calcolatrice, query, eval
 
 **Registrazione**:
 Un file audio o video più lungo di un vocale (una riunione, una chiamata, una lezione) che Owni tiene nel workspace e trascrive con `audio_transcribe`, a pezzi di dieci minuti. Vedi ADR 0033.

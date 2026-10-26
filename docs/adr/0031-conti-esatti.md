@@ -1,5 +1,7 @@
 # Conti esatti: domande alle tabelle e calcolatrice
 
+> Sostituito dall'[ADR 0119](0119-programmi-python.md): `table_query` e `calculate` non ci sono più, i conti li fa `code_run`.
+
 Le persone mandano a Owni l'export delle fatture, l'estratto conto, il foglio delle vendite, e chiedono «quanto ho fatturato a marzo?», «chi sono i cinque clienti migliori?», «quante fatture non sono pagate?». Owni poteva leggere il testo del foglio (ADR 0026) e fare i conti a mente: con cento righe un modello sbaglia una somma, salta una riga o conta due volte il totale in fondo. Lo stesso per un preventivo: imponibile, IVA, sconto e rate fatti a mente escono sbagliati di qualche euro. Un numero sbagliato detto con sicurezza è il danno peggiore che una segretaria possa fare.
 
 ## Decisione
