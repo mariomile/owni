@@ -1,5 +1,5 @@
 // What the console knows about models and providers: the chat picker's cache, what a model does and costs, the subscriptions' state.
-import { api, h } from "./common.js";
+import { api, h, icon, mount, toast } from "./common.js";
 
 /** What the chat model picker reads, asked once per chat view: the choices, and each provider's models. */
 export const chatModelCache = new Map();
@@ -77,4 +77,184 @@ export function providerLogo(provider) {
 		svg.append(path);
 	}
 	return svg;
+}
+
+/**
+ * The chat's model (ADR 0036), a pill in the message box as on Grok: the instance's, or a model of
+ * a provider this person may use. `current` ({provider, modelId, name}) undefined: the instance's.
+ * `save(model | undefined)` stores a choice; choices are saved one after the other, and when the
+ * newest fails the pill shows the last one saved and the error is said.
+ */
+export function modelPill(inst, current, save) {
+	let chosen = current;
+	let saved = current;
+	let instanceModel;
+	let picks = 0;
+	let saving = Promise.resolve();
+	// The name without what is in brackets: «Claude Sonnet 4 (Anthropic)» reads «Claude Sonnet 4»; the full name is in the tooltip.
+	const short = (name) => name.replace(/\s*\([^)]*\)\s*$/, "") || name;
+	const label = h("span.model-name", short(current?.name ?? "Modello"));
+	const mark = h("span.model-mark");
+	const pill = h("button.model-pill", { type: "button", "aria-haspopup": "listbox", "aria-expanded": "false", title: "Modello per questa conversazione" }, mark, label, icon("down"));
+	const draw = () => {
+		const shown = chosen ?? instanceModel;
+		label.textContent = short(shown?.name ?? "Modello");
+		mount(mark, shown?.provider ? providerLogo(shown.provider) : null);
+		mark.hidden = mark.childElementCount === 0;
+		pill.title = shown?.name ? `Modello per questa conversazione: ${shown.name}` : "Modello per questa conversazione";
+		pill.classList.toggle("own", chosen !== undefined);
+		pill.setAttribute("aria-label", `Modello per questa conversazione: ${shown?.name ?? "Modello"}${chosen ? "" : " (quello dell'agente)"}`);
+	};
+	const pick = (model) => {
+		closeModelMenu();
+		pill.focus();
+		chosen = model;
+		draw();
+		const mine = ++picks;
+		saving = saving.then(async () => {
+			try {
+				await save(model);
+				saved = model;
+				// An owner's pick may have allowed a provider: the list says so next time.
+				chatModelCache.delete(inst.id);
+			} catch (error) {
+				if (mine !== picks) return;
+				chosen = saved;
+				draw();
+				toast(error.message, true);
+			}
+		});
+	};
+	pill.addEventListener("click", () => {
+		if (!closeModelMenu()) void openModelMenu(inst, pill, chosen, pick);
+	});
+	void chatModelChoices(inst)
+		.then((choices) => {
+			instanceModel = choices.instanceModel;
+			draw();
+		})
+		.catch(() => {});
+	draw();
+	return pill;
+}
+
+/** The list of models under the pill: search, the instance's model, then each provider's. */
+async function openModelMenu(inst, pill, chosen, pick) {
+	const listId = `model-list-${Date.now()}`;
+	const search = h("input", { type: "search", placeholder: "Cerca un modello", autocomplete: "off", "aria-label": "Cerca un modello", "aria-controls": listId });
+	const list = h("div.model-list", { id: listId, role: "listbox", "aria-label": "Modelli" });
+	const status = h("p.muted.model-empty", { role: "status" });
+	const menu = h("div.model-menu", search, list, status);
+	document.body.append(menu);
+	pill.setAttribute("aria-expanded", "true");
+	pill.setAttribute("aria-controls", listId);
+	const place = () => {
+		const r = pill.getBoundingClientRect();
+		const view = window.visualViewport;
+		const height = view?.height ?? window.innerHeight;
+		const width = Math.min(320, window.innerWidth - 16);
+		menu.style.width = `${width}px`;
+		menu.style.left = `${Math.max(8, Math.min(r.right - width, window.innerWidth - width - 8))}px`;
+		// Upwards from the box at the bottom of a chat; downwards when there is more room below.
+		const above = r.top - 14;
+		const below = height - r.bottom - 14;
+		const up = above >= 280 || above >= below;
+		menu.style.maxHeight = `${Math.min(420, up ? above : below)}px`;
+		menu.style.bottom = up ? `${window.innerHeight - r.top + 6}px` : "";
+		menu.style.top = up ? "" : `${r.bottom + 6}px`;
+		menu.style.transformOrigin = up ? "bottom right" : "top right";
+	};
+	place();
+	// On a phone the search waits for a tap: focusing it would open the keyboard over the list.
+	const touch = window.matchMedia("(pointer: coarse)").matches;
+	if (!touch) search.focus();
+	const option = (text, note, selected, onPick, tag = null) =>
+		h("button.model-option", { type: "button", role: "option", "aria-selected": selected ? "true" : "false", onclick: onPick }, h("span", h("span.model-option-name", text), note ? h("small", note) : null), tag ? h("span.model-tag", tag) : null, h("span.model-check", selected ? icon("check") : null));
+	let catalogs = [];
+	const fill = () => {
+		const words = search.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+		const match = (m, p) => words.every((w) => `${m.name} ${m.id} ${p.label}`.toLowerCase().includes(w));
+		const groups = catalogs.map(({ provider, models, error }, i) => {
+			const shown = (models ?? []).filter((m) => match(m, provider));
+			if (error === undefined && shown.length === 0) return null;
+			const head = `model-group-${i}`;
+			// Two models with the same name (one is a dated version) are told apart by their id.
+			const names = new Map();
+			for (const m of shown) names.set(m.name, (names.get(m.name) ?? 0) + 1);
+			// The provider's suggested model first, then its catalog as it comes.
+			const ordered = [...shown].sort((a, b) => (b.id === provider.defaultModel) - (a.id === provider.defaultModel));
+			return h(
+				"div",
+				{ role: "group", "aria-labelledby": head },
+				h("div.model-group", { id: head }, providerLogo(provider.id), h("span", provider.label, provider.allowed ? null : h("small", " · sceglierlo lo permette all'agente"))),
+				error === undefined
+					? ordered.map((m) => {
+							// A subscription costs nothing more per message: it says so instead of a price.
+							const subscription = provider.id === "claude-code" || provider.id === "codex";
+							return option(names.get(m.name) > 1 ? `${m.name} (${m.id})` : m.name, subscription ? modelAbilities(m) : modelFacts(m), chosen?.provider === provider.id && chosen?.modelId === m.id, () => pick({ provider: provider.id, modelId: m.id, name: m.name }), subscription ? "Abbonamento" : null);
+						})
+					: h("small.model-error", "Elenco non disponibile ora"),
+			);
+		});
+		mount(list, words.length === 0 ? option("Modello dell'agente", "lo sceglie l'owner nella configurazione", chosen === undefined, () => pick(undefined)) : null, groups);
+		status.textContent = words.length > 0 && groups.every((g) => g === null) ? "Nessun modello trovato" : "";
+		status.hidden = status.textContent === "";
+	};
+	search.addEventListener("input", fill);
+	menu.addEventListener("keydown", (e) => {
+		const all = [search, ...list.querySelectorAll("button")];
+		const i = all.indexOf(document.activeElement);
+		if (e.key === "Escape") {
+			e.preventDefault();
+			closeModelMenu();
+			pill.focus();
+		} else if (e.key === "Tab") closeModelMenu();
+		else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+			e.preventDefault();
+			all[(i + (e.key === "ArrowDown" ? 1 : -1) + all.length) % all.length]?.focus();
+		} else if (e.key === "Home" || e.key === "End") {
+			if (document.activeElement === search) return;
+			e.preventDefault();
+			all[e.key === "Home" ? 1 : all.length - 1]?.focus();
+		} else if (e.key === "Enter" && document.activeElement === search && search.value.trim() !== "") {
+			// Enter in the search takes the first model found; with nothing typed it does nothing.
+			e.preventDefault();
+			list.querySelector("button")?.click();
+		}
+	});
+	const away = (e) => {
+		if (!menu.contains(e.target) && !pill.contains(e.target)) closeModelMenu();
+	};
+	document.addEventListener("pointerdown", away);
+	window.addEventListener("resize", place);
+	window.visualViewport?.addEventListener("resize", place);
+	menu.cleanup = () => {
+		document.removeEventListener("pointerdown", away);
+		window.removeEventListener("resize", place);
+		window.visualViewport?.removeEventListener("resize", place);
+		pill.setAttribute("aria-expanded", "false");
+		pill.removeAttribute("aria-controls");
+	};
+	status.textContent = "Carico i modelli…";
+	try {
+		const { providers } = await chatModelChoices(inst);
+		// One provider that does not answer leaves the others listed.
+		const settled = await Promise.allSettled(providers.map((provider) => chatModelList(inst, provider.id)));
+		catalogs = providers.map((provider, i) => (settled[i].status === "fulfilled" ? { provider, models: settled[i].value } : { provider, error: settled[i].reason }));
+	} catch (error) {
+		status.textContent = error.message;
+		return;
+	}
+	if (!menu.isConnected) return;
+	fill();
+	if (touch) list.querySelector('[aria-selected="true"]')?.focus({ preventScroll: true });
+}
+
+/** Closes the model list; true when one was open. */
+export function closeModelMenu() {
+	const menu = document.querySelector(".model-menu");
+	if (!menu) return false;
+	menu.cleanup?.();
+	menu.remove();
+	return true;
 }

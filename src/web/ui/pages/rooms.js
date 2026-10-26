@@ -1,5 +1,5 @@
 // Canali pages.
-import { api, batched, channelHref, channelName, confirmDialog, emptyNote, face, faceColor, fmt, go, h, head, icon, initials, mount, route, state, store, thinking, toast, whenSeen } from "../common.js";
+import { api, batched, channelHref, channelName, confirmDialog, emptyNote, face, faceColor, fmt, go, h, head, icon, mount, route, state, store, thinking, toast } from "../common.js";
 import { agentCommands, commandMenu } from "../commands.js";
 import { renderMarkdown } from "../markdown.js";
 import { fillComposer } from "../openui.js";
@@ -7,6 +7,7 @@ import { copyButton, listenButton } from "../listen.js";
 import { refreshConversations, render, renderRail, windowDrag } from "../shell.js";
 import { artifactCard, artifactPanel, isHtml } from "../artifacts.js";
 import { agentPanel } from "../agent-panel.js";
+import { markRead, meAvatar, threadPanel, threadSummary } from "../threads.js";
 
 // ---------- canali (ADR 0063, 0113) ----------
 export async function viewRooms(main) {
@@ -82,12 +83,7 @@ function channelDialog(title, name, chosen, okLabel, onSave) {
 }
 
 /** The person had the canale or thread on screen: the rail stops showing it unread. */
-function markRead(roomId) {
-	return whenSeen(roomId, () => api(`/api/rooms/${encodeURIComponent(roomId)}/read`, { method: "POST", body: {} }))
-		.then(refreshConversations)
-		.then(renderRail)
-		.catch(() => {});
-}
+const read = (roomId) => markRead(roomId, `/api/rooms/${encodeURIComponent(roomId)}/read`);
 
 /** The artifact panel of the canale on screen (ADR 0112): an agente's HTML pages open there. */
 let artifacts;
@@ -119,19 +115,7 @@ function roomMessage(room, entry, answer, slot) {
 }
 
 /** Under a message with a thread: who answered, how many replies, the last one. Nothing when none yet. */
-function threadSummary(room, thread, open) {
-	if (!thread || thread.count === 0) return null;
-	const who = thread.who.map((w) => (w === "person" ? h("span.avatar.mini", { "aria-hidden": "true" }, initials(state.me.name)) : face(room.agents.find((a) => a.instanceId === w) ?? { id: w }, 18)));
-	const count = thread.count === 1 ? "1 risposta" : `${thread.count} risposte`;
-	return h(
-		"button.thread-summary",
-		{ type: "button", "aria-label": `${count}${thread.unread ? ", non lette" : ""}: apri il thread`, onclick: open },
-		h("span.who", who),
-		h("b", count),
-		thread.lastAt ? h("span.muted", `ultima ${fmt.time(thread.lastAt)}`) : null,
-		thread.unread ? h("span.dot", { "aria-hidden": "true" }) : null,
-	);
-}
+const summary = (room, thread, open) => threadSummary(thread, (w) => (w === "person" ? meAvatar() : face(room.agents.find((a) => a.instanceId === w) ?? { id: w }, 18)), open);
 
 /**
  * The box of a canale or a thread: @nome chips for its agenti, their skills, a message that goes to
@@ -193,7 +177,7 @@ function roomBox(room, send) {
 async function viewRoom(main, roomId, openId) {
 	const { room, entries } = await api(`/api/rooms/${encodeURIComponent(roomId)}`);
 	if (!main.isConnected) return;
-	void markRead(roomId);
+	void read(roomId);
 	const transcript = h("div.transcript", { role: "log", "aria-live": "polite" });
 	const typing = thinking(room.agents.filter((a) => a.present));
 	// One panel at a time next to the canale: a thread, a page or an agente. A page opened from an
@@ -204,12 +188,12 @@ async function viewRoom(main, roomId, openId) {
 	let switching = false;
 	const only = (keep) => {
 		switching = true;
-		if (keep !== panel) panel.close();
+		if (keep !== panel) panel.show(false);
 		if (keep !== artifacts) artifacts.show(false);
 		if (keep !== agent) agent?.show(false);
 		switching = false;
 	};
-	const panel = threadPanel(room, () => void refreshSummaries(), () => only(panel));
+	const panel = roomThreads(room, () => void refreshSummaries(), () => only(panel));
 	artifacts = artifactPanel(() => { fromAgent = false; only(artifacts); }, () => {
 		if (fromAgent && !switching) agent?.show(true);
 		fromAgent = false;
@@ -237,7 +221,7 @@ async function viewRoom(main, roomId, openId) {
 		if (entry.from === "note" || entry.id === undefined) return roomMessage(room, entry);
 		// Under every message: answer it in a thread (ADR 0113), and the thread's replies so far.
 		const answer = h("button.listen.reply-thread", { type: "button", title: "Rispondi nel thread", "aria-label": "Rispondi nel thread", onclick: () => openThread(entry) }, icon("thread"));
-		const slot = h("div.thread-slot", threadSummary(room, entry.thread, () => openThread(entry)));
+		const slot = h("div.thread-slot", summary(room, entry.thread, () => openThread(entry)));
 		slots.set(entry.id, { el: slot, threadId: entry.thread?.id });
 		return roomMessage(room, entry, answer, slot);
 	};
@@ -249,7 +233,7 @@ async function viewRoom(main, roomId, openId) {
 			if (!entry.thread || !slot) continue;
 			children.add(entry.thread.id);
 			slot.threadId = entry.thread.id;
-			mount(slot.el, threadSummary(room, entry.thread, () => openThread(entry)));
+			mount(slot.el, summary(room, entry.thread, () => openThread(entry)));
 		}
 	});
 	for (const e of entries) show(e);
@@ -262,7 +246,7 @@ async function viewRoom(main, roomId, openId) {
 			// A new page opens by itself when the place next to the canale is free; on a phone it would cover it.
 			if (event.entry.artifact && panel.el.hidden && !agent?.isOpen() && !matchMedia("(max-width: 860px)").matches) void artifacts.openArtifact(event.entry.instanceId, event.entry.artifact.threadId, event.entry.artifact);
 			transcript.scrollTop = transcript.scrollHeight;
-			void markRead(roomId);
+			void read(roomId);
 			return true;
 		}
 		if (panel.onEntry(event)) return true;
@@ -329,106 +313,54 @@ async function viewRoom(main, roomId, openId) {
 }
 
 /**
- * A thread under one message of a canale (ADR 0113), in the place next to the conversation the
- * browser uses in the direct messages: the message, its replies and a box to answer, with the agenti
- * of the canale. The thread is made on the first open.
+ * A thread under one message of a canale (ADR 0113): the message, its replies and a box to answer,
+ * with the agenti of the canale. The thread is made on the first open.
  */
-function threadPanel(channel, onChange, onShow) {
-	const list = h("div.thread-list", { role: "log", "aria-live": "polite" });
-	// A click in an interactive answer of the open thread: written in its box.
-	let input = null;
-	list.addEventListener("openui-action", (event) => input && fillComposer(input, event.detail.text));
-	const dock = h("div.thread-dock");
-	const el = h(
-		"aside.browser-panel.thread-panel",
-		{ hidden: true, "aria-label": "Thread" },
-		h(
-			"div.browser-head",
-			h("button.icon-btn.thread-back", { type: "button", title: "Torna al canale", "aria-label": "Torna al canale", onclick: () => close() }, icon("back")),
-			icon("thread"),
-			h("span.page-title", "Thread"),
-			h("button.icon-btn.thread-close", { type: "button", title: "Chiudi", "aria-label": "Chiudi il thread", onclick: () => close() }, icon("close")),
-		),
-		list,
-		dock,
-	);
-	let current;
+function roomThreads(channel, onChange, onShow) {
+	// The thread's own canale, as fetched on the last open.
 	let shown;
-	let typing;
-	let opening = 0;
-	let said = 0;
-	let count;
-	const counted = (more) => {
-		said += more;
-		if (count) count.textContent = said === 1 ? "1 risposta" : said ? `${said} risposte` : "Nessuna risposta, per ora";
-	};
-	const follow = () => { list.scrollTop = list.scrollHeight; };
-	const put = (node) => list.insertBefore(node, typing?.parentNode === list ? typing : null);
-	/** Closed: the address is the canale's again. */
-	const close = () => {
-		if (el.hidden) return;
-		el.hidden = true;
-		current = undefined;
-		// An open still on its way stays closed.
-		opening++;
-		typing?.remove();
-		mount(dock);
-		if (route().rest[1] === "t") history.pushState(null, "", channelHref(channel.id));
-	};
-	const open = async (root, threadId) => {
-		const mine = ++opening;
-		try {
+	const panel = threadPanel({
+		back: "Torna al canale",
+		home: () => channelHref(channel.id),
+		at: (id) => channelHref(channel.id, id),
+		read,
+		load: async (root, threadId) => {
 			const id = threadId ?? (await api(`/api/rooms/${encodeURIComponent(channel.id)}/threads`, { method: "POST", body: { parent: root.id } })).room.id;
 			const { room, entries } = await api(`/api/rooms/${encodeURIComponent(id)}`);
-			if (mine !== opening || !el.isConnected) return;
-			onShow();
-			typing?.remove();
-			current = id;
 			shown = room;
-			el.hidden = false;
-			mount(list, roomMessage(channel, root));
-			said = entries.filter((e) => e.from !== "note").length;
-			count = h("div.thread-count");
-			list.append(count);
-			counted(0);
-			for (const entry of entries) put(roomMessage(room, entry));
-			typing = thinking(room.agents.filter((a) => a.present));
-			const box = roomBox(room, async (text) => {
-				const bubble = put(roomMessage(room, { from: "person", text, at: new Date().toISOString() }));
-				follow();
+			return { id, entries, said: entries.filter((e) => e.from !== "note").length, counted: true };
+		},
+		drawRoot: (root, put) => put(roomMessage(channel, root)),
+		draw: (entry, put) => put(roomMessage(shown, entry)),
+		box: (id, ctx) => {
+			ctx.typing = thinking(shown.agents.filter((a) => a.present));
+			return roomBox(shown, async (text) => {
+				const bubble = ctx.put(roomMessage(shown, { from: "person", text, at: new Date().toISOString() }));
+				ctx.follow();
 				try {
 					await api(`/api/rooms/${encodeURIComponent(id)}/messages`, { method: "POST", body: { text } });
 				} catch (error) {
 					bubble.remove();
 					throw error;
 				}
-				counted(1);
-				list.append(typing);
-				follow();
+				ctx.counted(1);
+				ctx.list.append(ctx.typing);
+				ctx.follow();
 				onChange();
 			});
-			mount(dock, box.el);
-			input = box.input;
-			box.fit();
-			if (route().rest[2] !== id) history.pushState(null, "", channelHref(channel.id, id));
-			// Read first, then the summary under the message: else it would still say unread.
-			void markRead(id).then(onChange);
-			follow();
-			if (!matchMedia("(pointer: coarse)").matches) box.input.focus({ preventScroll: true });
-		} catch (error) {
-			if (mine === opening) toast(error.message, true);
-		}
-	};
+		},
+	}, onShow, onChange);
 	/** A reply in the thread on screen: shown here and read. */
 	const onEntry = (event) => {
+		const current = panel.current();
 		if (current === undefined || event.roomId !== current) return false;
 		if (event.entry.from === "person") return true;
-		typing?.remove();
-		put(roomMessage(shown, event.entry));
-		if (event.entry.from !== "note") counted(1);
-		follow();
-		void markRead(current).then(onChange);
+		panel.stopTyping();
+		panel.put(roomMessage(shown, event.entry));
+		if (event.entry.from !== "note") panel.counted(1);
+		panel.follow();
+		void read(current).then(onChange);
 		return true;
 	};
-	return { el, open, close, onEntry };
+	return { ...panel, onEntry };
 }
