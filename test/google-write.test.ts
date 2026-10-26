@@ -18,7 +18,6 @@ afterEach(async () => {
 
 const READ = `openid email ${GOOGLE_SCOPE.gmail} ${GOOGLE_SCOPE.calendar}`;
 const ALL = `${READ} ${GOOGLE_WRITE_SCOPE.gmail} ${GOOGLE_WRITE_SCOPE.calendar}`;
-const b64 = (text: string) => Buffer.from(text).toString("base64url");
 
 type Call = { method: string; url: URL; body: string };
 

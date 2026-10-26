@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { BOARD_LIMITS, type Card, CARD_PRIORITIES, CARD_STATUSES, type CardPriority, type CardStatus, type CheckChange, BoardError, type BoardStore, dueDay, dueIn, dueLabel, dueText, STATUS_LABEL, waitingFor } from "../board.ts";
+import { BOARD_LIMITS, type Card, CARD_PRIORITIES, type CardPriority, type CardStatus, type CheckChange, BoardError, type BoardStore, dueDay, dueIn, dueLabel, dueText, STATUS_LABEL, waitingFor } from "../board.ts";
 import { digestText } from "../board-digest.ts";
 import { type BoardWork, checklistText } from "../board-work.ts";
 import type { OwniTool } from "../engine.ts";

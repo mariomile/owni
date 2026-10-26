@@ -1,5 +1,5 @@
-import { mkdir, readdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { mkdir, readdir, readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { createHash, randomBytes } from "node:crypto";
 import { writeFileAtomic } from "./atomic-file.ts";
 
