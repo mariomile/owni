@@ -155,7 +155,7 @@ nav.rail-list > a.unread .label { font-weight: 650; color: var(--fg); }
 nav.rail-list > a.unread > .icon { color: var(--fg); }
 .roster-item[aria-current="true"] .roster-text .line { color: var(--fg-2); }
 .dot { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--fg); display: inline-block; }
-.rail-foot { flex: none; padding-top: 6px; border-top: 1px solid var(--border); }
+.rail-foot { flex: none; padding-top: 6px; }
 button.who-id { display: flex; align-items: center; gap: 10px; width: 100%; border: 0; background: transparent; padding: 6px 8px; border-radius: 8px; text-align: left; cursor: default; color: inherit; transition: background 0.15s var(--ease); }
 button.who-id:hover, button.who-id[aria-expanded="true"] { background: var(--hover); }
 button.who-id .icon { color: var(--fg-3); }
@@ -273,7 +273,6 @@ main.is-page { width: 100%; max-width: 1080px; margin: 0 auto; padding: 0 clamp(
 .agent-menu .model-option > span { flex: 1; }
 .agent-menu .model-option small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .agent-menu .model-option .face { flex: none; }
-.rail-management { flex: none; margin: 12px 0 8px; padding-top: 10px; border-top: 1px solid var(--border); }
 .attention-link { margin-bottom: 12px; }
 .work-toolbar { display: flex; align-items: end; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
 .work-toolbar > select { width: auto; max-width: 240px; }
