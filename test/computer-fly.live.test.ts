@@ -16,6 +16,15 @@ import { type Backend, fakeFly, runProcess } from "./fake-fly.ts";
 const image = process.env.OWNI_TEST_FLY_IMAGE;
 const realFly = process.env.FLY_API_TOKEN !== undefined && process.env.OWNI_TEST_FLY_ORG !== undefined;
 const key = `live${process.pid}`;
+/** Each address with the errno of a connection to it: 111, refused by the egress rules (a reset, at once). */
+const PRIVATE = `python3 -c "
+import socket
+for h in ['169.254.169.254', '10.0.0.1', '172.16.0.1', '192.168.0.1']:
+    try:
+        socket.create_connection((h, 80), 5); print(h, 'open')
+    except OSError as e:
+        print(h, e.errno)
+"`;
 
 function checks(computer: () => FlyComputerProvider) {
 	it("runs as uid 1000 in /work, reaches the internet, and not Fly's API, the host or raw packets", async () => {
@@ -24,9 +33,12 @@ function checks(computer: () => FlyComputerProvider) {
 		const net = await computer().run(key, "python3 -c \"import socket; socket.create_connection(('1.1.1.1', 53), 5); print('fuori')\"", { timeoutS: 30 });
 		expect(net).toMatchObject({ exitCode: 0, stdout: "fuori\n" });
 		// pip installs for uid 1000, into /work/.local, where the package stays.
-		const pip = await computer().run(key, "pip install -q --no-deps six && python3 -c 'import six; print(six.__file__)'", { timeoutS: 120 });
+		const pip = await computer().run(key, "pip install -q --no-deps tabulate && python3 -c 'import tabulate; print(tabulate.__file__)'", { timeoutS: 120 });
 		expect(pip.exitCode).toBe(0);
 		expect(pip.stdout).toMatch(/^\/work\/\.local\//);
+		// Not the network around it: the metadata endpoint (the host's credentials on a cloud), private addresses.
+		const inside = await computer().run(key, PRIVATE, { timeoutS: 60 });
+		expect(inside.stdout).toBe("169.254.169.254 111\n10.0.0.1 111\n172.16.0.1 111\n192.168.0.1 111\n");
 		// Fly's API inside the machine answers without a token: uid 1000 cannot reach its socket.
 		expect((await computer().run(key, "ls /.fly", { timeoutS: 30 })).exitCode).not.toBe(0);
 		// vsock talks to the host, packet sockets forge and sniff: both refused.
@@ -62,8 +74,8 @@ function containers(caps = true): Backend {
 		async boot(app, config) {
 			const env = (config.env ?? {}) as Record<string, string>;
 			await docker(["rm", "-f", name(app)]);
-			// What Fly's root in a VM has: SYS_ADMIN (and no AppArmor profile) for its mounts.
-			const privileges = caps ? ["--cap-add", "SYS_ADMIN", "--security-opt", "apparmor=unconfined"] : [];
+			// What Fly's root in a VM has: SYS_ADMIN (and no AppArmor profile) for its mounts, NET_ADMIN for the egress rules.
+			const privileges = caps ? ["--cap-add", "SYS_ADMIN", "--cap-add", "NET_ADMIN", "--security-opt", "apparmor=unconfined"] : [];
 			// Fly's API folder, open to all as on a machine before owni-fly-init closes it.
 			const fly = ["--mount", "type=tmpfs,destination=/.fly,tmpfs-mode=0755"];
 			const out = await docker(["run", "-d", "--name", name(app), ...privileges, ...fly, "-v", `${name(app)}:/work`, ...Object.entries(env).flatMap(([k, v]) => ["-e", `${k}=${v}`]), String(config.image)]);
@@ -95,6 +107,13 @@ describe.skipIf(image === undefined || realFly)("the computer of a micro-VM, as 
 	}, 120_000);
 
 	checks(() => provider);
+
+	it("runs nothing once the egress rules are gone: owni-run reads them back before each command", async () => {
+		expect((await provider.run(key, "true", { timeoutS: 30 })).exitCode).toBe(0);
+		const flushed = await docker(["exec", `owni-fly-${provider.appOf(key)}`, "/usr/sbin/iptables-nft", "-F", "OUTPUT"]);
+		expect(flushed.exit_code).toBe(0);
+		await expect(provider.run(key, "echo fuori", { timeoutS: 30 })).rejects.toThrow(/not ready/);
+	}, 120_000);
 
 	it("runs nothing on a machine whose first process could not finish", async () => {
 		const unready = await fakeFly(containers(false));

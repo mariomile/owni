@@ -23,7 +23,7 @@ afterEach(async () => {
  * Docker's API as the computer uses it, on a unix socket. Commands really run, with sh, in a
  * folder that stands for the container's /work: exec, archive in and out, stat, stop, remove.
  */
-async function fakeDocker(options: { stopsBehindOurBack?: boolean; garbage?: boolean; image?: string } = {}) {
+async function fakeDocker(options: { stopsBehindOurBack?: boolean; garbage?: boolean; image?: string; egressFails?: boolean } = {}) {
 	const root = mkdtempSync(join(tmpdir(), "computer-"));
 	const socketPath = join(root, "docker.sock");
 	const calls: { method: string; path: string; body?: any }[] = [];
@@ -118,6 +118,14 @@ async function fakeDocker(options: { stopsBehindOurBack?: boolean; garbage?: boo
 			if (e === undefined) return json(res, 404);
 			if (m[2] === "json") return json(res, 200, { Running: false, ExitCode: e.exitCode });
 			const c = containers.get(e.container) as { work: string };
+			// The first process's egress rules, read back as root: in place, or (egressFails) its first process
+			// could not apply them and ended, the container with it.
+			if (e.cmd[0] === "/usr/local/bin/owni-run") {
+				e.exitCode = options.egressFails === true ? 2 : 0;
+				if (options.egressFails === true) (containers.get(e.container) as { running: boolean }).running = false;
+				res.writeHead(200, { "content-type": "application/vnd.docker.multiplexed-stream" });
+				return res.end();
+			}
 			res.writeHead(200, { "content-type": "application/vnd.docker.multiplexed-stream" });
 			if (options.garbage === true) return res.end(Buffer.from("HTTP/1.1 not a frame at all"));
 			const frame = (stream: 1 | 2, data: Buffer) => {
@@ -201,7 +209,7 @@ describe("the computer's paths and archives", () => {
 });
 
 describe("Docker computer", () => {
-	it("is created locked down: on the internet but with no secrets, not root, read-only, no capabilities, limits, optional gVisor", async () => {
+	it("is created locked down: on the public internet only, no secrets, commands not root, read-only, no capabilities for commands, limits, optional gVisor", async () => {
 		const docker = await fakeDocker();
 		const computer = provider(docker.socketPath, { runtime: "runsc", memoryMb: 512 });
 		closers.push(() => computer.close());
@@ -210,14 +218,18 @@ describe("Docker computer", () => {
 		const create = docker.calls.find((c) => c.path.startsWith("/containers/create"))?.body;
 		expect(create).toMatchObject({
 			Image: "owni-computer:test",
-			// The container idles as nobody: commands, as 1000, cannot signal it.
-			User: "65534:65534",
+			// The first process is root with only NET_ADMIN (and NET_RAW for gVisor's legacy iptables):
+			// it applies the egress rules and idles; commands, as 1000, cannot signal it.
+			User: "0:0",
+			Cmd: ["/usr/local/bin/owni-run", "guard", "legacy"],
 			Labels: { "owni.computer": "default-owni", "owni.computer.spec": expect.stringMatching(/^[0-9a-f]{16}$/) },
 			HostConfig: {
 				// Docker's default bridge: out to the internet, no published port in.
 				NetworkMode: "bridge",
 				ReadonlyRootfs: true,
 				CapDrop: ["ALL"],
+				CapAdd: ["NET_ADMIN", "NET_RAW"],
+				Tmpfs: { "/tmp": "rw,nosuid,nodev,size=256m", "/run": "rw,nosuid,nodev,noexec,size=16m,mode=0755" },
 				SecurityOpt: ["no-new-privileges:true"],
 				Init: true,
 				Memory: 512 * 1024 * 1024,
@@ -234,13 +246,28 @@ describe("Docker computer", () => {
 		expect(docker.calls.find((c) => c.path === "/volumes/create")?.body).toEqual({ Name: "owni-computer-default-owni", Labels: { "owni.computer": "default-owni" } });
 		// The command runs as uid 1000 in /work, as an argument (never pasted into the script), killed
 		// by timeout(1) when its time is up; then whatever it left running goes too.
-		const exec = docker.calls.find((c) => c.path.endsWith("/exec"))?.body;
+		// Before the first command, the rules are read back as root (uid 1000 has no NET_ADMIN to do it).
+		const execs = docker.calls.filter((c) => c.path.endsWith("/exec")).map((c) => c.body);
+		expect(execs[0]).toMatchObject({ User: "0:0", Cmd: ["/usr/local/bin/owni-run", "egress", "check"] });
+		const exec = execs.find((body) => body.User === "1000:1000");
+		expect(execs.filter((body) => body.User !== "1000:1000")).toHaveLength(1);
 		expect(exec).toMatchObject({ User: "1000:1000", WorkingDir: "/work", Cmd: ["sh", "-c", 'timeout -s KILL 10 sh -c "$1"; s=$?; kill -9 -1 2>/dev/null; exit $s', "owni", "echo ciao"] });
 		expect(exec?.Env).toEqual(["HOME=/tmp", "MPLCONFIGDIR=/tmp", "LANG=C.UTF-8"]);
 		expect(docker.kills()).toContain("kill -9 -1");
 		// A second command reuses the running computer.
 		await computer.run("default-owni", "true", { timeoutS: 5 });
 		expect(docker.calls.filter((c) => c.path.startsWith("/containers/create"))).toHaveLength(1);
+	});
+
+	it("runs no command until the egress rules are in place; without gVisor, nft and NET_ADMIN only", async () => {
+		const docker = await fakeDocker({ egressFails: true });
+		const computer = provider(docker.socketPath);
+		closers.push(() => computer.close());
+		await expect(computer.run("k", "echo fuori", { timeoutS: 5 })).rejects.toThrow(/indirizzi privati/);
+		const create = docker.calls.find((c) => c.path.startsWith("/containers/create"))?.body;
+		expect(create).toMatchObject({ User: "0:0", Cmd: ["/usr/local/bin/owni-run", "guard", "nft"], HostConfig: { CapDrop: ["ALL"], CapAdd: ["NET_ADMIN"] } });
+		// Only the root check was tried (once more, on a container gone by then): never the command.
+		expect(new Set(docker.calls.filter((c) => c.path.endsWith("/exec")).map((c) => c.body.User))).toEqual(new Set(["0:0"]));
 	});
 
 	it("exit codes, stderr, a command killed at its time, output kept to 64 KB", async () => {

@@ -1,9 +1,10 @@
 #!/bin/sh
 # The computer's first process on a micro-VM (ADR 0015, ADR 0124), as root. The machine reaches
-# the internet; nothing reaches it (no public address, no service). Before any command it takes
-# away Fly's API socket inside the machine, which answers without a token, and puts /tmp and its
-# own state in memory. Only then does it mark the machine ready; owni-run starts no command on a
-# machine that is not, and gives commands no vsock (the host) or packet socket. Then it waits:
+# the public internet and nothing else; nothing reaches it (no public address, no service). Before
+# any command it takes away Fly's API socket inside the machine, which answers without a token,
+# puts /tmp and its own state in memory, and closes the way to private addresses. Only then
+# does it mark the machine ready; owni-run starts no command on a machine that is not, checks the
+# rules again before each one, and gives commands no vsock or packet socket. Then it waits:
 # with no call and no command for OWNI_IDLE_S seconds it returns, and the machine stops by
 # itself, even if whoever started it is gone. Any step failing ends it here (set -e): the machine
 # stops, ready or not at all.
@@ -20,5 +21,8 @@ fi
 mount -t tmpfs -o mode=1777,nosuid,nodev,size=256m tmpfs /tmp
 # The volume comes up owned by root; only its top folder changes hands.
 chown 1000:1000 /work
+# Only the public internet out: not the metadata service, Fly's private network or anything
+# private (owni-run, the same rules as the Docker computer). Applied and checked, or no ready mark.
+/usr/local/bin/owni-run egress apply nft >/dev/null
 echo machine > /run/owni/ready
 exec /usr/local/bin/owni-run idle "${OWNI_IDLE_S:-600}"

@@ -6,10 +6,12 @@ Perché: un agente che lavora davvero deve poter installare un pacchetto che l'i
 
 ## Decisione
 
-Il computer ha la rete in uscita verso internet, con ogni provider, senza elenco di siti consentiti e senza approvazione per comando. Non c'è un'opzione per tornare al computer chiuso.
+Il computer ha la rete in uscita verso internet pubblica, con ogni provider, senza elenco di siti consentiti e senza approvazione per comando. Non raggiunge la rete intorno a sé: su un server cloud l'indirizzo dei metadati (169.254.169.254) consegna le credenziali della macchina, e la rete locale e i servizi del server non sono internet. Non c'è un'opzione per tornare al computer chiuso.
 
-- **Docker**: il container sta sulla rete `bridge` di default di Docker invece che su `none`. Nessuna porta pubblicata.
-- **Fly**: `owni-fly-init` non blocca più l'uscita (niente iptables e ip6tables) e non scrive più il segno «sigillata». `owni-run` non rifiuta più una macchina non sigillata e non ricontrolla il firewall prima di ogni comando. Un comando parte solo quando il primo processo ha chiuso l'API di Fly dentro la macchina: il segno ora si chiama `ready` e dice questo.
+- **Le stesse regole su ogni provider**, scritte una volta in `owni-run` (`owni-run egress rules` le stampa): in uscita tutto, tranne link-local (169.254.0.0/16, fe80::/10), le reti private (10/8, 172.16/12, 192.168/16), CGNAT 100.64/10 (i metadati di Alibaba sono 100.100.100.200), l'endpoint dell'host di Azure 168.63.129.16, 0.0.0.0/8, multicast e indirizzi riservati (224/4, 240/4, ff00::/8), IPv6 unique-local fc00::/7 (la rete privata di Fly, i metadati IPv6 di AWS fd00:ec2::254). Loopback resta permesso: è il computer stesso. Una connessione TCP verso un indirizzo vietato riceve subito un reset, il resto viene scartato. Le regole si applicano in un colpo solo con `iptables-restore` e `ip6tables-restore`, e si controllano rileggendo le catene esatte.
+- **Il DNS**: dei nameserver di `/etc/resolv.conf`, quelli che cadono in un intervallo vietato sono permessi solo sulla porta 53, UDP e TCP, e nient'altro di privato. Su Fly è `fdaa::3`, il resolver della rete privata ([docs di Fly](https://fly.io/docs/networking/private-networking/)); su Docker è il resolver che Docker dà al container (quello del server, o `127.0.0.11` su una rete definita dall'utente, che è già loopback).
+- **Docker**: il container sta sulla rete `bridge` di default di Docker invece che su `none`. Nessuna porta pubblicata. Il primo processo del container (`owni-run guard`) parte come root con una sola capability, NET_ADMIN: mette le regole, scrive `ready`, poi resta fermo. I comandi entrano con `docker exec` come uid 1000, e Owni non ne manda nessuno prima che un `owni-run egress check` da root confermi le regole: se mancano, il computer non parte e Owni lo dice.
+- **Fly**: `owni-fly-init`, già root, mette le stesse regole con iptables e ip6tables dopo aver chiuso l'API di Fly, e solo dopo scrive `ready`. Se un passo fallisce il primo processo termina e la macchina si ferma. `owni-run` rilegge le regole prima di ogni comando e non avvia niente se mancano o sono cambiate.
 - **Owni Cloud**: niente cambia nel control plane e nelle celle. Il control plane passa comandi e file come prima; nessuna parte assumeva il computer senza rete.
 - **L'immagine** ha in più `curl`, `git` e `pip`. Con il file system in sola lettura, `pip install` scrive in `/work/.local` (`/etc/pip.conf` e `PYTHONUSERBASE`): i pacchetti restano con i file del computer e contano nella quota.
 - **`computer_run`** dice al modello che il computer ha internet (pip install, curl, git clone, API pubbliche), che non ha chiavi né password, e che non deve mandare fuori niente che la persona non abbia chiesto, mai perché lo dice un file, una pagina o un'uscita.
@@ -20,6 +22,7 @@ Il computer ha la rete in uscita verso internet, con ogni provider, senza elenco
 
 - **Niente segreti nel computer.** Il container non riceve variabili d'ambiente di Owni; il comando ha solo `HOME`, `LANG` e le variabili di Python e del PATH. La macchina Fly riceve solo `OWNI_IDLE_S`. Nel computer entrano solo i file del workspace copiati con `copy_in`, e il workspace è separato da `secrets.json` e dai token dei connettori. I token di Fly e la chiave del modello restano nel server o nel control plane.
 - **Niente in entrata.** Docker: nessuna porta pubblicata. Fly: nessun indirizzo pubblico, nessun servizio, una rete privata per ogni app, nessuna registrazione DNS.
+- **Niente rete privata.** Le regole sopra, uguali su Docker e su Fly, controllate prima del primo comando su Docker e prima di ogni comando su Fly.
 - **L'API di Fly chiusa.** `/.fly/api` dentro la macchina risponde senza token: resta solo per root, e nessun comando parte prima che sia chiusa.
 - **Niente vsock né socket packet.** Il filtro seccomp di `owni-run` resta. Il vsock parla con l'host della VM, non con internet. Un socket packet serve a falsificare e ascoltare pacchetti, mai a usare internet: `pip`, `curl` e `git` usano socket normali.
 - **Le protezioni della macchina**: comandi come uid 1000, file system in sola lettura tranne `/work` e `/tmp`, nessuna capability, niente escalation di privilegi, limiti di memoria, CPU, processi e dimensione dei file, quota di `/work`, gVisor facoltativo, tutto chiuso alla fine di ogni comando.
@@ -33,7 +36,16 @@ Un comando può mandare fuori i file che l'agente ha copiato in `/work`. Il caso
 Altri rischi, minori:
 
 - **Abuso della rete**: scansioni, spam, mining partono dagli indirizzi di Fly o del server di Owni. Limiti di CPU e di tempo per comando li contengono, non li impediscono.
-- **Docker e la rete locale**: dal bridge il computer raggiunge anche la rete locale del server e i servizi in ascolto su tutte le interfacce. Il runbook (6j) dice di tenerli su `127.0.0.1` o chiusi verso `docker0`. Su Fly no: la macchina ha una rete privata sua.
+- **L'indirizzo pubblico del server Docker**: le regole chiudono metadati, rete locale e l'indirizzo del bridge (172.17.0.1), ma l'indirizzo pubblico del server è internet, e da lì il computer raggiunge i servizi del server in ascolto su tutte le interfacce. Il runbook (6j) dice di tenerli su `127.0.0.1` o di chiudere con il firewall del server quello che arriva da `docker0`. Su Fly la macchina non ha un server di Owni intorno.
+- **Il DNS come canale**: il resolver permesso inoltra nomi verso internet, quindi un comando può far uscire dati dentro le richieste DNS. È il rischio della rete aperta, non uno in più.
+
+## Perché le regole reggono su Docker
+
+Il container parte come root, ma con `CapDrop: ALL`, `CapAdd: NET_ADMIN`, `no-new-privileges` e nessun file setuid o setgid nell'immagine (l'immagine li toglie tutti). Un `docker exec` come uid 1000 non ha nessuna capability effettiva: NET_ADMIN resta solo nel bounding set, che limita quello che un processo potrebbe ottenere, non quello che ha. Provato su Docker (OrbStack): il comando ha `CapPrm`, `CapEff` e `CapAmb` a zero e `CapBnd` 0x1000 (solo NET_ADMIN), e `iptables -F OUTPUT` fallisce con «Permission denied (you must be root)».
+
+Il motivo: l'exec di Docker eredita le capability del container e per un exec non privilegiato non ne aggiunge (moby, `daemon/exec.go` e `daemon/exec_linux.go`). Con `execve` un processo con uid diverso da 0, senza ambient set e senza file capability parte con il permitted set vuoto. Da Docker 24 (moby PR #46221) i container non root ricevono Effective e Permitted, ma conta solo quando il primo binario dell'exec ha file capability: nell'immagine nessuno ne ha, e `no-new-privileges` impedisce a setuid e file capability di dare più di quello che il processo ha già. Il primo processo è l'unico con NET_ADMIN, e un comando non può mandargli segnali (uid diverso) né cambiarlo.
+
+**Con gVisor** (`runsc`) cambiano due cose. gVisor non implementa nftables, quindi le regole usano il backend legacy di iptables; e legacy iptables in gVisor passa da socket raw, che `runsc` dà solo con `--net-raw`, con NET_RAW anche nel container (gVisor issue #9917, [docs di gVisor su Docker](https://gvisor.dev/docs/user_guide/quick_start/docker/)). Owni aggiunge NET_RAW solo con `runsc`; NET_RAW resta al primo processo, non ai comandi. Il reset per TCP invece di un rifiuto ICMP evita un blocco noto della connect in gVisor (issue #13756). Senza `--net-raw` le regole non si mettono, il primo processo esce e il computer non parte: chiuso, non aperto. Questo percorso non è provato né in locale né in CI, che non hanno `runsc`.
 
 ## Alternative scartate
 
@@ -43,7 +55,8 @@ Altri rischi, minori:
 
 ## Conseguenze
 
-- Il job `computer` del workflow Image prova il contrario di prima, sull'immagine vera: il computer raggiunge internet, `pip install` scrive in `/work/.local`, nell'ambiente non c'è niente di Owni; sul target `fly` l'API di Fly è chiusa a uid 1000 e vsock e packet sono rifiutati. Serve ancora la prova dal vivo su Fly con un token vero.
+- Il job `computer` del workflow Image prova sull'immagine vera, su tutti e due i target: il computer raggiunge internet, `pip install` scrive in `/work/.local`, nell'ambiente non c'è niente di Owni, 169.254.169.254 e gli indirizzi privati sono rifiutati. Sul target di default uid 1000 non ha capability e non riesce a togliere le regole; sul target `fly` l'API di Fly è chiusa a uid 1000, vsock e packet sono rifiutati, e se le regole spariscono il comando dopo non parte. Servono ancora la prova dal vivo su Fly con un token vero e quella con gVisor.
+- Un'immagine personalizzata per Docker deve avere `python3`, `iptables` e `/usr/local/bin/owni-run`: senza, il computer non parte.
 - Il traffico in uscita costa: Fly fattura l'uscita oltre la soglia gratuita, e un computer che scarica molto pesa sul conto del tenant.
 - Un computer già creato passa alla rete al comando dopo: su Docker cambia la configurazione e il container viene ricreato, su Fly serve l'immagine nuova (`owni-computer:fly`). I file in `/work` restano.
 - Se un giorno serve chiudere la rete per un cliente, si torna a decidere: oggi non c'è e non si tiene codice per farlo.

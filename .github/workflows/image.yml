@@ -69,7 +69,7 @@ jobs:
         env:
           OWNI_TEST_COMPUTER_IMAGE: owni-computer:ci
         run: pnpm vitest run test/computer-docker.live.test.ts
-      # The micro-VM target (ADR 0015, ADR 0124): on the internet, its first process closes Fly's API, then the same checks.
+      # The micro-VM target (ADR 0015, ADR 0124): on the internet, its first process closes Fly's API and private addresses, then the same checks.
       - name: Build the micro-VM computer image
         run: docker build -f docker/computer.Dockerfile --target fly -t owni-computer:fly-ci docker
       - name: The micro-VM computer on Docker's network

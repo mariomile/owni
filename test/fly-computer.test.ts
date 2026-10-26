@@ -176,7 +176,7 @@ describe("the computer on a Fly machine", () => {
 		const c = computer();
 		await c.put("jjjj0000", [{ path: "x", data: Buffer.from("x") }]);
 		rmSync(join(dirs(appOf("jjjj0000")).state, "ready"));
-		await expect(c.run("jjjj0000", "echo no", { timeoutS: 10 })).rejects.toThrow("Fly's API inside it may be open");
+		await expect(c.run("jjjj0000", "echo no", { timeoutS: 10 })).rejects.toThrow("the way to private addresses inside it may be open");
 	}, 20_000);
 
 	it("uses a volume left free again, and grows the volume with the quota", async () => {
@@ -208,6 +208,43 @@ describe("the computer on a Fly machine", () => {
 		const out = await runProcess("python3", [runner, "idle", "1"], "", { OWNI_RUN_STATE: state, OWNI_RUN_WORK: root });
 		expect(out.exit_code).toBe(0);
 		expect(Date.now() - started).toBeLessThan(5000);
+	});
+
+	it("never runs a command on a machine whose egress rules are not in place", async () => {
+		const c = computer();
+		await c.put("mmmm3333", [{ path: "x", data: Buffer.from("x") }]);
+		// A real machine ("machine" in ready) with no rules: owni-run checks them before each command.
+		writeFileSync(join(dirs(appOf("mmmm3333")).state, "ready"), "machine");
+		await expect(c.run("mmmm3333", "echo no", { timeoutS: 10 })).rejects.toThrow("the way to private addresses inside it may be open");
+	}, 20_000);
+
+	it("the egress rules: the public internet only, the resolver it is given on port 53, the same on both providers", async () => {
+		const state = dirs("rules").state;
+		mkdirSync(state, { recursive: true });
+		const resolv = join(state, "resolv.conf");
+		// A cloud's private resolver, Fly's, a link-local one with its zone, a public one, and junk.
+		writeFileSync(resolv, "# Generated\nnameserver 10.0.0.2\nnameserver fdaa::3\nnameserver fe80::1%eth0\nnameserver 8.8.8.8\nnameserver nonsense\nsearch internal\n");
+		const out = await runProcess("python3", [runner, "egress", "rules"], "", { OWNI_RUN_STATE: state, OWNI_RUN_RESOLV: resolv });
+		expect(out.exit_code).toBe(0);
+		const rules = JSON.parse(out.stdout) as Record<string, Record<string, string[]>>;
+		const deny = (net: string) => `-A OUTPUT -d ${net} -j OWNI-DENY`;
+		const dns = (ip: string) => [`-A OUTPUT -d ${ip} -p udp -m udp --dport 53 -j ACCEPT`, `-A OUTPUT -d ${ip} -p tcp -m tcp --dport 53 -j ACCEPT`];
+		expect(rules.iptables?.OUTPUT).toEqual([
+			"-P OUTPUT ACCEPT",
+			"-A OUTPUT -o lo -j ACCEPT",
+			// The private resolver on port 53 only; the public one needs no rule.
+			...dns("10.0.0.2/32"),
+			...["0.0.0.0/8", "10.0.0.0/8", "100.64.0.0/10", "168.63.129.16/32", "169.254.0.0/16", "172.16.0.0/12", "192.168.0.0/16", "224.0.0.0/4", "240.0.0.0/4"].map(deny),
+		]);
+		expect(rules.ip6tables?.OUTPUT).toEqual(["-P OUTPUT ACCEPT", "-A OUTPUT -o lo -j ACCEPT", ...dns("fdaa::3/128"), ...dns("fe80::1/128"), ...["fe80::/10", "fc00::/7", "ff00::/8"].map(deny)]);
+		// TCP refused at once with a reset (gVisor hangs on an ICMP reject), the rest dropped.
+		for (const table of ["iptables", "ip6tables"]) expect(rules[table]?.["OWNI-DENY"]).toEqual(["-N OWNI-DENY", "-A OWNI-DENY -p tcp -j REJECT --reject-with tcp-reset", "-A OWNI-DENY -j DROP"]);
+		// No resolver at all: no hole for one.
+		const none = await runProcess("python3", [runner, "egress", "rules"], "", { OWNI_RUN_STATE: state, OWNI_RUN_RESOLV: join(state, "missing") });
+		expect(JSON.parse(none.stdout).iptables.OUTPUT.filter((r: string) => r.includes("--dport 53"))).toEqual([]);
+		// Rules never applied are never taken as in place; an unknown backend is refused.
+		expect((await runProcess("python3", [runner, "egress", "check"], "", { OWNI_RUN_STATE: state })).exit_code).not.toBe(0);
+		expect((await runProcess("python3", [runner, "egress", "apply", "ufw"], "", { OWNI_RUN_STATE: state })).stderr).toContain("nft|legacy");
 	});
 
 	it("refuses limits Fly cannot give", () => {

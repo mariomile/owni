@@ -198,7 +198,7 @@ export class FlyComputerProvider implements ComputerProvider {
 				await new Promise((resolve) => setTimeout(resolve, 500));
 				continue;
 			}
-			if (/not ready/.test(out.stderr)) throw new Error("computer: the machine is not ready, Fly's API inside it may be open (owni-fly-init failed): no command runs there");
+			if (/not ready/.test(out.stderr)) throw new Error("computer: the machine is not ready, Fly's API or the way to private addresses inside it may be open (owni-fly-init failed): no command runs there");
 			throw new Error(`computer: start failed (${out.exitCode}): ${out.stderr.slice(0, 200)}`);
 		}
 	}
