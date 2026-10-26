@@ -1,4 +1,5 @@
-import type { OwniTool } from "../engine.ts";
+import { Type } from "@earendil-works/pi-ai";
+import { defineOwniTool, type OwniTool } from "../engine.ts";
 
 export type SlowCounterOptions = {
 	/** Simulated work per step. */
@@ -15,18 +16,13 @@ export type SlowCounterOptions = {
  */
 export function createSlowCounter(options: SlowCounterOptions = {}): OwniTool {
 	const stepMs = options.stepMs ?? 500;
-	return {
+	return defineOwniTool({
 		name: "slow_counter",
 		description: "Count from 1 to n slowly, one checkpointed step per number. Use it when asked to count.",
-		parameters: {
-			type: "object",
-			properties: { n: { type: "integer", minimum: 1, maximum: 100, description: "Number to count to" } },
-			required: ["n"],
-			additionalProperties: false,
-		},
+		parameters: Type.Object({ n: Type.Integer({ minimum: 1, maximum: 100, description: "Number to count to" }) }, { additionalProperties: false }),
 		replaySafe: true,
 		async execute(args, ctx) {
-			const n = args.n as number;
+			const n = args.n;
 			for (let i = 1; i <= n; i++) {
 				await ctx.step(`count-${i}`, async () => {
 					await sleep(stepMs, ctx.signal);
@@ -38,7 +34,7 @@ export function createSlowCounter(options: SlowCounterOptions = {}): OwniTool {
 			}
 			return `Ho contato fino a ${n}.`;
 		},
-	};
+	});
 }
 
 function sleep(ms: number, signal: AbortSignal): Promise<void> {

@@ -1,8 +1,9 @@
 import { randomBytes } from "node:crypto";
+import { Type } from "@earendil-works/pi-ai";
 import { readPdfPage } from "../document-reader.ts";
 import { DocumentTexts } from "../document-texts.ts";
 import { DocumentError, type DocumentText, documentKind, documentLabel, documentPartsLabel, documentSectionAt, looksLikeDocument, oldFormatAdvice, signedPlainText } from "../documents.ts";
-import type { OwniTool } from "../engine.ts";
+import { defineOwniTool, type OwniTool } from "../engine.ts";
 import { parseQuery, QUERY_LIMITS, type QueryTerm } from "../text-match.ts";
 import { imageProblem, imageType } from "../images.ts";
 import { inertMarkers } from "../untrusted.ts";
@@ -19,7 +20,7 @@ export type WorkspaceToolsOptions = {
 /** Largest text file_read returns, in characters. */
 const MAX_READ = 100_000;
 
-const pathParam = { type: "string", description: "Relative path in the workspace, e.g. report/ottobre.md", minLength: 1, maxLength: 300 };
+const pathParam = Type.String({ description: "Relative path in the workspace, e.g. report/ottobre.md", minLength: 1, maxLength: 300 });
 
 /** The instance's file tools: write, read, search, list, delete, and send to the current conversation. */
 export function createWorkspaceTools(options: WorkspaceToolsOptions): OwniTool[] {
@@ -32,36 +33,31 @@ export function createWorkspaceTools(options: WorkspaceToolsOptions): OwniTool[]
 		throw error;
 	};
 	return [
-		{
+		defineOwniTool({
 			name: "file_write",
 			description: "Create or replace a text file in your workspace (reports, notes, CSV, Markdown, code). Returns the path and size.",
-			parameters: { type: "object", properties: { path: pathParam, content: { type: "string", description: "Full text content" } }, required: ["path", "content"], additionalProperties: false },
+			parameters: Type.Object({ path: pathParam, content: Type.String({ description: "Full text content" }) }, { additionalProperties: false }),
 			replaySafe: true,
 			async execute(args) {
 				try {
-					const file = await workspace.write(String(args.path), String(args.content));
+					const file = await workspace.write(args.path, args.content);
 					return `Salvato ${file.path} (${file.size} byte).`;
 				} catch (error) {
 					return fail(error);
 				}
 			},
-		},
-		{
+		}),
+		defineOwniTool({
 			name: "file_read",
 			description:
 				"Read a file from your workspace, including files people uploaded: text files, and the text of PDF, Word, Excel, PowerPoint and OpenDocument documents; a signed file (.p7m) is read as what it holds. " +
 				`Long files come back in pieces of ${MAX_READ} characters: pass offset to read on from where the last piece stopped.`,
-			parameters: {
-				type: "object",
-				properties: { path: pathParam, offset: { type: "integer", minimum: 0, description: "Character to start from, for long files (default 0)" } },
-				required: ["path"],
-				additionalProperties: false,
-			},
+			parameters: Type.Object({ path: pathParam, offset: Type.Optional(Type.Integer({ minimum: 0, description: "Character to start from, for long files (default 0)" })) }, { additionalProperties: false }),
 			replaySafe: true,
 			async execute(args) {
 				try {
-					const path = String(args.path);
-					const offset = typeof args.offset === "number" && Number.isInteger(args.offset) && args.offset > 0 ? args.offset : 0;
+					const path = args.path;
+					const offset = args.offset ?? 0;
 					const data = await workspace.read(path);
 					const signed = signedPlainText(path, data);
 					if (signed !== undefined) return `${offset === 0 ? `[${signed.note}]\n` : ""}${piece(signed.text, offset)}`;
@@ -75,8 +71,8 @@ export function createWorkspaceTools(options: WorkspaceToolsOptions): OwniTool[]
 					return fail(error);
 				}
 			},
-		},
-		{
+		}),
+		defineOwniTool({
 			name: "file_search",
 			description:
 				"Search the words inside the files of your workspace and their names: notes, reports, transcripts, files people sent (PDF, Word, Excel, PowerPoint, text, CSV). " +
@@ -87,20 +83,18 @@ export function createWorkspaceTools(options: WorkspaceToolsOptions): OwniTool[]
 				"Files with all the words come first, then those with the rarer ones. Each passage comes with its offset: read on from there with file_read. " +
 				"For a transcript the passage shows its minute: tell the person («al minuto 04:10»). Scanned PDFs have no text: the answer lists them, look at them with image_view. " +
 				"If nothing is found, try once more with the start of a word or a synonym before saying it is not there.",
-			parameters: {
-				type: "object",
-				properties: {
-					query: { type: "string", minLength: 1, maxLength: QUERY_LIMITS.chars, description: 'Key words to find, e.g. rossi fattura, or "condizioni di recesso" for a phrase' },
-					folder: { type: "string", maxLength: 300, description: "Search only this folder, e.g. trascrizioni; empty for all" },
+			parameters: Type.Object(
+				{
+					query: Type.String({ minLength: 1, maxLength: QUERY_LIMITS.chars, description: 'Key words to find, e.g. rossi fattura, or "condizioni di recesso" for a phrase' }),
+					folder: Type.Optional(Type.String({ maxLength: 300, description: "Search only this folder, e.g. trascrizioni; empty for all" })),
 				},
-				required: ["query"],
-				additionalProperties: false,
-			},
+				{ additionalProperties: false },
+			),
 			replaySafe: true,
 			async execute(args, ctx) {
-				const terms = parseQuery(String(args.query));
+				const terms = parseQuery(args.query);
 				if (terms.length === 0) return "Errore: scrivi almeno una parola da cercare.";
-				const folder = typeof args.folder === "string" ? args.folder.trim() : "";
+				const folder = (args.folder ?? "").trim();
 				try {
 					const outcome = await searchWorkspace({ workspace, texts, terms, folder, limits: searchLimits, signal: ctx.signal, progress: (t) => ctx.progress(t) });
 					return searchAnswer(terms, folder, outcome, searchLimits);
@@ -108,26 +102,21 @@ export function createWorkspaceTools(options: WorkspaceToolsOptions): OwniTool[]
 					return fail(error);
 				}
 			},
-		},
-		{
+		}),
+		defineOwniTool({
 			name: "image_view",
 			description:
 				"Look at an image in your workspace (JPEG, PNG, GIF or WebP): a photo someone sent earlier, a screenshot, a chart you made with the computer. " +
 				"Also a page of a scanned PDF: give the PDF's path and page, and read what the page says yourself. " +
 				"Photos sent with the current message you already see; use this for any other.",
-			parameters: {
-				type: "object",
-				properties: { path: pathParam, page: { type: "integer", minimum: 1, maximum: 1000, description: "For a PDF: the page to look at (default 1)" } },
-				required: ["path"],
-				additionalProperties: false,
-			},
+			parameters: Type.Object({ path: pathParam, page: Type.Optional(Type.Integer({ minimum: 1, maximum: 1000, description: "For a PDF: the page to look at (default 1)" })) }, { additionalProperties: false }),
 			replaySafe: true,
 			async execute(args) {
 				try {
-					const path = String(args.path);
+					const path = args.path;
 					const data = await workspace.read(path);
-					if (args.page !== undefined && !(typeof args.page === "number" && Number.isInteger(args.page) && args.page >= 1)) return "Errore: page è il numero di una pagina, da 1.";
-					if (documentKind(path, data) === "pdf") return await viewPdfPage(path, data, typeof args.page === "number" ? args.page : 1);
+					if (args.page !== undefined && !(Number.isInteger(args.page) && args.page >= 1)) return "Errore: page è il numero di una pagina, da 1.";
+					if (documentKind(path, data) === "pdf") return await viewPdfPage(path, data, args.page ?? 1);
 					if (args.page !== undefined && documentKind(path, data) !== undefined) return `Errore: ${path} non è un PDF: per Word, Excel, PowerPoint e i file firmati il testo lo dà file_read.`;
 					const problem = imageProblem(data);
 					if (problem !== undefined) return `Errore: ${path} ${problem}.`;
@@ -136,45 +125,45 @@ export function createWorkspaceTools(options: WorkspaceToolsOptions): OwniTool[]
 					return fail(error);
 				}
 			},
-		},
-		{
+		}),
+		defineOwniTool({
 			name: "file_list",
 			description: "List the files in your workspace, optionally under a folder.",
-			parameters: { type: "object", properties: { folder: { type: "string", description: "Folder to list; empty for all", maxLength: 300 } }, additionalProperties: false },
+			parameters: Type.Object({ folder: Type.Optional(Type.String({ description: "Folder to list; empty for all", maxLength: 300 })) }, { additionalProperties: false }),
 			replaySafe: true,
 			async execute(args) {
 				try {
-					const files = await workspace.list(typeof args.folder === "string" ? args.folder : "");
+					const files = await workspace.list(args.folder ?? "");
 					if (files.length === 0) return "Nessun file.";
 					return files.map((f) => `${f.path}\t${f.size} byte\t${f.modifiedAt}`).join("\n");
 				} catch (error) {
 					return fail(error);
 				}
 			},
-		},
-		{
+		}),
+		defineOwniTool({
 			name: "file_delete",
 			description: "Delete a file from your workspace. Only when the person asks for it.",
-			parameters: { type: "object", properties: { path: pathParam }, required: ["path"], additionalProperties: false },
+			parameters: Type.Object({ path: pathParam }, { additionalProperties: false }),
 			replaySafe: true,
 			async execute(args) {
 				try {
-					await workspace.remove(String(args.path));
-					return `Eliminato ${String(args.path)}.`;
+					await workspace.remove(args.path);
+					return `Eliminato ${args.path}.`;
 				} catch (error) {
 					return fail(error);
 				}
 			},
-		},
-		{
+		}),
+		defineOwniTool({
 			name: "file_send",
 			description: "Send a file from your workspace to the person you are talking to, as an attachment.",
-			parameters: { type: "object", properties: { path: pathParam, caption: { type: "string", maxLength: 900 } }, required: ["path"], additionalProperties: false },
+			parameters: Type.Object({ path: pathParam, caption: Type.Optional(Type.String({ maxLength: 900 })) }, { additionalProperties: false }),
 			replaySafe: true,
 			async execute(args, ctx) {
 				if (ctx.thread === undefined) return "Errore: non so a chi inviarlo (nessuna conversazione attiva).";
 				const thread = ctx.thread;
-				const path = String(args.path);
+				const path = args.path;
 				try {
 					if ((await workspace.stat(path)) === undefined) return `Errore: File not found: ${path}`;
 				} catch (error) {
@@ -182,12 +171,12 @@ export function createWorkspaceTools(options: WorkspaceToolsOptions): OwniTool[]
 				}
 				// One send per call, also when the call reruns after a crash.
 				await ctx.step("send", async () => {
-					await options.sendFile({ channel: thread.channel, threadId: thread.threadId, path, ...(typeof args.caption === "string" ? { caption: args.caption } : {}), key: ctx.callId });
+					await options.sendFile({ channel: thread.channel, threadId: thread.threadId, path, ...(args.caption !== undefined ? { caption: args.caption } : {}), key: ctx.callId });
 					return true;
 				});
 				return `Inviato ${path}.`;
 			},
-		},
+		}),
 	];
 }
 

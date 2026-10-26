@@ -1,4 +1,5 @@
-import type { OwniTool } from "../engine.ts";
+import { StringEnum, Type } from "@earendil-works/pi-ai";
+import { defineOwniTool, type OwniTool } from "../engine.ts";
 
 type VoiceMode = "auto" | "always" | "never";
 
@@ -21,12 +22,12 @@ export function createVoiceTools(options: {
 		never: "rispondo solo per iscritto, anche ai vocali",
 	};
 	return [
-		{
+		defineOwniTool({
 			name: "voice_replies",
 			description:
 				"Set how the person you are talking to gets your replies on Telegram and WhatsApp. auto: a voice note back when they send a voice note (the default); always: a voice note with every reply; never: text only. " +
 				"Use it when they ask 'rispondimi a voce', 'mandami sempre vocali', 'basta vocali', 'scrivimi e basta'. Without mode, tells the current choice. Never promise voice notes without it.",
-			parameters: { type: "object", properties: { mode: { type: "string", enum: ["auto", "always", "never"] } }, additionalProperties: false },
+			parameters: Type.Object({ mode: Type.Optional(StringEnum(["auto", "always", "never"] as const)) }, { additionalProperties: false }),
 			replaySafe: true,
 			async execute(args, ctx) {
 				const thread = ctx.thread;
@@ -34,12 +35,10 @@ export function createVoiceTools(options: {
 				if (options.whoIs(thread) === undefined) return "Errore: si sceglie in una chat privata con la persona, non in un gruppo.";
 				const key = `${thread.channel}:${thread.threadId}`;
 				const off = (await options.on()) ? "" : " Però le risposte a voce non sono attive per questa istanza: le accende l'owner in Impostazioni → Risposte a voce. Diglielo.";
-				if (typeof args.mode !== "string") return `Adesso con questa persona ${said[await options.get(key)]}.${off}`;
-				const mode = args.mode as VoiceMode;
-				if (!(mode in said)) return "Errore: mode è auto, always o never.";
-				await options.set(key, mode);
-				return `Fatto: con questa persona ${said[mode]}.${off}`;
+				if (args.mode === undefined) return `Adesso con questa persona ${said[await options.get(key)]}.${off}`;
+				await options.set(key, args.mode);
+				return `Fatto: con questa persona ${said[args.mode]}.${off}`;
 			},
-		},
+		}),
 	];
 }

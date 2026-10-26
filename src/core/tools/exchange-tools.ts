@@ -1,4 +1,5 @@
-import type { OwniTool } from "../engine.ts";
+import { type Static, Type } from "@earendil-works/pi-ai";
+import { defineOwniTool, type OwniTool } from "../engine.ts";
 import { checkDate, type DayRates, type ExchangeRates, ExchangeRateError, FIRST_RATES_DATE, type RatesOn, type RatesSeries } from "../exchange-rates.ts";
 import { addDays } from "../italian-calendar.ts";
 import { capitalized, formatResult, italianDate, italianMoney, italianWeekday, MAX_MONEY } from "../italian-format.ts";
@@ -67,13 +68,27 @@ const CRYPTO = new Set(["BTC", "ETH", "USDT", "USDC", "XRP", "SOL", "BNB", "DOGE
 /** The rouble's last reference rate; the ECB suspended it the day after. */
 const RUB_LAST = "2022-03-01";
 
+const exchangeRateParameters = Type.Object(
+	{
+		from: Type.Optional(Type.String({ pattern: "^[A-Za-z]{3,5}$", description: "The currency of the amount, an ISO 4217 code: USD, GBP, CHF, JPY…" })),
+		to: Type.Optional(Type.String({ pattern: "^[A-Za-z]{3,5}$", description: "The currency to convert to, an ISO 4217 code (EUR if not given)" })),
+		amount: Type.Optional(Type.Number({ minimum: 0, maximum: MAX_AMOUNT, description: "One amount in from to convert; without it, only the rate" })),
+		amounts: Type.Optional(Type.Array(Type.Number({ minimum: 0, maximum: MAX_AMOUNT }), { minItems: 1, maxItems: MAX_AMOUNTS, description: "Several amounts in from, converted at the same rate, with their total" })),
+		date: Type.Optional(Type.String({ pattern: "^\\d{4}-\\d{2}-\\d{2}$", description: `The day of the rate, YYYY-MM-DD, e.g. the invoice date: not in the future, not before ${FIRST_RATES_DATE} (today if not given)` })),
+		since: Type.Optional(Type.String({ pattern: "^\\d{4}-\\d{2}-\\d{2}$", description: "Start of a trend, YYYY-MM-DD, at most a year back: the rate at the start and the end, the lowest and highest, the change" })),
+		list: Type.Optional(Type.Boolean({ description: "true for the currencies the ECB publishes that day, with their Italian names" })),
+	},
+	{ additionalProperties: false },
+);
+type ExchangeRateArgs = Static<typeof exchangeRateParameters>;
+
 /**
  * Exchange rates and conversions with the ECB's reference rates. The numbers come from outside
  * but are validated numbers, and the answer echoes no provider text: no fence is needed.
  */
 export function createExchangeTools(options: ExchangeToolsOptions): OwniTool[] {
 	return [
-		{
+		defineOwniTool({
 			name: "exchange_rate",
 			description:
 				"Official exchange rates of the European Central Bank (euro foreign exchange reference rates, 29 currencies, published on working days around 16:00 CET), and conversions with them. " +
@@ -84,19 +99,7 @@ export function createExchangeTools(options: ExchangeToolsOptions): OwniTool[] {
 				"since gives the trend from that day (at most a year back) to date or today; list gives the currencies of the day. " +
 				"For VAT, discounts or totals pass code_run the converted amount the tool gave (already rounded to the cent), not amount × rate; use document_create for a quote in another currency. " +
 				"Say once per conversation, or when the person talks about paying or a bank, that banks and cards apply their own rate.",
-			parameters: {
-				type: "object",
-				properties: {
-					from: { type: "string", pattern: "^[A-Za-z]{3,5}$", description: "The currency of the amount, an ISO 4217 code: USD, GBP, CHF, JPY…" },
-					to: { type: "string", pattern: "^[A-Za-z]{3,5}$", description: "The currency to convert to, an ISO 4217 code (EUR if not given)" },
-					amount: { type: "number", minimum: 0, maximum: MAX_AMOUNT, description: "One amount in from to convert; without it, only the rate" },
-					amounts: { type: "array", items: { type: "number", minimum: 0, maximum: MAX_AMOUNT }, minItems: 1, maxItems: MAX_AMOUNTS, description: "Several amounts in from, converted at the same rate, with their total" },
-					date: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$", description: `The day of the rate, YYYY-MM-DD, e.g. the invoice date: not in the future, not before ${FIRST_RATES_DATE} (today if not given)` },
-					since: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$", description: "Start of a trend, YYYY-MM-DD, at most a year back: the rate at the start and the end, the lowest and highest, the change" },
-					list: { type: "boolean", description: "true for the currencies the ECB publishes that day, with their Italian names" },
-				},
-				additionalProperties: false,
-			},
+			parameters: exchangeRateParameters,
 			replaySafe: true,
 			async execute(args, ctx) {
 				const request = requestOf(args);
@@ -109,7 +112,7 @@ export function createExchangeTools(options: ExchangeToolsOptions): OwniTool[] {
 					}
 				});
 			},
-		},
+		}),
 	];
 }
 
@@ -119,13 +122,12 @@ type Request =
 	| { readonly kind: "convert"; readonly from: string; readonly to: string; readonly amounts?: readonly number[]; readonly date?: string };
 
 /** The arguments checked, or what is wrong with them. */
-function requestOf(args: Record<string, unknown>): Request | string {
+function requestOf(args: ExchangeRateArgs): Request | string {
 	for (const name of ["date", "since"] as const) {
 		if (args[name] !== undefined && typeof args[name] !== "string") return `${name} è una data scritta come AAAA-MM-GG`;
 	}
 	if (args.list !== undefined && typeof args.list !== "boolean") return "list è true o false";
-	const date = args.date as string | undefined;
-	const dated = date === undefined ? {} : { date };
+	const dated = args.date === undefined ? {} : { date: args.date };
 	if (args.list === true) return { kind: "list", ...dated };
 	if (args.from === undefined) return "manca from, la valuta di partenza (o list per l'elenco delle valute)";
 	const from = currencyCode(args.from);
@@ -137,19 +139,19 @@ function requestOf(args: Record<string, unknown>): Request | string {
 	if (from === to) return `${from} e ${to} sono la stessa valuta`;
 	if (args.amount !== undefined && args.amounts !== undefined) return "usa amount per un importo, amounts per più importi, non tutti e due";
 	const amounts = args.amounts ?? (args.amount === undefined ? undefined : [args.amount]);
-	if (amounts !== undefined && (!Array.isArray(amounts) || amounts.length < 1 || amounts.length > MAX_AMOUNTS || !amounts.every(validAmount))) {
+	if (amounts !== undefined && (amounts.length < 1 || amounts.length > MAX_AMOUNTS || !amounts.every(validAmount))) {
 		return `gli importi sono numeri da 0 a un miliardo, al più ${MAX_AMOUNTS}`;
 	}
-	if (typeof args.since === "string") return amounts === undefined ? { kind: "trend", from, to, since: args.since, ...dated } : "since dà l'andamento del cambio: senza importi";
-	return { kind: "convert", from, to, ...(amounts === undefined ? {} : { amounts: amounts as number[] }), ...dated };
+	if (args.since !== undefined) return amounts === undefined ? { kind: "trend", from, to, since: args.since, ...dated } : "since dà l'andamento del cambio: senza importi";
+	return { kind: "convert", from, to, ...(amounts === undefined ? {} : { amounts }), ...dated };
 }
 
 function validAmount(value: unknown): value is number {
 	return typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= MAX_AMOUNT;
 }
 
-function currencyCode(value: unknown): string | undefined {
-	return typeof value === "string" && /^[A-Za-z]{3,5}$/.test(value.trim()) ? value.trim().toUpperCase() : undefined;
+function currencyCode(value: string): string | undefined {
+	return /^[A-Za-z]{3,5}$/.test(value.trim()) ? value.trim().toUpperCase() : undefined;
 }
 
 async function answer(rates: ExchangeRates, request: Request): Promise<string> {

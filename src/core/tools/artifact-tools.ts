@@ -1,5 +1,6 @@
 import { ARTIFACT_LIMITS, ArtifactError, type ArtifactRef } from "../artifacts.ts";
-import type { OwniTool, ToolContext } from "../engine.ts";
+import { Type } from "@earendil-works/pi-ai";
+import { defineOwniTool, type OwniTool, type ToolContext } from "../engine.ts";
 
 /** The pages of the console conversations of one agente. */
 export type ArtifactPages = {
@@ -45,31 +46,24 @@ export function createArtifactTools(options: ArtifactToolsOptions): OwniTool[] {
 		});
 		return `Artifact «${saved.title}» (id ${saved.id}) alla versione ${saved.version}: la persona lo vede accanto alla conversazione. Per cambiarlo usa artifact_update con questo id e la pagina intera. Rispondi con una riga al massimo, senza ripetere il contenuto.`;
 	};
-	const html = { type: "string", minLength: 1, description: "The whole page: one HTML document with its CSS and JavaScript inline" };
+	const html = Type.String({ minLength: 1, description: "The whole page: one HTML document with its CSS and JavaScript inline" });
 	return [
-		{
+		defineOwniTool({
 			name: "artifact_create",
 			description: `Make an artifact in this conversation. ${WHEN}`,
-			parameters: {
-				type: "object",
-				properties: { title: { type: "string", minLength: 1, maxLength: ARTIFACT_LIMITS.maxTitle, description: "Short, what the page is, in the person's language" }, html },
-				required: ["title", "html"],
-				additionalProperties: false,
-			},
+			parameters: Type.Object({ title: Type.String({ minLength: 1, maxLength: ARTIFACT_LIMITS.maxTitle, description: "Short, what the page is, in the person's language" }), html }, { additionalProperties: false }),
 			replaySafe: true,
-			execute: (args, ctx) => run(ctx, (store, threadId) => store.create(threadId, { title: String(args.title), html: String(args.html), key: ctx.callId })),
-		},
-		{
+			execute: (args, ctx) => run(ctx, (store, threadId) => store.create(threadId, { title: args.title, html: args.html, key: ctx.callId })),
+		}),
+		defineOwniTool({
 			name: "artifact_update",
 			description: `Change an artifact of this conversation: give its id and the whole new page (not the changed part), which becomes its next version; the earlier ones stay. ${WHEN}`,
-			parameters: {
-				type: "object",
-				properties: { id: { type: "string", pattern: "^a_[0-9a-f]{12}$" }, html, title: { type: "string", minLength: 1, maxLength: ARTIFACT_LIMITS.maxTitle, description: "Only to rename it" } },
-				required: ["id", "html"],
-				additionalProperties: false,
-			},
+			parameters: Type.Object(
+				{ id: Type.String({ pattern: "^a_[0-9a-f]{12}$" }), html, title: Type.Optional(Type.String({ minLength: 1, maxLength: ARTIFACT_LIMITS.maxTitle, description: "Only to rename it" })) },
+				{ additionalProperties: false },
+			),
 			replaySafe: true,
-			execute: (args, ctx) => run(ctx, (store, threadId) => store.update(threadId, String(args.id), { ...(typeof args.title === "string" ? { title: args.title } : {}), html: String(args.html), key: ctx.callId })),
-		},
+			execute: (args, ctx) => run(ctx, (store, threadId) => store.update(threadId, args.id, { ...(args.title === undefined ? {} : { title: args.title }), html: args.html, key: ctx.callId })),
+		}),
 	];
 }

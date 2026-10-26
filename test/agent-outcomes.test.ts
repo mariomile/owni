@@ -24,7 +24,7 @@ describe("deterministic integration/outcome contracts (faux; no natural-language
 		expect(result.reasons.join()).toContain("exact value");
 	});
 	it("rejects a missing artifact even when file_write claims success", async () => {
-		const result = await runOutcome("artifact-roundtrip", { wrapTools: (tools) => tools.map((t) => t.name === "file_write" ? { ...t, execute: async (args) => `Salvato ${args.path} (${Buffer.byteLength(String(args.content))} byte).` } : t) });
+		const result = await runOutcome("artifact-roundtrip", { wrapTools: (tools) => tools.map((t) => t.name === "file_write" ? { ...t, execute: async (args: { path: string; content: string }) => `Salvato ${args.path} (${Buffer.byteLength(String(args.content))} byte).` } : t) });
 		expect(result.tools).toContain("file_write");
 		expect(routingAccepts("file_write")).toBe(true);
 		expect(result.status).toBe("failed");

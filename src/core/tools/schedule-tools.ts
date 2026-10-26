@@ -1,5 +1,6 @@
 import { AGENT_CHANNEL } from "../agent-messages.ts";
-import type { OwniTool } from "../engine.ts";
+import { Type } from "@earendil-works/pi-ai";
+import { defineOwniTool, type OwniTool } from "../engine.ts";
 import { ScheduleError, type ScheduleStore } from "../schedules.ts";
 
 type ScheduleToolsOptions = { readonly store: ScheduleStore; readonly defaultTimeZone: string; readonly now?: () => Date };
@@ -27,22 +28,20 @@ export function createScheduleTools(options: ScheduleToolsOptions): OwniTool[] {
 	const { store } = options;
 	const now = options.now ?? (() => new Date());
 	const tools: OwniTool[] = [
-		{
+		defineOwniTool({
 			name: "schedule_create",
 			description:
 				"Schedule an instruction for yourself to run later, once (at) or repeatedly (cron), with the result sent to this conversation. " +
 				"Use it for reminders and recurring reports; to be told when a page or a price changes, use watch_create instead; cron has 5 fields in the given time zone, e.g. '30 8 * * 1-5' = weekdays at 8:30.",
-			parameters: {
-				type: "object",
-				properties: {
-					instruction: { type: "string", description: "What to do when it fires, written as a request to yourself", minLength: 1, maxLength: 2000 },
-					at: { type: "string", description: "ISO 8601 date-time for a one-off run, with offset, e.g. 2026-10-20T09:00:00+02:00" },
-					cron: { type: "string", description: "5-field cron for a recurring run" },
-					timeZone: { type: "string", description: `IANA time zone for cron (default ${options.defaultTimeZone})` },
+			parameters: Type.Object(
+				{
+					instruction: Type.String({ description: "What to do when it fires, written as a request to yourself", minLength: 1, maxLength: 2000 }),
+					at: Type.Optional(Type.String({ description: "ISO 8601 date-time for a one-off run, with offset, e.g. 2026-10-20T09:00:00+02:00" })),
+					cron: Type.Optional(Type.String({ description: "5-field cron for a recurring run" })),
+					timeZone: Type.Optional(Type.String({ description: `IANA time zone for cron (default ${options.defaultTimeZone})` })),
 				},
-				required: ["instruction"],
-				additionalProperties: false,
-			},
+				{ additionalProperties: false },
+			),
 			replaySafe: true,
 			async execute(args, ctx) {
 				const refused = scheduleRefusal(ctx.thread);
@@ -56,10 +55,10 @@ export function createScheduleTools(options: ScheduleToolsOptions): OwniTool[] {
 					try {
 						const s = await store.create(
 							{
-								instruction: String(args.instruction),
+								instruction: args.instruction,
 								channel: thread.channel,
 								threadId: thread.threadId,
-								when: args.at !== undefined ? { at: String(args.at) } : { cron: String(args.cron), timeZone: typeof args.timeZone === "string" ? args.timeZone : options.defaultTimeZone },
+								when: args.at !== undefined ? { at: args.at } : { cron: String(args.cron), timeZone: args.timeZone ?? options.defaultTimeZone },
 								createdBy: { kind: "instance" },
 							},
 							now(),
@@ -72,11 +71,11 @@ export function createScheduleTools(options: ScheduleToolsOptions): OwniTool[] {
 				});
 				return result;
 			},
-		},
-		{
+		}),
+		defineOwniTool({
 			name: "schedule_list",
 			description: "List your tasks programmati with their next run.",
-			parameters: { type: "object", properties: {}, additionalProperties: false },
+			parameters: Type.Object({}, { additionalProperties: false }),
 			replaySafe: true,
 			async execute() {
 				const all = await store.list();
@@ -85,16 +84,16 @@ export function createScheduleTools(options: ScheduleToolsOptions): OwniTool[] {
 					.map((s) => `${s.id}\t${"at" in s.when ? `una volta ${s.when.at}` : `cron ${s.when.cron} (${s.when.timeZone})`}\tprossima: ${s.nextRunAt ?? "finito"}\t${s.instruction.slice(0, 120)}`)
 					.join("\n");
 			},
-		},
-		{
+		}),
+		defineOwniTool({
 			name: "schedule_delete",
 			description: "Delete a task programmato by its ID.",
-			parameters: { type: "object", properties: { id: { type: "string" } }, required: ["id"], additionalProperties: false },
+			parameters: Type.Object({ id: Type.String() }, { additionalProperties: false }),
 			replaySafe: true,
 			async execute(args) {
-				return (await store.remove(String(args.id))) ? `Eliminato il task ${String(args.id)}.` : `Nessun task con ID ${String(args.id)}.`;
+				return (await store.remove(args.id)) ? `Eliminato il task ${args.id}.` : `Nessun task con ID ${args.id}.`;
 			},
-		},
+		}),
 	];
 	return tools;
 }

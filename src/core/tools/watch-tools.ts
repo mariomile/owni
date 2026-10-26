@@ -1,4 +1,5 @@
-import type { OwniTool } from "../engine.ts";
+import { Type } from "@earendil-works/pi-ai";
+import { defineOwniTool, type OwniTool } from "../engine.ts";
 import { threadPerson } from "../schedules.ts";
 import { untrusted } from "../untrusted.ts";
 import { firstLook, formatNumber, type Watch, WatchError, WATCH_LIMITS, type WatchStore, watchUrl } from "../watches.ts";
@@ -31,7 +32,7 @@ export function createWatchTools(options: WatchToolsOptions): OwniTool[] {
 		});
 	};
 	return [
-		{
+		defineOwniTool({
 			name: "watch_create",
 			description:
 				"Watch a web page and write to this conversation by yourself when it changes. Use it, not schedule_create, whenever someone asks to be told when something changes: " +
@@ -40,18 +41,16 @@ export function createWatchTools(options: WatchToolsOptions): OwniTool[] {
 				"below/above: write only when the price right after `what` goes under/over this number (needs what). " +
 				`everyMinutes: how often to check, ${WATCH_LIMITS.minEveryMinutes} to ${WATCH_LIMITS.maxEveryMinutes} (default ${WATCH_LIMITS.defaultEveryMinutes}). Only sites the owner allowed. ` +
 				"Tell the person what you read now, so they can check it is the right thing.",
-			parameters: {
-				type: "object",
-				properties: {
-					url: { type: "string", minLength: 8, maxLength: 2000 },
-					what: { type: "string", maxLength: WATCH_LIMITS.maxWhatChars },
-					below: { type: "number", exclusiveMinimum: 0 },
-					above: { type: "number", exclusiveMinimum: 0 },
-					everyMinutes: { type: "integer", minimum: WATCH_LIMITS.minEveryMinutes, maximum: WATCH_LIMITS.maxEveryMinutes },
+			parameters: Type.Object(
+				{
+					url: Type.String({ minLength: 8, maxLength: 2000 }),
+					what: Type.Optional(Type.String({ maxLength: WATCH_LIMITS.maxWhatChars })),
+					below: Type.Optional(Type.Number({ exclusiveMinimum: 0 })),
+					above: Type.Optional(Type.Number({ exclusiveMinimum: 0 })),
+					everyMinutes: Type.Optional(Type.Integer({ minimum: WATCH_LIMITS.minEveryMinutes, maximum: WATCH_LIMITS.maxEveryMinutes })),
 				},
-				required: ["url"],
-				additionalProperties: false,
-			},
+				{ additionalProperties: false },
+			),
 			replaySafe: true,
 			async execute(args, ctx) {
 				if (ctx.thread === undefined) return "Errore: una sentinella va creata in una conversazione.";
@@ -61,19 +60,19 @@ export function createWatchTools(options: WatchToolsOptions): OwniTool[] {
 				// It writes by itself for someone: in a group there is nobody it acts for, so it would never write.
 				if (threadPerson({ createdBy: { kind: "instance" }, ...thread }) === undefined) return "Errore: le sentinelle si creano in una chat privata con la persona da avvisare (o nella console), non in un gruppo.";
 				const input = defined({
-					what: typeof args.what === "string" && args.what.trim() !== "" ? args.what.replace(/\s+/g, " ").trim() : undefined,
-					below: typeof args.below === "number" ? args.below : undefined,
-					above: typeof args.above === "number" ? args.above : undefined,
+					what: args.what !== undefined && args.what.trim() !== "" ? args.what.replace(/\s+/g, " ").trim() : undefined,
+					below: args.below,
+					above: args.above,
 				});
 				if ((input.below !== undefined || input.above !== undefined) && input.what === undefined) return "Errore: per un avviso sul prezzo indica in what la frase che sta subito prima del prezzo, per esempio «Prezzo» o il nome del prodotto.";
 				// Once per call, also when the call reruns after a crash.
 				return ctx.step("create", async () => {
 					try {
-						const url = watchUrl(String(args.url));
+						const url = watchUrl(args.url);
 						const at = now();
 						// The first look now: the person learns at once whether the page and the price are readable.
 						const first = await firstLook(options.read, url, input, at);
-						const w = await store.create({ url, ...input, ...(typeof args.everyMinutes === "number" ? { everyMinutes: args.everyMinutes } : {}), channel: thread.channel, threadId: thread.threadId, createdBy: { kind: "instance" }, last: first }, at);
+						const w = await store.create({ url, ...input, ...(args.everyMinutes === undefined ? {} : { everyMinutes: args.everyMinutes }), channel: thread.channel, threadId: thread.threadId, createdBy: { kind: "instance" }, last: first }, at);
 						await record({ type: "watch.created", watchId: w.id, host: new URL(w.url).host });
 						return describeNew(w, first);
 					} catch (error) {
@@ -82,11 +81,11 @@ export function createWatchTools(options: WatchToolsOptions): OwniTool[] {
 					}
 				});
 			},
-		},
-		{
+		}),
+		defineOwniTool({
 			name: "watch_list",
 			description: "List the sentinelle (watched pages) of the person you are talking to, with what they watch and their last check.",
-			parameters: { type: "object", properties: {}, additionalProperties: false },
+			parameters: Type.Object({}, { additionalProperties: false }),
 			replaySafe: true,
 			async execute(_args, ctx) {
 				const all = await theirs(ctx.thread);
@@ -94,19 +93,19 @@ export function createWatchTools(options: WatchToolsOptions): OwniTool[] {
 				// The last error may name a site the page redirected to: it is data, inside the fence.
 				return all.map((w) => `${w.id}\t${w.url}\t${condition(w)}\togni ${w.everyMinutes} min\t${state(w)}`).join("\n");
 			},
-		},
-		{
+		}),
+		defineOwniTool({
 			name: "watch_delete",
 			description: "Delete a sentinella of the person you are talking to, by its ID.",
-			parameters: { type: "object", properties: { id: { type: "string" } }, required: ["id"], additionalProperties: false },
+			parameters: Type.Object({ id: Type.String() }, { additionalProperties: false }),
 			replaySafe: true,
 			async execute(args, ctx) {
-				const watch = (await theirs(ctx.thread)).find((w) => w.id === String(args.id));
-				if (watch === undefined || !(await store.remove(watch.id))) return `Nessuna sentinella con ID ${String(args.id)}.`;
+				const watch = (await theirs(ctx.thread)).find((w) => w.id === args.id);
+				if (watch === undefined || !(await store.remove(watch.id))) return `Nessuna sentinella con ID ${args.id}.`;
 				await record({ type: "watch.deleted", watchId: watch.id, host: new URL(watch.url).host });
 				return `Eliminata la sentinella ${watch.id}.`;
 			},
-		},
+		}),
 	];
 }
 

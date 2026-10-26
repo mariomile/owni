@@ -1,4 +1,5 @@
-import type { OwniTool } from "../engine.ts";
+import { Type } from "@earendil-works/pi-ai";
+import { defineOwniTool, type OwniTool } from "../engine.ts";
 import { hashIdempotency } from "../practice.ts";
 import type { MailAdapter } from "../../connectors/types.ts";
 import type { PracticeStore } from "../practice.ts";
@@ -17,24 +18,22 @@ export function createMailTools(options: {
 }): OwniTool[] {
 	const { tenantId, mail, practices, maySend } = options;
 
-	const sendEmail: OwniTool = {
+	const sendEmail = defineOwniTool({
 		name: "send_email",
 		description: "Send an approved draft email reply. Only callable after human Approva.",
-		parameters: {
-			type: "object",
-			properties: {
-				praticaId: { type: "string" },
-				to: { type: "string" },
-				subject: { type: "string" },
-				bodyText: { type: "string" },
-				inReplyToMessageId: { type: "string" },
+		parameters: Type.Object(
+			{
+				praticaId: Type.String(),
+				to: Type.String(),
+				subject: Type.String(),
+				bodyText: Type.String(),
+				inReplyToMessageId: Type.String(),
 			},
-			required: ["praticaId", "to", "subject", "bodyText", "inReplyToMessageId"],
-			additionalProperties: false,
-		},
+			{ additionalProperties: false },
+		),
 		replaySafe: false,
 		async execute(args) {
-			const praticaId = String(args.praticaId);
+			const praticaId = args.praticaId;
 			const pratica = await practices.get(praticaId);
 			if (!pratica) return JSON.stringify({ ok: false, error: "pratica_not_found" });
 			if (pratica.sentMessageId) {
@@ -46,10 +45,10 @@ export function createMailTools(options: {
 			const idempotencyKey = hashIdempotency("send", praticaId, String(pratica.draftVersion));
 			try {
 				const result = await mail.sendReply(tenantId, {
-					to: String(args.to),
-					subject: String(args.subject),
-					bodyText: String(args.bodyText),
-					inReplyToMessageId: String(args.inReplyToMessageId),
+					to: args.to,
+					subject: args.subject,
+					bodyText: args.bodyText,
+					inReplyToMessageId: args.inReplyToMessageId,
 					idempotencyKey,
 				});
 				pratica.sentMessageId = result.sentMessageId;
@@ -67,20 +66,15 @@ export function createMailTools(options: {
 				return JSON.stringify({ ok: false, error: "mail_send_failed", message: pratica.lastError.message });
 			}
 		},
-	};
+	});
 
-	const readMail: OwniTool = {
+	const readMail = defineOwniTool({
 		name: "mail_read",
 		description: "Read a previously ingested inbound mail by message id (idempotent).",
-		parameters: {
-			type: "object",
-			properties: { messageId: { type: "string" } },
-			required: ["messageId"],
-			additionalProperties: false,
-		},
+		parameters: Type.Object({ messageId: Type.String() }, { additionalProperties: false }),
 		replaySafe: true,
 		async execute(args, ctx) {
-			const messageId = String(args.messageId);
+			const messageId = args.messageId;
 			return ctx.step(`mail_read:${messageId}`, async () => {
 				const pratica = await practices.findByMailMessageId(messageId);
 				if (!pratica) return JSON.stringify({ ok: false, error: "not_found" });
@@ -92,7 +86,7 @@ export function createMailTools(options: {
 				});
 			});
 		},
-	};
+	});
 
 	return [sendEmail, readMail];
 }

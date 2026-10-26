@@ -1,7 +1,8 @@
-import { CHART_KINDS, CHART_LIMITS, ChartError, type ChartKind, type ChartSeries, type ChartSpec } from "../chart-spec.ts";
+import { StringEnum, Type } from "@earendil-works/pi-ai";
+import { CHART_KINDS, CHART_LIMITS, ChartError, type ChartSeries, type ChartSpec } from "../chart-spec.ts";
 import { makeChartFile } from "../document-reader.ts";
 import { DocumentError } from "../documents.ts";
-import type { OwniTool } from "../engine.ts";
+import { defineOwniTool, type OwniTool } from "../engine.ts";
 import { cellNumber, parseCsv } from "../make-xlsx.ts";
 import { freePath, type Workspace, WorkspaceError } from "../workspace.ts";
 import { slugify } from "./research-tools.ts";
@@ -25,7 +26,7 @@ const MAX_COLUMNS = 64;
 export function createChartTools(options: ChartToolsOptions): OwniTool[] {
 	const { workspace } = options;
 	return [
-		{
+		defineOwniTool({
 			name: "chart_create",
 			description:
 				"Draw a chart as a picture and send it to the person: bar (compare amounts: sales by month, costs by item), line (a trend over time, many points) or pie (shares of one total, up to 6 parts). " +
@@ -34,66 +35,67 @@ export function createChartTools(options: ChartToolsOptions): OwniTool[] {
 				"Title: short (under 60 characters), what the chart shows; details such as the period or the source in subtitle. " +
 				"Bars: sort desc for rankings (top products); stacked to pile the series up; horizontal for long names (chosen by itself when they do not fit). target draws a reference line (a goal, a budget). At most 8 series: group the small ones. " +
 				"The picture is saved in grafici/; to put it in a Word or PDF file, use send: false and then ![grafico](path) in document_create. Do not describe the chart afterwards.",
-			parameters: {
-				type: "object",
-				properties: {
-					kind: { type: "string", enum: [...CHART_KINDS] },
-					title: { type: "string", maxLength: CHART_LIMITS.maxTitle },
-					subtitle: { type: "string", maxLength: CHART_LIMITS.maxTitle, description: "A second line: the period, the source, what the numbers count" },
-					labels: { type: "array", items: { type: "string", maxLength: CHART_LIMITS.maxLabel }, maxItems: CHART_LIMITS.maxPoints },
-					series: {
-						type: "array",
-						maxItems: CHART_LIMITS.maxSeries,
-						items: {
-							type: "object",
-							properties: { name: { type: "string", maxLength: CHART_LIMITS.maxLabel }, values: { type: "array", items: { type: ["number", "string", "null"], maxLength: 40 }, maxItems: CHART_LIMITS.maxPoints, description: "Numbers; a value written as text (1.200,50 or € 30) is read too" } },
-							required: ["values"],
-							additionalProperties: false,
-						},
-					},
-					source: { type: "string", minLength: 1, maxLength: 300, description: "Instead of labels and series: a .csv file in the workspace" },
-					stacked: { type: "boolean" },
-					sort: { type: "string", enum: ["desc", "asc"], description: "Bars in order of value: desc for a ranking. Leave it out for periods (months, years)" },
-					target: { type: "number", description: "A reference line at this value: a goal, a budget, an average" },
-					targetLabel: { type: "string", maxLength: 40, description: "Its name, e.g. Obiettivo, Budget, Media" },
-					horizontal: { type: "boolean" },
-					unit: { type: "string", maxLength: 12 },
-					decimals: { type: "integer", minimum: 0, maximum: 4 },
-					path: { type: "string", minLength: 1, maxLength: 300, description: "Where to save it, ending in .png. Leave it out for grafici/<title>.png" },
-					send: { type: "boolean", description: "false to only save it (to put it in a document). Sent to the conversation otherwise" },
-					caption: { type: "string", maxLength: 200, description: "One short line sent with the picture, in the person's language" },
+			parameters: Type.Object(
+				{
+					kind: StringEnum([...CHART_KINDS]),
+					title: Type.Optional(Type.String({ maxLength: CHART_LIMITS.maxTitle })),
+					subtitle: Type.Optional(Type.String({ maxLength: CHART_LIMITS.maxTitle, description: "A second line: the period, the source, what the numbers count" })),
+					labels: Type.Optional(Type.Array(Type.String({ maxLength: CHART_LIMITS.maxLabel }), { maxItems: CHART_LIMITS.maxPoints })),
+					series: Type.Optional(
+						Type.Array(
+							Type.Object(
+								{
+									name: Type.Optional(Type.String({ maxLength: CHART_LIMITS.maxLabel })),
+									values: Type.Array(Type.Unsafe<number | string | null>({ type: ["number", "string", "null"], maxLength: 40 }), { maxItems: CHART_LIMITS.maxPoints, description: "Numbers; a value written as text (1.200,50 or € 30) is read too" }),
+								},
+								{ additionalProperties: false },
+							),
+							{ maxItems: CHART_LIMITS.maxSeries },
+						),
+					),
+					source: Type.Optional(Type.String({ minLength: 1, maxLength: 300, description: "Instead of labels and series: a .csv file in the workspace" })),
+					stacked: Type.Optional(Type.Boolean()),
+					sort: Type.Optional(Type.Unsafe<"desc" | "asc">({ type: "string", enum: ["desc", "asc"], description: "Bars in order of value: desc for a ranking. Leave it out for periods (months, years)" })),
+					target: Type.Optional(Type.Number({ description: "A reference line at this value: a goal, a budget, an average" })),
+					targetLabel: Type.Optional(Type.String({ maxLength: 40, description: "Its name, e.g. Obiettivo, Budget, Media" })),
+					horizontal: Type.Optional(Type.Boolean()),
+					unit: Type.Optional(Type.String({ maxLength: 12 })),
+					decimals: Type.Optional(Type.Integer({ minimum: 0, maximum: 4 })),
+					path: Type.Optional(Type.String({ minLength: 1, maxLength: 300, description: "Where to save it, ending in .png. Leave it out for grafici/<title>.png" })),
+					send: Type.Optional(Type.Boolean({ description: "false to only save it (to put it in a document). Sent to the conversation otherwise" })),
+					caption: Type.Optional(Type.String({ maxLength: 200, description: "One short line sent with the picture, in the person's language" })),
 				},
-				required: ["kind"],
-				additionalProperties: false,
-			},
+				{ additionalProperties: false },
+			),
 			replaySafe: true,
 			async execute(args, ctx) {
-				const kind = String(args.kind) as ChartKind;
+				const kind = args.kind;
 				if (!CHART_KINDS.includes(kind)) return "Errore: il tipo di grafico deve essere bar, line o pie.";
-				const path = typeof args.path === "string" ? args.path.trim() : undefined;
+				const path = args.path?.trim();
 				if (path !== undefined && !/\.png$/i.test(path)) return "Errore: il nome del file deve finire con .png.";
-				const hasSource = typeof args.source === "string";
-				const hasData = Array.isArray(args.series) || Array.isArray(args.labels);
+				const source = args.source;
+				const hasSource = source !== undefined;
+				const hasData = args.series !== undefined || args.labels !== undefined;
 				if (hasSource === hasData) return "Errore: dammi i dati in labels e series oppure un CSV del workspace in source (uno dei due).";
 				const made = await ctx.step("draw", async (): Promise<{ path: string; notes: string[]; size: number } | { error: string }> => {
 					try {
-						const data = hasSource ? await fromCsv(workspace, String(args.source)) : fromArgs(args.labels, args.series);
+						const data = source !== undefined ? await fromCsv(workspace, source) : fromArgs(args.labels, args.series);
 						const notes = [...data.notes];
-						const unit = typeof args.unit === "string" && args.unit.trim() !== "" ? args.unit.trim() : data.unit;
-						const title = typeof args.title === "string" ? args.title : undefined;
+						const unit = args.unit !== undefined && args.unit.trim() !== "" ? args.unit.trim() : data.unit;
+						const title = args.title;
 						const spec: ChartSpec = {
 							kind,
 							labels: data.labels,
 							series: data.series,
 							...(title === undefined ? {} : { title }),
-							...(typeof args.subtitle === "string" ? { subtitle: args.subtitle } : {}),
+							...(args.subtitle !== undefined ? { subtitle: args.subtitle } : {}),
 							...(args.stacked === true ? { stacked: true } : {}),
-							...(typeof args.horizontal === "boolean" ? { horizontal: args.horizontal } : {}),
+							...(args.horizontal !== undefined ? { horizontal: args.horizontal } : {}),
 							...(unit === undefined ? {} : { unit }),
-							...(typeof args.decimals === "number" ? { decimals: args.decimals } : {}),
-							...(args.sort === "asc" || args.sort === "desc" ? { sort: args.sort } : {}),
-							...(typeof args.target === "number" ? { target: args.target } : {}),
-							...(typeof args.targetLabel === "string" ? { targetLabel: args.targetLabel } : {}),
+							...(args.decimals !== undefined ? { decimals: args.decimals } : {}),
+							...(args.sort !== undefined ? { sort: args.sort } : {}),
+							...(args.target !== undefined ? { target: args.target } : {}),
+							...(args.targetLabel !== undefined ? { targetLabel: args.targetLabel } : {}),
 						};
 						const chart = await makeChartFile(spec);
 						notes.push(...chart.notes);
@@ -122,7 +124,7 @@ export function createChartTools(options: ChartToolsOptions): OwniTool[] {
 				if (args.send === false || thread === undefined) {
 					return `Grafico salvato in ${made.path} (${Math.max(1, Math.round(made.size / 1024))} KB).${notes} Per metterlo in un documento: ![grafico](${made.path}) in document_create; per mandarlo, file_send.`;
 				}
-				const caption = typeof args.caption === "string" && args.caption.trim() !== "" ? args.caption.trim() : undefined;
+				const caption = args.caption !== undefined && args.caption.trim() !== "" ? args.caption.trim() : undefined;
 				try {
 					await ctx.step("send", async () => {
 						await options.sendFile({ channel: thread.channel, threadId: thread.threadId, path: made.path, ...(caption === undefined ? {} : { caption }), key: `${ctx.callId}:chart` });
@@ -133,30 +135,30 @@ export function createChartTools(options: ChartToolsOptions): OwniTool[] {
 				}
 				return `Grafico inviato in questa conversazione (${made.path}).${notes} ${caption === undefined ? "Rispondi con una riga al massimo." : "Non serve altro testo."}`;
 			},
-		},
+		}),
 	];
 }
 
 type ChartData = { labels: string[]; series: ChartSeries[]; unit?: string; notes: string[] };
 
 /** Labels and series as the model gave them; a value written as text (1.200,50 or € 30) is read as a number. */
-function fromArgs(labelsArg: unknown, seriesArg: unknown): ChartData {
-	const series = Array.isArray(seriesArg) ? seriesArg : [];
+function fromArgs(labelsArg: readonly string[] | undefined, seriesArg: readonly { name?: string | undefined; values: readonly (number | string | null)[] }[] | undefined): ChartData {
+	const series = seriesArg ?? [];
 	const units = new Set<string>();
-	const read = (v: unknown, i: number): number | null => {
-		if (v === null || v === undefined || v === "") return null;
+	const read = (v: number | string | null, i: number): number | null => {
+		if (v === null || v === "") return null;
 		if (typeof v === "number") return v;
-		const n = typeof v === "string" ? cellNumber(v) : undefined;
+		const n = cellNumber(v);
 		if (n === undefined) throw new ChartError(`la serie ${i + 1} ha un valore che non è un numero`);
 		if (n.unit !== undefined) units.add(n.unit);
 		return n.value;
 	};
-	const out: ChartSeries[] = series.map((s: { name?: unknown; values?: unknown }, i) => ({
-		...(typeof s?.name === "string" ? { name: s.name } : {}),
-		values: (Array.isArray(s?.values) ? s.values : []).map((v: unknown) => read(v, i)),
+	const out: ChartSeries[] = series.map((s, i) => ({
+		...(s.name !== undefined ? { name: s.name } : {}),
+		values: s.values.map((v) => read(v, i)),
 	}));
-	if (!Array.isArray(labelsArg) || labelsArg.length === 0) throw new ChartError("servono le etichette (labels): le categorie o le date dei valori, una per valore");
-	return { labels: labelsArg.map((l) => String(l)), series: out, notes: [], ...(units.size === 1 ? { unit: [...units][0] as string } : {}) };
+	if (labelsArg === undefined || labelsArg.length === 0) throw new ChartError("servono le etichette (labels): le categorie o le date dei valori, una per valore");
+	return { labels: [...labelsArg], series: out, notes: [], ...(units.size === 1 ? { unit: [...units][0] as string } : {}) };
 }
 
 const TOTAL = /^(totale|totali|total|totals|tot\.?|somma|subtotale|sub-totale|totale generale|grand total)$/i;

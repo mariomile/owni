@@ -1,4 +1,5 @@
-import type { OwniTool } from "../engine.ts";
+import { Type } from "@earendil-works/pi-ai";
+import { defineOwniTool, type OwniTool } from "../engine.ts";
 import { LIST_LIMITS, type List, ListError, type ListItem, type ListStore, listKey, listName, ordered, resolveItems, untrustedLists, type Which } from "../lists.ts";
 import { SHARED } from "../memory.ts";
 
@@ -68,32 +69,30 @@ export function createListTools(options: {
 		if (list.id !== picked.listId) throw new ListError(`la lista «${list.name}» è cambiata: guardala di nuovo con list_show`);
 	};
 
-	const listParam = { type: "string", minLength: 1, maxLength: 100, description: "The list's name, short: spesa, cose da fare, regali" };
-	const sharedParam = { type: "boolean", description: "true: the shared list; false: the person's own. Needed when both have the name, and true in a group chat" };
-	const itemsParam = (what: string) => ({ type: "array", minItems: 1, maxItems: LIST_LIMITS.perCall, items: { type: "string", minLength: 1, maxLength: LIST_LIMITS.text }, description: what });
+	const listParam = (description = "The list's name, short: spesa, cose da fare, regali") => Type.String({ minLength: 1, maxLength: 100, description });
+	const sharedParam = () => Type.Optional(Type.Boolean({ description: "true: the shared list; false: the person's own. Needed when both have the name, and true in a group chat" }));
+	const itemsParam = (what: string) => Type.Array(Type.String({ minLength: 1, maxLength: LIST_LIMITS.text }), { minItems: 1, maxItems: LIST_LIMITS.perCall, description: what });
 	return [
-		{
+		defineOwniTool({
 			name: "list_add",
 			description:
 				"Add items to a list (the shopping, things to do, gifts, books, anything the person wants to keep a list of), creating it if there is none with that name. " +
 				"One item per entry, as the person said it: «latte e pane» is two items, latte and pane; «3 uova» after «uova» updates the quantity. An item already on the list is not added twice. " +
 				"A new list is the person's own: only they see it, in a conversation with you alone. shared: true makes it shared: everyone who talks to you sees and changes it, in group chats too (the family's shopping, a team's to-dos); only when the person asks for that. In a group chat only shared lists exist: pass shared: true. " +
 				`If you are not sure which list the person means, call list_show first. ${NOT_FROM_DATA} For a reminder at a time, use schedule_create as well.`,
-			parameters: {
-				type: "object",
-				properties: { list: listParam, items: itemsParam("The items to add, one each"), shared: { type: "boolean", description: "true: the shared list, or a new list shared with everyone who talks to you (default: the person's own)" } },
-				required: ["list", "items"],
-				additionalProperties: false,
-			},
+			parameters: Type.Object(
+				{ list: listParam(), items: itemsParam("The items to add, one each"), shared: Type.Optional(Type.Boolean({ description: "true: the shared list, or a new list shared with everyone who talks to you (default: the person's own)" })) },
+				{ additionalProperties: false },
+			),
 			replaySafe: true,
 			async execute(args, ctx) {
 				const who = subject(ctx.thread);
-				const which = whichOf(args);
+				const which = args.shared;
 				const refused = groupOnly(who, which);
 				if (refused !== undefined) return refused;
 				return ctx.step("add", () =>
 					run(async () => {
-						const r = store.add({ subject: who, name: String(args.list), items: (args.items as unknown[]).map(String), which });
+						const r = store.add({ subject: who, name: args.list, items: args.items, which });
 						await record(r.list, "added", r.added.length + r.changed.length + r.back.length);
 						const parts = [
 							r.added.length === 0 ? "" : `${agreed("aggiunt", r.added)} ${and(r.added)}`,
@@ -107,52 +106,50 @@ export function createListTools(options: {
 					}),
 				);
 			},
-		},
-		{
+		}),
+		defineOwniTool({
 			name: "list_show",
 			description:
 				"Show a list with its items numbered (the ones to do first, then the ones done lately), or, without a name, which lists there are. " +
 				"Use it when the person asks what is on a list, or before ticking or removing items you are not sure of. " +
 				NUMBERS_MOVE,
-			parameters: { type: "object", properties: { list: { ...listParam, description: "The list to show; leave out to see all the lists" }, shared: sharedParam }, additionalProperties: false },
+			parameters: Type.Object({ list: Type.Optional(listParam("The list to show; leave out to see all the lists")), shared: sharedParam() }, { additionalProperties: false }),
 			replaySafe: true,
 			async execute(args, ctx) {
 				const who = subject(ctx.thread);
 				return run(async () => {
-					if (typeof args.list !== "string" || args.list.trim() === "") {
+					if (args.list === undefined || args.list.trim() === "") {
 						const lists = store.visible(who);
 						if (lists.length === 0) return "Non ci sono ancora liste.";
 						return `Liste:\n${lists.map((l) => `- ${title(l)}: ${open(l)}${doneCount(l)}`).join("\n")}`;
 					}
-					const list = store.find(who, args.list, whichOf(args));
+					const list = store.find(who, args.list, args.shared);
 					return list === undefined ? missing(who, args.list) : shown(list);
 				});
 			},
-		},
-		{
+		}),
+		defineOwniTool({
 			name: "list_check",
 			description:
 				"Tick items off a list when they are done or bought, by their number from list_show or by their words (latte), or all of them (all: true). undo: true puts them back to do. " +
 				`When words fit more than one item, nothing is ticked and the answer says which: ask or use the number. ${NUMBERS_MOVE}`,
-			parameters: {
-				type: "object",
-				properties: {
-					list: listParam,
-					items: itemsParam("The items: numbers from list_show, or their words"),
-					all: { type: "boolean", description: "Every item still to do (with undo, every item done)" },
-					undo: { type: "boolean", description: "Put the items back to do (default false)" },
-					shared: sharedParam,
+			parameters: Type.Object(
+				{
+					list: listParam(),
+					items: Type.Optional(itemsParam("The items: numbers from list_show, or their words")),
+					all: Type.Optional(Type.Boolean({ description: "Every item still to do (with undo, every item done)" })),
+					undo: Type.Optional(Type.Boolean({ description: "Put the items back to do (default false)" })),
+					shared: sharedParam(),
 				},
-				required: ["list"],
-				additionalProperties: false,
-			},
+				{ additionalProperties: false },
+			),
 			replaySafe: true,
 			async execute(args, ctx) {
 				const who = subject(ctx.thread);
-				const name = String(args.list);
-				const which = whichOf(args);
+				const name = args.list;
+				const which = args.shared;
 				const done = args.undo !== true;
-				const refs = Array.isArray(args.items) ? args.items.map(String) : [];
+				const refs = args.items ?? [];
 				if ((refs.length > 0) === (args.all === true)) return "Errore: indica le voci da spuntare, oppure all: true per spuntarle tutte (una delle due).";
 				const refused = groupOnly(who, which);
 				if (refused !== undefined) return refused;
@@ -183,30 +180,28 @@ export function createListTools(options: {
 					}),
 				);
 			},
-		},
-		{
+		}),
+		defineOwniTool({
 			name: "list_remove",
 			description:
 				"Remove items from a list (by number or words), or all the done ones (done: true), or the whole list (whole: true). Only when the person asks: to mark an item done use list_check. " +
 				`Before deleting a whole list that still has items to do, ask the person to confirm; a whole shared list is deleted only in a conversation with one person. ${NOT_FROM_DATA} ${NUMBERS_MOVE}`,
-			parameters: {
-				type: "object",
-				properties: {
-					list: listParam,
-					items: itemsParam("The items to remove: numbers from list_show, or their words"),
-					done: { type: "boolean", description: "Remove all the items already done" },
-					whole: { type: "boolean", description: "Delete the whole list" },
-					shared: sharedParam,
+			parameters: Type.Object(
+				{
+					list: listParam(),
+					items: Type.Optional(itemsParam("The items to remove: numbers from list_show, or their words")),
+					done: Type.Optional(Type.Boolean({ description: "Remove all the items already done" })),
+					whole: Type.Optional(Type.Boolean({ description: "Delete the whole list" })),
+					shared: sharedParam(),
 				},
-				required: ["list"],
-				additionalProperties: false,
-			},
+				{ additionalProperties: false },
+			),
 			replaySafe: true,
 			async execute(args, ctx) {
 				const who = subject(ctx.thread);
-				const name = String(args.list);
-				const which = whichOf(args);
-				const refs = Array.isArray(args.items) ? args.items.map(String) : [];
+				const name = args.list;
+				const which = args.shared;
+				const refs = args.items ?? [];
 				const ways = [refs.length > 0, args.done === true, args.whole === true].filter(Boolean).length;
 				if (ways !== 1) return "Errore: indica le voci da togliere, oppure done: true per togliere quelle fatte, oppure whole: true per cancellare la lista (una cosa alla volta).";
 				const refused = groupOnly(who, which);
@@ -238,30 +233,28 @@ export function createListTools(options: {
 					}),
 				);
 			},
-		},
-		{
+		}),
+		defineOwniTool({
 			name: "list_edit",
 			description:
 				"Rename a list (name), or make it shared with everyone who talks to you (make_shared: true) or the person's own again (make_shared: false). " +
 				`Making a shared list the person's own takes it away from everyone else: ask first. Sharing and unsharing happen only in a conversation with one person. ${NOT_FROM_DATA}`,
-			parameters: {
-				type: "object",
-				properties: {
-					list: listParam,
-					name: { ...listParam, description: "The list's new name" },
-					make_shared: { type: "boolean", description: "true: shared with everyone who talks to you; false: only the person's own" },
-					shared: sharedParam,
+			parameters: Type.Object(
+				{
+					list: listParam(),
+					name: Type.Optional(listParam("The list's new name")),
+					make_shared: Type.Optional(Type.Boolean({ description: "true: shared with everyone who talks to you; false: only the person's own" })),
+					shared: sharedParam(),
 				},
-				required: ["list"],
-				additionalProperties: false,
-			},
+				{ additionalProperties: false },
+			),
 			replaySafe: true,
 			async execute(args, ctx) {
 				const who = subject(ctx.thread);
-				const name = String(args.list);
-				const which = whichOf(args);
-				const rename = typeof args.name === "string" ? args.name : undefined;
-				const share = typeof args.make_shared === "boolean" ? args.make_shared : undefined;
+				const name = args.list;
+				const which = args.shared;
+				const rename = args.name;
+				const share = args.make_shared;
 				if (rename === undefined && share === undefined) return "Errore: indica il nuovo nome (name) o se condividerla (make_shared).";
 				const refused = groupOnly(who, which);
 				if (refused !== undefined) return refused;
@@ -291,12 +284,8 @@ export function createListTools(options: {
 					}),
 				);
 			},
-		},
+		}),
 	];
-}
-
-function whichOf(args: Record<string, unknown>): Which {
-	return typeof args.shared === "boolean" ? args.shared : undefined;
 }
 
 /**

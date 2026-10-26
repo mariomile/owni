@@ -1,5 +1,6 @@
-import type { OwniTool } from "../engine.ts";
-import { IMAGE_CONNECTOR, IMAGE_QUALITIES, IMAGE_SHAPES, type GenerateImage, ImageGenerationError, type ImageQuality, type ImageShape } from "../image-generation.ts";
+import { StringEnum, Type } from "@earendil-works/pi-ai";
+import { defineOwniTool, type OwniTool } from "../engine.ts";
+import { IMAGE_CONNECTOR, IMAGE_QUALITIES, IMAGE_SHAPES, type GenerateImage, ImageGenerationError } from "../image-generation.ts";
 import { imageProblem, imageType } from "../images.ts";
 import type { EgressPolicy } from "../policy.ts";
 import { type Workspace, WorkspaceError } from "../workspace.ts";
@@ -27,7 +28,7 @@ const EXTENSION: Record<string, string> = { "image/png": "png", "image/jpeg": "j
  */
 export function createImageTools(options: ImageToolsOptions): OwniTool[] {
 	return [
-		{
+		defineOwniTool({
 			name: "image_generate",
 			description:
 				"Make a picture from a description (an illustration, a logo, a poster, a photo-like scene) or retouch a picture of your workspace (from: a photo someone sent, in uploads/, or a picture you made). " +
@@ -35,28 +36,26 @@ export function createImageTools(options: ImageToolsOptions): OwniTool[] {
 				"Write the prompt in English, detailed: subject, style, colors, light, composition; any text to show goes in quotes exactly as the person wrote it, in their language. " +
 				"When the person asks to change a picture you made (\"più blu\", \"togli la scritta\"), use from with its path and say only what changes. " +
 				"Not for pictures of real people who did not ask for it, or to fake documents.",
-			parameters: {
-				type: "object",
-				properties: {
-					prompt: { type: "string", minLength: 3, maxLength: 4000 },
-					from: { type: "string", minLength: 1, maxLength: 300, description: "To retouch a picture: its path in the workspace (JPEG, PNG or WebP)" },
-					shape: { type: "string", enum: [...IMAGE_SHAPES], description: "square, portrait (tall) or landscape (wide). Leave it out to retouch a picture keeping its proportions; square for a new one" },
-					count: { type: "integer", minimum: 1, maximum: 4, description: "Variations to choose from, when the person asks for some (each counts in the day's pictures)" },
-					transparent: { type: "boolean", description: "No background (a PNG): for logos, icons, stickers" },
-					quality: { type: "string", enum: [...IMAGE_QUALITIES], description: "low for a quick draft; high for something to print. Leave it out otherwise" },
-					caption: { type: "string", maxLength: 200, description: "One short line sent with the picture, in the person's language" },
+			parameters: Type.Object(
+				{
+					prompt: Type.String({ minLength: 3, maxLength: 4000 }),
+					from: Type.Optional(Type.String({ minLength: 1, maxLength: 300, description: "To retouch a picture: its path in the workspace (JPEG, PNG or WebP)" })),
+					shape: Type.Optional(StringEnum([...IMAGE_SHAPES], { description: "square, portrait (tall) or landscape (wide). Leave it out to retouch a picture keeping its proportions; square for a new one" })),
+					count: Type.Optional(Type.Integer({ minimum: 1, maximum: 4, description: "Variations to choose from, when the person asks for some (each counts in the day's pictures)" })),
+					transparent: Type.Optional(Type.Boolean({ description: "No background (a PNG): for logos, icons, stickers" })),
+					quality: Type.Optional(StringEnum([...IMAGE_QUALITIES], { description: "low for a quick draft; high for something to print. Leave it out otherwise" })),
+					caption: Type.Optional(Type.String({ maxLength: 200, description: "One short line sent with the picture, in the person's language" })),
 				},
-				required: ["prompt"],
-				additionalProperties: false,
-			},
+				{ additionalProperties: false },
+			),
 			replaySafe: true,
 			async execute(args, ctx) {
 				const policy = await options.policy();
 				if (!(policy.connectors ?? []).includes(IMAGE_CONNECTOR)) return "Errore: la generazione di immagini non è attiva per questa istanza. La accende l'owner in Impostazioni, «Immagini».";
-				const prompt = String(args.prompt).trim();
-				const count = typeof args.count === "number" ? Math.min(4, Math.max(1, Math.floor(args.count))) : 1;
+				const prompt = args.prompt.trim();
+				const count = args.count ?? 1;
 				let from: { data: Uint8Array; name: string } | undefined;
-				if (typeof args.from === "string") {
+				if (args.from !== undefined) {
 					try {
 						const data = await options.workspace.read(args.from);
 						const problem = imageProblem(data);
@@ -75,11 +74,11 @@ export function createImageTools(options: ImageToolsOptions): OwniTool[] {
 					if (left < count) return { error: left === 0 ? "per oggi le immagini di questo account sono finite. Dillo alla persona: si può riprovare domani." : `per oggi restano ${left} immagini a questo account: chiedine al massimo ${left}.` };
 					try {
 						const pictures = await options.generate(prompt, {
-							...(IMAGE_SHAPES.includes(args.shape as ImageShape) ? { shape: args.shape as ImageShape } : {}),
+							...(args.shape === undefined ? {} : { shape: args.shape }),
 							...(from === undefined ? {} : { from }),
 							count,
 							...(args.transparent === true ? { transparent: true } : {}),
-							...(IMAGE_QUALITIES.includes(args.quality as ImageQuality) ? { quality: args.quality as ImageQuality } : {}),
+							...(args.quality === undefined ? {} : { quality: args.quality }),
 							signal: ctx.signal,
 						});
 						// Only pictures made count in the day's pictures; a refusal or a timeout does not.
@@ -103,7 +102,7 @@ export function createImageTools(options: ImageToolsOptions): OwniTool[] {
 				const where = made.paths.join(", ");
 				const thread = ctx.thread;
 				if (thread === undefined) return `${made.paths.length === 1 ? "Immagine creata" : "Immagini create"}: ${where}. Nessuna conversazione a cui inviarle: si mandano con file_send.`;
-				const caption = typeof args.caption === "string" && args.caption.trim() !== "" ? args.caption.trim() : undefined;
+				const caption = args.caption !== undefined && args.caption.trim() !== "" ? args.caption.trim() : undefined;
 				try {
 					for (const [i, path] of made.paths.entries()) {
 						await ctx.step(`send-${i}`, async () => {
@@ -118,6 +117,6 @@ export function createImageTools(options: ImageToolsOptions): OwniTool[] {
 				}
 				return `${made.paths.length === 1 ? "Immagine creata e inviata" : `${made.paths.length} immagini create e inviate`} in questa conversazione: ${where}. ${caption === undefined ? "Rispondi con una riga al massimo." : "Non serve altro testo."} Per ritoccarla usa from con il suo percorso; per controllarla, image_view.`;
 			},
-		},
+		}),
 	];
 }

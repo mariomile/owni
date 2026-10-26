@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { egressFetch } from "../../connectors/http.ts";
-import type { OwniTool } from "../engine.ts";
+import { Type } from "@earendil-works/pi-ai";
+import { defineOwniTool, type OwniTool } from "../engine.ts";
 import type { EgressPolicy } from "../policy.ts";
 import { customToolName, ProposalError, type ProposalStore, type ToolProposal, toolEgressName } from "../proposals.ts";
 import { runSandboxed } from "../sandbox.ts";
@@ -21,35 +22,34 @@ export type CustomToolsOptions = {
  * egress policy lists tool:<name>.
  */
 export async function createCustomTools(options: CustomToolsOptions): Promise<OwniTool[]> {
-	const propose: OwniTool = {
+	const propose = defineOwniTool({
 		name: "tool_propose",
 		description:
 			"Write a new tool for yourself when no existing tool can do the job (e.g. call a public API, transform data). " +
 			"It does not run until a human approver approves it; tell the person it is waiting for approval. " +
 			"code is an ES module: `export default async (args, { workDir }) => result`, using only `fetch` (to the declared hosts), " +
 			"node:fs inside workDir, and standard JavaScript. No other network, processes or environment.",
-		parameters: {
-			type: "object",
-			properties: {
-				name: { type: "string", description: "snake_case, 3-41 chars, e.g. weather_forecast" },
-				description: { type: "string", description: "What it does and when to use it, for the approver and for you" },
-				parameters: { type: "object", description: 'JSON Schema of its arguments, with type "object"' },
-				code: { type: "string", description: "ES module source with a default export" },
-				hosts: { type: "array", items: { type: "string" }, description: "Host names it needs over https, e.g. api.open-meteo.com; empty for none" },
+		parameters: Type.Object(
+			{
+				name: Type.String({ description: "snake_case, 3-41 chars, e.g. weather_forecast" }),
+				description: Type.String({ description: "What it does and when to use it, for the approver and for you" }),
+				// The JSON Schema of the new tool's own arguments: an open object here.
+				parameters: Type.Unsafe<Record<string, unknown>>({ type: "object", description: 'JSON Schema of its arguments, with type "object"' }),
+				code: Type.String({ description: "ES module source with a default export" }),
+				hosts: Type.Array(Type.String(), { description: "Host names it needs over https, e.g. api.open-meteo.com; empty for none" }),
 			},
-			required: ["name", "description", "parameters", "code", "hosts"],
-			additionalProperties: false,
-		},
+			{ additionalProperties: false },
+		),
 		replaySafe: true,
 		async execute(args, ctx) {
 			return ctx.step("propose", async () => {
 				try {
 					const proposal = await options.store.propose({
-						name: String(args.name),
-						description: String(args.description),
-						parameters: (args.parameters ?? {}) as Record<string, unknown>,
-						code: String(args.code),
-						hosts: Array.isArray(args.hosts) ? args.hosts.map(String) : [],
+						name: args.name,
+						description: args.description,
+						parameters: args.parameters,
+						code: args.code,
+						hosts: args.hosts,
 						...(ctx.thread === undefined ? {} : { thread: ctx.thread }),
 					});
 					await options.onProposed(proposal);
@@ -60,11 +60,12 @@ export async function createCustomTools(options: CustomToolsOptions): Promise<Ow
 				}
 			});
 		},
-	};
-	const approved = (await options.store.approved()).map((proposal): OwniTool => ({
+	});
+	const approved = (await options.store.approved()).map((proposal): OwniTool => defineOwniTool({
 		name: customToolName(proposal.name),
 		description: `${proposal.description} (tool proposto ${proposal.id}, approvato)`.slice(0, 1024),
-		parameters: proposal.parameters,
+		// An approved tool's schema is the one its author wrote: known only at run time.
+		parameters: Type.Unsafe<Record<string, unknown>>(proposal.parameters),
 		// Written by the instance: what it does outside is not known to be safe to repeat.
 		replaySafe: false,
 		async execute(args, ctx) {

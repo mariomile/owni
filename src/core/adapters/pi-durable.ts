@@ -4,7 +4,7 @@
  */
 import { join } from "node:path";
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
-import { type Message, retryDelayMs, Type } from "@earendil-works/pi-ai";
+import { type Message, retryDelayMs } from "@earendil-works/pi-ai";
 import { AssistantMessageEventStream } from "@earendil-works/pi-ai/utils/event-stream";
 import { createModels, type MutableModels } from "@earendil-works/pi-ai/models";
 import {
@@ -803,7 +803,7 @@ function toPiTool(tool: OwniTool, stopped: ReadonlySet<string>): ToolRegistratio
 	return defineTool({
 		name: tool.name,
 		description: tool.description,
-		parameters: Type.Unsafe<Record<string, unknown>>(tool.parameters as never),
+		parameters: tool.parameters,
 		replay: tool.replaySafe ? "safe" : "unsafe",
 		deferred: tool.deferred,
 		execute: async (args, api, callContext) => {
