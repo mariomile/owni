@@ -131,6 +131,7 @@ describe("console as an app", () => {
 		const handlers: Record<string, (event: object) => void> = {};
 		const cached = new Map<string, string>([["/", "shell page"], ["/app.css", "shell style"]]);
 		const installed: { url: string; cache: string }[] = [];
+		const deleted: string[] = [];
 		let online = true;
 		const self = {
 			location: { origin: "https://owni.example" },
@@ -143,8 +144,11 @@ describe("console as an app", () => {
 				addAll: async (requests: { url: string; cache: string }[]) => installed.push(...requests),
 				put: async () => expect.unreachable("a file is never kept on its own, only the whole shell at install"),
 			}),
-			keys: async () => [],
-			match: async (key: string) => (cached.has(key) ? { body: cached.get(key) } : undefined),
+			keys: async () => ["owni-shell-v20", "owni-shell-__SHELL_VERSION__"],
+			delete: async (name: string) => deleted.push(name),
+			// Only the cache of this release is searched: an older one still waiting to go would mix releases.
+			match: async (key: string, options: { cacheName?: string }) =>
+				options.cacheName === "owni-shell-__SHELL_VERSION__" && cached.has(key) ? { body: cached.get(key) } : undefined,
 		};
 		const fetch = async (req: { url: string }) => {
 			if (!online) throw new TypeError("offline");
@@ -166,6 +170,11 @@ describe("console as an app", () => {
 		await installing;
 		expect(installed.map((r) => r.url)).toEqual(expect.arrayContaining(["/", "/app.js", "/app.css"]));
 		expect(installed.every((r) => r.cache === "reload")).toBe(true);
+		// The new worker drops every shell of an older release.
+		let activating: Promise<unknown> | undefined;
+		handlers.activate?.({ waitUntil: (p: Promise<unknown>) => (activating = p) });
+		await activating;
+		expect(deleted).toEqual(["owni-shell-v20"]);
 		const request = async (path: string, mode = "cors", method = "GET", origin = "https://owni.example") => {
 			let answer: Promise<unknown> | undefined;
 			handlers.fetch?.({ request: { url: `${origin}${path}`, mode, method }, respondWith: (p: Promise<unknown>) => (answer = p) });
