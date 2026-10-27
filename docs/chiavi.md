@@ -25,7 +25,7 @@ Questa guida serve a dare a Owni quello che le manca per la prova dal vivo e per
 4. Consigliato: in **Settings → Limits** metti un tetto di spesa mensile, per esempio 50 dollari. Owni ha anche il suo tetto giornaliero.
 5. Dominio da consentire: `api.anthropic.com`.
 
-Al posto di Anthropic, o accanto, va bene uno qualsiasi dei 18 provider di [ADR 0032](adr/0032-qualsiasi-modello.md), che ha la tabella con il nome di ogni variabile e il dominio da consentire. `OWNI_MODEL_PROVIDER` dice quale usa la prima istanza; ogni chiave messa qui l'owner la può usare da Impostazioni → Modello AI, dove può anche incollare una chiave sua. La segreteria commerciale vuole comunque `ANTHROPIC_API_KEY`.
+Al posto di Anthropic, o accanto, va bene uno qualsiasi dei 18 provider di [ADR 0032](adr/0032-qualsiasi-modello.md), che ha la tabella con il nome di ogni variabile e il dominio da consentire. `OWNI_MODEL_PROVIDER` dice quale usa la prima istanza; ogni chiave messa qui l'owner la può usare da Impostazioni → Modello AI, dove può anche incollare una chiave sua.
 
 ### 2. Telegram: `TELEGRAM_BOT_TOKEN` e gli ID delle persone
 
@@ -38,35 +38,7 @@ Al posto di Anthropic, o accanto, va bene uno qualsiasi dei 18 provider di [ADR 
 
 In alternativa il bot si collega anche dalla console: Impostazioni → Telegram.
 
-### 3. Segreteria commerciale: secondo bot, Gmail, HubSpot
-
-**Secondo bot Telegram**: rifai i passi 1-2 del punto 2 con un altro bot. Il token va in `OWNI_SEGRETERIA_TELEGRAM_BOT_TOKEN`. Gli ID dei commerciali vanno in `OWNI_SEGRETERIA_SALES`.
-
-**Gmail della casella commerciale** (`GMAIL_CLIENT_ID`, `GMAIL_CLIENT_SECRET`, `GMAIL_REFRESH_TOKEN`):
-
-1. https://console.cloud.google.com → crea un progetto, per esempio `owni`.
-2. **APIs & Services → Library** → abilita **Gmail API**.
-3. **OAuth consent screen**: tipo *External*, stato *Testing*. Aggiungi la casella commerciale tra i *Test users*.
-4. **Credentials → Create credentials → OAuth client ID**:
-   - tipo *Web application*;
-   - redirect URI: `https://developers.google.com/oauthplayground`.
-   
-   Client ID e secret vanno in `GMAIL_CLIENT_ID` e `GMAIL_CLIENT_SECRET`.
-5. Apri https://developers.google.com/oauthplayground e ottieni il refresh token:
-   - ingranaggio in alto a destra → *Use your own OAuth credentials*, poi incolla client ID e secret;
-   - nel campo degli scope scrivi `https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.send` → *Authorize APIs* → entra con la casella commerciale;
-   - *Exchange authorization code for tokens* → copia il **Refresh token** in `GMAIL_REFRESH_TOKEN`.
-6. Attenzione: con l'app in *Testing* il refresh token scade dopo 7 giorni. Per l'uso vero l'app va pubblicata (vedi il punto 4).
-7. Domini: `gmail.googleapis.com`, `oauth2.googleapis.com`.
-
-**HubSpot** (`HUBSPOT_ACCESS_TOKEN`):
-
-1. In HubSpot: icona impostazioni → **Integrazioni → App private**. Nei portali recenti la voce è **Sviluppo → App legacy → Crea app privata**.
-2. Nome `Owni`. Nella scheda *Scopes* spunta `crm.objects.contacts.read` e `crm.objects.contacts.write`.
-3. Crea l'app e copia l'**Access token** in `HUBSPOT_ACCESS_TOKEN`.
-4. Dominio: `api.hubapi.com`.
-
-### 4. Google per persona: `OWNI_GOOGLE_CLIENT_ID`, `OWNI_GOOGLE_CLIENT_SECRET`
+### 3. Google per persona: `OWNI_GOOGLE_CLIENT_ID`, `OWNI_GOOGLE_CLIENT_SECRET`
 
 Serve perché ognuno colleghi il proprio Gmail e Calendar dalla console: in lettura e, con `OWNI_GOOGLE_WRITE=1`, anche per far preparare a Owni mail ed eventi, che partono solo quando la persona li approva ([ADR 0021](adr/0021-google-scrivere-con-approvazione.md)).
 
@@ -281,8 +253,6 @@ Anche senza questa variabile Owni controlla «sulla carta» partite IVA, numeri 
 |---|---|
 | Modello | `api.anthropic.com`, o il dominio del provider scelto (tabella in [ADR 0032](adr/0032-qualsiasi-modello.md)) |
 | Telegram | `api.telegram.org` |
-| Gmail (segreteria) | `gmail.googleapis.com`, `oauth2.googleapis.com` |
-| HubSpot | `api.hubapi.com` |
 | Google per persona | `accounts.google.com`, `oauth2.googleapis.com`, `openidconnect.googleapis.com`, `gmail.googleapis.com`, `www.googleapis.com` |
 | Railway | `backboard.railway.com`, `docs.railway.com` |
 | Stripe | `api.stripe.com` |
@@ -301,4 +271,4 @@ Anche senza questa variabile Owni controlla «sulla carta» partite IVA, numeri 
 
 ## Cosa succede dopo
 
-In una sessione nuova con le chiavi, il primo comando è `pnpm owni check`. Prova ogni servizio configurato e dice cosa correggere, senza stampare segreti. Poi vengono la prova dal vivo di Telegram, della segreteria (una mail vera fino alla bozza approvata) e di Google, e lo spike Railway con le misure di risveglio e di costo.
+In una sessione nuova con le chiavi, il primo comando è `pnpm owni check`. Prova ogni servizio configurato e dice cosa correggere, senza stampare segreti. Poi vengono la prova dal vivo di Telegram, e di Google, e lo spike Railway con le misure di risveglio e di costo.

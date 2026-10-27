@@ -30,7 +30,6 @@ import type { InstanceRecord, ModelSelection } from "../core/registry.ts";
 import { ChatModels } from "../core/chat-models.ts";
 import type { OwniRuntime } from "../core/runtime.ts";
 import { DEFAULT_COST_CAPS, type UsageLedger } from "../core/usage.ts";
-import type { SegreteriaService } from "../segreteria/service.ts";
 import { type PeopleStore, type Person, publicPerson, type SessionStore } from "./auth.ts";
 import { WebChannel, type WebEntry } from "./channel.ts";
 import { boardRoutes } from "./board-routes.ts";
@@ -107,7 +106,6 @@ export type WebAppOptions = {
 	readonly main?: string;
 	readonly connectors: (instanceId: string) => ConnectorStore;
 	readonly connectorStatus: (instanceId: string) => readonly ConnectorStatus[];
-	readonly segreterie?: ReadonlyMap<string, SegreteriaService>;
 	/** The browser panel of the chat; without it the console shows none. */
 	readonly browser?: BrowserPanel;
 	readonly usage: UsageLedger;
@@ -188,7 +186,7 @@ export type WebAppOptions = {
 	readonly serverModelKeys?: readonly string[];
 	/** Create an instance with its web channel, open for `ownerId` (owner only). */
 	readonly createInstance?: (input: { id: string; name: string; instructions: string | undefined; persona: Persona; ownerId: string }) => Promise<void>;
-	/** Delete an agente for good (ADR 0046); never the general one, nor a segreteria. */
+	/** Delete an agente for good (ADR 0046); never the general one. */
 	readonly deleteInstance?: { readonly main: string; readonly run: (id: string) => Promise<void> };
 	/** The board (ADR 0050). */
 	readonly board?: { readonly store: BoardStore; readonly work: BoardWork; readonly routines?: RoutineStore };
@@ -321,7 +319,6 @@ export function createWebApp(options: WebAppOptions): Server {
 		name: r.name,
 		canChat: canChatWith(r, p),
 		isApprover: await isApprover(runtime, tenantId, r.id, approverOf(p)),
-		hasSegreteria: options.segreterie?.has(r.id) ?? false,
 		...(r.id === options.main ? { main: true } : {}),
 		...(r.persona?.tagline === undefined ? {} : { tagline: r.persona.tagline }),
 	});
@@ -422,14 +419,13 @@ export function createWebApp(options: WebAppOptions): Server {
 	});
 
 	// Deleting an agente (ADR 0046): the owner types its name, as it is now, to confirm.
-	const deletable = (id: string) => options.deleteInstance !== undefined && id !== options.deleteInstance.main && !(options.segreterie?.has(id) ?? false);
+	const deletable = (id: string) => options.deleteInstance !== undefined && id !== options.deleteInstance.main;
 	route("DELETE", "/api/instances/:id", "owner", async ({ person, params, req }) => {
 		const remover = options.deleteInstance;
 		if (remover === undefined) throw new HttpError(501, "Questa installazione non elimina agenti dalla console");
 		const id = params[0];
 		const record = await knownInstance(id);
 		if (id === remover.main) throw new HttpError(400, `${record.name} è l'agente principale: non si elimina`);
-		if (options.segreterie?.has(id)) throw new HttpError(400, "La segreteria non si elimina dalla console");
 		const body = (await readJson(req)) as { confirm?: unknown };
 		if (body.confirm !== record.name) throw new HttpError(400, `Per confermare scrivi il nome dell'agente esattamente così: «${record.name}»`);
 		await remover.run(id);
@@ -438,16 +434,14 @@ export function createWebApp(options: WebAppOptions): Server {
 	});
 
 	// --- the board (ADR 0050) ---
-	boardRoutes(route, { runtime, tenantId, people: options.people, board: options.board, segreterie: options.segreterie, agentNow });
+	boardRoutes(route, { runtime, tenantId, people: options.people, board: options.board, agentNow });
 	capabilityRoutes(route, { runtime, tenantId, knownInstance, voice: options.voice, speech: options.speech, images: options.images, search: options.search, computer: options.computer, desktop: options.desktop, google: options.google });
 
 	// --- the organigramma (ADR 0117): who does what, and who writes to whom ---
-	/** The agenti that may write to this one (ADR 0042), as the organigramma says (ADR 0117): never itself nor a segreteria. */
+	/** The agenti that may write to this one (ADR 0042), as the organigramma says (ADR 0117): never itself. */
 	const allowAgents = async (person: Person, id: string, asked: readonly string[]): Promise<string[]> => {
-		// A segreteria has no conversations of its own: it can neither ask nor be asked.
-		if (options.segreterie?.has(id)) throw new HttpError(400, "La segreteria non scrive agli altri agenti");
 		const record = await runtime.registry.getInstance(tenantId, id);
-		const known = new Set<string>((await runtime.registry.listInstances(tenantId)).map((r) => r.id).filter((x) => !options.segreterie?.has(x)));
+		const known = new Set<string>((await runtime.registry.listInstances(tenantId)).map((r) => r.id));
 		const from = [...new Set(asked)].filter((x) => x !== String(record.id) && known.has(x));
 		await runtime.registry.setAllowedUsers(tenantId, id, AGENT_CHANNEL, from);
 		await runtime.registry.setEgress(tenantId, id, (egress) => withChannel(egress, AGENT_CHANNEL, from.length > 0));
@@ -458,7 +452,6 @@ export function createWebApp(options: WebAppOptions): Server {
 		store: runtime.org(tenantId),
 		agents: async () =>
 			(await runtime.registry.listInstances(tenantId))
-				.filter((r) => !options.segreterie?.has(r.id))
 				.map((r) => ({ id: r.id, name: r.name, accepts: r.egress.channels.includes(AGENT_CHANNEL) ? (r.allowedUsers[AGENT_CHANNEL] ?? []) : [] })),
 		allow: (person, id, from) => allowAgents(person, id, from),
 		audit: (event) => runtime.audit(tenantId).append(event),
@@ -502,8 +495,8 @@ export function createWebApp(options: WebAppOptions): Server {
 	// --- tasks programmati, automazioni (ADR 0060), brief del mattino, sentinelle (ADR 0018) ---
 	scheduleRoutes(route, { runtime, tenantId, defaultTimeZone: options.defaultTimeZone, google: options.google, watchRead: options.watchRead, instanceAccess, channelOf });
 
-	// --- what waits for a decision: tools proposti, forms, connector calls, Google writes, pratiche; the inbox ---
-	const waitsOn = approvalRoutes(route, { runtime, tenantId, segreterie: options.segreterie, sendWebAction: options.sendWebAction, runConnectorAction: options.runConnectorAction, google: options.google, board: options.board, log: options.log, instanceAccess, approverOf, usageSummary });
+	// --- what waits for a decision: tools proposti, forms, connector calls, Google writes; the inbox ---
+	const waitsOn = approvalRoutes(route, { runtime, tenantId, sendWebAction: options.sendWebAction, runConnectorAction: options.runConnectorAction, google: options.google, board: options.board, log: options.log, instanceAccess, approverOf, usageSummary });
 
 	// --- owner: an instance's computer and screen, settings, primi passi, the sites it reads ---
 	settingsRoutes(route, { runtime, tenantId, computer: options.computer, desktop: options.desktop, people: options.people, defaultInstructions: options.defaultInstructions, browser: options.browser, connectedChannels: options.connectedChannels, connectors: options.connectors, search: options.search, voice: options.voice, speech: options.speech, images: options.images, knownInstance, instanceAccess, channelOf, personaOf, deletable });

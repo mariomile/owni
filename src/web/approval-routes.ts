@@ -1,16 +1,14 @@
-import { randomUUID } from "node:crypto";
 import { WebActionError } from "../core/web-actions.ts";
 import { cardView, decideGoogleAction, GoogleActionError } from "../core/google-actions.ts";
 import { connectorAction, decide, isApprover, NotAnApprover, toolProposal, type Approver, webAction } from "../core/approvals.ts";
 import { ConnectorActionError } from "../core/connector-actions.ts";
-import type { Pratica } from "../core/practice.ts";
 import type { InstanceRecord } from "../core/registry.ts";
 import type { OwniRuntime } from "../core/runtime.ts";
 import type { Person } from "./auth.ts";
 import { type AddRoute, HttpError, readJson } from "./http.ts";
 import type { WebAppOptions } from "./server.ts";
 
-export type ApprovalRoutesDeps = Pick<WebAppOptions, "segreterie" | "sendWebAction" | "runConnectorAction" | "google" | "board" | "log"> & {
+export type ApprovalRoutesDeps = Pick<WebAppOptions, "sendWebAction" | "runConnectorAction" | "google" | "board" | "log"> & {
 	readonly runtime: OwniRuntime;
 	readonly tenantId: string;
 	readonly instanceAccess: (person: Person, instanceId: string) => Promise<{ readonly record: InstanceRecord; readonly member: boolean }>;
@@ -21,7 +19,7 @@ export type ApprovalRoutesDeps = Pick<WebAppOptions, "segreterie" | "sendWebActi
 
 /**
  * What waits for a person's decision (ADR 0011, 0021, 0025): tools proposti, forms to send,
- * connector calls, writes to Google, the segreteria's pratiche; and the inbox that gathers them.
+ * connector calls, and writes to Google; and the inbox that gathers them.
  * Returns whether an agente waits for a person, for the agente's status (ADR 0125).
  */
 export function approvalRoutes(route: AddRoute, options: ApprovalRoutesDeps): (person: Person, agent: InstanceRecord) => Promise<boolean> {
@@ -94,47 +92,22 @@ export function approvalRoutes(route: AddRoute, options: ApprovalRoutesDeps): (p
 		return { action: cardView(await decideGoogleAction(runtime, tenantId, instance, id, decision, p.id, run(instance), options.log)) };
 	});
 
-	// --- segreteria ---
-	const publicPractices = (all: readonly Pratica[]) => [...all].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).map(({ mail: _mail, ...p }) => p);
-	route("GET", "/api/instances/:id/pratiche", "person", async ({ person, params }) => {
-		await instanceAccess(person, params[0]);
-		const service = options.segreterie?.get(params[0]);
-		if (service === undefined) throw new HttpError(404, "Questo agente non è una segreteria");
-		const all = await service.practices.list();
-		return { pratiche: publicPractices(all) };
-	});
-	route("POST", "/api/instances/:id/pratiche/:pid/action", "person", async ({ person: p, params, req }) => {
-		await instanceAccess(p, params[0]);
-		const service = options.segreterie?.get(params[0]);
-		if (service === undefined) throw new HttpError(404, "Questo agente non è una segreteria");
-		if (!(await isApprover(runtime, tenantId, params[0], approverOf(p)))) throw new HttpError(403, "Non sei un approvatore di questo agente");
-		const body = (await readJson(req)) as { action?: string; text?: string; requestId?: string; draftVersion?: number };
-		if (body.action !== "approve" && body.action !== "edit" && body.action !== "discard") throw new HttpError(400, "action: approve | edit | discard");
-		const result = await service.act({ userId: `web:${p.id}` }, params[1], body.action, {
-			...(typeof body.text === "string" ? { text: body.text } : {}),
-			...(typeof body.draftVersion === "number" ? { draftVersion: body.draftVersion } : {}),
-			actionId: typeof body.requestId === "string" ? body.requestId.slice(0, 80) : randomUUID(),
-		});
-		return { result: result.kind === "handled" ? { kind: "handled", sent: result.sent, status: result.pratica.status } : result };
-	});
-
 	// The inbox and rail share the same eligible objects across every visible instance. Counts
 	// skip the public payload projections; no source failure is turned into an empty queue.
 	const pendingOf = async (p: Person, r: InstanceRecord, now: Date) => {
 		const approver = await mayDecideAll(p, r.id);
-		const [allWeb, allConnectors, allGoogle, proposals, practices] = await Promise.all([
+		const [allWeb, allConnectors, allGoogle, proposals] = await Promise.all([
 			runtime.webActions(tenantId, r.id).list(now),
 			runtime.connectorActions(tenantId, r.id).list(now),
 			runtime.googleActions(tenantId, r.id).list(now),
 			approver ? runtime.proposals(tenantId, r.id).list() : [],
-			approver ? (options.segreterie?.get(r.id)?.practices.list() ?? []) : [],
 		]);
 		const webActions = approver ? allWeb : allWeb.filter((a) => a.requester === `web:${p.id}`);
 		const connectorActions = approver ? allConnectors : allConnectors.filter((a) => a.requester === `web:${p.id}`);
 		const googleActions = allGoogle.filter((a) => a.personId === p.id);
-		let pending = practices.filter((a) => a.status === "draft_ready").length;
+		let pending = 0;
 		for (const items of [proposals, webActions, connectorActions, googleActions]) pending += items.filter((a) => a.status === "pending").length;
-		return { approver, proposals, webActions, connectorActions, googleActions, practices, pending };
+		return { approver, proposals, webActions, connectorActions, googleActions, pending };
 	};
 	const collectApprovals = async (p: Person, includeGroups: boolean) => {
 		const visible = (await runtime.registry.listInstances(tenantId)).filter((r) => p.role === "owner" || (r.allowedUsers.web ?? []).includes(p.id));
@@ -142,7 +115,7 @@ export function approvalRoutes(route: AddRoute, options: ApprovalRoutesDeps): (p
 		let pendingApprovals = 0;
 		const now = new Date();
 		for (const r of visible) {
-			const { approver, proposals, webActions, connectorActions, googleActions, practices, pending } = await pendingOf(p, r, now);
+			const { approver, proposals, webActions, connectorActions, googleActions, pending } = await pendingOf(p, r, now);
 			pendingApprovals += pending;
 			if (includeGroups) groups.push({
 				instance: { id: r.id, name: r.name, isApprover: approver },
@@ -150,7 +123,6 @@ export function approvalRoutes(route: AddRoute, options: ApprovalRoutesDeps): (p
 				webActions,
 				connectorActions,
 				googleActions: googleActions.map(cardView),
-				pratiche: publicPractices(practices),
 			});
 		}
 		return { groups, pendingApprovals };

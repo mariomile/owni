@@ -27,7 +27,7 @@ describe("persona (ADR 0041)", () => {
 		expect(withPersona(undefined, "Owni", { named: true })).toBeUndefined();
 		// Named by a script, before agenti had names: it keeps presenting itself as before.
 		expect(withPersona("Sei Owni.", "Telegram (default)", undefined)).toBe("Sei Owni.");
-		expect(withPersona("Sei Owni.", "Segreteria (acme)", {})).toBe("Sei Owni.");
+		expect(withPersona("Sei Owni.", "Ops (acme)", {})).toBe("Sei Owni.");
 	});
 
 	it("keeps a name on one line, without our quote marks", () => {

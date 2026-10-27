@@ -44,7 +44,7 @@ Regole verificate da `test/boundaries.test.ts`:
 
 - **Owner**: chi installa e gestisce Owni (Buildrs o il reparto IT del cliente on-prem). Oggi agisce via codice sul `TenantRegistry`; in futuro tramite una dashboard owner che userà la stessa API.
 - **Tenant**: un cliente. Confine di isolamento per dati, segreti, memoria e audit.
-- **Instance**: un agente di un tenant. Ha il suo modello, la sua egress policy, le sue istruzioni e il suo storage durevole. Un tenant può avere più istanze (es. "segreteria commerciale" e "assistente interno").
+- **Instance**: un agente di un tenant. Ha il suo modello, la sua egress policy, le sue istruzioni e il suo storage durevole. Un tenant può avere più istanze (es. "assistente interno" e "amministrazione").
 
 ### Layout su disco
 
@@ -289,7 +289,7 @@ Ogni canale è un `ChannelAdapter` con un `name` che la policy dell'istanza deve
 | Desktop | stessa API della web app, client nativo | nessun adapter separato se parla con l'API |
 | Mobile | stessa API, notifiche push come canale di uscita | push = adapter solo `send` |
 
-Due estensioni previste dell'interfaccia, da fare quando arriva il primo canale che le richiede: streaming di risposte parziali e azioni strutturate (pulsanti Approva/Scarta per l'human-in-the-loop del caso d'uso segreteria commerciale).
+Due estensioni previste dell'interfaccia, da fare quando arriva il primo canale che le richiede: streaming di risposte parziali e azioni strutturate (pulsanti Approva/Scarta per l'human-in-the-loop).
 
 ## 7. Rischi di Pi Durable sperimentale
 

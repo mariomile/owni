@@ -12,8 +12,6 @@ export type BoardRoutesDeps = {
 	readonly tenantId: string;
 	readonly people: PeopleStore;
 	readonly board: { readonly store: BoardStore; readonly work: BoardWork; readonly routines?: RoutineStore } | undefined;
-	/** Segreterie take no schede. */
-	readonly segreterie: ReadonlyMap<string, unknown> | undefined;
 	/** The agente's status for this person (ADR 0125), shown next to the assignee. */
 	readonly agentNow: (agent: InstanceRecord, person: Person) => Promise<{ readonly status: AgentStatus; readonly statusText: string }>;
 };
@@ -22,12 +20,12 @@ export type BoardRoutesDeps = {
  * The board in the console (ADR 0050). The owner sees every scheda; a member those they created
  * or work on, and those of the agenti they can talk to.
  */
-export function boardRoutes(route: AddRoute, { runtime, tenantId, people, board, segreterie, agentNow }: BoardRoutesDeps): void {
+export function boardRoutes(route: AddRoute, { runtime, tenantId, people, board, agentNow }: BoardRoutesDeps): void {
 	const boardOf = () => {
 		if (board === undefined) throw new HttpError(501, "Gli incarichi non sono disponibili su questo server");
 		return board;
 	};
-	const boardAgents = async () => (await runtime.registry.listInstances(tenantId)).filter((r) => !(segreterie?.has(r.id) ?? false));
+	const boardAgents = async () => runtime.registry.listInstances(tenantId);
 	/** The scheda, if this person sees it. */
 	const visibleCard = async (ref: string, p: Person) => {
 		const { store, work } = boardOf();

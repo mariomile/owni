@@ -10,31 +10,10 @@ export { modelApiKeySecret, TenantSecrets } from "./secrets.ts";
 export { createSlowCounter, type SlowCounterOptions } from "./tools/slow-counter.ts";
 
 export {
-	type FlowAction,
-	type LeadFields,
-	type LeadTitle,
-	type MailClassification,
-	type MissingField,
-	type Pratica,
-	type PraticaStatus,
-	PracticeStore,
-	type TenantSegreteriaConfig,
-	callbackData,
-	hashIdempotency,
-	newPraticaId,
-	parseCallbackData,
-	shortPraticaId,
-} from "./practice.ts";
-export {
 	DEFAULT_COST_CAPS,
 	estimateUsd,
 	romeDayKey,
-	TELEGRAM_HARD_CAP,
-	TELEGRAM_SOFT_CAP,
 	type CostCaps,
 	type UsageRecord,
 	UsageLedger,
 } from "./usage.ts";
-export { DEFAULT_MODEL_ROLES, FAUX_MODEL_ROLES, roleModel, type ModelRoles } from "./model-routing.ts";
-export { createMailTools } from "./tools/mail-tools.ts";
-export { createCrmTools } from "./tools/crm-tools.ts";

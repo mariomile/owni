@@ -72,7 +72,6 @@ export type ToolsWiring = {
 	readonly connectorStore: (instance: string) => ConnectorStore;
 	readonly proposeConnectorAction: (instance: string, input: Parameters<NonNullable<McpConnectionsOptions["actions"]>["propose"]>[0]) => Promise<string>;
 	readonly policyOf: (record: InstanceRecord) => () => Promise<InstanceRecord["egress"]>;
-	readonly segreteriaId: string | undefined;
 	readonly board: BoardStore;
 	readonly boardWork: BoardWork;
 	readonly webChannels: ReadonlyMap<string, WebChannel>;
@@ -209,7 +208,7 @@ export async function assembleTools(w: ToolsWiring, record: InstanceRecord): Pro
 			self: record.id,
 			store: w.board,
 			work: w.boardWork,
-			agents: async () => (await runtime.registry.listInstances(record.tenantId)).filter((r) => r.id !== w.segreteriaId).map((r) => ({ id: r.id, name: r.name })),
+			agents: async () => (await runtime.registry.listInstances(record.tenantId)).map((r) => ({ id: r.id, name: r.name })),
 			personOf: (thread) => (thread.channel === "web" ? WebChannel.ownerOf(thread.threadId) : undefined),
 		}),
 		...createAgentTools({

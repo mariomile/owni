@@ -19,7 +19,6 @@ COPY package.json pnpm-lock.yaml ./
 RUN pnpm install --prod --frozen-lockfile && pnpm store prune
 
 COPY src ./src
-COPY evals/segreteria/checks.json ./evals/segreteria/checks.json
 COPY LICENSE NOTICE ./
 
 # Run as the unprivileged user of the image; /data must be writable by it.

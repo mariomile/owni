@@ -1044,16 +1044,6 @@ dialog.skill-dialog { max-width: 640px; max-height: calc(100dvh - 48px); overflo
 .hints.ideas button:nth-child(n + 6) { animation-delay: 390ms; }
 @keyframes chip-in { from { opacity: 0; transform: translateY(6px) scale(0.97); } }
 
-/* ---------- segreteria ---------- */
-.pratiche { display: grid; grid-template-columns: 320px minmax(0, 1fr); gap: 16px; align-items: start; }
-.pratiche .list { max-height: calc(100vh - 150px); overflow: auto; }
-.pratiche .list button { display: block; width: 100%; text-align: left; border: 0; border-bottom: 1px solid var(--border); background: transparent; padding: 11px 14px; cursor: default; transition: background 0.15s var(--ease); }
-.pratiche .list button:last-child { border-bottom: 0; }
-.pratiche .list button:hover { background: var(--hover); }
-.pratiche .list button[aria-current="true"] { background: var(--active); }
-.pratiche .list .who-line { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
-.pratiche .list .who-line b { font-weight: 550; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.pratiche .list .subj { color: var(--fg-3); font-size: 13px; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .lead { display: grid; grid-template-columns: 140px 1fr; gap: 8px 14px; font-size: 13.5px; margin: 0; }
 .lead dt { color: var(--fg-3); }
 .lead dd { margin: 0; }
@@ -1136,8 +1126,7 @@ dialog.palette li.none { color: var(--fg-3); cursor: default; }
 
 /* ---------- responsive ---------- */
 @media (max-width: 1100px) {
-	.pratiche, .grid-2 { grid-template-columns: 1fr; }
-	.pratiche .list { max-height: 320px; }
+	.grid-2 { grid-template-columns: 1fr; }
 }
 @media (max-width: 860px) {
 	/* The top bar keeps its own height; a short page does not stretch it to fill the screen. */

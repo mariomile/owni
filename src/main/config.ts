@@ -78,61 +78,6 @@ function nonEmpty(value: string | undefined): string | undefined {
 	return trimmed === undefined || trimmed === "" ? undefined : trimmed;
 }
 
-export type SegreteriaConfig = {
-	readonly telegramBotToken: string;
-	/** "anthropic" (Haiku reads, Sonnet drafts) or "faux" (heuristics, no key). */
-	readonly modelProvider: "anthropic" | "faux";
-	readonly anthropicApiKey: string | undefined;
-	readonly gmail: { readonly clientId: string; readonly clientSecret: string; readonly refreshToken: string };
-	readonly hubspotAccessToken: string;
-	readonly salesUserIds: readonly string[];
-	readonly dataDir: string;
-	readonly tenantId: string;
-	readonly instanceId: string;
-	readonly pollSeconds: number;
-	readonly requireVatNumber: boolean;
-};
-
-/** Reads the configuration of `pnpm dev:segreteria`. Throws ConfigError naming each missing variable. */
-export function loadSegreteriaConfig(env: Readonly<Record<string, string | undefined>>): SegreteriaConfig {
-	const missing: string[] = [];
-	const need = (name: string): string => {
-		const value = nonEmpty(env[name]);
-		if (value === undefined) missing.push(name);
-		return value ?? "";
-	};
-	const telegramBotToken = need("TELEGRAM_BOT_TOKEN");
-	const provider = nonEmpty(env.OWNI_SEGRETERIA_MODEL) ?? "anthropic";
-	if (provider !== "anthropic" && provider !== "faux") throw new ConfigError(`OWNI_SEGRETERIA_MODEL="${provider}" is not supported. Use anthropic or faux.`);
-	const anthropicApiKey = provider === "anthropic" ? need("ANTHROPIC_API_KEY") : undefined;
-	const gmail = { clientId: need("GMAIL_CLIENT_ID"), clientSecret: need("GMAIL_CLIENT_SECRET"), refreshToken: need("GMAIL_REFRESH_TOKEN") };
-	const hubspotAccessToken = need("HUBSPOT_ACCESS_TOKEN");
-	const allowedRaw = need("OWNI_TELEGRAM_ALLOWED_USERS");
-	const salesUserIds = allowedRaw.split(",").map((id) => id.trim()).filter((id) => id !== "");
-	const invalid = salesUserIds.filter((id) => !/^\d+$/.test(id));
-	if (invalid.length > 0) throw new ConfigError(`OWNI_TELEGRAM_ALLOWED_USERS must be a comma-separated list of numeric Telegram user IDs; invalid: ${invalid.join(", ")}`);
-	if (missing.length > 0) {
-		throw new ConfigError(
-			`Missing environment variable${missing.length > 1 ? "s" : ""}: ${missing.join(", ")}. Set ${missing.length > 1 ? "them" : "it"} in .env (see .env.example).`,
-		);
-	}
-	const pollSeconds = Number(nonEmpty(env.OWNI_MAIL_POLL_SECONDS) ?? "60");
-	if (!Number.isInteger(pollSeconds) || pollSeconds < 10) throw new ConfigError("OWNI_MAIL_POLL_SECONDS must be an integer of at least 10");
-	return {
-		telegramBotToken,
-		modelProvider: provider,
-		anthropicApiKey: provider === "anthropic" ? anthropicApiKey : undefined,
-		gmail,
-		hubspotAccessToken,
-		salesUserIds,
-		dataDir: nonEmpty(env.OWNI_DATA_DIR) ?? "data",
-		tenantId: nonEmpty(env.OWNI_TENANT_ID) ?? "default",
-		instanceId: nonEmpty(env.OWNI_SEGRETERIA_INSTANCE_ID) ?? "segreteria",
-		pollSeconds,
-		requireVatNumber: /^(1|true|yes|si|sì)$/i.test(nonEmpty(env.OWNI_REQUIRE_VAT_NUMBER) ?? ""),
-	};
-}
-
 export type OwniConfig = {
 	/** Opt-in access to official CLI subscriptions; only for a local single-tenant app. */
 	readonly localProviders?: boolean;
@@ -155,7 +100,6 @@ export type OwniConfig = {
 				readonly webhookSecret: string | undefined;
 		  }
 		| undefined;
-	readonly segreteria: SegreteriaConfig | undefined;
 	/** Running as a cell of Owni Cloud: set by the control plane. */
 	readonly cell: { readonly secret: string | undefined };
 	/** The OAuth client people connect their Google account with (Gmail and Calendar, read only). */
@@ -391,7 +335,7 @@ export function loadDesktopConfig(env: Readonly<Record<string, string | undefine
 	return { kind, url: serviceUrl("OWNI_DESKTOP_URL", url.replace(/\/+$/, ""), "https://schermo.example:3211"), token };
 }
 
-/** Reads the configuration of `pnpm start`. Only the model key is required; Telegram and the segreteria are optional. */
+/** Reads the configuration of `pnpm start`. Only the model key is required; Telegram is optional. */
 export function loadOwniConfig(env: Readonly<Record<string, string | undefined>>): OwniConfig {
 	const missing: string[] = [];
 	const { modelProvider, modelId, keyEnv } = modelChoice(env);
@@ -517,22 +461,6 @@ export function loadOwniConfig(env: Readonly<Record<string, string | undefined>>
 		throw new ConfigError(`OWNI_TIME_ZONE="${timeZone}" is not a time zone`);
 	}
 	if (missing.length > 0) throw new ConfigError(`Missing environment variable${missing.length > 1 ? "s" : ""}: ${missing.join(", ")}. Set ${missing.length > 1 ? "them" : "it"} in .env (see .env.example).`);
-	const segreteriaToken = nonEmpty(env.OWNI_SEGRETERIA_TELEGRAM_BOT_TOKEN);
-	let segreteria: SegreteriaConfig | undefined;
-	if (segreteriaToken !== undefined) {
-		try {
-			segreteria = loadSegreteriaConfig({
-				...env,
-				TELEGRAM_BOT_TOKEN: segreteriaToken,
-				OWNI_TELEGRAM_ALLOWED_USERS: env.OWNI_SEGRETERIA_SALES,
-				OWNI_SEGRETERIA_MODEL: modelProvider === "faux" ? "faux" : "anthropic",
-			});
-		} catch (error) {
-			// Same checks as dev:segreteria, with the names this process reads.
-			if (error instanceof ConfigError) throw new ConfigError(error.message.replaceAll("OWNI_TELEGRAM_ALLOWED_USERS", "OWNI_SEGRETERIA_SALES").replaceAll("TELEGRAM_BOT_TOKEN", "OWNI_SEGRETERIA_TELEGRAM_BOT_TOKEN"));
-			throw error;
-		}
-	}
 	return {
 		dataDir: nonEmpty(env.OWNI_DATA_DIR) ?? "data",
 		localProviders,
@@ -545,7 +473,6 @@ export function loadOwniConfig(env: Readonly<Record<string, string | undefined>>
 		timeZone,
 		web: { host: nonEmpty(env.OWNI_WEB_HOST) ?? "127.0.0.1", port, publicUrl },
 		telegram,
-		segreteria,
 		cell: { secret: cellSecret },
 		google,
 		chromiumPath: nonEmpty(env.OWNI_CHROMIUM_PATH),

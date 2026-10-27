@@ -9,8 +9,8 @@ export type UsageRecord = {
 	readonly at: string;
 	readonly provider: string;
 	readonly model: string;
-	/** "agent": a turn of an agente (ADR 0098); the others are the segreteria's steps. */
-	readonly role: "extract" | "draft" | "classify" | "agent" | "other";
+	/** "agent": a turn of an agente (ADR 0098). */
+	readonly role: "agent";
 	readonly inputTokens: number;
 	readonly outputTokens: number;
 	readonly estimatedUsd: number;
@@ -217,23 +217,6 @@ function parseRecords(log: string, path: string): UsageRecord[] {
 		}
 	});
 }
-
-export const TELEGRAM_SOFT_CAP = `Limite soft di spesa · oggi
-
-Questo tenant ha superato circa 5 USD di modelli nel giorno civile.
-Continuo a preparare le bozze già in corso. Le nuove mail restano in coda e ti avviso se il ritmo non cala.
-Se serve alzare il tetto, chiedilo all'owner.`;
-
-export const TELEGRAM_HARD_CAP = `Limite hard di spesa · oggi
-
-Ho smesso di usare il modello per questo tenant: raggiunto il tetto di circa 20 USD nel giorno civile.
-Nessuna nuova bozza partirà fino a domani (o finché l'owner non alza il tetto).
-Le mail in arrivo restano salvate e non vengono inviate risposte automatiche.
-Pratiche già in approvazione: puoi ancora Approvare una bozza già pronta (parte solo l'invio mail).`;
-
-export const TELEGRAM_HARD_CAP_REGEN = `Non posso rigenerare la bozza: tetto di spesa giornaliero raggiunto.
-Puoi Scartare, oppure Approvare la bozza già mostrata (v{n}) senza rigenerarla.`;
-
 export type TurnStats = {
 	readonly turns: number;
 	readonly inputTokens: number;

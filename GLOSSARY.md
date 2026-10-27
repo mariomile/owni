@@ -55,7 +55,7 @@ Un agente di un tenant, con il suo modello, le sue conversazioni, i suoi connett
 _Avoid_: bot, profilo; «istanza» nei testi per le persone
 
 **Agente**:
-Un'istanza vista da chi la usa: ha un nome, un volto, un compito in una riga e un tono, e con loro la sua memoria, i suoi task, file, connettori e bot. Ognuno si presenta con il suo nome. L'owner lo elimina da Impostazioni scrivendone il nome (tranne il principale e la segreteria). Vedi ADR 0041 e 0046.
+Un'istanza vista da chi la usa: ha un nome, un volto, un compito in una riga e un tono, e con loro la sua memoria, i suoi task, file, connettori e bot. Ognuno si presenta con il suo nome. L'owner lo elimina da Impostazioni scrivendone il nome (tranne il principale). Vedi ADR 0041 e 0046.
 _Avoid_: bot, assistente (quando si intende uno degli agenti), GPT
 
 **Board**:
@@ -107,7 +107,7 @@ Una persona che può parlare con un'istanza su un canale. Chi non è nella lista
 _Avoid_: user, membro
 
 **Approvatore**:
-Utente consentito che può approvare le azioni di un'istanza. Nella segreteria è il commerciale.
+Utente consentito che può approvare le azioni di un'istanza.
 _Avoid_: admin, supervisore
 
 **Link personale**:
@@ -188,7 +188,7 @@ Un'azione che il modello di un'istanza può chiamare. Può essere integrato, ven
 _Avoid_: funzione, skill, plugin
 
 **Connettore**:
-Il collegamento configurato tra un'istanza e un sistema esterno (un server MCP, Gmail, HubSpot), con i suoi segreti e i suoi host. Porta dei tool all'istanza.
+Il collegamento configurato tra un'istanza e un sistema esterno (un server MCP, Google, un'API), con i suoi segreti e i suoi host. Porta dei tool all'istanza.
 _Avoid_: integrazione, adapter (fuori dal codice), plugin
 
 **Tool proposto**:
@@ -260,7 +260,7 @@ Una scadenza di fattura come «60 gg d.f.f.m.»: Owni conta i giorni dalla data 
 _Avoid_: fine mese commerciale, scadenza a 30 giorni come mese
 
 **Partita IVA da ricontrollare**:
-Una partita IVA scritta dal cliente in una mail che non supera il controllo formale: la segreteria non la salva e nella bozza chiede di ricontrollarla (dato mancante `vatNumberInvalid`). Non usa il VIES. Vedi ADR 0049.
+Una partita IVA scritta dal cliente in una mail che non supera il controllo formale: `vat_check` la segnala come formalmente sbagliata. Non usa il VIES. Vedi ADR 0047.
 _Avoid_: partita IVA inesistente, partita IVA non attiva
 
 **Fattura elettronica**:
@@ -360,23 +360,6 @@ _Avoid_: log
 **Tetto di spesa**:
 Il limite giornaliero di spesa in modelli di un tenant: oltre quello soft si avvisa, oltre quello hard si smette di chiamare il modello.
 _Avoid_: budget, quota
-
-## Segreteria commerciale
-
-**Segreteria**:
-Il primo caso d'uso: un'istanza che legge le richieste di preventivo arrivate per email, prepara il lead e la bozza di risposta e aspetta l'approvazione del commerciale.
-
-**Pratica**:
-Una richiesta di preventivo arrivata per email e tutto quello che ne segue, dalla lettura all'invio o allo scarto.
-_Avoid_: ticket, caso, lead (il lead è nel CRM)
-
-**Bozza**:
-La risposta al cliente preparata dall'istanza. Ha una versione che cresce a ogni modifica e non parte senza approvazione.
-_Avoid_: draft (in italiano), proposta
-
-**Scheda** (della segreteria):
-Il messaggio a un approvatore con la pratica, la bozza e i pulsanti Approva, Modifica, Scarta.
-_Avoid_: notifica (quando ha pulsanti), card
 
 **Connettore in un clic**:
 Un servizio del catalogo (Notion, Linear, Jira, Stripe, GitHub e altri) che l'owner collega dalla pagina Connettori entrando con il suo account, o incollando un token. L'accesso resta sul server di Owni e si rinnova da solo; quando non si rinnova il connettore è «Da collegare». Vedi ADR 0024.

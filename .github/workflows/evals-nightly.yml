@@ -16,14 +16,8 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Deterministic evals
-        run: pnpm eval:segreteria && pnpm eval:agente
-      - name: Real models + LLM judge (skipped without OWNI_JUDGE_MODEL_KEY, an Anthropic key)
-        run: pnpm eval:segreteria:judge
-        env:
-          OWNI_JUDGE_MODEL_KEY: ${{ secrets.OWNI_JUDGE_MODEL_KEY }}
+        run: pnpm eval:agente
       - name: General agent with the real model (skipped without OWNI_JUDGE_MODEL_KEY)
-        # Runs also when the segreteria judge failed: the two measure different things.
-        if: success() || failure()
         run: pnpm eval:agente:real
         env:
           OWNI_JUDGE_MODEL_KEY: ${{ secrets.OWNI_JUDGE_MODEL_KEY }}
@@ -41,16 +35,6 @@ jobs:
             fi
           done
           exit "$missing"
-      - name: Upload judge report
-        if: always()
-        # A full artifact quota must not turn the evals red: the report is a convenience.
-        continue-on-error: true
-        uses: actions/upload-artifact@v7
-        with:
-          name: segreteria-judge-report
-          path: evals/segreteria/last-report/
-          if-no-files-found: ignore
-          retention-days: 14
       - name: Upload agent report
         if: always()
         uses: actions/upload-artifact@v7

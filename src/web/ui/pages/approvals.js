@@ -84,7 +84,7 @@ function approvalGroup(group) {
 	const pending = proposals.filter((p) => p.status === "pending");
 	const decided = proposals.filter((p) => p.status !== "pending").reverse().slice(0, 20);
 	const mark = (type, item, el) => {
-		el.dataset.approval = `${type}:${inst.id}:${item.id ?? item.praticaId}`;
+		el.dataset.approval = `${type}:${inst.id}:${item.id}`;
 		el.querySelector("header > div")?.append(h("small.dossier-meta", inst.name));
 		return el;
 	};
@@ -142,13 +142,8 @@ function approvalGroup(group) {
 	const afterGoogle = redraw;
 	const pendingGoogle = googleActions.filter((a) => a.status === "pending").map((a) => mark("google", a, googleActionCard(inst, a, afterGoogle)));
 	const decidedGoogle = googleActions.filter((a) => a.status !== "pending").reverse().slice(0, 20).map((a) => mark("google", a, googleActionCard(inst, a, afterGoogle)));
-	const practices = group.pratiche.filter((practice) => practice.status === "draft_ready").map((practice) => mark("pratica", practice, h("article.card.pad.dossier",
-		h("header", h("div", h("h2", practice.lead.rawSubject || "Risposta commerciale da autorizzare"), h("small.dossier-meta", "Pratica commerciale · Invio da autorizzare"))),
-		h("p", practice.lead.fullName ?? practice.lead.company ?? practice.lead.email ?? "Richiesta commerciale"),
-		h("a.btn", { href: instanceHref("segreteria", [practice.praticaId], inst.id) }, "Apri la pratica e controlla la bozza"),
-	)));
 	return {
-		pending: [...practices, ...pendingGoogle, ...pendingConnector, ...pendingActions.map((a) => mark("web", a, actionCard(a))), ...pending.map((p) => mark("proposal", p, card(p)))],
+		pending: [...pendingGoogle, ...pendingConnector, ...pendingActions.map((a) => mark("web", a, actionCard(a))), ...pending.map((p) => mark("proposal", p, card(p)))],
 		decided: [...decidedGoogle, ...decidedConnector, ...decidedActions.slice(0, 20).map((a) => mark("web", a, actionCard(a))), ...decided.map((p) => mark("proposal", p, card(p)))],
 	};
 }

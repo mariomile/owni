@@ -12,7 +12,7 @@ export type OrgAgent = {
 
 export type OrgRoutesDeps = {
 	readonly store: OrgStore;
-	/** The agenti that may be in the organigramma: all but the segreteria. */
+	/** The agenti in the organigramma: all of them. */
 	readonly agents: () => Promise<readonly OrgAgent[]>;
 	/** Set the agenti that may write to `id`. */
 	readonly allow: (person: Person, id: string, from: readonly string[]) => Promise<unknown>;

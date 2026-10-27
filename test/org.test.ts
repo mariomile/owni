@@ -41,7 +41,7 @@ describe("the organigramma (ADR 0117)", () => {
 				return (error as Error).message;
 			}
 		};
-		expect(fails({ teams: [], agents: { segreteria: { role: "X" } } })).toBe("Agente sconosciuto: segreteria");
+		expect(fails({ teams: [], agents: { fantasma: { role: "X" } } })).toBe("Agente sconosciuto: fantasma");
 		expect(fails({ teams: [{ id: "A B", name: "X" }] })).toBe("ID di squadra non valido");
 		expect(fails({ teams: [{ id: "a", name: "Vendite" }, { id: "b", name: "vendite" }] })).toBe("Due squadre si chiamano «vendite»");
 		expect(fails({ teams: [{ id: "a", name: " " }] })).toBe("Ogni squadra ha bisogno di un nome");

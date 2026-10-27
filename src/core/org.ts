@@ -50,8 +50,7 @@ function line(value: unknown, max: number, what: string): string {
 }
 
 /**
- * The organigramma as the owner sent it, checked against the agenti that exist and may be in it
- * (not the segreteria). Empty places are dropped; a mistake throws an OrgError with words for the console.
+ * The organigramma as the owner sent it, checked against the agenti that exist. Empty places are dropped; a mistake throws an OrgError with words for the console.
  */
 export function checkOrg(input: unknown, agents: ReadonlyMap<string, string>): Org {
 	if (typeof input !== "object" || input === null) throw new OrgError("Organigramma non valido");
@@ -142,8 +141,8 @@ export function withoutAgent(org: Org, gone: string): Org {
 }
 
 /**
- * The organigramma with only the agenti that are still there and may be in it: an agente deleted
- * while a save was running, or turned into the segreteria, does not block the next save.
+ * The organigramma with only the agenti that are still there: an agente deleted
+ * while a save was running does not block the next save.
  */
 export function onlyKnown(org: Org, agents: ReadonlyMap<string, string>): Org {
 	let clean = org;

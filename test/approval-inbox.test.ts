@@ -2,22 +2,16 @@ import { mkdir, rename, rm, writeFile } from "node:fs/promises";
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { TelegramAdapter } from "../src/channels/telegram.ts";
-import { FakeCrmAdapter } from "../src/connectors/crm-fake.ts";
-import { FakeMailAdapter } from "../src/connectors/mail-fake.ts";
 import { ConnectorStore } from "../src/connectors/mcp.ts";
 import { piDurableEngine } from "../src/core/adapters/pi-durable.ts";
 import { ConnectorActionStore } from "../src/core/connector-actions.ts";
 import { GoogleActionStore } from "../src/core/google-actions.ts";
 import { instanceId, tenantId } from "../src/core/ids.ts";
-import { FAUX_MODEL_ROLES } from "../src/core/model-routing.ts";
 import { instanceDir } from "../src/core/paths.ts";
-import { type Pratica, PracticeStore } from "../src/core/practice.ts";
 import { ProposalStore } from "../src/core/proposals.ts";
 import { OwniRuntime } from "../src/core/runtime.ts";
 import { UsageLedger } from "../src/core/usage.ts";
 import { WebActionStore } from "../src/core/web-actions.ts";
-import { SegreteriaService } from "../src/segreteria/service.ts";
 import { PeopleStore, SessionStore } from "../src/web/auth.ts";
 import { WebChannel } from "../src/web/channel.ts";
 import { createWebApp } from "../src/web/server.ts";
@@ -41,7 +35,6 @@ async function setup() {
 	const outsider = await people.add("Outsider", "member");
 	const dir = (id: string) => instanceDir(dataDir, tenantId("acme"), instanceId(id));
 	const channels = new Map<string, WebChannel>();
-	const segreterie = new Map<string, SegreteriaService>();
 	for (const id of ["ops", "sales", "hidden"]) {
 		await runtime.registry.createInstance("acme", {
 			id, name: id.toUpperCase(), model: FAUX_MODEL,
@@ -51,15 +44,9 @@ async function setup() {
 			approvers: { web: [anna.person.id, outsider.person.id] },
 		});
 		channels.set(id, new WebChannel({ tenantId: "acme", instanceId: id }, dir(id)));
-		segreterie.set(id, new SegreteriaService({
-			tenantId: "acme", instanceId: id, instanceDir: dir(id),
-			mail: new FakeMailAdapter(), crm: new FakeCrmAdapter(),
-			telegram: new TelegramAdapter({ token: "fake", tenantId: "acme", instanceId: id, fetch: async () => { throw new Error("No external calls in inbox tests"); } }),
-			audit: runtime.audit("acme"), usage: new UsageLedger(tenantDir), roles: FAUX_MODEL_ROLES, salesUserIds: [],
-		}));
 	}
 	const server = createWebApp({
-		runtime, tenantId: "acme", people, sessions: new SessionStore(tenantDir), channels, segreterie,
+		runtime, tenantId: "acme", people, sessions: new SessionStore(tenantDir), channels,
 		connectors: (id) => new ConnectorStore(dir(id)), connectorStatus: () => [],
 		usage: new UsageLedger(tenantDir), uiDir: join(import.meta.dirname, "..", "src", "web", "ui"),
 		secureCookies: false, defaultTimeZone: "Europe/Rome",
@@ -86,24 +73,15 @@ async function setup() {
 		const webActions = await runtime.webActions("acme", id).propose({ pageUrl: "https://example.test", form: 0, action: "https://example.test/send", values: { text: "Quote" }, button: 0, shown: [["text", "Quote"]], fingerprint: "form", reason: "Send quote", requester: `web:${personId}` });
 		const connectorActions = await runtime.connectorActions("acme", id).propose({ connectorId: "crm", connectorName: "CRM", server: "https://example.test", tool: "write", toolTitle: "Write", args: { text: "Quote" }, reason: "Save quote", destructive: false, requester: `web:${personId}` });
 		const googleActions = await runtime.googleActions("acme", id).propose({ kind: "mail.send", personId, account: `${personId}@example.test`, reason: "Send quote", mail: { to: ["customer@example.test"], cc: [], subject: "Quote", body: "Draft" } });
-		const now = new Date().toISOString();
-		const pratiche: Pratica = {
-			praticaId: "abcdef0123456789", tenantId: "acme", instanceId: id, status: "draft_ready", mailMessageId: "mail-1",
-			lead: { fullName: "Test Customer", email: "customer@example.test", productOrService: "Quote", missingFields: [], source: "email", rawSubject: "Request a quote", rawSnippet: "Snippet", receivedAt: now, mailMessageId: "mail-1" },
-			missingFields: [], draftSubject: "Quote", draftBody: "Draft", draftVersion: 1, createdAt: now, updatedAt: now,
-			mail: { messageId: "mail-1", from: "customer@example.test", subject: "Raw private mail", bodyText: "Raw private body", receivedAt: now },
-		};
-		await segreterie.get(id)!.practices.save(pratiche);
-		return { proposals, webActions, connectorActions, googleActions, pratiche };
+		return { proposals, webActions, connectorActions, googleActions };
 	};
-	return { runtime, owner, anna, luca, outsider, dir, channels, segreterie, base, as, seed };
+	return { runtime, owner, anna, luca, outsider, dir, channels, base, as, seed };
 }
 
 const actionSources = ["proposals", "webActions", "connectorActions", "googleActions"] as const;
-type Inbox = { groups: { instance: { id: string; name: string; isApprover: boolean }; pratiche: { praticaId: string; status: string }[] }[]; pendingApprovals: number };
+type Inbox = { groups: { instance: { id: string; name: string; isApprover: boolean } }[]; pendingApprovals: number };
 const pendingKeys = (inbox: Inbox) => inbox.groups.flatMap((group) => [
 	...actionSources.flatMap((source) => (group as any)[source].filter((item: any) => item.status === "pending").map((item: any) => `${group.instance.id}/${source}/${item.id}`)),
-	...group.pratiche.filter((p) => p.status === "draft_ready").map((p) => `${group.instance.id}/pratiche/${p.praticaId}`),
 ]);
 
 describe("personal approval inbox", () => {
@@ -116,7 +94,7 @@ describe("personal approval inbox", () => {
 		expect((await outsider("/api/console-summary")).body.pendingApprovals).toBe(0);
 	});
 
-	it("returns all six source shapes across two agents, with exactly the summary's pending membership regardless of selected agent", async () => {
+	it("returns all four source shapes across two agents, with exactly the summary's pending membership regardless of selected agent", async () => {
 		const h = await setup();
 		await h.seed("ops");
 		await h.seed("sales");
@@ -128,22 +106,20 @@ describe("personal approval inbox", () => {
 		expect(response.body.groups.map((g: any) => g.instance.id).sort()).toEqual(["ops", "sales"]);
 		const expected = [];
 		for (const group of response.body.groups) {
-			expect(Object.keys(group).sort()).toEqual(["instance", "pratiche", ...actionSources].sort());
+			expect(Object.keys(group).sort()).toEqual(["instance", ...actionSources].sort());
 			expect(group.instance).toEqual({ id: group.instance.id, name: group.instance.id.toUpperCase(), isApprover: true });
 			for (const [source, route, key] of [
 				["proposals", "proposals", "proposals"], ["webActions", "web-actions", "actions"],
 				["connectorActions", "connector-actions", "actions"],
-				["googleActions", "google-actions", "actions"], ["pratiche", "pratiche", "pratiche"],
+				["googleActions", "google-actions", "actions"],
 			] as const) {
 				const direct = (await anna(`/api/instances/${group.instance.id}/${route}`)).body[key];
 				expect(group[source]).toEqual(direct);
-				expected.push(...direct.map((item: any) => `${group.instance.id}/${source}/${item.id ?? item.praticaId}`));
+				expected.push(...direct.map((item: any) => `${group.instance.id}/${source}/${item.id}`));
 			}
-			expect(group.pratiche[0]).toMatchObject({ praticaId: "abcdef0123456789", lead: { rawSubject: "Request a quote", fullName: "Test Customer" } });
-			expect(group.pratiche[0]).not.toHaveProperty("mail");
 		}
 		expect(pendingKeys(response.body).sort()).toEqual(expected.sort());
-		expect(response.body.pendingApprovals).toBe(10);
+		expect(response.body.pendingApprovals).toBe(8);
 		expect((await anna("/api/console-summary")).body.pendingApprovals).toBe(pendingKeys(response.body).length);
 		for (const selected of ["ops", "sales", "hidden", "missing"]) {
 			expect((await anna(`/api/approvals?instance=${selected}`)).body).toEqual(response.body);
@@ -165,7 +141,7 @@ describe("personal approval inbox", () => {
 		expect(inbox.groups.map((g: any) => g.instance.id).sort()).toEqual(["ops", "sales"]);
 		for (const group of inbox.groups) {
 			expect(group.instance.isApprover).toBe(false);
-			expect([group.proposals, group.pratiche]).toEqual([[], []]);
+			expect(group.proposals).toEqual([]);
 			expect([...group.webActions, ...group.connectorActions].every((a: any) => a.requester === `web:${h.luca.person.id}`)).toBe(true);
 			expect(group.googleActions.every((a: any) => a.personId === h.luca.person.id)).toBe(true);
 		}
@@ -189,7 +165,7 @@ describe("personal approval inbox", () => {
 		const inbox = (await owner("/api/approvals")).body;
 		expect(inbox.groups.map((g: any) => g.instance.id).sort()).toEqual(["hidden", "ops", "sales"]);
 		expect(inbox.groups.flatMap((g: any) => g.googleActions).map((a: any) => a.personId)).toEqual([h.owner.person.id]);
-		expect(inbox.pendingApprovals).toBe(13);
+		expect(inbox.pendingApprovals).toBe(10);
 		expect((await owner("/api/console-summary")).body.pendingApprovals).toBe(pendingKeys(inbox).length);
 		expect((await owner(`/api/instances/ops/threads/${thread.id}`)).status).toBe(404);
 		expect((await owner("/api/instances/ops/threads")).body.threads).toEqual([]);
@@ -209,30 +185,28 @@ describe("personal approval inbox", () => {
 		}
 		const anna = await h.as(h.anna.token);
 		const inbox = (await anna("/api/approvals")).body;
-		expect(pendingKeys(inbox)).toHaveLength(10);
-		expect(new Set(pendingKeys(inbox)).size).toBe(10);
+		expect(pendingKeys(inbox)).toHaveLength(8);
+		expect(new Set(pendingKeys(inbox)).size).toBe(8);
 		for (const group of inbox.groups) for (const source of actionSources) expect(group[source][0].id).toBe(sharedId);
-		expect((await anna("/api/console-summary")).body.pendingApprovals).toBe(10);
+		expect((await anna("/api/console-summary")).body.pendingApprovals).toBe(8);
 	});
 
-	it("retains expired and rejected history without counting it, and counts only draft_ready practices", async () => {
+	it("retains expired and rejected history without counting it", async () => {
 		const h = await setup();
 		const seeded = await h.seed("ops");
 		await h.runtime.proposals("acme", "ops").decide(seeded.proposals.id, "rejected", { channel: "web", userId: h.anna.person.id });
 		const old = new Date(Date.now() - 25 * 3600_000);
 		await h.runtime.googleActions("acme", "ops").propose({ kind: "mail.send", personId: h.anna.person.id, account: "anna@example.test", reason: "Expired mail" }, old);
-		await h.segreterie.get("ops")!.practices.save({ ...seeded.pratiche, status: "awaiting_edit" });
 		const anna = await h.as(h.anna.token);
 		const inbox = (await anna("/api/approvals")).body;
 		const ops = inbox.groups.find((g: any) => g.instance.id === "ops");
 		expect(ops.proposals[0].status).toBe("rejected");
 		expect(ops.googleActions.map((a: any) => a.status).sort()).toEqual(["expired", "pending"]);
-		expect(ops.pratiche[0].status).toBe("awaiting_edit");
 		expect(inbox.pendingApprovals).toBe(3);
 		expect((await anna("/api/console-summary")).body.pendingApprovals).toBe(pendingKeys(inbox).length);
 	});
 
-	for (const [source, store] of [["proposals", ProposalStore], ["web", WebActionStore], ["MCP", ConnectorActionStore], ["Google", GoogleActionStore], ["practices", PracticeStore]] as const) {
+	for (const [source, store] of [["proposals", ProposalStore], ["web", WebActionStore], ["MCP", ConnectorActionStore], ["Google", GoogleActionStore]] as const) {
 		it(`fails the whole inbox and summary explicitly when ${source} cannot load`, async () => {
 			const h = await setup();
 			await h.seed("ops");
@@ -252,8 +226,8 @@ describe("personal approval inbox", () => {
 		await mkdir(join(h.dir("hidden"), "google-actions"), { recursive: true });
 		await writeFile(join(h.dir("hidden"), "google-actions", "012345abcdef.json"), "invalid JSON");
 		const anna = await h.as(h.anna.token);
-		expect((await anna("/api/approvals")).body.pendingApprovals).toBe(5);
-		expect((await anna("/api/console-summary")).body.pendingApprovals).toBe(5);
+		expect((await anna("/api/approvals")).body.pendingApprovals).toBe(4);
+		expect((await anna("/api/console-summary")).body.pendingApprovals).toBe(4);
 		const owner = await h.as(h.owner.token);
 		expect((await owner("/api/approvals")).status).toBe(500);
 		await rename(join(h.dir("hidden"), "google-actions", "012345abcdef.json"), join(h.dir("hidden"), "google-actions", ".ignored"));

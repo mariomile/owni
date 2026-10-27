@@ -3,7 +3,7 @@ import { DUPLICATE_NOTICE, splitText, TELEGRAM_MAX_TEXT, TelegramAdapter } from 
 import { ChannelRefused } from "../src/channels/types.ts";
 import type { InboundAction, InboundMessage } from "../src/channels/types.ts";
 import { connectChannel } from "../src/gateway.ts";
-import { ConfigError, loadOwniConfig, loadSegreteriaConfig, loadTelegramConfig } from "../src/main/config.ts";
+import { ConfigError, loadOwniConfig, loadTelegramConfig } from "../src/main/config.ts";
 import { runtimeWithInstance, waitFor } from "./helpers.ts";
 
 const TOKEN = "123456:TEST-TOKEN";
@@ -246,32 +246,6 @@ describe("gateway with several tenants", () => {
 		expect(acmeApi.calls.filter((c) => c.method === "sendMessage")).toHaveLength(1);
 		expect(globexApi.calls).toEqual([]);
 		await runtime.close();
-	});
-});
-
-describe("dev:segreteria configuration", () => {
-	const full = {
-		TELEGRAM_BOT_TOKEN: "t",
-		ANTHROPIC_API_KEY: "k",
-		GMAIL_CLIENT_ID: "c",
-		GMAIL_CLIENT_SECRET: "s",
-		GMAIL_REFRESH_TOKEN: "r",
-		HUBSPOT_ACCESS_TOKEN: "h",
-		OWNI_TELEGRAM_ALLOWED_USERS: "12, 34",
-	};
-
-	it("needs the mailbox, the CRM and at least one sales person; names what is missing", () => {
-		expect(() => loadSegreteriaConfig({ TELEGRAM_BOT_TOKEN: "t", ANTHROPIC_API_KEY: "k" })).toThrow(
-			"Missing environment variables: GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN, HUBSPOT_ACCESS_TOKEN, OWNI_TELEGRAM_ALLOWED_USERS.",
-		);
-		expect(() => loadSegreteriaConfig({ ...full, OWNI_TELEGRAM_ALLOWED_USERS: "@mario" })).toThrow("invalid: @mario");
-		expect(() => loadSegreteriaConfig({ ...full, OWNI_MAIL_POLL_SECONDS: "2" })).toThrow("at least 10");
-	});
-
-	it("defaults to Anthropic, the segreteria instance and a one-minute poll; faux needs no key", () => {
-		expect(loadSegreteriaConfig(full)).toMatchObject({ modelProvider: "anthropic", anthropicApiKey: "k", instanceId: "segreteria", pollSeconds: 60, salesUserIds: ["12", "34"], requireVatNumber: false });
-		const { ANTHROPIC_API_KEY: _, ...noKey } = full;
-		expect(loadSegreteriaConfig({ ...noKey, OWNI_SEGRETERIA_MODEL: "faux", OWNI_REQUIRE_VAT_NUMBER: "sì" })).toMatchObject({ modelProvider: "faux", anthropicApiKey: undefined, requireVatNumber: true });
 	});
 });
 

@@ -76,7 +76,7 @@ describe("pnpm start (startOwni)", () => {
 		expect(owni.ownerLink).toMatch(/^http:\/\/127\.0\.0\.1:0\/login#[\w-]{40,}$/);
 		const api = await client(base, owni.ownerLink as string);
 		const instances = (await api("/api/instances")).instances;
-		expect(instances).toEqual([{ id: "owni", name: "Owni", canChat: true, isApprover: true, hasSegreteria: false, main: true }]);
+		expect(instances).toEqual([{ id: "owni", name: "Owni", canChat: true, isApprover: true, main: true }]);
 		const thread = (await api("/api/instances/owni/dm", {})).thread;
 		const proposal = { name: "double", description: "Raddoppia", parameters: { type: "object", properties: { x: { type: "number" } } }, code: "export default async (a) => String(a.x * 2)", hosts: [] };
 		await api(`/api/instances/owni/threads/${thread.id}/messages`, { text: `/tool tool_propose ${JSON.stringify(proposal)}` });
@@ -224,7 +224,7 @@ describe("pnpm start (startOwni)", () => {
 		const first = await boot(dataDir);
 		const api = await client(first.base, first.owni.ownerLink as string);
 		const created = await api("/api/instances", { id: "vendite", name: "Vendite", instructions: "Rispondi sulle offerte." });
-		expect(created.instance).toEqual({ id: "vendite", name: "Vendite", canChat: true, isApprover: true, hasSegreteria: false });
+		expect(created.instance).toEqual({ id: "vendite", name: "Vendite", canChat: true, isApprover: true });
 		expect((await api("/api/instances", { id: "vendite", name: "Doppia" })).error).toMatch(/esiste già/);
 		expect((await api("/api/instances", { id: "../x", name: "X" })).error).toMatch(/ID/);
 		expect((await api("/api/instances", { id: "vuota", name: "  " })).error).toMatch(/nome/);

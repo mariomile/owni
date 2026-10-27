@@ -8,7 +8,7 @@ Owni è «pronta al 100%» quando ognuna di queste voci è vera e verificata da 
 
 ## 1. Un solo processo
 
-- [x] `pnpm start` avvia tutto per un tenant: istanze, Telegram, interfaccia web, task programmati, segreteria se configurata.
+- [x] `pnpm start` avvia tutto per un tenant: istanze, Telegram, interfaccia web, task programmati.
 - [x] Configurazione da `.env` per il bootstrap; il resto (connettori, task, persone) dalla console web o dalla riga di comando.
 - [x] Docker Compose con volume dati, healthcheck e riavvio automatico. *(Verificato: immagine costruita e avviata; healthcheck `healthy`, utente non privilegiato, link dell'owner in un file 0600; login, chat, file, tool proposto approvato ed eseguito in sandbox, CLI; tutto persiste dopo un riavvio del container.)*
 
@@ -34,7 +34,6 @@ Owni è «pronta al 100%» quando ognuna di queste voci è vera e verificata da 
 - [x] Console come una chat di team: un messaggio diretto per agente, canali con più agenti, thread sotto ogni messaggio, non letto dal server (ADR 0113).
 - [x] Pannello dell'agente accanto alla conversazione (attività, artifact, routine, memoria, documenti, procedure); configurazione a parte, con i servizi collegati (ADR 0114).
 - [x] Richiede te come pagina unica per decisioni e incarichi da rivedere; Lavori si apre sulla Board (ADR 0115).
-- [x] Segreteria: elenco pratiche, scheda con bozza, Approva, Modifica, Scarta.
 - [x] Connettori, task programmati, file, tool proposti e approvazioni.
 - [x] Spesa del giorno e audit.
 - [x] Funziona da telefono; tema chiaro e scuro; nessuna risorsa esterna (ADR 0005).

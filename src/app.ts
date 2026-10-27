@@ -1,7 +1,7 @@
 /**
  * Owni as one process for one tenant: the general instance with its tools (workspace,
  * tasks programmati, MCP connectors, tools proposti), Telegram and the web console as
- * channels, the scheduler, and the segreteria when configured. `src/main/owni.ts` reads the
+ * channels, and the scheduler. `src/main/owni.ts` reads the
  * environment and calls startOwni; tests call it directly.
  */
 import type { Server } from "node:http";
@@ -64,7 +64,6 @@ import { runtimeActivity } from "./core/agent-activity.ts";
 import { romeDayKey, UsageLedger } from "./core/usage.ts";
 import { connectChannel } from "./gateway.ts";
 import type { OwniConfig } from "./main/config.ts";
-import { type RunningSegreteria, startSegreteria } from "./segreteria/boot.ts";
 import { BoardStore } from "./core/board.ts";
 import { RoutineStore, runRoutines } from "./core/board-routines.ts";
 import { approveFromChat, startBoard } from "./app/board.ts";
@@ -137,7 +136,6 @@ export type RunningOwni = {
 	readonly runtime: OwniRuntime;
 	readonly server: Server;
 	readonly scheduler: Scheduler;
-	readonly segreteria: RunningSegreteria | undefined;
 	/** The owner's login link, when this start created the owner. */
 	readonly ownerLink: string | undefined;
 	stop(): Promise<void>;
@@ -222,12 +220,11 @@ export async function startOwni(config: OwniConfig, options: OwniOptions = {}): 
 	// Pictures on request (ADR 0023): one service for the whole server, a daily count per account.
 	const generateImage = config.images === undefined ? undefined : imageGenerator(config.images, options.imageFetch);
 	const imagesLeft = dailyCounter(config.images?.maxPerDay ?? 0);
-	const segreteriaId = config.segreteria?.instanceId;
 	/** The other agenti as `self` sees them for agent_list (ADR 0042, 0117): whether each accepts its messages, and its place in the organigramma. */
 	const company = async (self: InstanceRecord) => {
 		const org = runtime.org(self.tenantId).read();
 		return (await runtime.registry.listInstances(self.tenantId))
-			.filter((r) => r.id !== self.id && r.id !== segreteriaId)
+			.filter((r) => r.id !== self.id)
 			.map((r) => {
 				const place = placeLine(org, r.id);
 				return {
@@ -479,7 +476,6 @@ export async function startOwni(config: OwniConfig, options: OwniOptions = {}): 
 					connectorStore,
 					proposeConnectorAction: (instance, input) => approvals.proposeConnectorAction(instance, input),
 					policyOf,
-					segreteriaId,
 					board,
 					boardWork,
 					webChannels,
@@ -579,7 +575,7 @@ export async function startOwni(config: OwniConfig, options: OwniOptions = {}): 
 
 	// --- channels ---
 	const chatModels = new ChatModels(runtime, tenant, { models: providerModels, serverModelKeys: Object.keys(config.modelApiKeys) });
-	const conversational = (await runtime.registry.listInstances(tenant)).filter((r) => r.id !== segreteriaId);
+	const conversational = await runtime.registry.listInstances(tenant);
 	const webChannels = new Map<string, WebChannel>();
 	const webUnsubscribes = new Map<string, () => void>();
 	/** Whether this person may write to this agente from the console now, and its name. */
@@ -610,7 +606,7 @@ export async function startOwni(config: OwniConfig, options: OwniOptions = {}): 
 		store: board,
 		people,
 		main: config.instanceId,
-		agentName: async (agent) => (agent === segreteriaId ? undefined : (await runtime.registry.getInstance(tenant, agent).catch(() => undefined))?.name),
+		agentName: async (agent) => (await runtime.registry.getInstance(tenant, agent).catch(() => undefined))?.name,
 		canChat: async (agent, personId) => (await consoleAgentName(agent, personId)) !== undefined,
 		webChannel: (agent) => webChannels.get(agent),
 		ownerChats: () => [telegram.bots.get(config.instanceId), whatsapp.adapters.get(config.instanceId)],
@@ -672,11 +668,11 @@ export async function startOwni(config: OwniConfig, options: OwniOptions = {}): 
 	const phone = startPhone({ runtime, tenant, config, fetch: options.phoneFetch, wait: options.phoneWait, log });
 	await phone.restore(conversational.map((r) => r.id));
 
-	// --- resume, scheduler, segreteria, web ---
+	// --- resume, scheduler, web ---
 	for (const record of conversational) await runtime.resume(tenant, record.id);
-	await approvals.start(await runtime.registry.listInstances(tenant), (instance) => instance !== segreteriaId);
+	await approvals.start(await runtime.registry.listInstances(tenant));
 	/** Requests nobody decided in 24 hours: the conversation that asked is told once, so Owni does not wait for an outcome that will never come. */
-	const tellExpired = async (now: Date) => approvals.tellExpired((await runtime.registry.listInstances(tenant)).filter((r) => r.id !== segreteriaId), now);
+	const tellExpired = async (now: Date) => approvals.tellExpired(await runtime.registry.listInstances(tenant), now);
 
 	const scheduler = new Scheduler(
 		// Read each tick: instances created from the console join without a restart.
@@ -705,7 +701,6 @@ export async function startOwni(config: OwniConfig, options: OwniOptions = {}): 
 		},
 	);
 	scheduler.start(options.schedulerIntervalMs ?? 30_000);
-	const segreteria = config.segreteria === undefined ? undefined : await startSegreteria(runtime, config.segreteria, log);
 	// A bot Telegram does not accept (wrong token, webhook on http) must not keep Owni down.
 	for (const bot of telegram.bots.values()) await bot.start().catch((error: unknown) => log(`telegram: not started: ${error instanceof Error ? error.message : String(error)}`));
 
@@ -841,7 +836,6 @@ export async function startOwni(config: OwniConfig, options: OwniOptions = {}): 
 		serverModelKeys: Object.keys(config.modelApiKeys),
 		mcpOAuth: mcpOAuth(),
 		...(options.connectorCatalog === undefined ? {} : { catalog: options.connectorCatalog }),
-		...(segreteria === undefined ? {} : { segreterie: new Map([[segreteria.instanceId, segreteria.service]]) }),
 		browser: browserPanel,
 		usage: ledger,
 		uiDir: options.uiDir ?? join(import.meta.dirname, "web", "ui"),
@@ -901,12 +895,11 @@ export async function startOwni(config: OwniConfig, options: OwniOptions = {}): 
 					cell: {
 						secret: config.cell.secret,
 						// Busy: work the cell must finish before it is stopped. Next wake: the earliest
-						// task programmato, or the next mail round of the segreteria.
+						// task programmato.
 						state: async () => {
 							const { working, retrying } = await runtime.activity(tenant);
 							const runs: number[] = [];
 							for (const id of webChannels.keys()) for (const sch of await runtime.schedules(tenant, id).list()) if (sch.nextRunAt !== null) runs.push(Date.parse(sch.nextRunAt));
-							if (config.segreteria !== undefined) runs.push(Date.now() + config.segreteria.pollSeconds * 1000);
 							return {
 								busy: working + retrying > 0,
 								nextWakeAt: runs.length === 0 ? null : new Date(Math.min(...runs)).toISOString(),
@@ -945,7 +938,6 @@ export async function startOwni(config: OwniConfig, options: OwniOptions = {}): 
 		runtime,
 		server,
 		scheduler,
-		segreteria,
 		ownerLink,
 		async stop() {
 			await localProviders?.close();
@@ -957,7 +949,6 @@ export async function startOwni(config: OwniConfig, options: OwniOptions = {}): 
 			await browseSessions.closeAll();
 			await computer?.close().catch((error: unknown) => log(`computer: not stopped: ${error instanceof Error ? error.message : String(error)}`));
 			await desktop?.close().catch((error: unknown) => log(`desktop: not stopped: ${error instanceof Error ? error.message : String(error)}`));
-			await segreteria?.stop();
 			await runtime.close();
 			await (await browser)?.close().catch(() => {});
 		},

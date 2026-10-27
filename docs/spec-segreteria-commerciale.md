@@ -1,5 +1,7 @@
 # Spec: segreteria commerciale su Telegram (settimana 3)
 
+> Storico: la segreteria commerciale è stata tolta ([ADR 0126](adr/0126-togliere-la-segreteria-commerciale.md)). Questo documento descrive com'era.
+
 > Deliverable di Craft per Ship (codice) e AI Guru (stack agenti). Nessun codice in questo documento. Commit e PR: Ship. Decisioni A1-A8 integrate.
 
 Architettura: [`architettura.md`](architettura.md). Settimana 2: [`week2.md`](week2.md). Piano e nota vault: `Active/Projects/Owni/`.

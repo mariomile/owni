@@ -179,7 +179,7 @@ export type Approvals = {
 	/** A button tapped under a card (tool:, web:, mcp:, board:). */
 	onTap(instance: string, adapter: ChannelAdapter, action: InboundAction): Promise<void>;
 	/** After a restart: requests left half done are settled and told; pending ones get their cards again. */
-	start(instances: readonly InstanceRecord[], conversational: (instance: string) => boolean): Promise<void>;
+	start(instances: readonly InstanceRecord[]): Promise<void>;
 	/** Requests nobody decided in 24 hours: the conversation that asked is told once. */
 	tellExpired(instances: readonly InstanceRecord[], now: Date): Promise<void>;
 };
@@ -275,13 +275,12 @@ export function startApprovals(w: ApprovalWiring): Approvals {
 		for (const action of await kind.store(runtime, tenant, instance).settleInterrupted()) await kind.interrupted(runtime, tenant, instance, action);
 	}
 
-	async function start(instances: readonly InstanceRecord[], conversational: (instance: string) => boolean): Promise<void> {
+	async function start(instances: readonly InstanceRecord[]): Promise<void> {
 		await Promise.all(
 			instances.map(async (record) => {
 				await settle(webQueue, record.id);
 				await settle(googleQueue, record.id);
 				await settle(connectorQueue, record.id);
-				if (!conversational(record.id)) return;
 				await pending(toolCard, record.id);
 				await pending(connectorCard, record.id);
 				await pending(webCard, record.id);

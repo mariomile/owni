@@ -74,7 +74,7 @@ export async function requestJson<T>(fetchImpl: typeof fetch, url: string, reque
 	}
 }
 
-/** A short, token-free summary of an error body (Google and HubSpot both use JSON). */
+/** A short, token-free summary of an error body (Google answers in JSON). */
 async function errorDetail(response: Response): Promise<string> {
 	const text = await response.text().catch(() => "");
 	try {

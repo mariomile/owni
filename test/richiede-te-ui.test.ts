@@ -88,7 +88,7 @@ describe("Richiede te", () => {
 
 	it("puts decisions and reviews on one page and counts them for the sidebar", async () => {
 		mocks.common.api.mockImplementation(async (url: string) => url === "/api/approvals"
-			? { groups: [{ instance: { id: "sales", name: "Vendite" }, proposals: [], webActions: [], connectorActions: [], googleActions: [], pratiche: [] }], pendingApprovals: 0 }
+			? { groups: [{ instance: { id: "sales", name: "Vendite" }, proposals: [], webActions: [], connectorActions: [], googleActions: [] }], pendingApprovals: 0 }
 			: { agents, cards: [card("5", "da_rivedere")] });
 		const main = mocks.common.h("main");
 		await viewApprovals(main);

@@ -12,7 +12,7 @@ export type BoardWiring = {
 	readonly people: PeopleStore;
 	/** The main agente: the owner hears of schede to review in their chat with it. */
 	readonly main: string;
-	/** The agente's name, or undefined when it is not one a scheda can go to (missing, a segreteria). */
+	/** The agente's name, or undefined when it is not one a scheda can go to (missing). */
 	readonly agentName: (agent: string) => Promise<string | undefined>;
 	/** Whether the person may talk to the agente from the console. */
 	readonly canChat: (agent: string, personId: string) => Promise<boolean>;

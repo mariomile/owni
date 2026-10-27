@@ -44,7 +44,7 @@ vi.mock("../src/web/ui/common.js", () => mocks);
 import { programRows, runOutcome, viewPrograms } from "../src/web/ui/pages/work.js";
 
 const at = "2026-10-25T09:00:00.000Z";
-const inst = { id: "sales", name: "Vendite", canChat: true, hasSegreteria: false };
+const inst = { id: "sales", name: "Vendite", canChat: true };
 const viewer = { id: "person", role: "owner" };
 const card = (id: string, status: string, extra = {}) => ({ id, n: Number(id) || 1, title: `Lavoro ${id}`, status, description: "Obiettivo reale", createdAt: at, updatedAt: at, events: [], ...extra });
 const routine = (title: string) => ({ id: "r1", title, assignee: inst.id, personId: viewer.id, whenText: "ogni lunedì", next: at, createdAt: at });
@@ -177,26 +177,6 @@ describe("automation overview reads and recovery", () => {
 		expect(main.textContent).not.toContain("Titolo riservato di un'altra persona");
 		expect(main.textContent).not.toContain("Descrizione riservata");
 		expect(nodes(main, "select")[0]?.textContent).not.toContain("Vendite");
-	});
-
-	it("skips Segreteria conversation resources while preserving administrative reads without chat access", async () => {
-		const secretary = { id: "secretary", name: "Segreteria", hasSegreteria: true, canChat: false };
-		const administrative = { ...inst, canChat: false };
-		mocks.api.mockImplementation(async (url: string) => {
-			if (url === "/api/instances") return { instances: [secretary, administrative] };
-			if (url === "/api/board") return { cards: [], agents: [], routines: [] };
-			if (url === "/api/approvals") return { groups: [], pendingApprovals: 0 };
-			for (const name of ["runs", "threads", "schedules", "watches", "automations"]) if (url.endsWith(`/${name}`)) {
-				if (url.includes("/secretary/") && ["runs", "threads"].includes(name)) throw new Error("Nessun canale web");
-				return { [name]: [] };
-			}
-			throw new Error(`Unexpected request ${url}`);
-		});
-		const programs = mocks.h("main");
-		await viewPrograms(programs);
-		expect(programs.textContent).not.toContain("Dati parziali");
-		expect(mocks.api.mock.calls.some(([url]) => String(url).includes("/secretary/runs"))).toBe(false);
-		expect(mocks.api.mock.calls.some(([url]) => url === "/api/instances/sales/runs")).toBe(true);
 	});
 
 	it("shows available automation models when another model's first read fails", async () => {
