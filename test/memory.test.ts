@@ -1,3 +1,5 @@
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { MEMORY_LIMITS, MemoryStore } from "../src/core/memory.ts";
 import { createMemoryTools } from "../src/core/tools/memory-tools.ts";
@@ -92,7 +94,10 @@ describe("MemoryStore", () => {
 		expect(new MemoryStore(dir).list()).toEqual([m]);
 		expect(() => store.add({ about: "test:anna", text: " ", source: "owni" })).toThrow();
 		expect(() => store.add({ about: "test:anna", text: "x".repeat(501), source: "owni" })).toThrow();
-		for (let i = 0; i < MEMORY_LIMITS.archived; i++) store.add({ about: "test:anna", text: `dettaglio ${i}`, source: "owni", archived: true });
+		// A full archivio written at once: a thousand adds would each rewrite the whole file.
+		const archived = Array.from({ length: MEMORY_LIMITS.archived }, (_, i) => ({ id: `a${i}`, about: "test:anna", text: `dettaglio ${i}`, source: "owni", createdAt: new Date().toISOString(), archived: true }));
+		writeFileSync(join(dir, "memory.json"), JSON.stringify([m, ...archived]));
+		expect(new MemoryStore(dir).archivedFor("test:anna")).toBe(MEMORY_LIMITS.archived);
 		expect(() => store.add({ about: "test:anna", text: "uno di troppo", source: "owni", archived: true })).toThrow(/archivio è pieno/);
 		expect(store.forSubject("test:luca")).toEqual([]);
 	});
