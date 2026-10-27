@@ -35,17 +35,21 @@ export class AgentChannel implements ChannelAdapter {
 		this.handler = handler;
 	}
 
-	/** A message from agente `from`, written in its conversation `origin`. `messageId` drops a repeat. */
-	async ask(message: { readonly from: { readonly id: string; readonly name: string }; readonly origin: Origin; readonly text: string; readonly messageId: string }): Promise<void> {
+	/**
+	 * A message from agente `from`, written in its conversation `origin`. `messageId` drops a repeat.
+	 * `forPerson`: written in a turn of the person there (ADR 0134), who may write to this agente themselves.
+	 */
+	async ask(message: { readonly from: { readonly id: string; readonly name: string }; readonly origin: Origin; readonly text: string; readonly messageId: string; readonly forPerson?: { readonly channel: string; readonly userId: string } }): Promise<void> {
 		if (this.handler === undefined) throw new Error(`agente ${this.target.instanceId} is not connected`);
 		await this.handler({
 			...this.target,
 			channel: AGENT_CHANNEL,
 			threadId: agentThreadId(message.from.id, message.origin),
 			userId: message.from.id,
-			text: agentInboundText(message.from, message.text),
+			text: agentInboundText(message.from, message.text, message.forPerson !== undefined),
 			messageId: message.messageId,
 			privateThread: false,
+			...(message.forPerson === undefined ? {} : { forPerson: message.forPerson }),
 		});
 	}
 

@@ -10,6 +10,7 @@ import { tempDataDir, waitFor } from "./helpers.ts";
 
 const PERSON = "p_000000000001";
 const NAMES: Record<string, string> = { ricerca: "Ricercatore", vendite: "Assistente vendite", conti: "Contabile" };
+const PLACES: Record<string, string> = { conti: "Contabile. Responsabile di: fatture" };
 
 /** Three agenti whose answers are `reply(text)` (ready when it resolves, then 5 ms on); what each received is in `got`. */
 function setup(reply: (instanceId: string, text: string) => string | undefined | Promise<string | undefined>, reachable: (id: string) => boolean = () => true) {
@@ -34,7 +35,7 @@ function setup(reply: (instanceId: string, text: string) => string | undefined |
 		});
 		channels.set(id, channel);
 	}
-	const rooms = new Rooms(new RoomStore(join(dir, "rooms")), { channel: (id) => channels.get(id), reachable: async (_p, id) => (reachable(id) ? NAMES[id] : undefined) });
+	const rooms = new Rooms(new RoomStore(join(dir, "rooms")), { channel: (id) => channels.get(id), reachable: async (_p, id) => (reachable(id) ? NAMES[id] : undefined), place: (id) => PLACES[id] ?? "" });
 	for (const c of channels.values()) rooms.attach(c);
 	const seen: RoomEntry[] = [];
 	rooms.events.on(PERSON, (e: { entry: RoomEntry }) => seen.push(e.entry));
@@ -108,6 +109,8 @@ describe("stanze", () => {
 		expect(agentTurns).toBe(1 + ROOM_LIMITS.chain);
 		expect(got.vendite?.[0]).toContain("Ricercatore, un altro agente e non la persona, ti ha chiamato in causa");
 		expect(got.vendite?.[0]).not.toContain("inizia tu\n\nRicercatore");
+		// Each one knows who does what here (ADR 0134): what is a colleague's responsabilità goes to them by @nome.
+		expect(got.vendite?.[0]).toContain("con Ricercatore (@ricercatore), Contabile (@contabile: Contabile. Responsabile di: fatture). Rispondi alla persona; per chiamare in causa un altro agente scrivi @nome, anche quando una cosa è sua responsabilità.");
 	});
 
 	it("an agente the person can no longer write to gets nothing; another person cannot read the stanza", async () => {

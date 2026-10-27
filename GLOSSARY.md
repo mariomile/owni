@@ -83,7 +83,7 @@ Il giorno, a Roma, entro cui una scheda va fatta. La board dice «scade oggi» o
 _Avoid_: deadline, due date (nel testo per le persone)
 
 **Organigramma**:
-Come sono organizzati gli agenti dell'installazione, deciso dall'owner nella pagina Organigramma: le squadre con chi le coordina e, per ogni agente, il ruolo, la squadra, a chi risponde, le sue responsabilità e se è a disposizione di tutti. Decide chi può scrivere a chi: la stessa squadra, chi sta sopra e sotto, i coordinatori fra loro. Ogni agente legge il suo posto prima di ogni richiesta. Le persone non ci sono. Vedi ADR 0117.
+Come sono organizzati gli agenti dell'installazione, deciso dall'owner nella pagina Organigramma: le squadre con chi le coordina e, per ogni agente, il ruolo, la squadra, a chi risponde, le sue responsabilità e se è a disposizione di tutti. Decide chi può scrivere a chi: la stessa squadra, chi sta sopra e sotto, i coordinatori fra loro. Oltre a questi, un agente scrive a un altro quando lo chiede la persona e lei può parlargli (ADR 0134). Ogni agente legge il suo posto prima di ogni richiesta. Le persone non ci sono. Vedi ADR 0117.
 _Avoid_: org chart, gerarchia, team (nel testo per le persone)
 
 **Responsabilità (di un agente)**:

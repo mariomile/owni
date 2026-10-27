@@ -44,6 +44,7 @@ async function setup(options: { ttlMs?: number; fakeInterval?: boolean } = {}) {
 			const record = await runtime.registry.getInstance("acme", id);
 			return (record.allowedUsers.web ?? []).includes(personId) ? record.name : undefined;
 		},
+		place: () => "",
 	});
 	for (const own of channels.values()) rooms.attach(own);
 	const store = new BoardStore(tenantDir);

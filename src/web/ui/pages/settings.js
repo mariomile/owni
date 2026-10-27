@@ -420,7 +420,7 @@ function webCard(inst, hosts) {
 
 /** Which other agenti may write to this one (ADR 0042): the organigramma decides it (ADR 0117). */
 function agentsCard(inst, settings) {
-	const from = settings.egress.channels.includes("agente") ? (settings.allowedUsers.agente ?? []) : [];
+	const from = settings.allowedUsers.agente ?? [];
 	const names = from.map((id) => state.instances.find((i) => i.id === id)).filter(Boolean).map((i) => i.name);
 	const chip = h(`span.chip${names.length ? ".ok" : ""}`, names.length === 0 ? "Nessuno" : names.length === 1 ? "1 agente" : `${names.length} agenti`);
 	return fold(

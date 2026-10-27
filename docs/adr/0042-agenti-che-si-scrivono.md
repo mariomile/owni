@@ -2,6 +2,8 @@
 
 > Aggiornata da [ADR 0117](0117-organigramma-degli-agenti.md): chi può scrivere a chi lo decide l'organigramma. La card «Agenti che possono scrivergli» è in sola lettura e «Fate squadra» non c'è più. Il resto di questa decisione vale ancora.
 
+> Aggiornata da [ADR 0134](0134-agenti-che-si-passano-le-cose.md): il canale `agente` non è più nella egress policy, chi può scrivere lo dice solo `allowedUsers.agente`; la persona può far scrivere un agente anche a uno non collegato, se lei può parlargli.
+
 Mario (17 ottobre 2026): «i bot devono poter comunicare tra di loro se serve». Con più agenti (ADR 0041) ognuno ha connettori, file e memoria suoi: l'assistente di una persona non vede il CRM che ha l'agente delle vendite, il ricercatore non ha il Google di nessuno. Serve che uno possa chiedere all'altro.
 
 ## Decisione

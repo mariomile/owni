@@ -183,17 +183,21 @@ describe("pnpm start (startOwni)", () => {
 		expect(settings.persona).toEqual({ tone: "formale", named: true });
 	});
 
-	it("agenti write to each other (ADR 0042): only those allowed, and the answer comes back to the conversation", async () => {
+	it("agenti write to each other (ADR 0042): those the organigramma links, others only for the person, and the answer comes back to the conversation", async () => {
 		const { owni, base } = await boot(tempDataDir());
 		const api = await client(base, owni.ownerLink as string);
 		await api("/api/instances", { id: "ricerca", name: "Ricercatore", persona: { tagline: "Cerca fornitori" } });
 		const thread = (await api("/api/instances/owni/dm", {})).thread;
 		const entries = async () => (await api(`/api/instances/owni/threads/${thread.id}`)).entries as { from: string; text?: string }[];
 		const say = (text: string) => api(`/api/instances/owni/threads/${thread.id}/messages`, { text });
+		const owner = ((await owni.runtime.registry.getInstance("default", "ricerca")).allowedUsers.web ?? [])[0];
+		// Not linked, but the owner can talk to Ricercatore: Owni writes to it when the owner asks (ADR 0134).
 		await say("/tool agent_list {}");
-		await until(async () => (await entries()).some((e) => e.text?.includes("Nessun altro agente accetta i tuoi messaggi")));
+		await until(async () => (await entries()).some((e) => e.text?.includes("Nessun altro agente accetta i tuoi messaggi") && e.text.includes("Solo se è la persona a chiedertelo, puoi scrivere anche a questi agenti, con cui lei può parlare direttamente:\n- Ricercatore (ricerca): Cerca fornitori")));
 		await say('/tool agent_message {"agent":"ricerca","message":"Trova tre fornitori di carta"}');
-		await until(async () => (await entries()).some((e) => e.text?.includes("Errore: nessun altro agente accetta")));
+		await until(async () => (await entries()).some((e) => e.from === "owni" && e.text?.includes("[Risposta dell'agente «Ricercatore» (ricerca)]")));
+		let audit = await owni.runtime.audit("default").read();
+		expect(audit.some((e) => e.type === "message.received" && e.instanceId === "ricerca" && e.channel === "agente" && e.userId === "owni" && e.forPerson === `web:${owner}`)).toBe(true);
 		// biome-ignore lint: test
 		const put = (path: string, body: unknown) => fetch(`${base}${path}`, { method: "PUT", headers: { "x-owni": "1", "content-type": "application/json", cookie: api.cookie }, body: JSON.stringify(body) }).then(async (r) => ({ status: r.status, ...((await r.json()) as any) }));
 		// The organigramma decides it (ADR 0117): Ricercatore answers to Owni, so they write to each other.
@@ -201,22 +205,20 @@ describe("pnpm start (startOwni)", () => {
 		const saved = await put("/api/org", { org: { teams: [], agents: { ricerca: { role: "Ricerca fornitori", reportsTo: "owni", owns: ["Fornitori e prezzi"] } } }, version: (await api("/api/org")).version });
 		expect(saved.accepts).toEqual({ owni: ["ricerca"], ricerca: ["owni"] });
 		expect(saved.saved).toBe(true);
-		expect((await owni.runtime.registry.getInstance("default", "ricerca")).egress.channels).toContain("agente");
 		expect((await api("/api/agents")).agents[1].acceptsFrom).toEqual(["owni"]);
 		await say("/tool agent_list {}");
 		await until(async () => (await entries()).some((e) => e.text?.includes("- Ricercatore (ricerca): Cerca fornitori [Ricerca fornitori. Responsabile di: Fornitori e prezzi]")));
 		await say('/tool agent_message {"agent":"Ricercatore","message":"Trova tre fornitori di carta"}');
-		await until(async () => (await entries()).some((e) => e.text?.includes("Messaggio mandato a «Ricercatore»")));
 		// Ricercatore got it in a conversation of its own, and its answer came back here as a notice.
-		await until(async () => (await entries()).some((e) => e.from === "owni" && e.text?.includes("[Risposta dell'agente «Ricercatore» (ricerca)]")));
-		const audit = await owni.runtime.audit("default").read();
-		expect(audit.some((e) => e.type === "message.received" && e.instanceId === "ricerca" && e.channel === "agente" && e.userId === "owni")).toBe(true);
+		await until(async () => (await entries()).filter((e) => e.from === "owni" && e.text?.includes("[Risposta dell'agente «Ricercatore» (ricerca)]")).length === 2);
+		audit = await owni.runtime.audit("default").read();
+		expect(audit.some((e) => e.type === "message.received" && e.instanceId === "ricerca" && e.channel === "agente" && e.userId === "owni" && e.forPerson === undefined)).toBe(true);
 		expect(audit.some((e) => e.type === "notice.submitted" && e.instanceId === "owni" && e.source === "agent" && e.from === "ricerca")).toBe(true);
-		// Taken back: the next message is refused, and nothing reaches Ricercatore.
+		// Taken back, and the owner no longer talks to Ricercatore: the next message is refused, and nothing reaches it.
 		await put("/api/org", { org: { teams: [], agents: {} }, version: (await api("/api/org")).version });
-		expect((await owni.runtime.registry.getInstance("default", "ricerca")).egress.channels).not.toContain("agente");
+		await owni.runtime.registry.setAllowedUsers("default", "ricerca", "web", []);
 		await say('/tool agent_message {"agent":"ricerca","message":"Ancora"}');
-		await until(async () => (await entries()).filter((e) => e.text?.includes("Errore: nessun altro agente accetta")).length === 2);
+		await until(async () => (await entries()).some((e) => e.text?.includes("Errore: nessun altro agente accetta")));
 	});
 
 	it("the owner creates an instance from the console: chat works at once and after a restart", async () => {
