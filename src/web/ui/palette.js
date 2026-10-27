@@ -20,7 +20,9 @@ export function openPalette() {
 	const list = h("ul", { id: "palette-list", role: "listbox", "aria-label": "Risultati" });
 	let active = 0;
 	let shown = items;
-	const dialog = h("dialog.palette", { "aria-label": "Cerca una sezione o un'azione" }, input, list);
+	// Outside the listbox, which holds only options.
+	const none = h("p.none", { role: "status" });
+	const dialog = h("dialog.palette", { "aria-label": "Cerca una sezione o un'azione" }, input, list, none);
 	const pick = (item) => {
 		dialog.close();
 		dialog.remove();
@@ -35,13 +37,22 @@ export function openPalette() {
 		const matches = (i) => i.label.toLowerCase().includes(q);
 		shown = [...items.filter((i) => q ? matches(i) : ["board", "approvazioni", "agenti", "gestione"].includes(i.id)), ...actions.filter((a) => q ? matches(a) : a.first), ...talks];
 		active = Math.min(active, Math.max(0, shown.length - 1));
-		mount(list, 
+		// An id from the item itself: when the results change, so does the active descendant.
+		const taken = new Set();
+		const ids = shown.map((item) => {
+			const slug = `${item.group ?? ""}-${item.href ?? item.label}`.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-+|-+$/g, "");
+			let id = `palette-option-${slug}`;
+			for (let k = 2; taken.has(id); k++) id = `palette-option-${slug}-${k}`;
+			taken.add(id);
+			return id;
+		});
+		mount(list,
 			...shown.map((item, n) =>
 				h(
 					"li",
 					{
 						role: "option",
-						id: `palette-option-${n}`,
+						id: ids[n],
 						"aria-selected": n === active ? "true" : "false",
 						onclick: () => pick(item),
 						onmousemove: () => {
@@ -55,10 +66,10 @@ export function openPalette() {
 					h("span.muted", item.group),
 				),
 			),
-			...(shown.length ? [] : [h("li.none", "Niente con questo nome")]),
 		);
+		mount(none, shown.length ? [] : "Niente con questo nome");
 		input.setAttribute("aria-expanded", String(shown.length > 0));
-		if (shown.length) input.setAttribute("aria-activedescendant", `palette-option-${active}`);
+		if (shown.length) input.setAttribute("aria-activedescendant", ids[active]);
 		else input.removeAttribute("aria-activedescendant");
 	};
 	input.addEventListener("input", () => {

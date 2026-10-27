@@ -6,6 +6,7 @@ export type FakeNode = {
 	listeners: Record<string, ((event: any) => void)[]>;
 	scrollTop: number;
 	open: boolean;
+	removed: boolean;
 	value: string;
 	setAttribute(name: string, value: unknown): void;
 	getAttribute(name: string): string | undefined;
@@ -22,7 +23,7 @@ export type FakeNode = {
 
 export function fakeNode(spec: string, attrs: Record<string, any> = {}, children: (FakeNode | string)[] = []): FakeNode {
 	const node: FakeNode = {
-		spec, attrs: {}, children, listeners: {}, scrollTop: 0, open: false, value: "",
+		spec, attrs: {}, children, listeners: {}, scrollTop: 0, open: false, removed: false, value: "",
 		setAttribute(name, value) { this.attrs[name] = String(value); },
 		getAttribute(name) { return this.attrs[name]; },
 		removeAttribute(name) { delete this.attrs[name]; },
@@ -43,7 +44,7 @@ export function fakeNode(spec: string, attrs: Record<string, any> = {}, children
 		},
 		showModal() { this.open = true; },
 		close() { this.open = false; this.fire("close"); },
-		remove() {},
+		remove() { this.removed = true; },
 		focus() {},
 	};
 	for (const [name, value] of Object.entries(attrs)) {

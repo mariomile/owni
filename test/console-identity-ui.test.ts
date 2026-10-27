@@ -55,7 +55,7 @@ async function consoleWith() {
 	const common = await import("../src/web/ui/common.js") as Common;
 	const rail = fakeNode("aside.rail");
 	const dialogs: FakeNode[] = [];
-	vi.stubGlobal("document", { getElementById: (id: string) => id === "rail" ? rail : null, querySelector: () => null, querySelectorAll: () => [], addEventListener: vi.fn(), documentElement: { dataset: {} }, body: { append: (node: FakeNode) => dialogs.push(node) }, visibilityState: "visible" });
+	vi.stubGlobal("document", { getElementById: (id: string) => id === "rail" ? rail : null, querySelector: () => null, querySelectorAll: (selector: string) => selector === "dialog" ? dialogs.filter((d) => !d.removed) : [], addEventListener: vi.fn(), documentElement: { dataset: {} }, body: { append: (node: FakeNode) => dialogs.push(node) }, visibilityState: "visible" });
 	// @ts-expect-error Console modules intentionally use plain JavaScript.
 	const shell = await import("../src/web/ui/shell.js") as { refreshConversations(): Promise<void>; renderRail(): void };
 	// @ts-expect-error Console modules intentionally use plain JavaScript.
@@ -143,6 +143,23 @@ describe("a console tab never shows the previous person's conversations", () => 
 		release(aliceChannels);
 		await late;
 		expect(common.state.conversations).toEqual({ direct: [], channels: [] });
+	});
+
+	it("a 401 with the palette open leaves no dialog over the login, so Alice's canali are not readable there", async () => {
+		const { common, palette, dialogs, read, signOut } = await consoleWith();
+		common.state.me = alice;
+		common.state.instances = [AGENT];
+		mocks.api.mockResolvedValueOnce(aliceChannels);
+		await read();
+		palette.openPalette();
+		const dialog = dialogs[0] as FakeNode;
+		(allNodes(dialog).find((n) => n.spec === "input") as FakeNode).value = "fusione";
+		(allNodes(dialog).find((n) => n.spec === "input") as FakeNode).fire("input");
+		expect(visible(dialog)).toContain("c-alice-private");
+		expect(dialog.open).toBe(true);
+		signOut();
+		expect(dialog.open).toBe(false);
+		expect(dialogs.filter((d) => !d.removed)).toHaveLength(0);
 	});
 
 	it("a sign-out closes the live stream and clears every person-scoped counter and list", async () => {

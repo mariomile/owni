@@ -45,17 +45,19 @@ export function eventsRoutes(route: AddRoute, options: EventsRoutesDeps): void {
 			draining = true;
 			try {
 				while (pending.size > 0 && !disconnected) {
-					const [id, item] = pending.entries().next().value as [string, Pending];
-					pending.delete(id);
-					// One check, before every event of every kind: the identity captured at open proves nothing later.
+					// One check per pass, before any event of any kind: the identity captured at open proves nothing later.
+					const batch = [...pending.values()];
+					pending.clear();
 					const person = await current();
 					if (person === undefined) { res.end(); break; }
-					try { await item.allowed(person); }
-					catch { continue; }
-					if (disconnected || res.writableEnded) break;
-					res.write(item.frame);
-					// A slow client reconnects and reads persisted state instead of retaining unbounded output.
-					if (res.writableLength > 512 * 1024) { res.end(); break; }
+					for (const item of batch) {
+						try { await item.allowed(person); }
+						catch { continue; }
+						if (disconnected || res.writableEnded) return;
+						res.write(item.frame);
+						// Only a client that really stalls is cut: it reconnects and reads persisted state.
+						if (res.writableLength > 512 * 1024) { res.end(); return; }
+					}
 				}
 			} catch { res.end(); }
 			finally { draining = false; }
@@ -63,7 +65,6 @@ export function eventsRoutes(route: AddRoute, options: EventsRoutesDeps): void {
 		const enqueue = (key: string, item: Pending) => {
 			if (disconnected) return;
 			pending.set(key, item);
-			if (pending.size > 200) { res.end(); return; }
 			void drain();
 		};
 		const always = async () => {};

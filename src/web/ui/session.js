@@ -89,7 +89,11 @@ function unreachable() {
 }
 
 export async function refreshInstances() {
-	state.instances = (await api("/api/instances")).instances;
+	const { generation } = state;
+	const { instances } = await api("/api/instances");
+	// A late answer for a person who has since left is nobody's.
+	if (state.generation !== generation) return;
+	state.instances = instances;
 	const saved = store("owni.instance");
 	state.instance = state.instances.find((i) => i.id === saved) ?? state.instances[0];
 	await refreshCounters();
@@ -97,11 +101,13 @@ export async function refreshInstances() {
 
 /** How many «Primi passi» are left, for the owner of the current instance. */
 export async function refreshSetup() {
+	const { generation } = state;
 	state.setupLeft = 0;
 	state.setup = undefined;
 	if (state.me?.role !== "owner" || !state.instance || setupHidden(state.instance.id)) return;
 	try {
 		const { setup } = await api(`/api/instances/${state.instance.id}/setup`);
+		if (state.generation !== generation) return;
 		state.setup = setup;
 		state.setupLeft = setupLeft(setup);
 	} catch {
@@ -133,11 +139,12 @@ export function refreshCounters() {
 		do {
 			countersChanged = false;
 			const person = state.me;
+			const { generation } = state;
 			if (!person) break;
 			try {
 				const summary = await api("/api/console-summary");
 				// A late response from a previous login must not overwrite this person's counters.
-				if (state.me !== person) continue;
+				if (state.me !== person || state.generation !== generation) continue;
 				state.usage = summary.usage;
 				state.pendingApprovals = summary.pendingApprovals;
 				state.boardReview = summary.boardReview;

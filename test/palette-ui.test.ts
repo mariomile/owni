@@ -76,4 +76,31 @@ describe("command palette as an ARIA combobox", () => {
 		expect(input.attrs["aria-activedescendant"]).toBeUndefined();
 		expect(input.attrs["aria-expanded"]).toBe("false");
 	});
+
+	it("«Niente con questo nome» is a status next to the listbox, never inside it", async () => {
+		const { input, list } = await opened();
+		const status = allNodes(dialog).find((n) => n.attrs.role === "status") as FakeNode;
+		expect(status).toBeDefined();
+		expect(allNodes(list)).not.toContain(status);
+		expect(status.children).toEqual([]);
+		input.value = "zzzz-niente";
+		input.fire("input");
+		expect(status.children).toEqual(["Niente con questo nome"]);
+		expect(JSON.stringify(list.children)).not.toContain("Niente con questo nome");
+		input.value = "";
+		input.fire("input");
+		expect(status.children).toEqual([]);
+	});
+
+	it("option ids come from the item, so the active descendant changes when the results change", async () => {
+		const { input, options } = await opened();
+		const before = input.attrs["aria-activedescendant"];
+		expect(before).toContain("incarichi");
+		input.value = "agent";
+		input.fire("input");
+		const after = input.attrs["aria-activedescendant"];
+		expect(after).not.toBe(before);
+		expect(after).toBe(options()[0]?.attrs.id);
+		expect(new Set(options().map((o) => o.attrs.id)).size).toBe(options().length);
+	});
 });

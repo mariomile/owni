@@ -388,6 +388,11 @@ export const state = {
 /** Everything of the person who was here, gone: on sign-out, session end, and a different person coming in. */
 export function resetPerson() {
 	state.events?.close();
+	// Dialogs live on the body: one left open would keep showing the previous person's names over the login.
+	for (const dialog of document.querySelectorAll("dialog")) {
+		dialog.close();
+		dialog.remove();
+	}
 	Object.assign(state, {
 		me: undefined,
 		instances: [],

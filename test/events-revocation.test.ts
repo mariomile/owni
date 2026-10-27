@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import type { AddressInfo } from "node:net";
-import { afterEach, describe, expect, it } from "vitest";
+import { request } from "node:http";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { BoardStore } from "../src/core/board.ts";
 import { BoardWork } from "../src/core/board-work.ts";
 import { ConnectorStore } from "../src/connectors/mcp.ts";
@@ -17,15 +18,15 @@ import { createWebApp } from "../src/web/server.ts";
 import { FAUX_MODEL, tempDataDir, waitFor } from "./helpers.ts";
 
 const closers: (() => Promise<void>)[] = [];
-afterEach(async () => { for (const close of closers.splice(0).reverse()) await close(); });
+afterEach(async () => { vi.useRealTimers(); for (const close of closers.splice(0).reverse()) await close(); });
 
-async function setup() {
+async function setup(options: { ttlMs?: number; fakeInterval?: boolean } = {}) {
 	const dataDir = tempDataDir();
 	const tenantDir = join(dataDir, "tenants", "acme");
 	const runtime = new OwniRuntime({ dataDir, engine: piDurableEngine });
 	await runtime.registry.createTenant({ id: "acme", name: "Acme" });
 	const people = new PeopleStore(tenantDir);
-	const sessions = new SessionStore(tenantDir);
+	const sessions = new SessionStore(tenantDir, options.ttlMs);
 	const owner = await people.add("Mario", "owner");
 	const anna = await people.add("Anna", "member");
 	await runtime.registry.createInstance("acme", { id: "ops", name: "Ops", model: FAUX_MODEL, allowedUsers: { web: [anna.person.id] }, egress: { modelProviders: ["faux"], channels: ["web"] } });
@@ -55,6 +56,8 @@ async function setup() {
 	await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
 	const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 	closers.push(async () => { server.closeAllConnections(); await new Promise((resolve) => server.close(resolve)); await runtime.close(); });
+	// Only the keep-alive interval: the server and the stream need the real clock for everything else.
+	if (options.fakeInterval) vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
 	const session = await sessions.create(anna.person.id);
 	const abort = new AbortController();
 	closers.push(async () => { abort.abort(); });
@@ -73,7 +76,7 @@ async function setup() {
 		room: (text: string, roomId = room.id) => rooms.events.emit(anna.person.id, { roomId, entry: entry(text) }),
 		board: (text: string) => work.events.emit("review", { card: { id: "c1", n: 1, title: text, status: "da_rivedere", events: [] } as never, people: [anna.person.id] }),
 	};
-	return { runtime, anna, sessions, session, stream, emit };
+	return { runtime, anna, people, sessions, session, stream, emit, base };
 }
 
 const FAMILIES = ["entry", "room", "board"] as const;
@@ -118,9 +121,58 @@ describe("the live stream asks again before every event, not only the run ones",
 		expect(s.stream.ended).toBe(false);
 	});
 
-	it("a client that cannot keep up is cut off instead of queueing without limit", async () => {
+	it("a healthy client survives a synchronous burst of board news, and gets all of it", async () => {
 		const s = await setup();
-		for (let n = 0; n < 500; n++) s.emit.entry(`burst-${n}`);
+		for (let n = 0; n < 300; n++) s.emit.board(`news-${n}`);
+		await waitFor(() => s.stream.output.includes("news-299"));
+		expect(s.stream.output).toContain("news-0");
+		expect(s.stream.ended).toBe(false);
+	});
+
+	it("a client that really stalls is cut off instead of queueing without limit", async () => {
+		const s = await setup();
+		// A second stream that opens and then never reads: the socket fills, then the server's own buffer.
+		const stalled = { ended: false };
+		await new Promise<void>((resolve) => {
+			const req = request(`${s.base}/api/events`, { headers: { cookie: `owni_session=${s.session}`, "x-owni": "1" } }, (res) => {
+				res.pause();
+				closers.push(async () => { req.destroy(); });
+				setTimeout(() => {
+					res.on("end", () => { stalled.ended = true; });
+					res.on("error", () => { stalled.ended = true; });
+					res.resume();
+				}, 3000);
+				resolve();
+			});
+			req.end();
+		});
+		const big = "x".repeat(100_000);
+		for (let n = 0; n < 300; n++) s.emit.entry(big);
+		await waitFor(() => stalled.ended, 15_000);
+		expect(s.stream.ended).toBe(false);
+	}, 30_000);
+
+	it("a person removed from the people list loses the stream, session or not", async () => {
+		const s = await setup();
+		await s.people.remove(s.anna.person.id);
+		s.emit.entry("SECRET-REMOVED-PERSON");
 		await waitFor(() => s.stream.ended);
+		expect(s.stream.output).not.toContain("SECRET-REMOVED-PERSON");
+	});
+
+	it("an idle stream closes on the next keep-alive once its session is revoked", async () => {
+		const s = await setup({ fakeInterval: true });
+		await s.sessions.end(s.session);
+		await vi.advanceTimersByTimeAsync(25_000);
+		await waitFor(() => s.stream.ended);
+		expect(s.stream.output).not.toContain(": ping");
+	});
+
+	it("a session that expires closes the stream, and the event is not written", async () => {
+		const s = await setup({ ttlMs: 1500 });
+		await new Promise((resolve) => setTimeout(resolve, 1700));
+		s.emit.entry("SECRET-AFTER-EXPIRY");
+		await waitFor(() => s.stream.ended);
+		expect(s.stream.output).not.toContain("SECRET-AFTER-EXPIRY");
 	});
 });
