@@ -2,17 +2,19 @@
  * Billing of answers (ADR 0098) on Pi Durable's own usage ledger: what each answer took, written
  * once per answer in the conversation's documents.
  */
+import type { Context } from "@earendil-works/chord";
 import type { Message } from "@earendil-works/pi-ai";
-import { CompactionEntry, type ConversationId, type Cursor, defineDoc, defineDocFamily, type EntryId, type EntryRecord, type Page, type Tx, UsageDoc } from "@earendil-works/pi-durable";
+import { CompactionEntry, type ConversationId, type Cursor, type DocumentReader, defineDoc, defineDocFamily, type EntryId, type EntryRecord, type Page, type Tx, UsageDoc } from "@earendil-works/pi-durable";
 import type { TurnUsage } from "../engine.ts";
 
 /**
  * How far this conversation is billed (ADR 0098): `answer` is the last answer billed, `spent` how
- * much of Pi's `pi.usage` had been spent at it. No `spent` until billing starts: when the
- * conversation is created, or for one created before, when this version first opens it.
+ * much of Pi's `pi.usage` had been spent at the last bill, an answer's or a turn's that ended
+ * unanswered, and `unanswered` the last entry such a turn's bill took in. No `spent` until billing
+ * starts: when the conversation is created, or for one created before, when this version first opens it.
  */
 type Spent = { input: number; output: number; cacheRead: number; cacheWrite: number; cost: number };
-export const BilledDoc = defineDoc<{ answer?: number; spent?: Spent }>({
+export const BilledDoc = defineDoc<{ answer?: number; spent?: Spent; unanswered?: number }>({
 	kind: "owni.billed-to",
 	version: 1,
 	scope: "conversation",
@@ -65,22 +67,23 @@ export function noSpend(): Spent {
  * read again gets its own bill back. Token and cost are Pi's own ledger of the conversation
  * (`pi.usage`, every provider call, summaries of a compaction included): at each answer the ledger
  * stood at today's total less the assistant messages written after it, and the bill is the growth
- * since the answer billed before. A call that left no message (a summary) goes to the first answer
- * billed after it was made. The tools are those the run called, in order; the model calls, its
- * assistant messages and compactions. Undefined for an answer from before billing started, and for
+ * since the bill before (an answer's, or a turn's that ended unanswered). A call that left no
+ * message (a summary) goes to the first bill after it was made. The tools are those the run called,
+ * in order; the model calls, its assistant messages and compactions; a turn that ended unanswered
+ * before it is on its own bill. Undefined for an answer from before billing started, and for
  * one that is not there.
  */
 export async function turnUsage(tx: Pick<Tx, "scanEntries" | "doc">, conversationId: ConversationId, answer: EntryId): Promise<TurnUsage | undefined> {
 	const billed = await tx.doc(BilledDoc, conversationId);
 	if (billed.spent === undefined) return undefined;
-	if (billed.answer === undefined || billed.answer < answer) await billAnswers(tx, conversationId, billed as { answer?: number; spent: Spent });
+	if (billed.answer === undefined || billed.answer < answer) await billAnswers(tx, conversationId, billed as { answer?: number; spent: Spent; unanswered?: number });
 	if (billed.answer === undefined || billed.answer < answer) return undefined;
 	const { bill } = await tx.doc(BillDoc, conversationId, String(answer), null);
 	return bill === undefined ? undefined : { ...bill, tools: [...bill.tools] };
 }
 
 /** Bill every answer after the last one billed, oldest first, from one complete scan of what came after it. */
-async function billAnswers(tx: Pick<Tx, "scanEntries" | "doc">, conversationId: ConversationId, billed: { answer?: number; spent: Spent }): Promise<void> {
+async function billAnswers(tx: Pick<Tx, "scanEntries" | "doc">, conversationId: ConversationId, billed: { answer?: number; spent: Spent; unanswered?: number }): Promise<void> {
 	const entries: EntryRecord[] = [];
 	let cursor: Cursor | undefined;
 	do {
@@ -94,19 +97,56 @@ async function billAnswers(tx: Pick<Tx, "scanEntries" | "doc">, conversationId: 
 	for (const entry of entries) {
 		run.push(entry);
 		if (!answered(entry)) continue;
-		const calls = assistants(run);
-		later = since(later, spentBy(calls));
+		later = since(later, spentBy(assistants(run)));
 		const at = since(now, later);
-		const spent = since(at, billed.spent);
-		const tools = calls.flatMap((m) => (m.stopReason === "toolUse" ? m.content.flatMap((c) => (c.type === "toolCall" ? [c.name] : [])) : []));
-		const modelCalls = calls.length + run.filter((e) => e.kind === CompactionEntry.kind).length;
-		// Never below zero: each difference is a sum of calls, only floating point can take it under.
-		const bill: Bill = { modelCalls, inputTokens: Math.max(0, spent.input), outputTokens: Math.max(0, spent.output), cacheReadTokens: Math.max(0, spent.cacheRead), cacheWriteTokens: Math.max(0, spent.cacheWrite), costUsd: Math.max(0, spent.cost), tools };
+		// The calls of a turn that ended unanswered are on its own bill already.
+		const bill = billOf(run.filter((e) => billed.unanswered === undefined || e.id > billed.unanswered), since(at, billed.spent));
 		await tx.doc(BillDoc, conversationId, String(entry.id), bill);
 		billed.answer = entry.id;
 		billed.spent = at;
 		run = [];
 	}
+}
+
+/** The bill of a run's `entries` that spent `spent`: the tools they called in order, their model calls and compactions. */
+function billOf(entries: readonly EntryRecord[], spent: Spent): Bill {
+	const calls = assistants(entries);
+	const tools = calls.flatMap((m) => (m.stopReason === "toolUse" ? m.content.flatMap((c) => (c.type === "toolCall" ? [c.name] : [])) : []));
+	const modelCalls = calls.length + entries.filter((e) => e.kind === CompactionEntry.kind).length;
+	// Never below zero: each difference is a sum of calls, only floating point can take it under.
+	return { modelCalls, inputTokens: Math.max(0, spent.input), outputTokens: Math.max(0, spent.output), cacheReadTokens: Math.max(0, spent.cacheRead), cacheWriteTokens: Math.max(0, spent.cacheWrite), costUsd: Math.max(0, spent.cost), tools };
+}
+
+/**
+ * What a turn that ended unanswered (cancelled, failed, refused by the cap) took (ADR 0098),
+ * billed once under its submission: everything spent since the last bill, so no spend stays
+ * unbilled and counts against the conversation forever. The answers written before it are billed
+ * first. Given again whenever it is read again; undefined before billing starts, and for a turn
+ * that spent nothing.
+ */
+export async function unansweredUsage(tx: Pick<Tx, "scanEntries" | "doc">, conversationId: ConversationId, submissionId: string): Promise<TurnUsage | undefined> {
+	const billed = await tx.doc(BilledDoc, conversationId);
+	if (billed.spent === undefined) return undefined;
+	const doc = await tx.doc(BillDoc, conversationId, `s${submissionId}`, null);
+	if (doc.bill === undefined) {
+		await billAnswers(tx, conversationId, billed as { answer?: number; spent: Spent; unanswered?: number });
+		const after = Math.max(billed.answer ?? -1, billed.unanswered ?? -1);
+		const entries: EntryRecord[] = [];
+		let cursor: Cursor | undefined;
+		do {
+			const page: Page<EntryRecord, Cursor> = await tx.scanEntries({ conversationId, order: "ascending", ...(after < 0 ? {} : { minEntryId: (after + 1) as EntryId }) }, 50, cursor);
+			entries.push(...page.items);
+			cursor = page.next;
+		} while (cursor !== undefined);
+		const now = await ledgerSpent(tx, conversationId);
+		doc.bill = billOf(entries, since(now, billed.spent));
+		billed.spent = now;
+		const last = entries.at(-1);
+		if (last !== undefined) billed.unanswered = last.id;
+	}
+	// A turn that sent nothing (refused at its first request) spent nothing: no row to record.
+	if (doc.bill.modelCalls === 0 && doc.bill.costUsd === 0) return undefined;
+	return { ...doc.bill, tools: [...doc.bill.tools] };
 }
 
 /**
@@ -130,6 +170,18 @@ export async function startBilling(tx: Pick<Tx, "scanEntries" | "doc">, conversa
 		cursor = page.next;
 	} while (cursor !== undefined);
 	billed.spent = since(await ledgerSpent(tx, conversationId), spentBy(assistants(after)));
+}
+
+/**
+ * What the conversation's model calls cost since its last bill: the turn under way, on no record
+ * of Owni's yet (it is recorded when it settles, answered or not). Zero before billing starts.
+ */
+export async function unbilledUsd(reader: DocumentReader, conversationId: ConversationId, readContext: Context): Promise<number> {
+	const billed = await reader.snapshot(BilledDoc, conversationId, readContext);
+	if (billed?.spent === undefined) return 0;
+	const usage = await reader.snapshot(UsageDoc, conversationId, readContext);
+	const total = Object.values(usage?.models ?? {}).reduce((sum, model) => sum + model.cost.total, 0);
+	return Math.max(0, total - billed.spent.cost);
 }
 
 /** Every model call of the conversation in Pi's ledger, summed across models. */

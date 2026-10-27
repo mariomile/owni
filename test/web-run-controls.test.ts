@@ -6,7 +6,7 @@ import { piDurableEngine } from "../src/core/adapters/pi-durable.ts";
 import { OwniRuntime } from "../src/core/runtime.ts";
 import { createSlowCounter } from "../src/core/tools/slow-counter.ts";
 import { UsageLedger } from "../src/core/usage.ts";
-import { connectChannel, REPLY_CANCELLED } from "../src/gateway.ts";
+import { connectChannel, REPLY_CANCELLED, REPLY_CAPPED } from "../src/gateway.ts";
 import { PeopleStore, SessionStore } from "../src/web/auth.ts";
 import { WebChannel } from "../src/web/channel.ts";
 import { createWebApp } from "../src/web/server.ts";
@@ -74,11 +74,12 @@ it("persists visible outcomes and source metadata without exposing another perso
 	expect((await a.api("/api/instances/ops/runs")).runs).toHaveLength(2);
 });
 
-it("does not count a Stop notice as the first successful conversation", async () => {
+it("does not count a Stop or spending-cap notice as the first successful conversation", async () => {
 	const s = await setup();
 	const owner = await s.client(s.owner.person.id);
 	const thread = await s.channel.createThread(s.owner.person.id, "Chat");
 	await s.channel.send({ tenantId: "acme", instanceId: "ops", channel: "web", threadId: thread.id, text: REPLY_CANCELLED, idempotencyKey: "stop-notice" });
+	await s.channel.send({ tenantId: "acme", instanceId: "ops", channel: "web", threadId: thread.id, text: REPLY_CAPPED, idempotencyKey: "cap-notice" });
 	expect((await owner.api("/api/instances/ops/setup")).setup.tried).toBe(false);
 	await s.channel.send({ tenantId: "acme", instanceId: "ops", channel: "web", threadId: thread.id, text: "La risposta richiesta", idempotencyKey: "answer" });
 	expect((await owner.api("/api/instances/ops/setup")).setup.tried).toBe(true);

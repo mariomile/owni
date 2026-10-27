@@ -317,7 +317,8 @@ describe("Owni Cloud control plane (cells as local processes)", () => {
 		previous.setUTCMonth(previous.getUTCMonth() - 1);
 		const tenantDir = join(c.root, "cells", tenant, "data", "tenants", tenant);
 		mkdirSync(tenantDir, { recursive: true });
-		writeFileSync(join(tenantDir, "usage-totals.json"), JSON.stringify({ [today]: 1.25, [`${previous.toISOString().slice(0, 7)}-10`]: 4, "2020-01-15": 9 }));
+		const row = (at: string, estimatedUsd: number) => `${JSON.stringify({ at, provider: "p", model: "m", role: "agent", inputTokens: 0, outputTokens: 0, estimatedUsd })}\n`;
+		writeFileSync(join(tenantDir, "usage.jsonl"), row(new Date().toISOString(), 1.25) + row(`${previous.toISOString().slice(0, 7)}-10T12:00:00Z`, 4) + row("2020-01-15T12:00:00Z", 9));
 		const awake = await c.cp.status();
 		expect(awake).toEqual([expect.objectContaining({ tenant, email: "anna@studio.example", cell: "running", spend: expect.objectContaining({ todayUsd: 1.25, monthUsd: 1.25, lastMonthUsd: 4 }) })]);
 		await c.cp.tick(new Date());
@@ -488,7 +489,8 @@ describe("Owni Cloud subscriptions (Stripe, faked)", () => {
 		const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
 		const tenantDir = join(c.root, "cells", tenant, "data", "tenants", tenant);
 		mkdirSync(tenantDir, { recursive: true });
-		const spent = (usd: number) => writeFileSync(join(tenantDir, "usage-totals.json"), JSON.stringify({ [today]: usd }));
+		const spent = (usd: number) =>
+			writeFileSync(join(tenantDir, "usage.jsonl"), `${JSON.stringify({ at: new Date().toISOString(), provider: "p", model: "m", role: "agent", inputTokens: 0, outputTokens: 0, estimatedUsd: usd })}\n`);
 		// During the trial: read when the cell goes to sleep, sent nowhere.
 		spent(1.25);
 		await c.cp.tick(new Date());

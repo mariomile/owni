@@ -1,6 +1,5 @@
 import { mkdir, readFile, appendFile, stat, truncate } from "node:fs/promises";
 import { join } from "node:path";
-import { writeFileAtomic } from "./atomic-file.ts";
 import type { AuditLog } from "./audit.ts";
 import type { TurnUsage } from "./engine.ts";
 import { SerialQueue } from "./serial-queue.ts";
@@ -44,21 +43,29 @@ export function estimateUsd(modelId: string, inputTokens: number, outputTokens: 
 	return (inputTokens / 1_000_000) * p.in + (outputTokens / 1_000_000) * p.out;
 }
 
+const ROME_DAY = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome", year: "numeric", month: "2-digit", day: "2-digit" });
+
 /** Europe/Rome civil day key YYYY-MM-DD. */
 export function romeDayKey(date = new Date()): string {
-	return new Intl.DateTimeFormat("en-CA", {
-		timeZone: "Europe/Rome",
-		year: "numeric",
-		month: "2-digit",
-		day: "2-digit",
-	}).format(date);
+	return ROME_DAY.format(date);
 }
 
-/** The record being written for each totals file: a ledger of the same tenant waits for it. */
+/** The record being written for each ledger file: a read of the same tenant waits for it. */
 const recording = new SerialQueue();
 
+type Ledger = { readonly records: readonly UsageRecord[]; readonly days: ReadonlyMap<string, number> };
+
 /** Each ledger file as last read or written in this process, by its identity on disk: parsed again only when that changes. */
-const ledgers = new Map<string, { readonly stamp: string; readonly size: bigint; readonly records: readonly UsageRecord[] }>();
+const ledgers = new Map<string, Ledger & { readonly stamp: string; readonly size: bigint }>();
+
+/** What was spent each day (Europe/Rome), from the records alone. */
+function spentByDay(records: readonly UsageRecord[], days = new Map<string, number>()): Map<string, number> {
+	for (const r of records) {
+		const day = romeDayKey(new Date(r.at));
+		days.set(day, (days.get(day) ?? 0) + r.estimatedUsd);
+	}
+	return days;
+}
 
 async function identity(path: string): Promise<{ stamp: string; size: bigint } | undefined> {
 	try {
@@ -71,8 +78,11 @@ async function identity(path: string): Promise<{ stamp: string; size: bigint } |
 }
 
 /**
- * Per-tenant daily usage ledger (append-only JSONL + day totals JSON).
- * Soft cap: warn; hard cap: reject new model calls (send-only Approva still allowed).
+ * Per-tenant usage ledger: one append-only JSONL file, the only record of the spend. The day and
+ * month totals are sums of its lines, kept in memory with the parsed file and computed again
+ * whenever the file changes: a fault or a crash after a line is written leaves nothing to
+ * reconcile, the next read (a retry, a new process) sums the same lines.
+ * Soft cap: warn; hard cap: refuse new model requests (runtime.ts asks before each one).
  */
 export class UsageLedger {
 	constructor(
@@ -84,44 +94,44 @@ export class UsageLedger {
 		return join(this.tenantDir, "usage.jsonl");
 	}
 
-	private totalsPath(): string {
-		return join(this.tenantDir, "usage-totals.json");
-	}
-
 	async ensure(): Promise<void> {
 		await mkdir(this.tenantDir, { recursive: true });
 	}
 
 	async todaySpent(): Promise<number> {
-		const totals = await this.readTotals();
-		return totals[romeDayKey()] ?? 0;
+		return (await this.days()).get(romeDayKey()) ?? 0;
 	}
 
-	/** One record at a time per tenant in this process: the day totals are read, added to and written back. */
+	/** One record at a time per tenant in this process: the ledger is read, checked for the turn and appended to. */
 	record(rec: UsageRecord, audit?: AuditLog): Promise<{ softExceeded: boolean; hardExceeded: boolean }> {
-		return recording.run(this.totalsPath(), () => this.write(rec, audit));
+		return recording.run(this.usagePath(), () => this.write(rec, audit));
 	}
 
 	/** Every record written, oldest first: only whole lines, read between two records being written. */
 	records(): Promise<UsageRecord[]> {
-		return recording.run(this.totalsPath(), async () => [...(await this.ledger(false))]);
+		return recording.run(this.usagePath(), async () => [...(await this.ledger(false)).records]);
+	}
+
+	private days(): Promise<ReadonlyMap<string, number>> {
+		return recording.run(this.usagePath(), async () => (await this.ledger(false)).days);
 	}
 
 	/** The ledger's whole lines; `repair`: first drop a line a crash cut short, so the next record does not glue to it. */
-	private async ledger(repair: boolean): Promise<readonly UsageRecord[]> {
+	private async ledger(repair: boolean): Promise<Ledger> {
 		const path = this.usagePath();
 		const before = await identity(path);
-		if (before === undefined) return [];
+		if (before === undefined) return { records: [], days: new Map() };
 		const cached = ledgers.get(path);
-		if (cached?.stamp === before.stamp) return cached.records;
+		if (cached?.stamp === before.stamp) return cached;
 		const log = await this.readLog();
 		const whole = log.lastIndexOf("\n") + 1;
 		if (repair && whole < log.length) await truncate(path, Buffer.byteLength(log.slice(0, whole)));
 		const records = parseRecords(log, path);
+		const read = { records, days: spentByDay(records) };
 		// Only a ledger that ends with a whole line is kept: a cut one is read again next time.
 		const after = await identity(path);
-		if (after !== undefined && after.size === BigInt(Buffer.byteLength(log.slice(0, whole)))) ledgers.set(path, { ...after, records });
-		return records;
+		if (after !== undefined && after.size === BigInt(Buffer.byteLength(log.slice(0, whole)))) ledgers.set(path, { ...after, ...read });
+		return read;
 	}
 
 	private async readLog(): Promise<string> {
@@ -137,70 +147,62 @@ export class UsageLedger {
 		await this.ensure();
 		const log = await this.ledger(true);
 		const day = romeDayKey(new Date(rec.at));
-		const totals = await this.readTotals();
 		// A turn is billed once: a recovery that delivers it again finds it already on record (ADR 0098).
 		const billed =
 			rec.role === "agent" &&
 			rec.instanceId !== undefined &&
 			rec.submissionId !== undefined &&
-			log.some((r) => r.role === "agent" && r.instanceId === rec.instanceId && r.submissionId === rec.submissionId);
+			log.records.some((r) => r.role === "agent" && r.instanceId === rec.instanceId && r.submissionId === rec.submissionId);
 		if (billed) {
-			const spent = totals[day] ?? 0;
+			const spent = log.days.get(day) ?? 0;
 			return { softExceeded: spent >= this.caps.softUsdPerDay, hardExceeded: spent >= this.caps.hardUsdPerDay };
 		}
 		const line = `${JSON.stringify(rec)}\n`;
 		const before = await identity(this.usagePath());
+		// Not fsynced: a power cut may lose the newest line, and the totals with it, never one without the other.
 		await appendFile(this.usagePath(), line, { mode: 0o600 });
+		const days = spentByDay([rec], new Map(log.days));
 		// Known without reading it back, unless someone else wrote to it in between.
 		const after = await identity(this.usagePath());
 		const expected = (before?.size ?? 0n) + BigInt(Buffer.byteLength(line));
-		if (after !== undefined && after.size === expected && ledgers.get(this.usagePath())?.size === (before?.size ?? -1n)) ledgers.set(this.usagePath(), { ...after, records: [...log, rec] });
+		if (after !== undefined && after.size === expected && ledgers.get(this.usagePath())?.size === (before?.size ?? -1n)) ledgers.set(this.usagePath(), { ...after, records: [...log.records, rec], days });
 		else ledgers.delete(this.usagePath());
-		totals[day] = (totals[day] ?? 0) + rec.estimatedUsd;
-		// The line above is not fsynced either: syncing the totals' folder would buy nothing on a power cut.
-		await writeFileAtomic(this.totalsPath(), `${JSON.stringify(totals, null, "\t")}\n`, { durable: false });
-		const spent = totals[day]!;
+		const spent = days.get(day) ?? 0;
 		const softExceeded = spent >= this.caps.softUsdPerDay;
 		const hardExceeded = spent >= this.caps.hardUsdPerDay;
-		if (audit) {
-			if (hardExceeded) {
-				await audit.append({ type: "cost.denied", day, spentUsd: spent, hardUsd: this.caps.hardUsdPerDay });
-			} else if (softExceeded) {
-				await audit.append({ type: "cost.warn", day, spentUsd: spent, softUsd: this.caps.softUsdPerDay });
-			}
-		}
+		// Over the hard cap, the next model request is refused and that refusal audited (cost.denied, runtime.ts).
+		if (audit !== undefined && softExceeded && !hardExceeded) await audit.append({ type: "cost.warn", day, spentUsd: spent, softUsd: this.caps.softUsdPerDay });
 		return { softExceeded, hardExceeded };
 	}
 
 	/** Spent per month ("YYYY-MM", Europe/Rome), every month on record. */
 	async byMonth(): Promise<Record<string, number>> {
 		const months: Record<string, number> = {};
-		for (const [day, usd] of Object.entries(await this.readTotals())) months[day.slice(0, 7)] = (months[day.slice(0, 7)] ?? 0) + usd;
+		for (const [day, usd] of await this.days()) months[day.slice(0, 7)] = (months[day.slice(0, 7)] ?? 0) + usd;
 		return months;
 	}
 
 	/** Spent this month (Europe/Rome), or in the month "YYYY-MM". */
 	async monthSpent(month = romeDayKey().slice(0, 7)): Promise<number> {
-		const totals = await this.readTotals();
-		return Object.entries(totals).reduce((sum, [day, usd]) => (day.startsWith(`${month}-`) ? sum + usd : sum), 0);
+		return (await this.byMonth())[month] ?? 0;
 	}
 
-	/** true when new model generations must be rejected. */
+	/**
+	 * Today's hard cap reached, with `unrecordedUsd` (spent by work still running, on no record
+	 * yet) counted: new model requests must be refused. What counts as spent today, then.
+	 */
+	async hardCapped(unrecordedUsd = 0): Promise<{ readonly day: string; readonly spentUsd: number; readonly hardUsd: number } | undefined> {
+		const spentUsd = (await this.todaySpent()) + unrecordedUsd;
+		return spentUsd >= this.caps.hardUsdPerDay ? { day: romeDayKey(), spentUsd, hardUsd: this.caps.hardUsdPerDay } : undefined;
+	}
+
+	/** true when new model requests must be refused. */
 	async isHardCapped(): Promise<boolean> {
-		return (await this.todaySpent()) >= this.caps.hardUsdPerDay;
+		return (await this.hardCapped()) !== undefined;
 	}
 
 	async isSoftCapped(): Promise<boolean> {
 		return (await this.todaySpent()) >= this.caps.softUsdPerDay;
-	}
-
-	private async readTotals(): Promise<Record<string, number>> {
-		try {
-			return JSON.parse(await readFile(this.totalsPath(), "utf8")) as Record<string, number>;
-		} catch (err) {
-			if ((err as NodeJS.ErrnoException).code === "ENOENT") return {};
-			throw err;
-		}
 	}
 }
 
@@ -208,14 +210,26 @@ export class UsageLedger {
 function parseRecords(log: string, path: string): UsageRecord[] {
 	const lines = log.slice(0, log.lastIndexOf("\n") + 1).split("\n");
 	lines.pop();
+	// A whole line that is not a record (edited by hand, a disk error) is skipped and said, never
+	// thrown: the cap and the stats read the same lines, and one bad line must not stop every turn.
 	return lines.flatMap((line, i) => {
 		if (line === "") return [];
+		let rec: unknown;
 		try {
-			return [JSON.parse(line) as UsageRecord];
+			rec = JSON.parse(line);
 		} catch {
-			throw new Error(`${path}: line ${i + 1} is not a usage record`);
+			rec = undefined;
 		}
+		if (isRecord(rec)) return [rec];
+		console.error(`owni: ${path}: line ${i + 1} is not a usage record, skipped`);
+		return [];
 	});
+}
+
+function isRecord(value: unknown): value is UsageRecord {
+	if (typeof value !== "object" || value === null) return false;
+	const { at, estimatedUsd } = value as Record<string, unknown>;
+	return typeof at === "string" && !Number.isNaN(Date.parse(at)) && typeof estimatedUsd === "number" && Number.isFinite(estimatedUsd);
 }
 export type TurnStats = {
 	readonly turns: number;
