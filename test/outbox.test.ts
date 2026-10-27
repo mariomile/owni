@@ -2,7 +2,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { DUPLICATE_NOTICE } from "../src/channels/telegram.ts";
-import { type ChannelAdapter, ChannelRefused, type OutboundMessage } from "../src/channels/types.ts";
+import { type ChannelAdapter, ChannelRefused, type OutboundMessage, type OutboundReaction } from "../src/channels/types.ts";
 import { piDurableEngine } from "../src/core/adapters/pi-durable.ts";
 import { OwniRuntime, type DurableEngine, type EngineSession, Outbox, type OutboxEntry, type Reply } from "../src/core/index.ts";
 import { connectChannel } from "../src/gateway.ts";
@@ -370,6 +370,67 @@ describe("reply outbox: review regressions", () => {
 		const keys = channel.sent.map((m) => m.idempotencyKey).sort();
 		expect(keys[0]).toMatch(/^reply:acme\/ops\//);
 		expect(keys[1]).toMatch(/^reply:globex\/ops\//);
+		await runtime.close();
+	});
+});
+
+describe("reactions through the outbox (ADR 0132)", () => {
+	const reaction = { channel: "test", threadId: "t1", messageId: "m1", emoji: "👍", key: "call-1" };
+	/** A test channel that also reacts: `react` records what it was asked. */
+	const reacting = () => {
+		const reactions: OutboundReaction[] = [];
+		return Object.assign(testChannel(async () => {}), {
+			reactions,
+			react: async (r: OutboundReaction) => void reactions.push(r),
+		});
+	};
+
+	it("a reaction reaches adapter.react with the message and the emoji, and is marked delivered", async () => {
+		const { runtime, dataDir } = await runtimeWithInstance({});
+		const channel = reacting();
+		connectChannel(runtime, channel, { tenantId: "acme", instanceId: "ops" });
+		await runtime.sendReaction("acme", "ops", reaction);
+		await waitFor(() => outboxEntries(dataDir)[0]?.deliveredAt !== undefined);
+		expect(channel.reactions).toEqual([expect.objectContaining({ channel: "test", threadId: "t1", messageId: "m1", emoji: "👍", idempotencyKey: "react:acme/ops/call-1" })]);
+		expect(channel.sent).toEqual([]);
+		expect(outboxEntries(dataDir)).toEqual([expect.objectContaining({ key: "react:acme/ops/call-1", reply: { status: "reaction", emoji: "👍", messageId: "m1" }, attempts: 1 })]);
+		await runtime.close();
+	});
+
+	it("the same key delivers once; another key is another reaction", async () => {
+		const { runtime, dataDir } = await runtimeWithInstance({});
+		const channel = reacting();
+		connectChannel(runtime, channel, { tenantId: "acme", instanceId: "ops" });
+		await runtime.sendReaction("acme", "ops", reaction);
+		await waitFor(() => outboxEntries(dataDir)[0]?.deliveredAt !== undefined);
+		await runtime.sendReaction("acme", "ops", reaction);
+		await new Promise((resolve) => setTimeout(resolve, 100));
+		expect(channel.reactions).toHaveLength(1);
+		await runtime.sendReaction("acme", "ops", { ...reaction, key: "call-2", emoji: "🔥" });
+		await waitFor(() => channel.reactions.length === 2);
+		expect(channel.reactions.map((r) => r.emoji)).toEqual(["👍", "🔥"]);
+		await runtime.close();
+	});
+
+	it("a channel without react has nothing to deliver: the reaction is delivered, nothing thrown", async () => {
+		const { runtime, dataDir } = await runtimeWithInstance({});
+		const channel = testChannel(async () => {});
+		const logs: string[] = [];
+		connectChannel(runtime, channel, { tenantId: "acme", instanceId: "ops" }, (line) => logs.push(line));
+		await runtime.sendReaction("acme", "ops", reaction);
+		await waitFor(() => outboxEntries(dataDir)[0]?.deliveredAt !== undefined);
+		expect(channel.sent).toEqual([]);
+		expect(logs).toEqual([]);
+		await runtime.close();
+	});
+
+	it("an answer with only blanks is marked delivered and never sent", async () => {
+		const { runtime, dataDir } = await runtimeWithInstance({});
+		const channel = reacting();
+		connectChannel(runtime, channel, { tenantId: "acme", instanceId: "ops" });
+		await runtime.sendMessage("acme", "ops", { channel: "test", threadId: "t1", text: " \n ", key: "blank" });
+		await waitFor(() => outboxEntries(dataDir)[0]?.deliveredAt !== undefined);
+		expect(channel.sent).toEqual([]);
 		await runtime.close();
 	});
 });

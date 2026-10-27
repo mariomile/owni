@@ -99,7 +99,7 @@ export function eventsRoutes(route: AddRoute, options: EventsRoutesDeps): void {
 		// A stanza the person still has.
 		const roomEntry = (event: RoomEvent) => enqueue(`room:${++counter}`, {
 			allowed: async (person) => { if (await options.rooms?.get(person.id, event.roomId) === undefined) throw new Error("No such room"); },
-			frame: `event: room\ndata: ${JSON.stringify({ roomId: event.roomId, entry: shown(event.entry), ...(event.parent === undefined ? {} : { parent: event.parent }) })}\n\n`,
+			frame: `event: room\ndata: ${JSON.stringify({ roomId: event.roomId, entry: shown(event.entry), ...(event.parent === undefined ? {} : { parent: event.parent }), ...(event.reaction === undefined ? {} : { reaction: true }) })}\n\n`,
 		});
 		options.rooms?.events.on(p.id, roomEntry);
 		// A quiet stream still ends with its session: the ping is checked like any event.

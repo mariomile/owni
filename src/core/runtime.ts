@@ -86,6 +86,8 @@ export type Reply = {
 	| { readonly status: "unanswered"; readonly reason: string; readonly cancelled?: true }
 	/** A file of the instance's workspace to send to the thread. */
 	| { readonly status: "file"; readonly path: string; readonly caption?: string }
+	/** An emoji on a message of the thread (ADR 0132), by the channel's id of that message. */
+	| { readonly status: "reaction"; readonly emoji: string; readonly messageId: string }
 );
 
 /** Tools of an instance, with what to release when it closes (connector connections). */
@@ -185,6 +187,11 @@ export class OwniRuntime {
 	 */
 	async sendMessage(tenant: string, instance: string, message: { channel: string; threadId: string; text: string; key: string; secret?: boolean }): Promise<void> {
 		await (await this.openInstance(tenant, instance)).sendMessage(message);
+	}
+
+	/** An emoji on a message of a thread (ADR 0132), through the outbox like a message: the same `key` once. */
+	async sendReaction(tenant: string, instance: string, reaction: { channel: string; threadId: string; messageId: string; emoji: string; key: string }): Promise<void> {
+		await (await this.openInstance(tenant, instance)).sendReaction(reaction);
 	}
 
 	/** The organigramma of a tenant (ADR 0117): squadre, roles and who answers to whom. */
@@ -1096,6 +1103,18 @@ export class OwniInstance {
 					createdAt: new Date().toISOString(),
 					attempts: 0,
 				},
+			);
+		});
+	}
+
+	async sendReaction(reaction: { channel: string; threadId: string; messageId: string; emoji: string; key: string }): Promise<void> {
+		assertChannelAllowed(this.record.egress, reaction.channel);
+		const key = `react:${this.record.tenantId}/${this.record.id}/${reaction.key}`;
+		await this.serial(key, async () => {
+			const existing = await this.outbox.get(key);
+			if (existing?.deliveredAt !== undefined) return;
+			await this.handOff(
+				existing ?? { key, submissionId: "reaction", channel: reaction.channel, threadId: reaction.threadId, reply: { status: "reaction", emoji: reaction.emoji, messageId: reaction.messageId }, createdAt: new Date().toISOString(), attempts: 0 },
 			);
 		});
 	}

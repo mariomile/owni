@@ -7,7 +7,7 @@ import { copyButton, listenButton } from "../listen.js";
 import { refreshConversations, render, renderRail, windowDrag } from "../shell.js";
 import { artifactCard, artifactPanel, isHtml } from "../artifacts.js";
 import { agentPanel } from "../agent-panel.js";
-import { markRead, meAvatar, threadPanel, threadSummary } from "../threads.js";
+import { markRead, meAvatar, reactionRow, showReaction, threadPanel, threadSummary } from "../threads.js";
 
 // ---------- canali (ADR 0063, 0113) ----------
 /** How many messages a canale draws at first; earlier ones are loaded on request. */
@@ -101,7 +101,7 @@ const fileCard = (instanceId, file) => (isHtml(file.path) ? h("div.file-open", f
 
 function roomMessage(room, entry, answer, slot) {
 	if (entry.from === "note") return h("div.room-note", entry.text);
-	if (entry.from === "person") return h("div.msg.person", h("div.meta", fmt.time(entry.at)), h("div.body", entry.text), answer ? h("div.msg-actions", answer) : null, slot);
+	if (entry.from === "person") return h("div.msg.person", { "data-entry": entry.id }, h("div.meta", fmt.time(entry.at)), h("div.body", entry.text), reactionRow(entry.reactions), answer ? h("div.msg-actions", answer) : null, slot);
 	const agent = room.agents.find((a) => a.instanceId === entry.instanceId);
 	const by = entry.model ? h("span.by", { title: `${entry.model.provider} · ${entry.model.modelId}` }, entry.model.name ?? entry.model.modelId) : null;
 	// Each agente's name in the colour of its face, so that who is speaking reads at a glance.
@@ -110,9 +110,9 @@ function roomMessage(room, entry, answer, slot) {
 	const who = known && openAgent ? h("button.who", { type: "button", title: `Apri ${agent?.name ?? "l'agente"}`, onclick: () => openAgent(entry.instanceId) }, name) : h("b.who", name);
 	who.style.setProperty("--agent", faceColor(agent ?? { id: entry.instanceId }));
 	const actions = entry.text || answer ? h("div.msg-actions", entry.text ? [copyButton(entry.text), listenButton(entry.text)] : null, answer) : null;
-	const msg = h("div.msg.owni", h("div.meta", face(agent ?? { id: entry.instanceId }, 20), who, h("span", fmt.time(entry.at)), by), entry.artifact ? artifactCard(entry.instanceId, entry.artifact.threadId, entry.artifact, (a) => void artifacts?.openArtifact(entry.instanceId, entry.artifact.threadId, a))
+	const msg = h("div.msg.owni", { "data-entry": entry.id }, h("div.meta", face(agent ?? { id: entry.instanceId }, 20), who, h("span", fmt.time(entry.at)), by), entry.artifact ? artifactCard(entry.instanceId, entry.artifact.threadId, entry.artifact, (a) => void artifacts?.openArtifact(entry.instanceId, entry.artifact.threadId, a))
 		: entry.file ? fileCard(entry.instanceId, entry.file)
-		: h("div.body", renderMarkdown(entry.text ?? "")), actions, slot);
+		: h("div.body", renderMarkdown(entry.text ?? "")), reactionRow(entry.reactions), actions, slot);
 	// A click in its interactive answer (ADR 0118) goes back to the agente that wrote it, not to the last one that spoke.
 	if (agent?.present) msg.addEventListener("openui-action", (event) => { event.detail.text = `@${agent.handle} ${event.detail.text}`.slice(0, 4000); });
 	return msg;
@@ -256,6 +256,13 @@ async function viewRoom(main, roomId, openId) {
 	transcript.append(older);
 	for (const e of entries.slice(from)) show(e);
 	state.onRoom = (event) => {
+		// A reaction (ADR 0132) changes a message already on screen, and is the agente's answer: the wait ends, nothing is counted.
+		if (event.reaction) {
+			showReaction(event.entry.id, event.entry.reactions);
+			if (event.roomId === roomId) typing.remove();
+			else if (event.roomId === panel.current()) panel.stopTyping();
+			return true;
+		}
 		if (event.roomId === roomId) {
 			if (event.entry.from === "person") return true;
 			// An answer ends the wait; one that calls another agente starts the next on the server.

@@ -28,6 +28,7 @@ import { createChartTools } from "../core/tools/chart-tools.ts";
 import { createCodeTools } from "../core/tools/code-tools.ts";
 import { createComputerTools } from "../core/tools/computer-tools.ts";
 import { createCustomTools } from "../core/tools/custom-tools.ts";
+import { createReactionTools } from "../core/tools/reaction-tools.ts";
 import { createDesktopTools } from "../core/tools/desktop-tools.ts";
 import { createDocumentTools } from "../core/tools/document-tools.ts";
 import { createImageTools } from "../core/tools/image-tools.ts";
@@ -163,6 +164,7 @@ export async function assembleTools(w: ToolsWiring, record: InstanceRecord): Pro
 					budget: { left: () => w.recordingSeconds.left(record.tenantId), spend: (seconds) => w.recordingSeconds.spend(record.tenantId, seconds) },
 					record: audit(),
 				})),
+		...createReactionTools({ react: (reaction) => runtime.sendReaction(record.tenantId, record.id, reaction) }),
 		...createScheduleTools({ store: runtime.schedules(record.tenantId, record.id), defaultTimeZone: config.timeZone }),
 		...createAutomationTools({
 			store: runtime.automations(record.tenantId, record.id),

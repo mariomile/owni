@@ -2,7 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { EventEmitter } from "node:events";
 import { appendFile, mkdir, readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { ChannelAdapter, InboundMessage, OutboundFile, OutboundMessage } from "../channels/types.ts";
+import { type ChannelAdapter, ChannelRefused, type InboundMessage, type OutboundFile, type OutboundMessage, type OutboundReaction } from "../channels/types.ts";
 import { type ArtifactRef, ArtifactStore } from "../core/artifacts.ts";
 import { writeFileAtomic } from "../core/atomic-file.ts";
 
@@ -35,11 +35,28 @@ export type WebEntry = {
 	readonly images?: readonly string[];
 	/** The model that wrote Owni's reply; `name` is added for the console, never stored. */
 	readonly model?: { readonly provider: string; readonly modelId: string; readonly name?: string };
+	/** The agente's reaction to this message (ADR 0132): folded in from the transcript, never stored on it. */
+	readonly reaction?: string;
+	/** In a stanza's seat: the stanza's message this one carries to the agente, the one its reaction lands on. */
+	readonly about?: string;
 };
 
-export type WebEvent = { readonly instanceId: string; readonly threadId: string; readonly entry: WebEntry };
+/** A line of the transcript that is no message: the agente's emoji on an earlier one; the last one wins. */
+type WebReaction = { readonly id: string; readonly at: string; readonly to: string; readonly emoji: string };
+
+/** The transcript as shown: each reaction on the message it answers. */
+function foldReactions(lines: readonly (WebEntry | WebReaction)[]): WebEntry[] {
+	const reactions = new Map(lines.flatMap((l) => ("to" in l ? [[l.to, l.emoji] as const] : [])));
+	return lines.flatMap((l) => ("to" in l ? [] : [reactions.has(l.id) ? { ...l, reaction: reactions.get(l.id) as string } : l]));
+}
+
+/** `reaction`: `entry` is an earlier message, shown again with the agente's reaction on it. */
+export type WebEvent = { readonly instanceId: string; readonly threadId: string; readonly entry: WebEntry; readonly reaction?: true };
 /** A reply in a seat of a stanza, emitted as "room" instead of to the person. */
 export type WebRoomEvent = WebEvent & { readonly room: string };
+
+/** The transcript line of what a key delivers: the same key, the same line. */
+const lineId = (key: string) => `r_${createHash("sha256").update(key).digest("hex").slice(0, 24)}`;
 
 const THREAD_ID = /^p_[0-9a-f]{12}\.[0-9a-f]{12}$/;
 
@@ -162,13 +179,17 @@ export class WebChannel implements ChannelAdapter {
 	}
 
 	async transcript(threadId: string): Promise<WebEntry[]> {
+		return foldReactions(await this.lines(threadId));
+	}
+
+	private async lines(threadId: string): Promise<(WebEntry | WebReaction)[]> {
 		if (!THREAD_ID.test(threadId)) return [];
 		try {
 			const text = await readFile(join(this.dir, "messages", `${threadId}.jsonl`), "utf8");
 			return text
 				.split("\n")
 				.filter((l) => l !== "")
-				.map((l) => JSON.parse(l) as WebEntry);
+				.map((l) => JSON.parse(l) as WebEntry | WebReaction);
 		} catch (error) {
 			if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
 			throw error;
@@ -178,16 +199,17 @@ export class WebChannel implements ChannelAdapter {
 	/**
 	 * A person writes in their thread. Rejects if the core does not admit it. `command`: their own
 	 * words, when `text` wraps them (a stanza's seat). `context`: told to the agente before the
-	 * person's words and never written in the transcript (the message a thread answers).
+	 * person's words and never written in the transcript (the message a thread answers). `about`: in a
+	 * seat, the stanza's message this one carries.
 	 */
-	async post(threadId: string, personId: string, text: string, more: { readonly attachments?: InboundMessage["attachments"]; readonly images?: readonly { readonly path: string; readonly data: Uint8Array }[]; readonly command?: string; readonly context?: string; readonly origin?: InboundMessage["origin"] } = {}): Promise<WebEntry> {
-		const { attachments, images = [], context, origin } = more;
+	async post(threadId: string, personId: string, text: string, more: { readonly attachments?: InboundMessage["attachments"]; readonly images?: readonly { readonly path: string; readonly data: Uint8Array }[]; readonly command?: string; readonly context?: string; readonly origin?: InboundMessage["origin"]; readonly about?: string } = {}): Promise<WebEntry> {
+		const { attachments, images = [], context, origin, about } = more;
 		const command = more.command ?? (context === undefined ? undefined : text);
 		const thread = await this.thread(threadId);
 		if (thread === undefined || thread.personId !== personId) throw new Error("No such thread");
 		if (this.handler === undefined) throw new Error("Web channel not connected");
 		const handler = this.handler;
-		const entry: WebEntry = { id: `m_${randomBytes(8).toString("hex")}`, at: new Date().toISOString(), from: "person", text, ...(images.length === 0 ? {} : { images: images.map((i) => i.path) }) };
+		const entry: WebEntry = { id: `m_${randomBytes(8).toString("hex")}`, at: new Date().toISOString(), from: "person", text, ...(images.length === 0 ? {} : { images: images.map((i) => i.path) }), ...(about === undefined ? {} : { about }) };
 		// The instance is told where each picture is, so it can come back to it later (image_view).
 		const said = [context, text, ...images.map((i) => `[Immagine nel workspace: ${i.path}]`)].filter(Boolean).join("\n\n");
 		// Owni's answer can be ready before this message is written down: the thread's writes go
@@ -229,9 +251,28 @@ export class WebChannel implements ChannelAdapter {
 		await this.deliver(threadId, key, { artifact: { id: artifact.id, version: artifact.version, title: artifact.title } });
 	}
 
+	/** The agente's emoji on a message of the thread (ADR 0132): it does not make the thread unread. */
+	async react(reaction: OutboundReaction): Promise<void> {
+		const { threadId, messageId, emoji } = reaction;
+		if (!THREAD_ID.test(threadId)) throw new ChannelRefused(`Not a web thread: ${threadId}`);
+		const id = lineId(reaction.idempotencyKey);
+		const done = await this.serial(threadId, async () => {
+			const lines = await this.lines(threadId);
+			if (!lines.some((l) => !("to" in l) && l.id === messageId)) throw new ChannelRefused(`No message ${messageId} in this thread`);
+			// Resent after a crash: written once, shown again (a later reaction still wins).
+			if (!lines.some((l) => l.id === id)) {
+				const line: WebReaction = { id, at: new Date().toISOString(), to: messageId, emoji };
+				await this.append(threadId, line);
+				lines.push(line);
+			}
+			return { entry: foldReactions(lines).find((e) => e.id === messageId) as WebEntry, room: (await this.thread(threadId))?.room };
+		});
+		this.publish({ instanceId: this.instance.instanceId, threadId, entry: done.entry, reaction: true }, done.room);
+	}
+
 	private async deliver(threadId: string, key: string, body: Pick<WebEntry, "text" | "file" | "model" | "artifact">): Promise<void> {
 		if (!THREAD_ID.test(threadId)) throw new Error(`Not a web thread: ${threadId}`);
-		const id = `r_${createHash("sha256").update(key).digest("hex").slice(0, 24)}`;
+		const id = lineId(key);
 		const done = await this.serial(threadId, async () => {
 			const thread = await this.thread(threadId);
 			// Resent after a crash: shown once. A seat's reply may not have reached its stanza yet, so it
@@ -247,9 +288,13 @@ export class WebChannel implements ChannelAdapter {
 			return { entry, room: thread?.room };
 		});
 		if (done === undefined) return;
-		const event: WebEvent = { instanceId: this.instance.instanceId, threadId, entry: done.entry };
-		if (done.room !== undefined) this.events.emit("room", { ...event, room: done.room } satisfies WebRoomEvent);
-		else this.events.emit(WebChannel.ownerOf(threadId) ?? "", event);
+		this.publish({ instanceId: this.instance.instanceId, threadId, entry: done.entry }, done.room);
+	}
+
+	/** A seat's news goes to its stanza; the rest to the person the thread belongs to. */
+	private publish(event: WebEvent, room: string | undefined): void {
+		if (room !== undefined) this.events.emit("room", { ...event, room } satisfies WebRoomEvent);
+		else this.events.emit(WebChannel.ownerOf(event.threadId) ?? "", event);
 	}
 
 	private readonly writing = new Map<string, Promise<unknown>>();
@@ -265,7 +310,7 @@ export class WebChannel implements ChannelAdapter {
 		return next;
 	}
 
-	private async append(threadId: string, entry: WebEntry): Promise<void> {
+	private async append(threadId: string, entry: WebEntry | WebReaction): Promise<void> {
 		await mkdir(join(this.dir, "messages"), { recursive: true });
 		await appendFile(join(this.dir, "messages", `${threadId}.jsonl`), `${JSON.stringify(entry)}\n`, { mode: 0o600 });
 	}

@@ -135,6 +135,15 @@ describe("WhatsApp adapter", () => {
 		expect(graph.calls.some((c) => c.path === `/${PHONE_ID}/media` && c.method === "POST")).toBe(true);
 	});
 
+	it("reacts to a message with the reaction message type, the emoji as it is (ADR 0132)", async () => {
+		const graph = await fakeGraph();
+		const wa = adapterFor(graph.base);
+		await wa.react({ tenantId: "default", instanceId: "owni", channel: "whatsapp", threadId: "393331234567", idempotencyKey: "react:1", messageId: "wamid.in1", emoji: "❤️" });
+		expect(graph.calls.filter((c) => c.path === `/${PHONE_ID}/messages`)).toEqual([
+			expect.objectContaining({ method: "POST", body: { messaging_product: "whatsapp", recipient_type: "individual", to: "393331234567", type: "reaction", reaction: { message_id: "wamid.in1", emoji: "❤️" } } }),
+		]);
+	});
+
 	it("a file it cannot have still lets the message through, saying so; a message that keeps failing is let go after three tries", async () => {
 		const graph = await fakeGraph();
 		const logs: string[] = [];
@@ -214,6 +223,23 @@ describe("WhatsApp beyond the 24-hour window", () => {
 		return wa;
 	};
 	const templates = (graph: Awaited<ReturnType<typeof fakeGraph>>) => graph.sent().filter((b) => b.type === "template");
+
+	it("outside the window a reaction is dropped: nothing sent, nothing thrown, and it is logged (ADR 0132)", async () => {
+		const graph = await fakeGraph();
+		const store = memoryWindow();
+		const logs: string[] = [];
+		const wa = adapter(graph.base, store, { log: (m) => logs.push(m) });
+		const reaction = { ...base, idempotencyKey: "react:1", messageId: "wamid.in1", emoji: "👍" };
+		store.setLast("393331234567", Date.now() - 48 * 3_600_000);
+		await expect(wa.react(reaction)).resolves.toBeUndefined();
+		expect(graph.sent()).toEqual([]);
+		expect(store.state()["393331234567"]?.parked ?? []).toEqual([]);
+		expect(logs).toEqual(["whatsapp: reaction to 393331234567 dropped, outside the 24-hour window"]);
+		// Inside it, the same reaction goes.
+		store.setLast("393331234567", Date.now() - 3_600_000);
+		await wa.react(reaction);
+		expect(graph.sent()).toEqual([expect.objectContaining({ type: "reaction", reaction: { message_id: "wamid.in1", emoji: "👍" } })]);
+	});
 
 	it("inside the window it writes; outside it keeps the message, tells once with the approved template, and delivers when the person writes", async () => {
 		const graph = await fakeGraph();

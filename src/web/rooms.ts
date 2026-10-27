@@ -40,10 +40,26 @@ export type RoomEntry = {
 	readonly model?: WebEntry["model"];
 	/** An agente's HTML page (ADR 0112), with the seat thread it lives in. */
 	readonly artifact?: NonNullable<WebEntry["artifact"]> & { readonly threadId: string };
+	/** The agenti's reactions to it (ADR 0132), one each: folded in from the stanza, never stored on it. */
+	readonly reactions?: readonly { readonly instanceId: string; readonly emoji: string }[];
 };
 
-/** `parent`: for a thread, the canale it is under. */
-export type RoomEvent = { readonly roomId: string; readonly entry: RoomEntry; readonly parent?: string };
+/** A line of the stanza that is no message: an agente's emoji on an earlier one; its last one there wins. */
+type RoomReaction = { readonly id: string; readonly at: string; readonly instanceId: string; readonly to: string; readonly emoji: string };
+
+/** The stanza as shown: each reaction on the message it answers. */
+function foldReactions(lines: readonly (RoomEntry | RoomReaction)[]): RoomEntry[] {
+	const on = new Map<string, Map<string, string>>();
+	for (const l of lines) if ("to" in l) on.set(l.to, (on.get(l.to) ?? new Map<string, string>()).set(l.instanceId, l.emoji));
+	return lines.flatMap((l) => {
+		if ("to" in l) return [];
+		const reactions = on.get(l.id);
+		return [reactions === undefined ? l : { ...l, reactions: [...reactions].map(([instanceId, emoji]) => ({ instanceId, emoji })) }];
+	});
+}
+
+/** `parent`: for a thread, the canale it is under. `reaction`: `entry` is an earlier message, shown again with a new reaction. */
+export type RoomEvent = { readonly roomId: string; readonly entry: RoomEntry; readonly parent?: string; readonly reaction?: true };
 
 export const ROOM_LIMITS = { agents: 5, perPerson: 50, title: 80, text: 4000, chain: 3, missed: 40, missedChars: 16_000 } as const;
 
@@ -118,19 +134,23 @@ export class RoomStore {
 	}
 
 	async entries(roomId: string): Promise<RoomEntry[]> {
+		return foldReactions(await this.lines(roomId));
+	}
+
+	private async lines(roomId: string): Promise<(RoomEntry | RoomReaction)[]> {
 		if (!ROOM_ID.test(roomId)) return [];
 		try {
 			return (await readFile(join(this.dir, `${roomId}.jsonl`), "utf8"))
 				.split("\n")
 				.filter((l) => l !== "")
-				.map((l) => JSON.parse(l) as RoomEntry);
+				.map((l) => JSON.parse(l) as RoomEntry | RoomReaction);
 		} catch (error) {
 			if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
 			throw error;
 		}
 	}
 
-	async append(roomId: string, entry: RoomEntry): Promise<void> {
+	async append(roomId: string, entry: RoomEntry | RoomReaction): Promise<void> {
 		await mkdir(this.dir, { recursive: true });
 		await appendFile(join(this.dir, `${roomId}.jsonl`), `${JSON.stringify(entry)}\n`, { mode: 0o600 });
 	}
@@ -336,6 +356,7 @@ export class Rooms {
 
 	/** An agente answered in its seat: the answer joins the stanza, and calls the agenti it names. */
 	private async answered(event: WebRoomEvent): Promise<void> {
+		if (event.reaction === true) return this.reacted(event);
 		const result = await this.serial(event.room, async () => {
 			const room = await this.store.get(event.room);
 			const seat = room?.seats.find((s) => s.instanceId === event.instanceId && s.threadId === event.threadId);
@@ -355,6 +376,26 @@ export class Rooms {
 		if (result === undefined) return;
 		await this.callAll(event.room, result.calls, event.instanceId);
 		if (result.stopped) await this.note(event.room, `Gli agenti si sono chiamati ${ROOM_LIMITS.chain} volte di fila: tocca a te. Scrivi @nome per chiamarne uno.`);
+	}
+
+	/**
+	 * An agente reacted in its seat to what was passed to it: the reaction lands on the stanza's message
+	 * the seat's one carried. It calls nobody and is no news to the other agenti.
+	 */
+	private async reacted(event: WebRoomEvent): Promise<void> {
+		const { reaction: emoji, about: to } = event.entry;
+		if (emoji === undefined || to === undefined) return;
+		await this.serial(event.room, async () => {
+			const room = await this.store.get(event.room);
+			if (room === undefined || !room.seats.some((s) => s.instanceId === event.instanceId && s.threadId === event.threadId)) return;
+			const target = (await this.store.entries(room.id)).find((e) => e.id === to);
+			// Resent after a crash, or the message gone: nothing to change.
+			if (target === undefined || target.reactions?.some((r) => r.instanceId === event.instanceId && r.emoji === emoji)) return;
+			await this.store.append(room.id, { id: `x_${randomBytes(8).toString("hex")}`, at: new Date().toISOString(), instanceId: event.instanceId, to, emoji });
+			// The message as a reload shows it, reactions in the same order.
+			const reacted = (await this.store.entries(room.id)).find((e) => e.id === to);
+			if (reacted !== undefined) this.emit(room, reacted, true);
+		});
 	}
 
 	/** Call each agente in turn; one that cannot be reached leaves a note in the stanza. */
@@ -385,6 +426,8 @@ export class Rooms {
 			// Its own answers are no news to it.
 			const missed = entries.slice(seat.seen).filter((e) => e.from !== "note" && e.instanceId !== instanceId);
 			const lastPerson = by === undefined ? [...missed].reverse().find((e) => e.from === "person") : undefined;
+			// The stanza's message this call carries: the one a reaction of the agente lands on.
+			const about = by === undefined ? lastPerson?.id : [...missed].reverse().find((e) => e.instanceId === by)?.id;
 			const lines = missed.filter((e) => e !== lastPerson).map((e) => `[${e.from === "person" ? "Persona" : nameOf(e.instanceId)}] ${(e.text ?? (e.file ? `(file ${e.file.path})` : e.artifact ? `(artifact «${e.artifact.title}», versione ${e.artifact.version})` : "")).replace(/\n/g, "\n  ")}`);
 			const kept = recent(lines);
 			const short = handles(present);
@@ -403,12 +446,12 @@ export class Rooms {
 			].filter((p) => p !== "");
 			// «@contabile /chiusura-mese ottobre»: the person's words without the names they called, read for a command.
 			const command = lastPerson?.text?.replace(/^(?:\s*@[\p{L}\p{N}_-]+[\s,:]*)+/u, "").trim();
-			return { room, seat, seen: entries.length, text: parts.join("\n\n"), ...(command?.startsWith("/") ? { command } : {}) };
+			return { room, seat, seen: entries.length, text: parts.join("\n\n"), ...(command?.startsWith("/") ? { command } : {}), ...(about === undefined ? {} : { about }) };
 		});
 		if (prepared === undefined) return;
 		const channel = this.agents.channel(instanceId);
 		if (channel === undefined) throw new RoomError(`${instanceId} non ha più la chat`);
-		await channel.post(prepared.seat.threadId, prepared.room.personId, prepared.text, { ...(prepared.command === undefined ? {} : { command: prepared.command }), ...(by === undefined ? {} : { origin: "agent" as const }) });
+		await channel.post(prepared.seat.threadId, prepared.room.personId, prepared.text, { ...(prepared.command === undefined ? {} : { command: prepared.command }), ...(by === undefined ? {} : { origin: "agent" as const }), ...(prepared.about === undefined ? {} : { about: prepared.about }) });
 		// Only what reached the agente counts as seen.
 		await this.serial(roomId, async () => {
 			const room = await this.store.get(roomId);
@@ -437,8 +480,8 @@ export class Rooms {
 		});
 	}
 
-	private emit(room: Room, entry: RoomEntry): void {
-		this.events.emit(room.personId, { roomId: room.id, entry, ...(room.parent === undefined ? {} : { parent: room.parent.roomId }) } satisfies RoomEvent);
+	private emit(room: Room, entry: RoomEntry, reaction = false): void {
+		this.events.emit(room.personId, { roomId: room.id, entry, ...(room.parent === undefined ? {} : { parent: room.parent.roomId }), ...(reaction ? { reaction } : {}) } satisfies RoomEvent);
 	}
 
 	/** Run `work` after the stanza's earlier writes, in this process. */

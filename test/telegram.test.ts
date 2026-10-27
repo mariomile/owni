@@ -27,7 +27,7 @@ function fakeTelegram(batches: unknown[][]) {
 			return Response.json({ ok: true, result: batch ?? [] });
 		}
 		if (method === "sendMessage") return Response.json({ ok: true, result: { message_id: calls.length } });
-		if (method === "answerCallbackQuery" || method === "setWebhook") return Response.json({ ok: true, result: true });
+		if (method === "answerCallbackQuery" || method === "setWebhook" || method === "setMessageReaction") return Response.json({ ok: true, result: true });
 		return Response.json({ ok: false, error_code: 404, description: "Not Found" });
 	});
 	return { calls, fetch: fetchMock as unknown as typeof fetch };
@@ -68,6 +68,28 @@ describe("Telegram adapter (mocked fetch)", () => {
 			["sendMessage", "42", 1],
 		]);
 		expect(splitText("")).toEqual(["(risposta vuota)"]);
+	});
+
+	it("reacts with setMessageReaction: the message number after the last colon, the emoji without its variation selector (ADR 0132)", async () => {
+		const api = fakeTelegram([]);
+		const adapter = new TelegramAdapter({ token: TOKEN, tenantId: "acme", instanceId: "ops", fetch: api.fetch });
+		const reaction = { tenantId: "acme", instanceId: "ops", channel: "telegram", threadId: "-5", idempotencyKey: "react:1", messageId: "-5:17", emoji: "❤️" };
+		await adapter.react(reaction);
+		await adapter.react({ ...reaction, messageId: "42:9", threadId: "42", emoji: "👍" });
+		expect(api.calls).toEqual([
+			{ method: "setMessageReaction", body: { chat_id: "-5", message_id: 17, reaction: [{ type: "emoji", emoji: "\u2764" }] } },
+			{ method: "setMessageReaction", body: { chat_id: "42", message_id: 9, reaction: [{ type: "emoji", emoji: "👍" }] } },
+		]);
+	});
+
+	it("refuses a reaction to something that is no Telegram message, and calls nothing", async () => {
+		const api = fakeTelegram([]);
+		const adapter = new TelegramAdapter({ token: TOKEN, tenantId: "acme", instanceId: "ops", fetch: api.fetch });
+		const reaction = { tenantId: "acme", instanceId: "ops", channel: "telegram", threadId: "42", idempotencyKey: "react:1", emoji: "👍" };
+		for (const messageId of ["m_abc", "42:abc", "42:1.5", "42:"]) {
+			expect(await adapter.react({ ...reaction, messageId }).catch((e: unknown) => e), messageId).toBeInstanceOf(ChannelRefused);
+		}
+		expect(api.calls).toEqual([]);
 	});
 
 	it("puts the duplicate warning on top of a possibly repeated reply, within the length limit", async () => {

@@ -90,6 +90,12 @@ export type OutboundVoice = Omit<OutboundMessage, "buttons"> & {
 	readonly audio: Uint8Array;
 };
 
+/** An emoji on a message of the thread (ADR 0132): `messageId` is the channel's own id of it, as inbound. */
+export type OutboundReaction = Omit<OutboundMessage, "text" | "buttons" | "model"> & {
+	readonly messageId: string;
+	readonly emoji: string;
+};
+
 export interface ChannelAdapter {
 	readonly name: string;
 	/** Start receiving. Resolves once the adapter is running. */
@@ -117,6 +123,11 @@ export interface ChannelAdapter {
 	 * channel that refuses it still gets the text). Optional: channels without voice notes omit it.
 	 */
 	sendVoice?(voice: OutboundVoice): Promise<void>;
+	/**
+	 * Resolves once the channel shows the reaction on the message; the agente's earlier one there is
+	 * replaced. Optional: on a channel without reactions, a reaction is nothing to deliver.
+	 */
+	react?(reaction: OutboundReaction): Promise<void>;
 	/** Show that a voice note is being recorded in this thread; best effort, never throws. */
 	recording?(threadId: string): Promise<void>;
 }

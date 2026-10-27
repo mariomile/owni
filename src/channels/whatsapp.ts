@@ -4,7 +4,7 @@ import { imageType, isPhoto } from "../core/images.ts";
 import { audioName, isRecording, RECORDING_TOO_LARGE, TRANSCRIBED, type Transcribe, voiceText } from "./voice.ts";
 import { sameSecret } from "../web/compare.ts";
 import { DUPLICATE_NOTICE, splitText, tailOf } from "./text.ts";
-import { type ActionButton, type ChannelAdapter, ChannelRefused, type InboundAction, type InboundMessage, type OutboundFile, type OutboundMessage, type OutboundVoice } from "./types.ts";
+import { type ActionButton, type ChannelAdapter, ChannelRefused, type InboundAction, type InboundMessage, type OutboundFile, type OutboundMessage, type OutboundReaction, type OutboundVoice } from "./types.ts";
 
 /** Largest image WhatsApp shows as a picture. */
 const WHATSAPP_MAX_IMAGE = 5 * 1024 * 1024;
@@ -325,6 +325,12 @@ export class WhatsAppAdapter implements ChannelAdapter {
 			for (const chunk of splitText(head, MAX_TEXT)) await this.call("POST", `/${this.options.phoneNumberId}/messages`, { ...to, type: "text", text: { body: chunk, preview_url: false } });
 		}
 		if (buttons.length > 0) await this.call("POST", `/${this.options.phoneNumberId}/messages`, { ...to, type: "interactive", interactive: replyButtons(tail || "…", buttons) });
+	}
+
+	/** A reaction replaces Owni's earlier one on the message. Outside the 24-hour window it would be refused, and is old news: dropped. */
+	async react(reaction: OutboundReaction): Promise<void> {
+		if (await this.windowClosed(reaction.threadId)) return void this.options.log?.(`whatsapp: reaction to ${reaction.threadId} dropped, outside the 24-hour window`);
+		await this.call("POST", `/${this.options.phoneNumberId}/messages`, { messaging_product: "whatsapp", recipient_type: "individual", to: reaction.threadId, type: "reaction", reaction: { message_id: reaction.messageId, emoji: reaction.emoji } });
 	}
 
 	/** Upload, then send as a picture or a document. A file cannot wait for the window: outside it, it is refused. */

@@ -87,6 +87,9 @@ export function connectChannel(
 				if (adapter.sendFile === undefined) return adapter.send({ ...base, text: `File pronto nel workspace: ${reply.path}${reply.caption ? `\n${reply.caption}` : ""}` });
 				return adapter.sendFile({ ...base, name, data, path: reply.path, ...(reply.caption === undefined ? {} : { caption: reply.caption }) });
 			}
+			if (reply.status === "reaction") return adapter.react?.({ ...base, messageId: reply.messageId, emoji: reply.emoji });
+			// An agente that reacted has nothing more to say (ADR 0132): no empty message.
+			if (reply.status === "answered" && reply.text.trim() === "") return;
 			if (reply.status === "unanswered") log(`${adapter.name}: unanswered in thread ${reply.threadId}: ${reply.reason}`);
 			const text = reply.status === "answered" ? reply.text : reply.cancelled === true ? REPLY_CANCELLED : reply.reason === COST_CAPPED ? REPLY_CAPPED : REPLY_FAILED;
 			// Only the reply to the message that asked for it, and only the first time: a retry sends the text alone.
