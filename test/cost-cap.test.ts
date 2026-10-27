@@ -3,9 +3,11 @@
  * leaves, whatever started the turn, and the person is told so. Asked by the engine before each
  * request, so a turn that crosses the cap mid-way stops at its next call, and a resumed run too.
  */
-import { appendFileSync, mkdirSync, readFileSync, rmSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import type { Provider } from "@earendil-works/pi-ai/models";
+import { AssistantMessageEventStream } from "@earendil-works/pi-ai/utils/event-stream";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { piDurableEngine } from "../src/core/adapters/pi-durable.ts";
 import { connectorAction } from "../src/core/approvals.ts";
 import type { DurableEngine } from "../src/core/engine.ts";
@@ -13,12 +15,68 @@ import { OwniRuntime, type OwniTool, type Reply } from "../src/core/index.ts";
 import { REPLY_CAPPED } from "../src/gateway.ts";
 import { runtimeWithInstance, waitFor } from "./helpers.ts";
 
+/** The dev model with a price: each request it answers costs `usd`, in Pi's usage of the conversation. */
+const price = vi.hoisted(() => ({ usd: 0 }));
+vi.mock("../src/core/adapters/pi-durable-models.ts", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("../src/core/adapters/pi-durable-models.ts")>();
+	const priced = (provider: Provider): Provider => ({
+		...provider,
+		streamSimple: (model, transcript, options) => {
+			const inner = provider.streamSimple(model, transcript, options);
+			const out = new AssistantMessageEventStream();
+			void (async () => {
+				for await (const event of inner) {
+					if (event.type === "done") event.message.usage.cost.total = price.usd;
+					if (event.type === "error") event.error.usage.cost.total = price.usd;
+					out.push(event);
+				}
+				out.end();
+			})();
+			return out;
+		},
+	});
+	return { ...actual, createProvider: (...args: Parameters<typeof actual.createProvider>) => (price.usd > 0 && args[0] === "faux" ? priced(actual.createProvider(...args)) : actual.createProvider(...args)) };
+});
+
 const runtimes: OwniRuntime[] = [];
 const dirs: string[] = [];
 afterEach(async () => {
 	for (const r of runtimes.splice(0)) await r.close();
 	for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
+	price.usd = 0;
 });
+
+/** The ledger's rows; none before the first one is written. */
+const records = (dataDir: string) =>
+	(existsSync(join(tenantDir(dataDir), "usage.jsonl")) ? readFileSync(join(tenantDir(dataDir), "usage.jsonl"), "utf8") : "")
+		.split("\n")
+		.filter((line) => line !== "")
+		.map((line) => JSON.parse(line) as { at: string; estimatedUsd: number; submissionId?: string; threadId?: string });
+
+/** A tool that waits until the test lets it go, or the turn is stopped. */
+function heldTool(): { tool: OwniTool; started: string[]; release: () => void } {
+	const started: string[] = [];
+	let release!: () => void;
+	const released = new Promise<void>((resolve) => (release = resolve));
+	return {
+		started,
+		release: () => release(),
+		tool: {
+			name: "hold",
+			description: "Waits.",
+			parameters: { type: "object", properties: {}, additionalProperties: false },
+			replaySafe: true,
+			async execute(_args, ctx) {
+				started.push(ctx.thread!.threadId);
+				await new Promise<void>((resolve, reject) => {
+					ctx.signal.addEventListener("abort", () => reject(ctx.signal.reason), { once: true });
+					void released.then(resolve);
+				});
+				return "fatto";
+			},
+		},
+	};
+}
 
 const tenantDir = (dataDir: string) => join(dataDir, "tenants", "acme");
 
@@ -154,5 +212,58 @@ describe("daily hard cap", () => {
 		await waitFor(() => replies.length === 1);
 		expect(replies[0]).toMatchObject({ status: "answered" });
 		expect(denials(dataDir)).toEqual([]);
+	});
+});
+
+describe("spend of a turn that ends unanswered", () => {
+	it("is billed when the turn is refused, so the next day the conversation answers again", async () => {
+		const quick: OwniTool = { name: "quick", description: "Quick.", parameters: { type: "object", properties: {}, additionalProperties: false }, replaySafe: true, execute: async () => "fatto" };
+		const { runtime, dataDir, replies } = await setup([quick]);
+		price.usd = 30;
+		// Its first request costs 30, over the cap of 20: the next one is refused.
+		await runtime.submit({ tenantId: "acme", instanceId: "ops", channel: "test", threadId: "p", userId: "u", text: "/tool quick {}", messageId: "m1" });
+		await waitFor(() => replies.length === 1);
+		expect(replies[0]).toMatchObject({ status: "unanswered", capped: true });
+		const refused = records(dataDir);
+		// The day turns: what was spent is yesterday's.
+		const yesterday = new Date(Date.now() - 86_400_000).toISOString();
+		writeFileSync(join(tenantDir(dataDir), "usage.jsonl"), refused.map((r) => `${JSON.stringify({ ...r, at: yesterday })}\n`).join(""));
+		await runtime.submit({ tenantId: "acme", instanceId: "ops", channel: "test", threadId: "p", userId: "u", text: "ciao", messageId: "m2" });
+		await waitFor(() => replies.length === 2);
+		expect(replies[1]).toMatchObject({ status: "answered" });
+		expect(denials(dataDir)).toHaveLength(1);
+		expect(refused).toEqual([expect.objectContaining({ threadId: "p", estimatedUsd: 30, submissionId: expect.any(String) })]);
+		expect(records(dataDir).map((r) => r.estimatedUsd)).toEqual([30, 30]);
+	});
+
+	it("is on the ledger when the person stops the turn, once", async () => {
+		const held = heldTool();
+		const { runtime, dataDir, replies } = await setup([held.tool]);
+		price.usd = 3;
+		const { runId } = await runtime.submit({ tenantId: "acme", instanceId: "ops", channel: "test", threadId: "p", userId: "u", text: "/tool hold {}", messageId: "m1" });
+		await waitFor(() => held.started.length === 1);
+		await runtime.stopConversation("acme", "ops", { channel: "test", threadId: "p" });
+		await waitFor(() => replies.length === 1);
+		expect(replies[0]).toMatchObject({ status: "unanswered", cancelled: true });
+		const run = (await runtime.listRuns("acme", "ops")).find((r) => r.id === runId);
+		expect(records(dataDir)).toEqual([expect.objectContaining({ threadId: "p", estimatedUsd: 3, submissionId: run?.submissionId })]);
+	});
+
+	it("turns of two conversations at the same time each see only their own unrecorded spend: together they pass the cap, each by at most one request", async () => {
+		const held = heldTool();
+		const { runtime, dataDir, replies } = await setup([held.tool]);
+		price.usd = 15;
+		for (const threadId of ["a", "b"]) await runtime.submit({ tenantId: "acme", instanceId: "ops", channel: "test", threadId, userId: "u", text: "/tool hold {}", messageId: `m-${threadId}` });
+		await waitFor(() => held.started.length === 2);
+		held.release();
+		await waitFor(() => replies.length === 2);
+		// Each turn: 15 recorded nowhere yet, under 20, so its second request goes too.
+		expect(replies.map((r) => r.status)).toEqual(["answered", "answered"]);
+		expect(records(dataDir).reduce((sum, r) => sum + r.estimatedUsd, 0)).toBe(60);
+		// Two conversations, each up to the cap plus one request: at most 2 * (20 + 15).
+		expect(60).toBeLessThanOrEqual(2 * (20 + 15));
+		await runtime.submit({ tenantId: "acme", instanceId: "ops", channel: "test", threadId: "c", userId: "u", text: "ciao", messageId: "m-c" });
+		await waitFor(() => replies.length === 3);
+		expect(replies[2]).toMatchObject({ threadId: "c", capped: true });
 	});
 });

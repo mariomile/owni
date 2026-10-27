@@ -210,14 +210,26 @@ export class UsageLedger {
 function parseRecords(log: string, path: string): UsageRecord[] {
 	const lines = log.slice(0, log.lastIndexOf("\n") + 1).split("\n");
 	lines.pop();
+	// A whole line that is not a record (edited by hand, a disk error) is skipped and said, never
+	// thrown: the cap and the stats read the same lines, and one bad line must not stop every turn.
 	return lines.flatMap((line, i) => {
 		if (line === "") return [];
+		let rec: unknown;
 		try {
-			return [JSON.parse(line) as UsageRecord];
+			rec = JSON.parse(line);
 		} catch {
-			throw new Error(`${path}: line ${i + 1} is not a usage record`);
+			rec = undefined;
 		}
+		if (isRecord(rec)) return [rec];
+		console.error(`owni: ${path}: line ${i + 1} is not a usage record, skipped`);
+		return [];
 	});
+}
+
+function isRecord(value: unknown): value is UsageRecord {
+	if (typeof value !== "object" || value === null) return false;
+	const { at, estimatedUsd } = value as Record<string, unknown>;
+	return typeof at === "string" && !Number.isNaN(Date.parse(at)) && typeof estimatedUsd === "number" && Number.isFinite(estimatedUsd);
 }
 export type TurnStats = {
 	readonly turns: number;

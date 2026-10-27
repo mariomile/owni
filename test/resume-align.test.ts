@@ -10,7 +10,7 @@ import { AgentDoc, type ConversationId, createRegistry, defineDoc, Harness } fro
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { piDurableEngine } from "../src/core/adapters/pi-durable.ts";
-import type { OwniTool, EngineOpenOptions, EngineReply } from "../src/core/engine.ts";
+import { ModelRequestRefused, type OwniTool, type EngineOpenOptions, type EngineReply } from "../src/core/engine.ts";
 import { tenantId } from "../src/core/ids.ts";
 import { TenantRegistry } from "../src/core/registry.ts";
 import { modelApiKeySecret, TenantSecrets } from "../src/core/secrets.ts";
@@ -390,6 +390,40 @@ describe("restart after the configuration changed", () => {
 			await session.idle();
 			expect(sent.map((s) => s.provider)).toEqual(["faux", "xai"]);
 			expect(sent[1]!.content).toEqual(sent[0]!.content);
+			expect(faux.state.callCount).toBe(2);
+		} finally { await session.close(); }
+	});
+
+	it("a compaction's summary is refused by the spending cap like any other request: nothing is sent", async () => {
+		const storageDir = tempDataDir();
+		const faux = fauxProvider({ provider: DEV.provider, models: [{ id: DEV.modelId }] });
+		providers.set(DEV.provider, faux.provider);
+		const sent: number[] = [];
+		faux.setResponses([fauxAssistantMessage("old answer"), async (_context, options) => {
+			sent.push(sent.length);
+			await new Promise<void>((resolve) => options!.signal!.addEventListener("abort", () => resolve(), { once: true }));
+			return fauxAssistantMessage("interrupted", { stopReason: "aborted" });
+		}, fauxAssistantMessage("summary sent anyway")]);
+		const first = await piDurableEngine.open({ storageDir, model: DEV, apiKey: async () => undefined, tools: [] });
+		await first.submit("web:t1", "summarize this history");
+		await first.idle();
+		await first.close();
+		const models = createModels({ credentials: { read: async () => undefined, list: async () => [], modify: async () => {}, delete: async () => {} }, authContext: { env: async () => undefined, fileExists: async () => false } });
+		models.setProvider(faux.provider);
+		const storage = await openNodeSqliteStorage(join(storageDir, "pi-durable.sqlite"));
+		const harness = await Harness.open(storage, { models, registry: createRegistry(), settings: { compaction: { keepRecentTokens: 1 } } }, BACKGROUND_CONTEXT);
+		const threads = defineDoc<{ threads: Record<string, number> }>({ kind: "owni.threads", version: 1, scope: "session", initial: () => ({ threads: {} }) });
+		const id = (await harness.snapshot(threads, BACKGROUND_CONTEXT))!.threads["web:t1"] as ConversationId;
+		await (await harness.conversation(id, BACKGROUND_CONTEXT))!.compact(undefined, BACKGROUND_CONTEXT);
+		await waitFor(() => sent.length === 1);
+		await harness.close(BACKGROUND_CONTEXT);
+		const asked: (string | undefined)[] = [];
+		const session = await piDurableEngine.open({ storageDir, model: DEV, apiKey: async () => undefined, tools: [], authorizeRequest: async ({ threadKey }) => { asked.push(threadKey); throw new ModelRequestRefused("capped"); } });
+		try {
+			await session.resume();
+			await session.idle();
+			expect(asked).toContain("web:t1");
+			// The old answer and the summary interrupted before the restart: the summary is not sent again.
 			expect(faux.state.callCount).toBe(2);
 		} finally { await session.close(); }
 	});

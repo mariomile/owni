@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "vitest";
-import { startBilling, turnUsage } from "../src/core/adapters/pi-durable-billing.ts";
+import { startBilling, turnUsage, unansweredUsage } from "../src/core/adapters/pi-durable-billing.ts";
 import { piDurableEngine } from "../src/core/adapters/pi-durable.ts";
 import type { EngineReply } from "../src/core/engine.ts";
 import { tenantId } from "../src/core/ids.ts";
@@ -153,6 +153,22 @@ describe("quanto costa un turno (ADR 0098)", () => {
 		// Recovery reads both again, in either order.
 		expect(await turnUsage(fakeTx(entries, 2, models, docs), 1 as never, 4 as never)).toEqual(b);
 		expect(await turnUsage(fakeTx(entries, 2, models, docs), 1 as never, 2 as never)).toEqual(a);
+	});
+
+	it("a turn that ends unanswered is billed once under its submission, and the next answer pays only its own run", async () => {
+		const docs = fresh();
+		// A answered (0.1); U called a tool (0.5) and was stopped; B answers after it (0.2).
+		const upToU: FakeEntry[] = [{ id: 4, model: [{ role: "toolResult" }] }, assistant(3, said(0.5, "web_search")), input(2), assistant(1, said(0.1)), input(0)];
+		expect((await turnUsage(fakeTx(upToU.slice(3), 2, { "p/m": ledger(0.1) }, docs), 1 as never, 1 as never))?.costUsd).toBeCloseTo(0.1, 9);
+		const u = await unansweredUsage(fakeTx(upToU, 2, { "p/m": ledger(0.6) }, docs), 1 as never, "u1");
+		expect(u).toEqual({ modelCalls: 1, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: expect.closeTo(0.5, 9), tools: ["web_search"] });
+		// Read again after a restart: the same bill, nothing billed twice.
+		expect(await unansweredUsage(fakeTx(upToU, 2, { "p/m": ledger(0.6) }, docs), 1 as never, "u1")).toEqual(u);
+		const all: FakeEntry[] = [assistant(6, said(0.2)), input(5), ...upToU];
+		const b = await turnUsage(fakeTx(all, 2, { "p/m": ledger(0.8) }, docs), 1 as never, 6 as never);
+		expect(b).toMatchObject({ modelCalls: 1, costUsd: expect.closeTo(0.2, 9), tools: [] });
+		// A turn refused before its first request spent nothing: no row.
+		expect(await unansweredUsage(fakeTx([input(7), ...all], 2, { "p/m": ledger(0.8) }, docs), 1 as never, "r1")).toBeUndefined();
 	});
 
 	it("answers read out of order are billed in order: the newer one does not take the older one's run", async () => {

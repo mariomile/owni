@@ -47,7 +47,7 @@ import { DEFAULT_IMAGE_LIMITS, type ImageProcessor } from "@earendil-works/pi-du
 import { ModelRequestRefused, type OwniTool, type DurableEngine, type EngineImage, type EngineOpenOptions, type EngineReply, type EngineSession, type EngineRunEvent, type EngineRunState, type JsonValue, type TurnUsage } from "../engine.ts";
 import type { ModelSelection } from "../registry.ts";
 import { isTurnOrigin, type TurnOrigin } from "../turn-origin.ts";
-import { answered, BilledDoc, noSpend, startBilling, turnUsage, unbilledUsd } from "./pi-durable-billing.ts";
+import { answered, BilledDoc, noSpend, startBilling, turnUsage, unansweredUsage, unbilledUsd } from "./pi-durable-billing.ts";
 import { createProvider } from "./pi-durable-models.ts";
 
 const context = BACKGROUND_CONTEXT;
@@ -505,7 +505,9 @@ class PiDurableSession implements EngineSession {
 				reply = { status: "answered", threadKey, submissionId, ...(await this.answer(settled)) };
 			} else {
 				const refused = typeof settled.detail === "string" && settled.detail.includes(REFUSED);
-				reply = { status: "unanswered", threadKey, submissionId, reason: settled.reason ?? settled.status, cancelled: settled.reason === "aborted", ...(refused ? { refused } : {}) };
+				// Billed like an answer, so its spend is on record and no longer counts against the conversation.
+				const usage = await (await this.harness.conversation(settled.conversationId, context))?.commit((tx) => unansweredUsage(tx, settled.conversationId, submissionId), context);
+				reply = { status: "unanswered", threadKey, submissionId, reason: settled.reason ?? settled.status, cancelled: settled.reason === "aborted", ...(refused ? { refused } : {}), ...(usage === undefined ? {} : { usage }) };
 			}
 		} catch (error) {
 			if (this.closing) return; // the next process resumes it

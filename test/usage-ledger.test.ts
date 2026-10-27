@@ -60,11 +60,21 @@ describe("the usage ledger (ADR 0098)", () => {
 		expect(await readFile(join(dir, "usage.jsonl"), "utf8")).not.toContain("prov\n");
 	});
 
-	it("says which whole line is not a record instead of skipping it", async () => {
+	it("skips and says each whole line that is not a record, the same for the cap and the stats", async () => {
 		const { dir, ledger } = ledgerIn();
-		await ledger.record(turn("s1"));
-		await appendFile(join(dir, "usage.jsonl"), "not json\n");
-		await expect(ledger.records()).rejects.toThrow(/usage\.jsonl: line 2 is not a usage record/);
+		const said = vi.spyOn(console, "error").mockImplementation(() => {});
+		try {
+			await ledger.record(turn("s1", 15));
+			await appendFile(join(dir, "usage.jsonl"), 'not json\n{"at":"yesterday","estimatedUsd":9}\n{"at":"2026-10-22T10:00:00Z","estimatedUsd":"9"}\n');
+			await ledger.record(turn("s2", 6));
+			expect((await ledger.records()).map((r) => r.submissionId)).toEqual(["s1", "s2"]);
+			expect(await ledger.todaySpent()).toBe(21);
+			expect(await ledger.monthSpent()).toBe(21);
+			expect(await ledger.isHardCapped()).toBe(true);
+			expect(said.mock.calls.map(([message]) => String(message))).toEqual(expect.arrayContaining([expect.stringMatching(/usage\.jsonl: line 2 is not a usage record, skipped/), expect.stringMatching(/line 3 /), expect.stringMatching(/line 4 /)]));
+		} finally {
+			said.mockRestore();
+		}
 	});
 
 	it("a read while records are being written sees each of them whole", async () => {

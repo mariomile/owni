@@ -112,6 +112,8 @@ export type EngineReply =
 			readonly cancelled?: boolean;
 			/** No request was sent: authorizeRequest refused it. */
 			readonly refused?: boolean;
+			/** What the turn took before it ended, when the engine can tell (ADR 0098). */
+			readonly usage?: TurnUsage;
 	  };
 
 export type EngineRunState = {

@@ -477,10 +477,12 @@ export class OwniRuntime {
 		const usage = new UsageLedger(tenantDir(this.options.dataDir, record.tenantId));
 		/**
 		 * The daily hard cap, asked before every new model request of every turn, whoever started it.
-		 * Most it can be overshot by: a request already sent finishes and is paid, and the turns of
-		 * other conversations running at the same time count only once they answer and are recorded;
-		 * this conversation's own spend so far counts at once. Actions already approved run all the
-		 * same (they call no model); the turn that would tell about them is refused like any other.
+		 * It counts what is recorded today plus this conversation's own spend not recorded yet; a
+		 * turn is recorded when it settles, answered or not. So it is a limit per conversation, not a
+		 * global one: each of N conversations running at the same time can reach the cap on its own
+		 * and send one more request, so the day can end at up to N times (cap + one request). Actions
+		 * already approved run all the same (they call no model); the turn that would tell about them
+		 * is refused like any other.
 		 */
 		const authorizeRequest = async ({ threadKey: key, unbilledUsd }: { readonly threadKey: string | undefined; readonly unbilledUsd: number }): Promise<void> => {
 			const capped = await usage.hardCapped(unbilledUsd);
@@ -1172,8 +1174,8 @@ export class OwniInstance {
 		await this.serial(key, async () => {
 			const existing = await this.outbox.get(key);
 			if (existing?.deliveredAt !== undefined) return;
-			// Counted once: a reply the outbox already holds was counted when it first came.
-			if (existing?.reply === undefined && engineReply.status === "answered" && engineReply.usage !== undefined) await recordTurn(this.usage, this.audit, { instanceId: this.record.id, threadId, submissionId: engineReply.submissionId, model: engineReply.model, usage: engineReply.usage }).catch((error: unknown) => console.error(`owni: usage of ${this.record.tenantId}/${this.record.id} not recorded: ${String(error)}`));
+			// Counted once, answered or not: a reply the outbox already holds was counted when it first came.
+			if (existing?.reply === undefined && engineReply.usage !== undefined) await recordTurn(this.usage, this.audit, { instanceId: this.record.id, threadId, submissionId: engineReply.submissionId, model: engineReply.status === "answered" ? engineReply.model : undefined, usage: engineReply.usage }).catch((error: unknown) => console.error(`owni: usage of ${this.record.tenantId}/${this.record.id} not recorded: ${String(error)}`));
 			await this.handOff(
 				existing === undefined
 					? { key, submissionId: engineReply.submissionId, channel, threadId, reply, createdAt: new Date().toISOString(), attempts: 0 }

@@ -249,7 +249,7 @@ export async function viewActivity(main) {
 				h("h3.section-title", "Oggi"),
 				h("div.row-gap", h("span", h("b", money.format(usage.todayUsd))), h("span.muted", `soglia di avviso ${money.format(usage.softUsd)} · tetto ${money.format(usage.hardUsd)}`)),
 				h("div.spend", h("div.bar", h(`i${share >= 1 ? ".bad" : usage.todayUsd >= usage.softUsd ? ".warn" : ""}`, { "data-w": share }))),
-				h("p.muted", "Raggiunto il tetto, Owni non avvia nuove chiamate al modello fino a domani e lo dice in chat. Una chiamata già partita finisce, quindi la spesa può superarlo di poco. Le azioni già approvate partono lo stesso."),
+				h("p.muted", "Raggiunto il tetto, Owni non avvia nuove chiamate al modello fino a domani e lo dice in chat. Le richieste già partite finiscono. Ogni conversazione conta subito la propria spesa, quella delle altre solo quando finiscono: con più conversazioni in corso insieme la spesa del giorno può superare il tetto. Le azioni già approvate partono lo stesso."),
 			),
 			owner
 				? h(
