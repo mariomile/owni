@@ -24,7 +24,7 @@ import { ScheduleStore } from "./schedules.ts";
 import { AutomationStore } from "./automations.ts";
 import { WatchStore } from "./watches.ts";
 import { Workspace } from "./workspace.ts";
-import { assertChannelAllowed, assertModelProviderAllowed, assertUserAllowed, CHANNEL_PATTERN } from "./policy.ts";
+import { assertChannelAllowed, assertModelProviderAllowed, assertUserAllowed, CHANNEL_PATTERN, type EgressPolicy } from "./policy.ts";
 import { DEV_PROVIDER } from "./model-providers.ts";
 import { subscriptionProvider } from "./model-providers.ts";
 import type { LocalProviders } from "./local-providers.ts";
@@ -34,6 +34,24 @@ import { withPersona } from "./persona.ts";
 import { activateCommand, SkillError, SkillStore, skillCatalog, skillCommand, withSkill } from "./skills.ts";
 import { type InstanceRecord, type ModelSelection, TenantRegistry } from "./registry.ts";
 import { modelApiKeySecret, TenantSecrets } from "./secrets.ts";
+
+/**
+ * The agenti's channel is no door of the policy (ADR 0134): who may write on it is its allowlist, or
+ * the person an asking agente writes for, and an answer on it goes back only to the agente that asked.
+ */
+function channelOpen(policy: EgressPolicy, channel: string): boolean {
+	return channel === AGENT_CHANNEL || policy.channels.includes(channel);
+}
+
+function assertOpen(policy: EgressPolicy, channel: string): void {
+	if (channel !== AGENT_CHANNEL) assertChannelAllowed(policy, channel);
+}
+
+/** An agente's message written for a person who may write to this agente themselves, on a channel it talks on. */
+function askedForPerson(record: InstanceRecord, request: Pick<SubmitRequest, "channel" | "forPerson">): boolean {
+	const person = request.forPerson;
+	return request.channel === AGENT_CHANNEL && person !== undefined && record.egress.channels.includes(person.channel) && (record.allowedUsers[person.channel] ?? []).includes(person.userId);
+}
 
 /** A normalized inbound message as the core sees it. Channels translate to this shape. */
 export type SubmitRequest = {
@@ -57,6 +75,11 @@ export type SubmitRequest = {
 	 * person's; on the agenti's channel always `agent`.
 	 */
 	readonly origin?: Exclude<TurnOrigin, "person">;
+	/**
+	 * On the agenti's channel: the person of the asking agente's conversation, who told it to write here
+	 * (ADR 0134). Admitted when that person may write to this agente themselves, whoever the organigramma links.
+	 */
+	readonly forPerson?: { readonly channel: string; readonly userId: string };
 };
 
 export type Reply = {
@@ -646,7 +669,7 @@ export class OwniInstance {
 		if (!CHANNEL_PATTERN.test(request.channel)) throw new Error(`Invalid channel name "${request.channel}"`);
 		const record = await this.fresh();
 		try {
-			assertChannelAllowed(record.egress, request.channel);
+			assertOpen(record.egress, request.channel);
 		} catch (error) {
 			if (error instanceof EgressDenied) {
 				await this.audit.append({ type: "egress.denied", instanceId: this.record.id, kind: error.kind, target: error.target });
@@ -656,7 +679,7 @@ export class OwniInstance {
 		// Who may talk to the instance is decided here, in the core, for every channel: a
 		// rejected message never reaches the engine or the model, and gets no reply.
 		try {
-			assertUserAllowed(record.allowedUsers, request);
+			if (!askedForPerson(record, request)) assertUserAllowed(record.allowedUsers, request);
 		} catch (error) {
 			if (error instanceof UserNotAllowed) {
 				await this.audit.append({
@@ -677,13 +700,14 @@ export class OwniInstance {
 			channel: request.channel,
 			threadId: request.threadId,
 			userId: request.userId,
+			...(request.forPerson === undefined ? {} : { forPerson: `${request.forPerson.channel}:${request.forPerson.userId}` }),
 			chars: request.text.length,
 			...(images.length === 0 ? {} : { images: images.length }),
 		});
 		// In a private thread the instance learns whom it is with, and each request gets what it
 		// remembers about them; in a group, only the shared memories, so one person's never reach the others.
 		const key = threadKey(request.channel, request.threadId);
-		const { privateThread, images: _given, command: _command, ...message } = request;
+		const { privateThread, images: _given, command: _command, forPerson: _for, ...message } = request;
 		if (privateThread === true) this.memory.participants.set(key, subjectOf(request.channel, request.userId));
 		else this.memory.participants.clear(key);
 		const { origin: given, ...said } = message;
@@ -756,7 +780,7 @@ export class OwniInstance {
 			throw new UserNotAllowed(person?.channel ?? request.channel, person?.userId ?? "(none)", request.threadId, "user_not_in_allowlist");
 		}
 		try {
-			assertChannelAllowed(record.egress, request.channel);
+			assertOpen(record.egress, request.channel);
 		} catch (error) {
 			if (error instanceof EgressDenied) {
 				await this.audit.append({ type: "egress.denied", instanceId: this.record.id, kind: error.kind, target: error.target });
@@ -786,7 +810,7 @@ export class OwniInstance {
 		if (!CHANNEL_PATTERN.test(request.channel)) throw new Error(`Invalid channel name "${request.channel}"`);
 		const record = await this.fresh();
 		try {
-			assertChannelAllowed(record.egress, request.channel);
+			assertOpen(record.egress, request.channel);
 		} catch (error) {
 			if (error instanceof EgressDenied) {
 				await this.audit.append({ type: "egress.denied", instanceId: this.record.id, kind: error.kind, target: error.target });
@@ -1076,7 +1100,7 @@ export class OwniInstance {
 
 	/** `secret`: the text is dropped from the outbox once the channel has it (ADR 0060). */
 	async sendMessage(message: { channel: string; threadId: string; text: string; key: string; secret?: boolean }): Promise<void> {
-		assertChannelAllowed(this.record.egress, message.channel);
+		assertOpen(this.record.egress, message.channel);
 		const key = `msg:${this.record.tenantId}/${this.record.id}/${message.secret === true ? SECRET_KEY : ""}${message.key}`;
 		await this.serial(key, async () => {
 			const existing = await this.outbox.get(key);
@@ -1088,7 +1112,7 @@ export class OwniInstance {
 	}
 
 	async sendFile(file: { channel: string; threadId: string; path: string; caption?: string; key: string }): Promise<void> {
-		assertChannelAllowed(this.record.egress, file.channel);
+		assertOpen(this.record.egress, file.channel);
 		const key = `file:${this.record.tenantId}/${this.record.id}/${file.key}`;
 		await this.serial(key, async () => {
 			const existing = await this.outbox.get(key);
@@ -1108,7 +1132,7 @@ export class OwniInstance {
 	}
 
 	async sendReaction(reaction: { channel: string; threadId: string; messageId: string; emoji: string; key: string }): Promise<void> {
-		assertChannelAllowed(this.record.egress, reaction.channel);
+		assertOpen(this.record.egress, reaction.channel);
 		const key = `react:${this.record.tenantId}/${this.record.id}/${reaction.key}`;
 		await this.serial(key, async () => {
 			const existing = await this.outbox.get(key);
@@ -1197,7 +1221,7 @@ export class OwniInstance {
 		const reply = entry.reply;
 		if (reply === undefined || this.handedOff.has(entry.key)) return;
 		// Replies leave through a channel: check egress again, the policy as stored now is the last word.
-		if (!(await this.fresh()).egress.channels.includes(entry.channel)) {
+		if (!channelOpen((await this.fresh()).egress, entry.channel)) {
 			await this.audit.append({ type: "egress.denied", instanceId: this.record.id, kind: "channel", target: entry.channel });
 			return;
 		}

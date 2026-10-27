@@ -1,5 +1,7 @@
 # Organigramma degli agenti
 
+> Aggiornata dall'[ADR 0134](0134-agenti-che-si-passano-le-cose.md): salvare l'organigramma non tocca più la egress policy, solo `allowedUsers.agente`; oltre ai collegamenti, un agente scrive a un altro quando lo chiede la persona che può parlargli.
+
 > In parte sostituito dall'[ADR 0127](0127-niente-squadre-pronte-ne-strumenti-per-cose-che-l-agente-fa-gia.md): le squadre pronte non ci sono più; le squadre dell'organigramma le fa il titolare a mano.
 
 > Aggiornata dall'[ADR 0125](0125-stato-unico-degli-agenti-e-console-piu-chiara.md): prima del primo salvataggio la console elenca i permessi che cambiano e chiede conferma; un segno dice sempre se i permessi sono decisi a mano o dall'organigramma.

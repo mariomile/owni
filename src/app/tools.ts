@@ -75,6 +75,8 @@ export type ToolsWiring = {
 	readonly agentChannels: ReadonlyMap<string, AgentChannel>;
 	readonly agentRatesOf: (id: string) => { readonly rate: AgentRate; readonly total: AgentRate };
 	readonly company: (self: InstanceRecord) => Promise<{ accepts: boolean; colleague: { id: string; name: string; tagline?: string; place?: string } }[]>;
+	/** The agente's name when this console person may write to it now; undefined otherwise. */
+	readonly reachable: (personId: string, instanceId: string) => Promise<string | undefined>;
 	readonly liveActivity: (tenantId: string) => ReturnType<typeof runtimeActivity>;
 	readonly googleTools: (record: InstanceRecord) => readonly OwniTool[];
 	readonly watchReader: (instance: string) => (url: string) => Promise<{ title: string; text: string }>;
@@ -211,7 +213,15 @@ export async function assembleTools(w: ToolsWiring, record: InstanceRecord): Pro
 			activity: (agent, thread) => w.liveActivity(record.tenantId)(agent, viewerOf(record.id, thread, WebChannel.ownerOf)),
 			colleagues: async () => (await w.company(record)).filter((c) => c.accepts).map((c) => c.colleague),
 			company: async () => (await w.company(record)).filter((c) => !c.accepts && c.colleague.place !== undefined).map((c) => c.colleague),
-			post: async ({ to, origin, text, key }) => {
+			forPerson: async (thread) => {
+				// The console person of a console chat: on another channel nobody is known to reach the other agenti.
+				const person = thread.channel === "web" ? WebChannel.ownerOf(thread.threadId) : undefined;
+				if (person === undefined) return [];
+				const others = (await w.company(record)).filter((c) => !c.accepts);
+				const open = await Promise.all(others.map(async (c) => ((await w.reachable(person, c.colleague.id)) === undefined ? undefined : c.colleague)));
+				return open.filter((c) => c !== undefined);
+			},
+			post: async ({ to, origin, text, key, forPerson }) => {
 				const channel = w.agentChannels.get(to);
 				if (channel === undefined) throw new Error("non è attivo");
 				const me = await runtime.registry.getInstance(record.tenantId, record.id);
@@ -219,10 +229,13 @@ export async function assembleTools(w: ToolsWiring, record: InstanceRecord): Pro
 				// Kept before the message goes (its turn may need it at once), taken back if it is not taken.
 				const asks = runtime.agentAsks(record.tenantId, to);
 				asks.record(agentThreadId(me.id, origin), key, { id: me.id, name: me.name }, text);
-				await channel.ask({ from: { id: me.id, name: me.name }, origin, text, messageId: key }).catch((error: unknown) => {
+				const person = forPerson && origin.channel === "web" ? WebChannel.ownerOf(origin.threadId) : undefined;
+				if (forPerson && person === undefined) throw new Error("qui non c'è una persona per cui scrivergli");
+				await channel.ask({ from: { id: me.id, name: me.name }, origin, text, messageId: key, ...(person === undefined ? {} : { forPerson: { channel: "web", userId: person } }) }).catch((error: unknown) => {
 					asks.forget(key);
 					// Its owner took the permission back since agent_list: say it plainly, the audit has the details.
-					throw error instanceof UserNotAllowed || error instanceof EgressDenied ? new Error("non accetta più messaggi da te") : error;
+					if (!(error instanceof UserNotAllowed || error instanceof EgressDenied)) throw error;
+					throw new Error(person === undefined ? "non accetta più messaggi da te" : "la persona non può più scrivergli");
 				});
 			},
 			record: audit(),

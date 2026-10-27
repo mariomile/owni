@@ -33,6 +33,8 @@ export type InboundMessage = {
 	readonly command?: string;
 	/** Not the person's turn although it comes through their chat (ADR 0088): an agente in a stanza, the board's own work. */
 	readonly origin?: "agent" | "scheduled";
+	/** On the agenti's channel: the person the asking agente writes for (ADR 0134); the core admits it if that person may write here. */
+	readonly forPerson?: { readonly channel: string; readonly userId: string };
 };
 
 /** A tap on a button of an earlier outbound message (Telegram: a callback query). */

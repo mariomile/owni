@@ -184,21 +184,22 @@ describe("the organigramma's routes", () => {
 		expect((await api("/api/org/preview", { org: EMPTY_ORG })).changes).toContainEqual({ from: "Owni", to: "Responsabile vendite", allowed: false });
 		expect(saved.saved).toBe(true);
 		expect(saved.accepts).toEqual(Object.fromEntries(orgLinks(COMPANY, [...NAMES.keys()])));
-		expect((await owni.runtime.registry.getInstance("default", "owni")).egress.channels).toContain("agente");
 		const audit = await owni.runtime.audit("default").read();
 		expect(audit).toContainEqual(expect.objectContaining({ type: "org.saved", teams: 2, agents: 5 }));
 
-		// Preventivi lists who it may write to, with their place, then the rest of the company it reaches through others.
+		// Preventivi lists who it may write to, with their place, then the rest of the company: the owner talks to all of
+		// them, so Preventivi may write to those too when the owner asks (ADR 0134).
 		const thread = (await api("/api/instances/preventivi/dm", {})).thread;
 		await api(`/api/instances/preventivi/threads/${thread.id}/messages`, { text: "/tool agent_list {}" });
 		let text = "";
-		for (let i = 0; i < 100 && !text.includes("Altri agenti"); i += 1) {
+		for (let i = 0; i < 100 && !text.includes("Solo se"); i += 1) {
 			const entries = (await api(`/api/instances/preventivi/threads/${thread.id}`)).entries as { text?: string }[];
 			text = entries.map((e) => e.text ?? "").join("\n");
 			await new Promise((r) => setTimeout(r, 50));
 		}
 		expect(text).toContain("- Responsabile vendite (vendite) [Responsabile vendite, squadra Vendite (la coordina). Responsabile di: Clienti da seguire]");
-		expect(text).toContain("Altri agenti dell'azienda, a cui non puoi scrivere: per una cosa loro chiedi a chi coordina la tua squadra o a chi rispondi.\n- Contabile (conti) [Contabile, squadra Amministrazione (la coordina). Responsabile di: Fatture]\n- Owni (owni) [Direzione]");
+		expect(text).toContain("Solo se è la persona a chiedertelo, puoi scrivere anche a questi agenti, con cui lei può parlare direttamente:\n- Contabile (conti) [Contabile, squadra Amministrazione (la coordina). Responsabile di: Fatture]\n- Owni (owni) [Direzione]");
+		expect(text).not.toContain("Altri agenti dell'azienda");
 
 		const { link } = await api("/api/people", { name: "Anna", role: "member" });
 		const anna = await login(link);

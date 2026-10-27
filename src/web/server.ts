@@ -23,7 +23,6 @@ import type { ScreenViews } from "../core/screen-views.ts";
 import type { RoutineStore } from "../core/board-routines.ts";
 import type { BoardWork } from "../core/board-work.ts";
 import type { ModelInfo } from "../core/model-providers.ts";
-import { withChannel } from "../core/policy.ts";
 import { type GoogleAccounts, type GoogleOAuth, type GoogleService, googleReturnQuery } from "../connectors/google.ts";
 import { instanceId } from "../core/ids.ts";
 import type { InstanceRecord, ModelSelection } from "../core/registry.ts";
@@ -368,7 +367,7 @@ export function createWebApp(options: WebAppOptions): Server {
 					watches: owner ? watches.length : watches.filter((w) => mineWatch(w, p)).length,
 					memories: runtime.memory(tenantId, r.id).list().filter((m) => m.about === SHARED || m.about === subjectOf("web", p.id)).length,
 					// Which agenti may write to it (ADR 0042): the owner's to decide, so the owner's to see.
-					...(owner ? { acceptsFrom: r.egress.channels.includes(AGENT_CHANNEL) ? (r.allowedUsers[AGENT_CHANNEL] ?? []) : [] } : {}),
+					...(owner ? { acceptsFrom: r.allowedUsers[AGENT_CHANNEL] ?? [] } : {}),
 				};
 			}),
 		);
@@ -444,7 +443,6 @@ export function createWebApp(options: WebAppOptions): Server {
 		const known = new Set<string>((await runtime.registry.listInstances(tenantId)).map((r) => r.id));
 		const from = [...new Set(asked)].filter((x) => x !== String(record.id) && known.has(x));
 		await runtime.registry.setAllowedUsers(tenantId, id, AGENT_CHANNEL, from);
-		await runtime.registry.setEgress(tenantId, id, (egress) => withChannel(egress, AGENT_CHANNEL, from.length > 0));
 		await runtime.audit(tenantId).append({ type: "agents.allowed", instanceId: id, personId: person.id, allowed: from.length, from: from.join(",") });
 		return from;
 	};
@@ -452,7 +450,7 @@ export function createWebApp(options: WebAppOptions): Server {
 		store: runtime.org(tenantId),
 		agents: async () =>
 			(await runtime.registry.listInstances(tenantId))
-				.map((r) => ({ id: r.id, name: r.name, accepts: r.egress.channels.includes(AGENT_CHANNEL) ? (r.allowedUsers[AGENT_CHANNEL] ?? []) : [] })),
+				.map((r) => ({ id: r.id, name: r.name, accepts: r.allowedUsers[AGENT_CHANNEL] ?? [] })),
 		allow: (person, id, from) => allowAgents(person, id, from),
 		audit: (event) => runtime.audit(tenantId).append(event),
 	});

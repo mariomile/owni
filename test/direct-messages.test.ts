@@ -59,6 +59,7 @@ async function setup() {
 			const record = await runtime.registry.getInstance("acme", id);
 			return (record.allowedUsers.web ?? []).includes(personId) ? record.name : undefined;
 		},
+		place: () => "",
 	});
 	for (const c of channels.values()) rooms.attach(c);
 	const server = createWebApp({

@@ -45,7 +45,7 @@ import { readAttachments } from "./core/mail-attachments.ts";
 import { attachmentSlots } from "./core/attachment-slots.ts";
 import { checkedUrl, publicAddress, WebFetchRefused } from "./core/web-fetch.ts";
 import { readPage } from "./core/watches.ts";
-import { webHostAllowed, withChannel } from "./core/policy.ts";
+import { webHostAllowed } from "./core/policy.ts";
 import type { DurableEngine } from "./core/engine.ts";
 import { EgressDenied, NotFound } from "./core/errors.ts";
 import { instanceId as toInstanceId, tenantId as toTenantId } from "./core/ids.ts";
@@ -210,7 +210,7 @@ export async function startOwni(config: OwniConfig, options: OwniOptions = {}): 
 			.map((r) => {
 				const place = placeLine(org, r.id);
 				return {
-					accepts: r.egress.channels.includes(AGENT_CHANNEL) && (r.allowedUsers[AGENT_CHANNEL] ?? []).includes(self.id),
+					accepts: (r.allowedUsers[AGENT_CHANNEL] ?? []).includes(self.id),
 					colleague: { id: r.id, name: r.name, ...(r.persona?.tagline === undefined ? {} : { tagline: r.persona.tagline }), ...(place === "" ? {} : { place }) },
 				};
 			});
@@ -466,6 +466,7 @@ export async function startOwni(config: OwniConfig, options: OwniOptions = {}): 
 					agentChannels,
 					agentRatesOf,
 					company,
+					reachable: (personId, id) => consoleAgentName(id, personId),
 					liveActivity,
 					googleTools,
 					watchReader,
@@ -563,7 +564,7 @@ export async function startOwni(config: OwniConfig, options: OwniOptions = {}): 
 		return record !== undefined && webChannels.has(agent) && record.egress.channels.includes("web") && (record.allowedUsers.web ?? []).includes(personId) ? record.name : undefined;
 	};
 	// --- stanze (ADR 0063): a person and a few agenti in one conversation ---
-	const rooms = new Rooms(new RoomStore(join(tenantDir(config.dataDir, toTenantId(tenant)), "rooms")), { channel: (id) => webChannels.get(id), reachable: (personId, id) => consoleAgentName(id, personId) }, log);
+	const rooms = new Rooms(new RoomStore(join(tenantDir(config.dataDir, toTenantId(tenant)), "rooms")), { channel: (id) => webChannels.get(id), reachable: (personId, id) => consoleAgentName(id, personId), place: (id) => placeLine(runtime.org(tenant).read(), id) }, log);
 	const attachWebChannel = (record: InstanceRecord) => {
 		const channel = new WebChannel({ tenantId: tenant, instanceId: record.id }, instanceDir(config.dataDir, record.tenantId, record.id));
 		const offWeb = connectChannel(runtime, channel, { tenantId: tenant, instanceId: record.id }, log);
@@ -794,8 +795,6 @@ export async function startOwni(config: OwniConfig, options: OwniOptions = {}): 
 			if (other.id === id || !from?.includes(id)) continue;
 			const left = from.filter((x) => x !== id);
 			await runtime.registry.setAllowedUsers(tenant, other.id, AGENT_CHANNEL, left);
-			// Like the Agenti page: nobody left to hear from, no channel.
-			if (left.length === 0) await runtime.registry.setEgress(tenant, other.id, (egress) => withChannel(egress, AGENT_CHANNEL, false));
 		}
 		// Out of the organigramma (ADR 0117): the links it gave are the ones just taken back.
 		const org = runtime.org(tenant);

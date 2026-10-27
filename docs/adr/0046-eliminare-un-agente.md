@@ -1,5 +1,7 @@
 # Eliminare un agente
 
+> Aggiornata dall'[ADR 0134](0134-agenti-che-si-passano-le-cose.md): eliminare un agente toglie agli altri il permesso di ricevere i suoi messaggi, ma non tocca più il loro canale `agente` nella policy.
+
 Con più agenti per tenant ([ADR 0041](0041-agenti.md)) serviva anche il contrario di «Nuovo agente»: toglierne uno fatto per prova, o che non serve più. Finora l'owner poteva solo togliere a tutti il permesso di scrivergli, e l'agente restava lì con bot, chiavi, automazioni e file.
 
 ## Decisione
