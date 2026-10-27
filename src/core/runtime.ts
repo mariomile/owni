@@ -1,10 +1,11 @@
 import { mkdir } from "node:fs/promises";
 import { AuditLog } from "./audit.ts";
-import { recordTurn, UsageLedger } from "./usage.ts";
+import { capGate, recordTurn, UsageLedger } from "./usage.ts";
 import { SerialQueue } from "./serial-queue.ts";
+import { parseThreadKey, threadKey } from "./thread-key.ts";
 import { AgentAsks } from "./agent-asks.ts";
 import { ConnectorActionStore } from "./connector-actions.ts";
-import { ModelRequestRefused, type OwniTool, type DurableEngine, type EngineImage, type EngineReply, type EngineSession, type EngineRunEvent, type EngineRunState } from "./engine.ts";
+import { type OwniTool, type DurableEngine, type EngineImage, type EngineReply, type EngineSession, type EngineRunEvent, type EngineRunState } from "./engine.ts";
 import { RunStore, isActiveRun, runId, runRequestId, type RunRecord, type RunEvent, type RunFilter } from "./run-store.ts";
 export type { RunRecord, RunEvent, RunFilter, RunStatus } from "./run-store.ts";
 import type { TurnOrigin } from "./turn-origin.ts";
@@ -81,8 +82,8 @@ export type Reply = {
 } & (
 	/** `model`: the one that wrote the answer, when the engine says. */
 	| { readonly status: "answered"; readonly text: string; readonly model?: ModelSelection }
-	/** `capped`: not answered because the day's spending cap was reached. */
-	| { readonly status: "unanswered"; readonly reason: string; readonly cancelled?: true; readonly capped?: true }
+	/** `reason` COST_CAPPED: not answered because the day's spending cap was reached. */
+	| { readonly status: "unanswered"; readonly reason: string; readonly cancelled?: true }
 	/** A file of the instance's workspace to send to the thread. */
 	| { readonly status: "file"; readonly path: string; readonly caption?: string }
 );
@@ -107,6 +108,9 @@ export type RuntimeOptions = {
 	/** Retries in one process before the reply waits for the next resume. */
 	readonly maxRetries?: number;
 };
+
+/** The reason of a reply not answered because the day's spending cap refused the model request. */
+export const COST_CAPPED = "cost_capped";
 
 /** What happened to a send the channel did not confirm. */
 export type DeliveryFailure = { readonly refused: boolean; readonly reason: string };
@@ -475,22 +479,6 @@ export class OwniRuntime {
 		const memory = this.memory(record.tenantId, record.id);
 		const participants = this.participants(record.tenantId, record.id);
 		const usage = new UsageLedger(tenantDir(this.options.dataDir, record.tenantId));
-		/**
-		 * The daily hard cap, asked before every new model request of every turn, whoever started it.
-		 * It counts what is recorded today plus this conversation's own spend not recorded yet; a
-		 * turn is recorded when it settles, answered or not. So it is a limit per conversation, not a
-		 * global one: each of N conversations running at the same time can reach the cap on its own
-		 * and send one more request, so the day can end at up to N times (cap + one request). Actions
-		 * already approved run all the same (they call no model); the turn that would tell about them
-		 * is refused like any other.
-		 */
-		const authorizeRequest = async ({ threadKey: key, unbilledUsd }: { readonly threadKey: string | undefined; readonly unbilledUsd: number }): Promise<void> => {
-			const capped = await usage.hardCapped(unbilledUsd);
-			if (capped === undefined) return;
-			// On record before the refusal, and so before any spend it would stop.
-			await audit.append({ type: "cost.denied", instanceId: record.id, ...capped, ...(key === undefined ? {} : parseThreadKey(key)) });
-			throw new ModelRequestRefused(`Daily spending cap reached: ${capped.spentUsd.toFixed(2)} of ${capped.hardUsd} USD`);
-		};
 		try {
 			toolSet = typeof this.options.tools === "function" ? await this.options.tools(record) : (this.options.tools ?? []);
 			session = await this.options.engine.open({
@@ -505,7 +493,7 @@ export class OwniRuntime {
 				},
 				localProviders: this.localProviders(record.tenantId),
 				modelUsable: reachable,
-				authorizeRequest,
+				authorizeRequest: capGate(usage, audit, record.id),
 				tools: "tools" in toolSet ? toolSet.tools : toolSet,
 				instructions,
 				// The time, and the memories of whom the thread is with (only the shared ones in a group), as they are at each request.
@@ -587,17 +575,18 @@ export class OwniInstance {
 	/** Pending in-process retries, cleared on close. */
 	private readonly retries = new Map<string, NodeJS.Timeout>();
 	private closed = false;
+	/** The close under way, if one is. */
 	private closing: Promise<void> | undefined;
-	/** What closing has still to do, in order: a step leaves once it succeeded. */
-	private readonly unclosed = new Map<string, () => Promise<void>>([
-		["engine", () => this.session.close()],
-		["events", () => this.events.idle()],
-		["chains", () => this.chains.idle()],
-		["runs", () => this.runs.idle()],
+	/** What closing has still to do, in order: after each close, only the steps that failed. */
+	private unclosed: (() => Promise<void>)[] = [
+		() => this.session.close(),
+		() => this.events.idle(),
+		() => this.chains.idle(),
+		() => this.runs.idle(),
 		// A tool set that fails to let go (an MCP server gone) is logged, not retried: nothing else waits on it.
-		["tools", () => this.releaseTools().catch((error: unknown) => console.error(`owni: releasing tools of ${this.record.tenantId}/${this.record.id} failed: ${String(error)}`))],
-		["lock", async () => this.lock.release()],
-	]);
+		() => this.releaseTools().catch((error: unknown) => console.error(`owni: releasing tools of ${this.record.tenantId}/${this.record.id} failed: ${String(error)}`)),
+		async () => this.lock.release(),
+	];
 	private readonly submissions = new SerialQueue();
 	private readonly events = new SerialQueue();
 	private recovery: Promise<void> | undefined;
@@ -1146,15 +1135,17 @@ export class OwniInstance {
 		this.closed = true;
 		for (const timer of this.retries.values()) clearTimeout(timer);
 		this.retries.clear();
+		const failed: (() => Promise<void>)[] = [];
 		let failure: { readonly error: unknown } | undefined;
-		for (const [step, run] of this.unclosed) {
+		for (const step of this.unclosed) {
 			try {
-				await run();
-				this.unclosed.delete(step);
+				await step();
 			} catch (error) {
+				failed.push(step);
 				failure ??= { error };
 			}
 		}
+		this.unclosed = failed;
 		if (failure !== undefined) throw failure.error;
 	}
 
@@ -1165,12 +1156,7 @@ export class OwniInstance {
 		const requestedStop = engineReply.status === "unanswered" && (await this.runs.all()).some((run) => run.submissionId === engineReply.submissionId && run.status === "cancelled" && run.cancelRequestedAt !== undefined);
 		const { channel, threadId } = parseThreadKey(engineReply.threadKey);
 		const key = this.replyKey(engineReply.submissionId);
-		const reply: OutboxEntry["reply"] =
-			engineReply.status === "answered"
-				? { status: "answered", text: engineReply.text, ...(engineReply.model === undefined ? {} : { model: engineReply.model }) }
-				: engineReply.refused === true && !requestedStop
-					? { status: "unanswered", reason: "cost_capped", capped: true }
-					: { status: "unanswered", reason: engineReply.reason, ...(requestedStop ? { cancelled: true } : {}) };
+		const reply: OutboxEntry["reply"] = engineReply.status === "answered" ? { status: "answered", text: engineReply.text, ...(engineReply.model === undefined ? {} : { model: engineReply.model }) } : unansweredReply(engineReply, requestedStop);
 		await this.serial(key, async () => {
 			const existing = await this.outbox.get(key);
 			if (existing?.deliveredAt !== undefined) return;
@@ -1229,13 +1215,10 @@ export class OwniInstance {
 	}
 }
 
-function threadKey(channel: string, threadId: string): string {
-	return `${channel}:${threadId}`;
-}
-
-function parseThreadKey(key: string): { channel: string; threadId: string } {
-	const at = key.indexOf(":");
-	return { channel: key.slice(0, at), threadId: key.slice(at + 1) };
+/** A turn that ended unanswered: stopped by the person, refused by the day's cap, or failed. */
+function unansweredReply(engineReply: Extract<EngineReply, { status: "unanswered" }>, requestedStop: boolean): OutboxEntry["reply"] {
+	if (requestedStop) return { status: "unanswered", reason: engineReply.reason, cancelled: true };
+	return { status: "unanswered", reason: engineReply.refused === true ? COST_CAPPED : engineReply.reason };
 }
 
 /**

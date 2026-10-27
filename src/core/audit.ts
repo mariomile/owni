@@ -1,7 +1,9 @@
-import { appendFile, mkdir, open, readdir, readFile, rename, stat, unlink } from "node:fs/promises";
-import { basename, dirname, join } from "node:path";
+import { appendFile, mkdir, open, readFile, stat } from "node:fs/promises";
+import { dirname } from "node:path";
 import type { TenantId } from "./ids.ts";
+import { MonthlyLog } from "./monthly-log.ts";
 import { auditFile } from "./paths.ts";
+import { SerialQueue } from "./serial-queue.ts";
 
 /**
  * Audit events carry metadata only: who, where, what kind, sizes. Never message text,
@@ -15,30 +17,21 @@ export type AuditEvent = {
 
 export type AuditRecord = AuditEvent & { readonly ts: string; readonly tenantId: string };
 
-/** Months of archives kept next to the live file (ADR 0129). */
-export const AUDIT_RETENTION_MONTHS = 12;
-
-const ARCHIVE = /^audit-(\d{4})-(\d{2})\.jsonl$/;
-
 /** Appends of one file run one after the other, so a rotation never races an append. */
-const writing = new Map<string, Promise<unknown>>();
+const writing = new SerialQueue();
 
 function monthKey(date: Date): string {
 	return date.toISOString().slice(0, 7);
 }
 
-function monthIndex(key: string): number {
-	return Number(key.slice(0, 4)) * 12 + Number(key.slice(5, 7)) - 1;
-}
-
 /**
  * Append-only JSONL audit log of one tenant, bound to that tenant at construction. It is kept by
- * month: the first append of a new month moves the live file to `audit-YYYY-MM.jsonl` (the month
- * of its last write) and deletes archives older than twelve months.
+ * month (ADR 0129): the first append of a new month moves the live file to `audit-YYYY-MM.jsonl`
+ * (the month of its last write, UTC) and deletes archives older than twelve months.
  */
 export class AuditLog {
 	private readonly file: string;
-	private readonly dir: string;
+	private readonly log: MonthlyLog;
 
 	constructor(
 		dataDir: string,
@@ -46,19 +39,17 @@ export class AuditLog {
 		private readonly clock: () => Date = () => new Date(),
 	) {
 		this.file = auditFile(dataDir, tenantId);
-		this.dir = dirname(this.file);
+		this.log = new MonthlyLog(dirname(this.file), "audit");
 	}
 
 	append(event: AuditEvent): Promise<void> {
-		const run = (writing.get(this.file) ?? Promise.resolve()).catch(() => undefined).then(() => this.write(event));
-		writing.set(this.file, run);
-		return run;
+		return writing.run(this.file, () => this.write(event));
 	}
 
 	private async write(event: AuditEvent): Promise<void> {
 		const now = this.clock();
 		const record: AuditRecord = { ts: now.toISOString(), tenantId: this.tenantId, ...event };
-		await mkdir(this.dir, { recursive: true });
+		await mkdir(dirname(this.file), { recursive: true });
 		await this.rotate(now);
 		// "a" opens with O_APPEND: writes only ever go to the end of the file.
 		await appendFile(this.file, `${JSON.stringify(record)}\n`, { flag: "a", mode: 0o600 });
@@ -72,46 +63,12 @@ export class AuditLog {
 			if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
 			return;
 		}
-		const month = monthKey(written);
-		if (month >= monthKey(now)) return;
-		const archive = join(this.dir, `audit-${month}.jsonl`);
-		try {
-			await rename(this.file, archive);
-		} catch (error) {
-			if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-		}
-		for (const old of await this.archives()) {
-			if (monthIndex(monthKey(now)) - monthIndex(old.month) > AUDIT_RETENTION_MONTHS) await unlink(old.path).catch(() => undefined);
-		}
-	}
-
-	/** Archived months, oldest first. */
-	private async archives(): Promise<{ month: string; path: string }[]> {
-		let names: string[];
-		try {
-			names = await readdir(this.dir);
-		} catch (error) {
-			if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
-			throw error;
-		}
-		return names
-			.map((name) => ({ name, match: ARCHIVE.exec(name) }))
-			.filter((entry) => entry.match !== null)
-			.map((entry) => ({ month: `${entry.match?.[1]}-${entry.match?.[2]}`, path: join(this.dir, basename(entry.name)) }))
-			.sort((a, b) => a.month.localeCompare(b.month));
+		if (monthKey(written) < monthKey(now)) await this.log.roll(monthKey(written), monthKey(now));
 	}
 
 	/** Bytes the audit takes on disk: the live file and its archives. */
-	async size(): Promise<number> {
-		let total = 0;
-		for (const path of [...(await this.archives()).map((a) => a.path), this.file]) {
-			try {
-				total += (await stat(path)).size;
-			} catch (error) {
-				if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-			}
-		}
-		return total;
+	size(): Promise<number> {
+		return this.log.size();
 	}
 
 	/**
@@ -119,7 +76,7 @@ export class AuditLog {
 	 * of the file in chunks so memory stays bounded however long the log has grown.
 	 */
 	async read(last?: number): Promise<AuditRecord[]> {
-		const files = [...(await this.archives()).map((a) => a.path), this.file];
+		const files = await this.log.files();
 		if (last === undefined) return (await Promise.all(files.map(readAll))).flat();
 		// Newest file first, until there are enough records.
 		const records: AuditRecord[] = [];

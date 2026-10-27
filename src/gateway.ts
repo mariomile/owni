@@ -4,7 +4,7 @@ import { type InstanceVoice, spokenNote } from "./channels/speech.ts";
 import { attachmentNote } from "./core/attachment-note.ts";
 import { imageType } from "./core/images.ts";
 import type { ChatModels } from "./core/chat-models.ts";
-import type { OwniRuntime, InstanceRecord } from "./core/index.ts";
+import { COST_CAPPED, type OwniRuntime, type InstanceRecord } from "./core/index.ts";
 import { answerModelCommand, modelCommandArgument } from "./model-command.ts";
 
 /** What a person reads when the model gave no answer; «Primi passi» does not count it as a reply. */
@@ -12,6 +12,8 @@ export const REPLY_FAILED = "Non sono riuscita a rispondere. Riprova tra poco.";
 export const REPLY_CANCELLED = "Lavoro interrotto su tua richiesta. Le azioni già completate restano.";
 /** What a person reads when the day's spending cap stopped the model before it answered. */
 export const REPLY_CAPPED = "Oggi ho raggiunto il tetto di spesa per i modelli AI, quindi mi fermo qui. Riprendo domani; le azioni già approvate partono lo stesso.";
+/** The texts Owni writes by herself when there is no answer: none of them is a reply of the model. */
+export const CANNED_REPLIES: ReadonlySet<string> = new Set([REPLY_FAILED, REPLY_CANCELLED, REPLY_CAPPED]);
 
 /**
  * Connects a channel adapter, bound to one instance, to the core: inbound messages become
@@ -86,7 +88,7 @@ export function connectChannel(
 				return adapter.sendFile({ ...base, name, data, path: reply.path, ...(reply.caption === undefined ? {} : { caption: reply.caption }) });
 			}
 			if (reply.status === "unanswered") log(`${adapter.name}: unanswered in thread ${reply.threadId}: ${reply.reason}`);
-			const text = reply.status === "answered" ? reply.text : reply.cancelled === true ? REPLY_CANCELLED : reply.capped === true ? REPLY_CAPPED : REPLY_FAILED;
+			const text = reply.status === "answered" ? reply.text : reply.cancelled === true ? REPLY_CANCELLED : reply.reason === COST_CAPPED ? REPLY_CAPPED : REPLY_FAILED;
 			// Only the reply to the message that asked for it, and only the first time: a retry sends the text alone.
 			if (reply.status === "answered" && speaks && reply.attempt === 1 && spoken.delete(reply.submissionId)) {
 				void adapter.recording?.(reply.threadId);

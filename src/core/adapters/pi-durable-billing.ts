@@ -8,13 +8,14 @@ import { CompactionEntry, type ConversationId, type Cursor, type DocumentReader,
 import type { TurnUsage } from "../engine.ts";
 
 /**
- * How far this conversation is billed (ADR 0098): `answer` is the last answer billed, `spent` how
- * much of Pi's `pi.usage` had been spent at the last bill, an answer's or a turn's that ended
- * unanswered, and `unanswered` the last entry such a turn's bill took in. No `spent` until billing
- * starts: when the conversation is created, or for one created before, when this version first opens it.
+ * How far this conversation is billed (ADR 0098): `answer` is the last entry a bill took in, an
+ * answer's or a turn's that ended unanswered, and `spent` how much of Pi's `pi.usage` had been
+ * spent at that bill. No `spent` until billing starts: when the conversation is created, or for one
+ * created before, when this version first opens it.
  */
 type Spent = { input: number; output: number; cacheRead: number; cacheWrite: number; cost: number };
-export const BilledDoc = defineDoc<{ answer?: number; spent?: Spent; unanswered?: number }>({
+type Billing = { answer?: number; spent: Spent };
+export const BilledDoc = defineDoc<Partial<Billing>>({
 	kind: "owni.billed-to",
 	version: 1,
 	scope: "conversation",
@@ -75,15 +76,22 @@ export function noSpend(): Spent {
  */
 export async function turnUsage(tx: Pick<Tx, "scanEntries" | "doc">, conversationId: ConversationId, answer: EntryId): Promise<TurnUsage | undefined> {
 	const billed = await tx.doc(BilledDoc, conversationId);
-	if (billed.spent === undefined) return undefined;
-	if (billed.answer === undefined || billed.answer < answer) await billAnswers(tx, conversationId, billed as { answer?: number; spent: Spent; unanswered?: number });
+	if (!billing(billed)) return undefined;
+	if (billed.answer === undefined || billed.answer < answer) await billAnswers(tx, conversationId, billed);
 	if (billed.answer === undefined || billed.answer < answer) return undefined;
 	const { bill } = await tx.doc(BillDoc, conversationId, String(answer), null);
 	return bill === undefined ? undefined : { ...bill, tools: [...bill.tools] };
 }
 
-/** Bill every answer after the last one billed, oldest first, from one complete scan of what came after it. */
-async function billAnswers(tx: Pick<Tx, "scanEntries" | "doc">, conversationId: ConversationId, billed: { answer?: number; spent: Spent; unanswered?: number }): Promise<void> {
+function billing(billed: Partial<Billing>): billed is Billing {
+	return billed.spent !== undefined;
+}
+
+/**
+ * Bill every answer after the last entry billed, oldest first, from one complete scan of what came
+ * after it. `rest`: the entries after the last answer, on no bill yet; `now`: Pi's ledger as it stands.
+ */
+async function billAnswers(tx: Pick<Tx, "scanEntries" | "doc">, conversationId: ConversationId, billed: Billing): Promise<{ rest: EntryRecord[]; now: Spent }> {
 	const entries: EntryRecord[] = [];
 	let cursor: Cursor | undefined;
 	do {
@@ -99,13 +107,12 @@ async function billAnswers(tx: Pick<Tx, "scanEntries" | "doc">, conversationId: 
 		if (!answered(entry)) continue;
 		later = since(later, spentBy(assistants(run)));
 		const at = since(now, later);
-		// The calls of a turn that ended unanswered are on its own bill already.
-		const bill = billOf(run.filter((e) => billed.unanswered === undefined || e.id > billed.unanswered), since(at, billed.spent));
-		await tx.doc(BillDoc, conversationId, String(entry.id), bill);
+		await tx.doc(BillDoc, conversationId, String(entry.id), billOf(run, since(at, billed.spent)));
 		billed.answer = entry.id;
 		billed.spent = at;
 		run = [];
 	}
+	return { rest: run, now };
 }
 
 /** The bill of a run's `entries` that spent `spent`: the tools they called in order, their model calls and compactions. */
@@ -126,23 +133,13 @@ function billOf(entries: readonly EntryRecord[], spent: Spent): Bill {
  */
 export async function unansweredUsage(tx: Pick<Tx, "scanEntries" | "doc">, conversationId: ConversationId, submissionId: string): Promise<TurnUsage | undefined> {
 	const billed = await tx.doc(BilledDoc, conversationId);
-	if (billed.spent === undefined) return undefined;
+	if (!billing(billed)) return undefined;
 	const doc = await tx.doc(BillDoc, conversationId, `s${submissionId}`, null);
 	if (doc.bill === undefined) {
-		await billAnswers(tx, conversationId, billed as { answer?: number; spent: Spent; unanswered?: number });
-		const after = Math.max(billed.answer ?? -1, billed.unanswered ?? -1);
-		const entries: EntryRecord[] = [];
-		let cursor: Cursor | undefined;
-		do {
-			const page: Page<EntryRecord, Cursor> = await tx.scanEntries({ conversationId, order: "ascending", ...(after < 0 ? {} : { minEntryId: (after + 1) as EntryId }) }, 50, cursor);
-			entries.push(...page.items);
-			cursor = page.next;
-		} while (cursor !== undefined);
-		const now = await ledgerSpent(tx, conversationId);
-		doc.bill = billOf(entries, since(now, billed.spent));
+		const { rest, now } = await billAnswers(tx, conversationId, billed);
+		doc.bill = billOf(rest, since(now, billed.spent));
 		billed.spent = now;
-		const last = entries.at(-1);
-		if (last !== undefined) billed.unanswered = last.id;
+		billed.answer = rest.at(-1)?.id ?? billed.answer;
 	}
 	// A turn that sent nothing (refused at its first request) spent nothing: no row to record.
 	if (doc.bill.modelCalls === 0 && doc.bill.costUsd === 0) return undefined;

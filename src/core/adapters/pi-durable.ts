@@ -575,18 +575,18 @@ class GatedRequest extends AssistantMessageEventStream {
  */
 function currentRequestRegistry(registry: RegistryReader, models: MutableModels, options: EngineOpenOptions, ownModel: OwnModel, stopped: ReadonlySet<string>): RegistryReader {
 	const phases = GenerationTask.definition.phases;
-	const useTarget = async <T>(runtime: DocumentReader & { conversationId: ConversationId }, ctx: OriginContext, use: (target: RequestTarget | undefined) => T): Promise<Awaited<T>> => {
+	const useTarget = async <T>(runtime: DocumentReader & { conversationId: ConversationId }, ctx: OriginContext, use: (target: RequestTarget | undefined, key: string | undefined) => T): Promise<Awaited<T>> => {
 		let key: string | undefined;
 		try { key = await threadKeyOf(runtime, runtime.conversationId, ctx); }
 		catch (error) { throw new AlignmentFailed(error); }
-		if (key === undefined) return await use(undefined);
+		if (key === undefined) return await use(undefined, key);
 		if (stopped.has(key)) throw new Error("Conversation stopped");
 		return modelFor(models, options, ownModel, key, (model) => {
 			if (stopped.has(key)) throw new Error("Conversation stopped");
 			let instructions: string | undefined;
 			try { instructions = typeof options.instructions === "function" ? options.instructions() : options.instructions; }
 			catch (error) { throw new AlignmentFailed(error); }
-			return use({ model, instructions });
+			return use({ model, instructions }, key);
 		});
 	};
 	const targetFor = (runtime: DocumentReader & { conversationId: ConversationId }, ctx: OriginContext) => useTarget(runtime, ctx, (target) => target);
@@ -607,26 +607,31 @@ function currentRequestRegistry(registry: RegistryReader, models: MutableModels,
 	 * owner that fails otherwise is retried like any alignment failure. Polls are not asked: they
 	 * fetch the answer to a request already sent.
 	 */
-	const authorize = async (runtime: DocumentReader & { conversationId: ConversationId }, ctx: OriginContext): Promise<void> => {
+	const authorize = async (runtime: DocumentReader & { conversationId: ConversationId }, ctx: OriginContext, key: string | undefined): Promise<void> => {
 		const ask = options.authorizeRequest;
 		if (ask === undefined) return;
 		try {
-			await ask({ threadKey: await threadKeyOf(runtime, runtime.conversationId, ctx), unbilledUsd: await unbilledUsd(runtime, runtime.conversationId, ctx) });
+			await ask({ threadKey: key, unbilledUsd: await unbilledUsd(runtime, runtime.conversationId, ctx) });
 		} catch (error) {
 			if (error instanceof ModelRequestRefused) throw new Error(REFUSED);
 			throw new AlignmentFailed(error);
 		}
 	};
-	const check = <T>(runtime: GenerationRuntime, checkpoint: RequestCheckpoint, messages: readonly Message[], ctx: OriginContext, send: () => T, gated: boolean): Promise<Awaited<T>> => useTarget(runtime, ctx, async (target) => {
+	/** `send` of a new request, once the owner allowed it. */
+	const authorized = <T>(runtime: DocumentReader & { conversationId: ConversationId; signal: AbortSignal }, ctx: OriginContext, send: () => T) => async (key: string | undefined): Promise<Awaited<T>> => {
+		await authorize(runtime, ctx, key);
+		runtime.signal.throwIfAborted();
+		return await send();
+	};
+	const check = <T>(runtime: GenerationRuntime, checkpoint: RequestCheckpoint, messages: readonly Message[], ctx: OriginContext, send: (key: string | undefined) => T): Promise<Awaited<T>> => useTarget(runtime, ctx, async (target, key) => {
 		if (target !== undefined) {
 			let shown: string | null | undefined;
 			for (const message of messages) if (message.role === "system" && message.sections?.instructions !== undefined) shown = message.sections.instructions;
 			const desired = target.instructions === undefined ? undefined : `<instructions>\n${target.instructions}\n</instructions>`;
 			if (!sameModel(checkpoint.model, target.model) || (shown ?? undefined) !== desired) throw new PrepareRequest(target);
 		}
-		if (gated) await authorize(runtime, ctx);
 		runtime.signal.throwIfAborted();
-		return send();
+		return send(key);
 	});
 	const recover = async (error: unknown, runtime: GenerationRuntime, checkpoint: Exclude<GenerationCheckpoint, { phase: "tools" }>, ctx: OriginContext) => {
 		runtime.signal.throwIfAborted();
@@ -655,7 +660,7 @@ function currentRequestRegistry(registry: RegistryReader, models: MutableModels,
 					const target = await checkpointTarget(runtime, ctx, checkpoint.model);
 					if (target !== undefined) throw new PrepareRequest(target);
 					await phases.request(task, withModels(runtime, {
-						streamSimple: (model, transcript, streamOptions) => new GatedRequest(() => check(runtime, checkpoint, transcript.messages, ctx, () => models.streamSimple(model, transcript, streamOptions), true)),
+						streamSimple: (model, transcript, streamOptions) => new GatedRequest(() => check(runtime, checkpoint, transcript.messages, ctx, authorized(runtime, ctx, () => models.streamSimple(model, transcript, streamOptions)))),
 					}), ctx);
 				} catch (error) { await recover(error, runtime, checkpoint, ctx); }
 			},
@@ -666,7 +671,7 @@ function currentRequestRegistry(registry: RegistryReader, models: MutableModels,
 					const target = await checkpointTarget(runtime, ctx, checkpoint.model);
 					if (target !== undefined) throw new PrepareRequest(target);
 					await phases.poll(task, withModels(runtime, {
-						fetchDeferred: (model, handle, fetchOptions) => check(runtime, checkpoint, view.messages, ctx, () => models.fetchDeferred(model, handle, fetchOptions), false),
+						fetchDeferred: (model, handle, fetchOptions) => check(runtime, checkpoint, view.messages, ctx, () => models.fetchDeferred(model, handle, fetchOptions)),
 					}), ctx);
 				} catch (error) {
 					if (error instanceof PrepareRequest) {
@@ -700,12 +705,10 @@ function currentRequestRegistry(registry: RegistryReader, models: MutableModels,
 						return;
 					}
 					await CompactionTask.definition.phases.summarize(task, withModels(runtime, {
-						completeSimple: (model, transcript, streamOptions) => useTarget(runtime, ctx, async (target) => {
+						completeSimple: (model, transcript, streamOptions) => useTarget(runtime, ctx, async (target, key) => {
 							const selected = target === undefined ? model : models.getModel(target.model.provider, target.model.modelId);
 							if (selected === undefined) throw new Error(`Model ${target!.model.provider}/${target!.model.modelId} is not available`);
-							await authorize(runtime, ctx);
-							runtime.signal.throwIfAborted();
-							return models.completeSimple(selected, transcript, { ...streamOptions, maxTokens: Math.min(streamOptions?.maxTokens ?? Infinity, selected.maxTokens > 0 ? selected.maxTokens : Infinity) });
+							return authorized(runtime, ctx, () => models.completeSimple(selected, transcript, { ...streamOptions, maxTokens: Math.min(streamOptions?.maxTokens ?? Infinity, selected.maxTokens > 0 ? selected.maxTokens : Infinity) }))(key);
 						}),
 					}), ctx);
 				} catch (error) {

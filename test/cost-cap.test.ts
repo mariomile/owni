@@ -11,7 +11,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { piDurableEngine } from "../src/core/adapters/pi-durable.ts";
 import { connectorAction } from "../src/core/approvals.ts";
 import type { DurableEngine } from "../src/core/engine.ts";
-import { OwniRuntime, type OwniTool, type Reply } from "../src/core/index.ts";
+import { COST_CAPPED, OwniRuntime, type OwniTool, type Reply } from "../src/core/index.ts";
 import { REPLY_CAPPED } from "../src/gateway.ts";
 import { runtimeWithInstance, waitFor } from "./helpers.ts";
 
@@ -107,7 +107,7 @@ describe("daily hard cap", () => {
 		spend(dataDir, 25);
 		await runtime.submit({ tenantId: "acme", instanceId: "ops", channel: "test", threadId: "p", userId: "u", text: "ciao", messageId: "m1" });
 		await waitFor(() => replies.length === 1);
-		expect(replies[0]).toMatchObject({ threadId: "p", status: "unanswered", reason: "cost_capped", capped: true });
+		expect(replies[0]).toMatchObject({ threadId: "p", status: "unanswered", reason: COST_CAPPED });
 		expect(denials(dataDir)).toEqual([expect.objectContaining({ instanceId: "ops", day: expect.any(String), spentUsd: 25, hardUsd: 20, channel: "test", threadId: "p" })]);
 		// Nothing was spent: no answer to record.
 		expect(rows(dataDir)).toBe(1);
@@ -120,7 +120,7 @@ describe("daily hard cap", () => {
 		await runtime.submitScheduled("acme", "ops", { channel: "test", threadId: "s", text: "[Task programmato S-1] Riassunto", messageId: "s1", scheduleId: "S-1", onBehalfOf: { channel: "test", userId: "u" } });
 		await runtime.submitNotice("acme", "ops", { channel: "test", threadId: "n", text: "Risposta di un altro agente", messageId: "n1", event: { kind: "test" }, origin: "agent" });
 		await waitFor(() => replies.length === 2);
-		expect(replies.map((r) => [r.threadId, r.status === "unanswered" && r.capped === true]).sort()).toEqual([
+		expect(replies.map((r) => [r.threadId, r.status === "unanswered" && r.reason === COST_CAPPED]).sort()).toEqual([
 			["n", true],
 			["s", true],
 		]);
@@ -145,7 +145,7 @@ describe("daily hard cap", () => {
 		await runtime.submit({ tenantId: "acme", instanceId: "ops", channel: "test", threadId: "p", userId: "u", text: "/tool costly {}", messageId: "m1" });
 		await waitFor(() => replies.length === 1);
 		expect(ran).toBe(1);
-		expect(replies[0]).toMatchObject({ status: "unanswered", capped: true });
+		expect(replies[0]).toMatchObject({ status: "unanswered", reason: COST_CAPPED });
 		expect(denials(dataDir)).toHaveLength(1);
 	});
 
@@ -186,7 +186,7 @@ describe("daily hard cap", () => {
 		second.onReply((reply) => replies.push(reply));
 		await second.resume("acme", "ops");
 		await waitFor(() => replies.length === 1);
-		expect(replies[0]).toMatchObject({ threadId: "r", status: "unanswered", capped: true });
+		expect(replies[0]).toMatchObject({ threadId: "r", status: "unanswered", reason: COST_CAPPED });
 		expect(denials(first.dataDir)).toHaveLength(1);
 	});
 
@@ -202,7 +202,7 @@ describe("daily hard cap", () => {
 		expect(ran).toBe(1);
 		expect(decided.status).toBe("done");
 		await waitFor(() => replies.length === 1);
-		expect(replies[0]).toMatchObject({ threadId: "a", status: "unanswered", capped: true });
+		expect(replies[0]).toMatchObject({ threadId: "a", status: "unanswered", reason: COST_CAPPED });
 	});
 
 	it("lets every turn through under the cap", async () => {
@@ -223,7 +223,7 @@ describe("spend of a turn that ends unanswered", () => {
 		// Its first request costs 30, over the cap of 20: the next one is refused.
 		await runtime.submit({ tenantId: "acme", instanceId: "ops", channel: "test", threadId: "p", userId: "u", text: "/tool quick {}", messageId: "m1" });
 		await waitFor(() => replies.length === 1);
-		expect(replies[0]).toMatchObject({ status: "unanswered", capped: true });
+		expect(replies[0]).toMatchObject({ status: "unanswered", reason: COST_CAPPED });
 		const refused = records(dataDir);
 		// The day turns: what was spent is yesterday's.
 		const yesterday = new Date(Date.now() - 86_400_000).toISOString();
@@ -264,6 +264,6 @@ describe("spend of a turn that ends unanswered", () => {
 		expect(60).toBeLessThanOrEqual(2 * (20 + 15));
 		await runtime.submit({ tenantId: "acme", instanceId: "ops", channel: "test", threadId: "c", userId: "u", text: "ciao", messageId: "m-c" });
 		await waitFor(() => replies.length === 3);
-		expect(replies[2]).toMatchObject({ threadId: "c", capped: true });
+		expect(replies[2]).toMatchObject({ threadId: "c", reason: COST_CAPPED });
 	});
 });

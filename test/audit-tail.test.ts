@@ -69,6 +69,19 @@ describe("audit retention (ADR 0129)", () => {
 		expect(archives(dataDir)).toEqual(["audit-2025-07.jsonl", "audit-2026-06.jsonl"]);
 	});
 
+	it("adds to an archive of the same month already there, never replaces it", async () => {
+		const dataDir = tempDataDir();
+		const dir = dirname(auditFile(dataDir, ACME));
+		mkdirSync(dir, { recursive: true });
+		writeFileSync(join(dir, "audit-2026-03.jsonl"), `${JSON.stringify({ ts: "2026-03-01T00:00:00Z", tenantId: ACME, type: "archived" })}\n`);
+		// A live file restored with an old mtime: its month is already archived.
+		writeFileSync(auditFile(dataDir, ACME), `${JSON.stringify({ ts: "2026-03-20T00:00:00Z", tenantId: ACME, type: "restored" })}\n`);
+		utimesSync(auditFile(dataDir, ACME), new Date("2026-03-20T00:00:00Z"), new Date("2026-03-20T00:00:00Z"));
+		await new AuditLog(dataDir, ACME, at("2026-04-02T00:00:00Z")).append({ type: "april" });
+		expect(archives(dataDir)).toEqual(["audit-2026-03.jsonl"]);
+		expect((await new AuditLog(dataDir, ACME).read()).map((r) => r.type)).toEqual(["archived", "restored", "april"]);
+	});
+
 	it("reads the newest records across files and reports the size of all of them", async () => {
 		const dataDir = tempDataDir();
 		const dir = dirname(auditFile(dataDir, ACME));
