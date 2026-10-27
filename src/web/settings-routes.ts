@@ -11,7 +11,7 @@ import type { Person } from "./auth.ts";
 import type { WebChannel } from "./channel.ts";
 import { type AddRoute, HttpError, readJson } from "./http.ts";
 import { ABOUT_MAX, INSTRUCTIONS_MAX, ownInstructions, withAbout } from "./setup.ts";
-import { REPLY_CANCELLED, REPLY_FAILED } from "../gateway.ts";
+import { REPLY_CANCELLED, REPLY_CAPPED, REPLY_FAILED } from "../gateway.ts";
 import type { WebAppOptions } from "./server.ts";
 
 export type SettingsRoutesDeps = Pick<WebAppOptions, "computer" | "desktop" | "people" | "defaultInstructions" | "browser" | "connectedChannels" | "connectors" | "search" | "voice" | "speech" | "images"> & {
@@ -107,7 +107,7 @@ export function settingsRoutes(route: AddRoute, options: SettingsRoutesDeps): vo
 		if (record.egress.channels.includes("web")) {
 			const channel = channelOf(record.id);
 			for (const thread of (await channel.threads(me.id)).slice(0, 5)) {
-				if ((await channel.transcript(thread.id)).some((e) => e.from === "owni" && e.text !== REPLY_FAILED && e.text !== REPLY_CANCELLED)) {
+				if ((await channel.transcript(thread.id)).some((e) => e.from === "owni" && e.text !== REPLY_FAILED && e.text !== REPLY_CANCELLED && e.text !== REPLY_CAPPED)) {
 					tried = true;
 					break;
 				}
