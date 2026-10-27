@@ -1,5 +1,5 @@
 // Account (two-factor).
-import { api, h, mount, state, toast } from "./common.js";
+import { adoptPerson, api, h, mount, toast } from "./common.js";
 import { codeInput } from "./login.js";
 import { googleSection } from "./google.js";
 import { renderRail } from "./shell.js";
@@ -9,11 +9,8 @@ export function accountDialog() {
 	const body = h("div");
 	const dialog = h("dialog", h("h2", "Il tuo account"), googleSection(), body);
 	const draw = async () => {
-		const { generation } = state;
 		const me = (await api("/api/me")).person;
-		// The person left while this was in flight: it must not sign them back in.
-		if (state.generation !== generation) return;
-		state.me = me;
+		adoptPerson(me);
 		if (me.twoFactor) {
 			const code = codeInput();
 			mount(body, 
@@ -92,6 +89,6 @@ export function accountDialog() {
 	dialog.addEventListener("close", () => (dialog.remove(), renderRail()));
 	document.body.append(dialog);
 	dialog.showModal();
-	void draw();
+	void draw().catch((error) => toast(error.message, true));
 }
 

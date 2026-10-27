@@ -243,6 +243,8 @@ $toasts?.addEventListener("focusout", () => queueMicrotask(holdWhileInside));
 
 /** A short note at the bottom; `action` ({ label, href }) is a link to go on from it. */
 export function toast(text, bad = false, action) {
+	// A request cut off by the person leaving is not news: nobody is there to read it.
+	if (text === SESSION_CLOSED) return;
 	// Focusable, so the keyboard can hold a toast to read it; Escape dismisses it.
 	const t = h(`div.toast${bad ? ".bad" : ""}`, { tabindex: "0", ...(bad ? { role: "alert" } : {}) }, icon(bad ? "alert" : "check"), h("span", text), action ? h("a.toast-action", { href: action.href, onclick: () => t.close() }, action.label) : null);
 	// An error is usually longer and says what to do: it stays longer.
@@ -306,6 +308,9 @@ export function toast(text, bad = false, action) {
 	layoutToasts();
 }
 
+/** What api() throws for a request cancelled by the person leaving. */
+const SESSION_CLOSED = "Sessione chiusa";
+
 export class ApiError extends Error {
 	constructor(status, message, data = {}) {
 		super(message);
@@ -315,16 +320,25 @@ export class ApiError extends Error {
 }
 
 export async function api(path, { method = "GET", body, raw } = {}) {
-	const res = await fetch(path, {
-		method,
-		headers: { "x-owni": "1", ...(raw ? { "content-type": "application/octet-stream" } : body !== undefined ? { "content-type": "application/json" } : {}) },
-		body: raw ?? (body === undefined ? undefined : JSON.stringify(body)),
-		credentials: "same-origin",
-	});
-	const data = (res.headers.get("content-type") ?? "").includes("json") ? await res.json() : {};
+	const signal = session.signal;
+	let res;
+	let data;
+	try {
+		res = await fetch(path, {
+			method,
+			headers: { "x-owni": "1", ...(raw ? { "content-type": "application/octet-stream" } : body !== undefined ? { "content-type": "application/json" } : {}) },
+			body: raw ?? (body === undefined ? undefined : JSON.stringify(body)),
+			credentials: "same-origin",
+			signal,
+		});
+		data = (res.headers.get("content-type") ?? "").includes("json") ? await res.json() : {};
+	} catch (error) {
+		// The person left while this was on its way: the answer is nobody's.
+		if (signal.aborted) throw new ApiError(0, SESSION_CLOSED);
+		throw error;
+	}
 	if (res.status === 401 && !path.startsWith("/api/login")) {
-		resetPerson();
-		// The session shows the login: this module imports nothing.
+		// The session signs the person out and shows the login: this module imports nothing.
 		window.dispatchEvent(new Event("owni:unauthorized"));
 		throw new ApiError(401, data.error ?? "Accesso richiesto");
 	}
@@ -364,7 +378,8 @@ export function store(key, value) {
 }
 
 // ---------- state ----------
-export const state = {
+/** Everything that belongs to the person signed in, as it starts. */
+const personState = () => ({
 	me: undefined,
 	instances: [],
 	instance: undefined,
@@ -376,41 +391,39 @@ export const state = {
 	conversations: { direct: [], channels: [] },
 	/** Steps of «Primi passi» still to do, for the owner; 0 when done or put away. */
 	setupLeft: 0,
+	setup: undefined,
 	events: undefined,
 	onEntry: undefined,
+	onRoom: undefined,
 	onRun: undefined,
 	onRunsReconnect: undefined,
 	onBoard: undefined,
-	/** Counts every sign-out and change of person: an answer asked before it belongs to nobody now. */
-	generation: 0,
-};
+});
+
+export const state = personState();
+
+/** Aborted when the person leaves: every request asked for them is cancelled with it. */
+let session = new AbortController();
+export const sessionSignal = () => session.signal;
 
 /** Everything of the person who was here, gone: on sign-out, session end, and a different person coming in. */
 export function resetPerson() {
 	state.events?.close();
+	Object.assign(state, personState());
+	session.abort();
+	session = new AbortController();
 	// Dialogs live on the body: one left open would keep showing the previous person's names over the login.
+	// Closed after the reset, so a close handler that redraws finds nobody signed in.
 	for (const dialog of document.querySelectorAll("dialog")) {
 		dialog.close();
 		dialog.remove();
 	}
-	Object.assign(state, {
-		me: undefined,
-		instances: [],
-		instance: undefined,
-		usage: undefined,
-		pendingApprovals: 0,
-		boardReview: 0,
-		conversations: { direct: [], channels: [] },
-		setupLeft: 0,
-		setup: undefined,
-		events: undefined,
-		onEntry: undefined,
-		onRoom: undefined,
-		onRun: undefined,
-		onRunsReconnect: undefined,
-		onBoard: undefined,
-		generation: state.generation + 1,
-	});
+}
+
+/** `me` is who the server says is signed in: another person than before starts from nothing. */
+export function adoptPerson(me) {
+	if (state.me?.id !== me.id) resetPerson();
+	state.me = me;
 }
 
 export function route() {

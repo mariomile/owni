@@ -16,6 +16,10 @@ export function openPalette() {
 	];
 	// Canali by name, once something is typed.
 	const rooms = state.conversations.channels.map((c) => ({ label: channelName(c.title), group: "Canale", icon: "canali", href: channelHref(c.id) }));
+	// Each entry's own id for the whole time the palette is open: the active descendant follows the entry, not its row.
+	[...items, ...actions, ...rooms].forEach((item, n) => {
+		item.optionId = `palette-option-${n}`;
+	});
 	const input = h("input", { type: "text", role: "combobox", placeholder: "Vai a una sezione, scrivi a un agente, crea…", "aria-label": "Cerca una sezione, una conversazione o un'azione", "aria-controls": "palette-list", "aria-autocomplete": "list", "aria-expanded": "true", autocomplete: "off" });
 	const list = h("ul", { id: "palette-list", role: "listbox", "aria-label": "Risultati" });
 	let active = 0;
@@ -37,22 +41,13 @@ export function openPalette() {
 		const matches = (i) => i.label.toLowerCase().includes(q);
 		shown = [...items.filter((i) => q ? matches(i) : ["board", "approvazioni", "agenti", "gestione"].includes(i.id)), ...actions.filter((a) => q ? matches(a) : a.first), ...talks];
 		active = Math.min(active, Math.max(0, shown.length - 1));
-		// An id from the item itself: when the results change, so does the active descendant.
-		const taken = new Set();
-		const ids = shown.map((item) => {
-			const slug = `${item.group ?? ""}-${item.href ?? item.label}`.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-+|-+$/g, "");
-			let id = `palette-option-${slug}`;
-			for (let k = 2; taken.has(id); k++) id = `palette-option-${slug}-${k}`;
-			taken.add(id);
-			return id;
-		});
 		mount(list,
 			...shown.map((item, n) =>
 				h(
 					"li",
 					{
 						role: "option",
-						id: ids[n],
+						id: item.optionId,
 						"aria-selected": n === active ? "true" : "false",
 						onclick: () => pick(item),
 						onmousemove: () => {
@@ -69,7 +64,7 @@ export function openPalette() {
 		);
 		mount(none, shown.length ? [] : "Niente con questo nome");
 		input.setAttribute("aria-expanded", String(shown.length > 0));
-		if (shown.length) input.setAttribute("aria-activedescendant", ids[active]);
+		if (shown.length) input.setAttribute("aria-activedescendant", shown[active].optionId);
 		else input.removeAttribute("aria-activedescendant");
 	};
 	input.addEventListener("input", () => {
