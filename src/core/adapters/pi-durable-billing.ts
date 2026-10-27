@@ -2,8 +2,9 @@
  * Billing of answers (ADR 0098) on Pi Durable's own usage ledger: what each answer took, written
  * once per answer in the conversation's documents.
  */
+import type { Context } from "@earendil-works/chord";
 import type { Message } from "@earendil-works/pi-ai";
-import { CompactionEntry, type ConversationId, type Cursor, defineDoc, defineDocFamily, type EntryId, type EntryRecord, type Page, type Tx, UsageDoc } from "@earendil-works/pi-durable";
+import { CompactionEntry, type ConversationId, type Cursor, type DocumentReader, defineDoc, defineDocFamily, type EntryId, type EntryRecord, type Page, type Tx, UsageDoc } from "@earendil-works/pi-durable";
 import type { TurnUsage } from "../engine.ts";
 
 /**
@@ -130,6 +131,18 @@ export async function startBilling(tx: Pick<Tx, "scanEntries" | "doc">, conversa
 		cursor = page.next;
 	} while (cursor !== undefined);
 	billed.spent = since(await ledgerSpent(tx, conversationId), spentBy(assistants(after)));
+}
+
+/**
+ * What the conversation's model calls cost since its last answer billed: the turn under way, on
+ * no record of Owni's yet (its answer is recorded when it is delivered). Zero before billing starts.
+ */
+export async function unbilledUsd(reader: DocumentReader, conversationId: ConversationId, readContext: Context): Promise<number> {
+	const billed = await reader.snapshot(BilledDoc, conversationId, readContext);
+	if (billed?.spent === undefined) return 0;
+	const usage = await reader.snapshot(UsageDoc, conversationId, readContext);
+	const total = Object.values(usage?.models ?? {}).reduce((sum, model) => sum + model.cost.total, 0);
+	return Math.max(0, total - billed.spent.cost);
 }
 
 /** Every model call of the conversation in Pi's ledger, summed across models. */

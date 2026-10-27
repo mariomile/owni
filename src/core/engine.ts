@@ -41,7 +41,22 @@ export type EngineOpenOptions = {
 	readonly localProviders?: LocalProviders;
 	/** Durable Stop intents restored before any recovered provider or tool work may start. */
 	readonly stoppedThreads?: readonly string[];
+	/**
+	 * Asked before each new request to a model (a generation, a summary for compaction), whatever
+	 * started the turn: a person, a scheduled task, a notice, a resumed run. `unbilledUsd`: what the
+	 * conversation's turn under way has spent so far. Rejecting with ModelRequestRefused sends no
+	 * request and ends the turn unanswered with `refused`; any other rejection is retried.
+	 */
+	readonly authorizeRequest?: (request: { readonly threadKey: string | undefined; readonly unbilledUsd: number }) => Promise<void>;
 };
+
+/** A model request authorizeRequest does not allow (the day's spending cap reached). */
+export class ModelRequestRefused extends Error {
+	constructor(message = "Model request refused") {
+		super(message);
+		this.name = "ModelRequestRefused";
+	}
+}
 
 export interface EngineSession {
 	/**
@@ -89,7 +104,15 @@ export type EngineReply =
 			/** What the turn took, when the engine can tell (ADR 0098). */
 			readonly usage?: TurnUsage;
 	  }
-	| { readonly status: "unanswered"; readonly threadKey: string; readonly submissionId: string; readonly reason: string; readonly cancelled?: boolean };
+	| {
+			readonly status: "unanswered";
+			readonly threadKey: string;
+			readonly submissionId: string;
+			readonly reason: string;
+			readonly cancelled?: boolean;
+			/** No request was sent: authorizeRequest refused it. */
+			readonly refused?: boolean;
+	  };
 
 export type EngineRunState = {
 	readonly threadKey: string;

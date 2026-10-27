@@ -4,7 +4,7 @@ import { recordTurn, UsageLedger } from "./usage.ts";
 import { SerialQueue } from "./serial-queue.ts";
 import { AgentAsks } from "./agent-asks.ts";
 import { ConnectorActionStore } from "./connector-actions.ts";
-import type { OwniTool, DurableEngine, EngineImage, EngineReply, EngineSession, EngineRunEvent, EngineRunState } from "./engine.ts";
+import { ModelRequestRefused, type OwniTool, type DurableEngine, type EngineImage, type EngineReply, type EngineSession, type EngineRunEvent, type EngineRunState } from "./engine.ts";
 import { RunStore, isActiveRun, runId, runRequestId, type RunRecord, type RunEvent, type RunFilter } from "./run-store.ts";
 export type { RunRecord, RunEvent, RunFilter, RunStatus } from "./run-store.ts";
 import type { TurnOrigin } from "./turn-origin.ts";
@@ -81,7 +81,8 @@ export type Reply = {
 } & (
 	/** `model`: the one that wrote the answer, when the engine says. */
 	| { readonly status: "answered"; readonly text: string; readonly model?: ModelSelection }
-	| { readonly status: "unanswered"; readonly reason: string; readonly cancelled?: true }
+	/** `capped`: not answered because the day's spending cap was reached. */
+	| { readonly status: "unanswered"; readonly reason: string; readonly cancelled?: true; readonly capped?: true }
 	/** A file of the instance's workspace to send to the thread. */
 	| { readonly status: "file"; readonly path: string; readonly caption?: string }
 );
@@ -473,6 +474,21 @@ export class OwniRuntime {
 		const instructions = () => [own, place(), skillCatalog(skills.list())].filter((part) => part !== undefined && part !== "").join("\n\n");
 		const memory = this.memory(record.tenantId, record.id);
 		const participants = this.participants(record.tenantId, record.id);
+		const usage = new UsageLedger(tenantDir(this.options.dataDir, record.tenantId));
+		/**
+		 * The daily hard cap, asked before every new model request of every turn, whoever started it.
+		 * Most it can be overshot by: a request already sent finishes and is paid, and the turns of
+		 * other conversations running at the same time count only once they answer and are recorded;
+		 * this conversation's own spend so far counts at once. Actions already approved run all the
+		 * same (they call no model); the turn that would tell about them is refused like any other.
+		 */
+		const authorizeRequest = async ({ threadKey: key, unbilledUsd }: { readonly threadKey: string | undefined; readonly unbilledUsd: number }): Promise<void> => {
+			const capped = await usage.hardCapped(unbilledUsd);
+			if (capped === undefined) return;
+			// On record before the refusal, and so before any spend it would stop.
+			await audit.append({ type: "cost.denied", instanceId: record.id, ...capped, ...(key === undefined ? {} : parseThreadKey(key)) });
+			throw new ModelRequestRefused(`Daily spending cap reached: ${capped.spentUsd.toFixed(2)} of ${capped.hardUsd} USD`);
+		};
 		try {
 			toolSet = typeof this.options.tools === "function" ? await this.options.tools(record) : (this.options.tools ?? []);
 			session = await this.options.engine.open({
@@ -487,6 +503,7 @@ export class OwniRuntime {
 				},
 				localProviders: this.localProviders(record.tenantId),
 				modelUsable: reachable,
+				authorizeRequest,
 				tools: "tools" in toolSet ? toolSet.tools : toolSet,
 				instructions,
 				// The time, and the memories of whom the thread is with (only the shared ones in a group), as they are at each request.
@@ -519,7 +536,7 @@ export class OwniRuntime {
 			lock,
 			outbox,
 			audit,
-			usage: new UsageLedger(tenantDir(this.options.dataDir, record.tenantId)),
+			usage,
 			releaseTools,
 			fresh,
 			reachable,
@@ -568,6 +585,17 @@ export class OwniInstance {
 	/** Pending in-process retries, cleared on close. */
 	private readonly retries = new Map<string, NodeJS.Timeout>();
 	private closed = false;
+	private closing: Promise<void> | undefined;
+	/** What closing has still to do, in order: a step leaves once it succeeded. */
+	private readonly unclosed = new Map<string, () => Promise<void>>([
+		["engine", () => this.session.close()],
+		["events", () => this.events.idle()],
+		["chains", () => this.chains.idle()],
+		["runs", () => this.runs.idle()],
+		// A tool set that fails to let go (an MCP server gone) is logged, not retried: nothing else waits on it.
+		["tools", () => this.releaseTools().catch((error: unknown) => console.error(`owni: releasing tools of ${this.record.tenantId}/${this.record.id} failed: ${String(error)}`))],
+		["lock", async () => this.lock.release()],
+	]);
 	private readonly submissions = new SerialQueue();
 	private readonly events = new SerialQueue();
 	private recovery: Promise<void> | undefined;
@@ -1099,20 +1127,33 @@ export class OwniInstance {
 		await this.runs.idle();
 	}
 
-	async close(): Promise<void> {
+	/**
+	 * Each step of closing is tried whatever the others did, and the first failure is thrown once
+	 * all were tried. A close while one runs waits for it; a close after a failed one tries again
+	 * only the steps that failed; after one that succeeded, it does nothing.
+	 */
+	close(): Promise<void> {
+		this.closing ??= this.shutdown().finally(() => {
+			this.closing = undefined;
+		});
+		return this.closing;
+	}
+
+	private async shutdown(): Promise<void> {
 		// Replies that settle from now on are left to the next process (resume() reattaches them).
 		this.closed = true;
 		for (const timer of this.retries.values()) clearTimeout(timer);
 		this.retries.clear();
-		try {
-			await this.session.close();
-			await this.events.idle();
-			await this.chains.idle();
-			await this.runs.idle();
-			await this.releaseTools().catch((error: unknown) => console.error(`owni: releasing tools of ${this.record.tenantId}/${this.record.id} failed: ${String(error)}`));
-		} finally {
-			this.lock.release();
+		let failure: { readonly error: unknown } | undefined;
+		for (const [step, run] of this.unclosed) {
+			try {
+				await run();
+				this.unclosed.delete(step);
+			} catch (error) {
+				failure ??= { error };
+			}
 		}
+		if (failure !== undefined) throw failure.error;
 	}
 
 	private async deliver(engineReply: EngineReply): Promise<void> {
@@ -1125,7 +1166,9 @@ export class OwniInstance {
 		const reply: OutboxEntry["reply"] =
 			engineReply.status === "answered"
 				? { status: "answered", text: engineReply.text, ...(engineReply.model === undefined ? {} : { model: engineReply.model }) }
-				: { status: "unanswered", reason: engineReply.reason, ...(requestedStop ? { cancelled: true } : {}) };
+				: engineReply.refused === true && !requestedStop
+					? { status: "unanswered", reason: "cost_capped", capped: true }
+					: { status: "unanswered", reason: engineReply.reason, ...(requestedStop ? { cancelled: true } : {}) };
 		await this.serial(key, async () => {
 			const existing = await this.outbox.get(key);
 			if (existing?.deliveredAt !== undefined) return;

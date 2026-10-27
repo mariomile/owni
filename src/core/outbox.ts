@@ -17,7 +17,7 @@ export type OutboxEntry = {
 	/** Undefined while the engine has not answered (as far as this outbox knows). */
 	readonly reply?:
 		| { readonly status: "answered"; readonly text: string; readonly model?: ModelSelection }
-		| { readonly status: "unanswered"; readonly reason: string; readonly cancelled?: true }
+		| { readonly status: "unanswered"; readonly reason: string; readonly cancelled?: true; readonly capped?: true }
 		/** A workspace file the instance sends to the thread. */
 		| { readonly status: "file"; readonly path: string; readonly caption?: string };
 	readonly createdAt: string;

@@ -44,10 +44,10 @@ import { createNodePhotonImages } from "@earendil-works/pi-durable/images/node";
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
 import { createToolSearchTool } from "@earendil-works/pi-durable/tool-search";
 import { DEFAULT_IMAGE_LIMITS, type ImageProcessor } from "@earendil-works/pi-durable/tools";
-import type { OwniTool, DurableEngine, EngineImage, EngineOpenOptions, EngineReply, EngineSession, EngineRunEvent, EngineRunState, JsonValue, TurnUsage } from "../engine.ts";
+import { ModelRequestRefused, type OwniTool, type DurableEngine, type EngineImage, type EngineOpenOptions, type EngineReply, type EngineSession, type EngineRunEvent, type EngineRunState, type JsonValue, type TurnUsage } from "../engine.ts";
 import type { ModelSelection } from "../registry.ts";
 import { isTurnOrigin, type TurnOrigin } from "../turn-origin.ts";
-import { answered, BilledDoc, noSpend, startBilling, turnUsage } from "./pi-durable-billing.ts";
+import { answered, BilledDoc, noSpend, startBilling, turnUsage, unbilledUsd } from "./pi-durable-billing.ts";
 import { createProvider } from "./pi-durable-models.ts";
 
 const context = BACKGROUND_CONTEXT;
@@ -504,7 +504,8 @@ class PiDurableSession implements EngineSession {
 			if (settled.status === "done" && settled.type === "input") {
 				reply = { status: "answered", threadKey, submissionId, ...(await this.answer(settled)) };
 			} else {
-				reply = { status: "unanswered", threadKey, submissionId, reason: settled.reason ?? settled.status, cancelled: settled.reason === "aborted" };
+				const refused = typeof settled.detail === "string" && settled.detail.includes(REFUSED);
+				reply = { status: "unanswered", threadKey, submissionId, reason: settled.reason ?? settled.status, cancelled: settled.reason === "aborted", ...(refused ? { refused } : {}) };
 			}
 		} catch (error) {
 			if (this.closing) return; // the next process resumes it
@@ -541,6 +542,9 @@ type RequestCheckpoint = Extract<GenerationCheckpoint, { phase: "request" | "pol
 class PrepareRequest extends Error {
 	constructor(readonly target: RequestTarget) { super("The request configuration changed"); }
 }
+
+/** The error a refused request fails its task with: what the settled turn's detail says, also after a restart. */
+const REFUSED = "owni: model request refused";
 
 class AlignmentFailed extends Error {
 	constructor(cause: unknown) { super("Request alignment failed", { cause }); }
@@ -593,13 +597,30 @@ function currentRequestRegistry(registry: RegistryReader, models: MutableModels,
 	};
 	/** The runtime with some of its models' calls replaced. Keep live getters (settings/registry), rather than freezing them with an object spread. */
 	const withModels = <R extends object>(runtime: R, patch: Partial<MutableModels>): R => Object.assign(Object.create(runtime), { models: Object.assign(Object.create(models), patch) });
-	const check = <T>(runtime: GenerationRuntime, checkpoint: RequestCheckpoint, messages: readonly Message[], ctx: OriginContext, send: () => T): Promise<Awaited<T>> => useTarget(runtime, ctx, (target) => {
+	/**
+	 * Right before a new request leaves: the owner may refuse it (the day's cap). A refusal fails
+	 * the task with REFUSED, so no request is sent and the turn ends unanswered; a lookup or an
+	 * owner that fails otherwise is retried like any alignment failure. Polls are not asked: they
+	 * fetch the answer to a request already sent.
+	 */
+	const authorize = async (runtime: DocumentReader & { conversationId: ConversationId }, ctx: OriginContext): Promise<void> => {
+		const ask = options.authorizeRequest;
+		if (ask === undefined) return;
+		try {
+			await ask({ threadKey: await threadKeyOf(runtime, runtime.conversationId, ctx), unbilledUsd: await unbilledUsd(runtime, runtime.conversationId, ctx) });
+		} catch (error) {
+			if (error instanceof ModelRequestRefused) throw new Error(REFUSED);
+			throw new AlignmentFailed(error);
+		}
+	};
+	const check = <T>(runtime: GenerationRuntime, checkpoint: RequestCheckpoint, messages: readonly Message[], ctx: OriginContext, send: () => T, gated: boolean): Promise<Awaited<T>> => useTarget(runtime, ctx, async (target) => {
 		if (target !== undefined) {
 			let shown: string | null | undefined;
 			for (const message of messages) if (message.role === "system" && message.sections?.instructions !== undefined) shown = message.sections.instructions;
 			const desired = target.instructions === undefined ? undefined : `<instructions>\n${target.instructions}\n</instructions>`;
 			if (!sameModel(checkpoint.model, target.model) || (shown ?? undefined) !== desired) throw new PrepareRequest(target);
 		}
+		if (gated) await authorize(runtime, ctx);
 		runtime.signal.throwIfAborted();
 		return send();
 	});
@@ -630,7 +651,7 @@ function currentRequestRegistry(registry: RegistryReader, models: MutableModels,
 					const target = await checkpointTarget(runtime, ctx, checkpoint.model);
 					if (target !== undefined) throw new PrepareRequest(target);
 					await phases.request(task, withModels(runtime, {
-						streamSimple: (model, transcript, streamOptions) => new GatedRequest(() => check(runtime, checkpoint, transcript.messages, ctx, () => models.streamSimple(model, transcript, streamOptions))),
+						streamSimple: (model, transcript, streamOptions) => new GatedRequest(() => check(runtime, checkpoint, transcript.messages, ctx, () => models.streamSimple(model, transcript, streamOptions), true)),
 					}), ctx);
 				} catch (error) { await recover(error, runtime, checkpoint, ctx); }
 			},
@@ -641,7 +662,7 @@ function currentRequestRegistry(registry: RegistryReader, models: MutableModels,
 					const target = await checkpointTarget(runtime, ctx, checkpoint.model);
 					if (target !== undefined) throw new PrepareRequest(target);
 					await phases.poll(task, withModels(runtime, {
-						fetchDeferred: (model, handle, fetchOptions) => check(runtime, checkpoint, view.messages, ctx, () => models.fetchDeferred(model, handle, fetchOptions)),
+						fetchDeferred: (model, handle, fetchOptions) => check(runtime, checkpoint, view.messages, ctx, () => models.fetchDeferred(model, handle, fetchOptions), false),
 					}), ctx);
 				} catch (error) {
 					if (error instanceof PrepareRequest) {
@@ -675,9 +696,10 @@ function currentRequestRegistry(registry: RegistryReader, models: MutableModels,
 						return;
 					}
 					await CompactionTask.definition.phases.summarize(task, withModels(runtime, {
-						completeSimple: (model, transcript, streamOptions) => useTarget(runtime, ctx, (target) => {
+						completeSimple: (model, transcript, streamOptions) => useTarget(runtime, ctx, async (target) => {
 							const selected = target === undefined ? model : models.getModel(target.model.provider, target.model.modelId);
 							if (selected === undefined) throw new Error(`Model ${target!.model.provider}/${target!.model.modelId} is not available`);
+							await authorize(runtime, ctx);
 							runtime.signal.throwIfAborted();
 							return models.completeSimple(selected, transcript, { ...streamOptions, maxTokens: Math.min(streamOptions?.maxTokens ?? Infinity, selected.maxTokens > 0 ? selected.maxTokens : Infinity) });
 						}),
