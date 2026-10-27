@@ -16,8 +16,8 @@ export function openPalette() {
 	];
 	// Canali by name, once something is typed.
 	const rooms = state.conversations.channels.map((c) => ({ label: channelName(c.title), group: "Canale", icon: "canali", href: channelHref(c.id) }));
-	const input = h("input", { type: "text", placeholder: "Vai a una sezione, scrivi a un agente, crea…", "aria-label": "Cerca una sezione, una conversazione o un'azione", autocomplete: "off" });
-	const list = h("ul", { role: "listbox" });
+	const input = h("input", { type: "text", role: "combobox", placeholder: "Vai a una sezione, scrivi a un agente, crea…", "aria-label": "Cerca una sezione, una conversazione o un'azione", "aria-controls": "palette-list", "aria-autocomplete": "list", "aria-expanded": "true", autocomplete: "off" });
+	const list = h("ul", { id: "palette-list", role: "listbox", "aria-label": "Risultati" });
 	let active = 0;
 	let shown = items;
 	const dialog = h("dialog.palette", { "aria-label": "Cerca una sezione o un'azione" }, input, list);
@@ -41,6 +41,7 @@ export function openPalette() {
 					"li",
 					{
 						role: "option",
+						id: `palette-option-${n}`,
 						"aria-selected": n === active ? "true" : "false",
 						onclick: () => pick(item),
 						onmousemove: () => {
@@ -56,6 +57,9 @@ export function openPalette() {
 			),
 			...(shown.length ? [] : [h("li.none", "Niente con questo nome")]),
 		);
+		input.setAttribute("aria-expanded", String(shown.length > 0));
+		if (shown.length) input.setAttribute("aria-activedescendant", `palette-option-${active}`);
+		else input.removeAttribute("aria-activedescendant");
 	};
 	input.addEventListener("input", () => {
 		active = 0;

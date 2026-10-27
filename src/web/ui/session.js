@@ -1,5 +1,5 @@
 // Starting the app: who is signed in, the agents, the counters, the live events.
-import { $app, api, ApiError, emptyNote, h, mount, route, state, store, toast } from "./common.js";
+import { $app, api, ApiError, emptyNote, h, mount, resetPerson, route, state, store, toast } from "./common.js";
 import { renderCode, renderLogin } from "./login.js";
 import { finishGoogle } from "./google.js";
 import { setupLeft } from "./setup.js";
@@ -10,7 +10,7 @@ import { refreshConversations, render, renderRail } from "./shell.js";
 // api() says a session is gone with this event (common.js imports nothing): show the login.
 let counterTimer;
 window.addEventListener("owni:unauthorized", () => {
-	state.me = undefined;
+	resetPerson();
 	clearInterval(counterTimer);
 	renderLogin();
 });
@@ -35,7 +35,10 @@ export async function boot() {
 /** With a session: load who this is and the instances, then show the console. */
 export async function enter() {
 	try {
-		state.me = (await api("/api/me")).person;
+		const me = (await api("/api/me")).person;
+		// Another person in the same tab: nothing of the one before stays.
+		if (state.me?.id !== me.id) resetPerson();
+		state.me = me;
 		await refreshInstances();
 	} catch (error) {
 		// No network, or the server not answering (a restart, a cell waking up): say so and try again by itself.
