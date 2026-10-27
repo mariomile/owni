@@ -9,10 +9,9 @@
 	</head>
 	<body>
 		<div class="titlebar" data-tauri-drag-region></div>
-		<main id="avvio" hidden>
-			<img src="icon.svg" alt="" width="48" height="48" />
-			<h1>Owni si sta accendendo</h1>
-			<p>Gira su questo computer. Al primo avvio ci vogliono alcuni secondi.</p>
+		<main id="avvio" role="status" hidden>
+			<svg class="mark" viewBox="0 0 64 64" width="72" height="72" aria-hidden="true"><rect width="64" height="64" rx="14.3"/><g class="eyes"><ellipse cx="23.5" cy="32" rx="4.6" ry="7.4"/><ellipse cx="40.5" cy="32" rx="4.6" ry="7.4"/></g></svg>
+			<h1 class="visually-hidden">Owni si sta accendendo</h1>
 		</main>
 		<main id="collega" hidden>
 			<img src="icon.svg" alt="" width="48" height="48" />

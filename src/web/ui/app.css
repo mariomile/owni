@@ -1196,6 +1196,14 @@ li.step.done .step-text > b { font-weight: 500; color: var(--fg-3); }
 ol.steps .stack { display: grid; gap: 8px; }
 ol.steps .stack > .choices { margin-bottom: 2px; }
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+/* Starting: the mark, looking around and blinking, until the first screen replaces it. A quick start never shows it. */
+.splash { position: fixed; inset: 0; display: grid; place-items: center; animation: splash-in 0.5s var(--ease) 0.3s backwards; }
+.mark rect { fill: var(--fg); }
+.mark ellipse { fill: var(--bg); transform-box: fill-box; transform-origin: center; animation: mark-blink 3.2s var(--ease) infinite; }
+.mark .eyes { animation: mark-glance 3.2s var(--ease) infinite; }
+@keyframes splash-in { from { opacity: 0; transform: scale(0.94); } }
+@keyframes mark-glance { 0%, 18% { transform: none; } 28%, 42% { transform: translateX(-3px); } 52%, 66% { transform: translateX(3px); } 76%, 100% { transform: none; } }
+@keyframes mark-blink { 0%, 86%, 100% { transform: none; } 91% { transform: scaleY(0.1); } }
 @media (max-width: 560px) {
 	ol.steps li.step { grid-template-columns: 28px 1fr; padding: 14px 16px; }
 	li.step > .btn { grid-column: 2; justify-self: start; }

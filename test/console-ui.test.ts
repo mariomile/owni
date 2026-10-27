@@ -53,6 +53,15 @@ describe("console accessibility floor", () => {
 		expect(read("shell.js")).toContain("Salta al contenuto");
 	});
 
+	it("starts on the mark, said once to a screen reader, and the desktop app shows the same mark", () => {
+		const page = read("index.html");
+		expect(page).toMatch(/<div id="app"><div class="splash" role="status"><svg class="mark"[^>]*aria-hidden="true"/);
+		expect(page).toContain('<span class="visually-hidden">Owni si sta accendendo</span>');
+		const desktop = join(import.meta.dirname, "..", "desktop", "connect");
+		expect(readFileSync(join(desktop, "icon.svg"), "utf8")).toBe(read("icon.svg"));
+		expect(readFileSync(join(desktop, "index.html"), "utf8")).toContain('<main id="avvio" role="status" hidden>');
+	});
+
 	it("the phone drawer makes the page behind inert and closes on Esc", () => {
 		const shell = read("shell.js");
 		expect(shell).toMatch(/"main, \.topbar"\)\) behind\.inert/);
