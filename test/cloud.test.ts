@@ -3,7 +3,7 @@ import { createHmac } from "node:crypto";
 import { createServer, request, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { StripeBilling } from "../src/cloud/billing.ts";
 import { type ControlPlane, startControlPlane } from "../src/cloud/control-plane.ts";
 import { LocalCellProvider } from "../src/cloud/local-provider.ts";
@@ -206,9 +206,10 @@ describe("Owni Cloud control plane (cells as local processes)", () => {
 		expect(await c.provider.status(cell)).toBe("running");
 	}, 180_000);
 
-	it("wake attempts are limited per tenant", async () => {
+	it("anonymous webhook wakes use up only their own budget: the owner's credential still wakes the cell", async () => {
 		const c = await cloud({ idleMs: 0 });
 		const anna = await signUp(c, "anna@studio.example");
+		const cell = (await c.provider.list())[0] as string;
 		const statuses: number[] = [];
 		for (let i = 0; i < 8; i++) {
 			await c.cp.tick(new Date());
@@ -216,6 +217,45 @@ describe("Owni Cloud control plane (cells as local processes)", () => {
 		}
 		expect(statuses.slice(0, 6).every((s) => s !== 429 && s !== 503)).toBe(true);
 		expect(statuses.slice(6)).toEqual([429, 429]);
+		await c.cp.tick(new Date());
+		expect(await c.provider.status(cell)).toBe("stopped");
+		// Her credential is not charged to that budget, and a planted cookie of the same name does not hide it.
+		expect((await anna.cell("/api/me", { cookie: `owni_wake=1.zz; ${anna.session}; ${anna.wake}` })).status).toBe(200);
+		expect(await c.provider.status(cell)).toBe("running");
+	}, 180_000);
+
+	it("requests that arrive while a cell is starting wait for that start: one provider.start, one wake charged", async () => {
+		const c = await cloud({ idleMs: 0 });
+		const anna = await signUp(c, "anna@studio.example");
+		await c.cp.tick(new Date());
+		// A start slow enough that the four requests all find the cell still stopped.
+		const realStart = c.provider.start.bind(c.provider);
+		const start = vi.spyOn(c.provider, "start").mockImplementation(async (tenant) => {
+			await new Promise((r) => setTimeout(r, 500));
+			return realStart(tenant);
+		});
+		const hook = () => anna.cell("/hooks/telegram/owni", { method: "POST", body: "{}" });
+		const together = await Promise.all([hook(), hook(), hook(), hook()]);
+		expect(together.every((r) => r.status !== 429 && r.status !== 503)).toBe(true);
+		expect(start).toHaveBeenCalledTimes(1);
+		// Four requests were one wake: five more fit in the budget of six, the sixth after those does not.
+		const later: number[] = [];
+		for (let i = 0; i < 6; i++) {
+			await c.cp.tick(new Date());
+			later.push((await hook()).status);
+		}
+		expect(later.slice(0, 5).every((s) => s !== 429)).toBe(true);
+		expect(later[5]).toBe(429);
+	}, 180_000);
+
+	it("logging out clears the wake credential with the session", async () => {
+		const c = await cloud();
+		const anna = await signUp(c, "anna@studio.example");
+		const out = await anna.api("/api/logout", {});
+		expect(out.status).toBe(200);
+		const cleared = out.headers.get("set-cookie") ?? "";
+		expect(cleared).toMatch(/owni_session=;[^,]*Max-Age=0/);
+		expect(cleared).toMatch(/owni_wake=;[^,]*Max-Age=0/);
 	}, 180_000);
 
 	it("the same machine cannot send sign-in links to everyone", async () => {

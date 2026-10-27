@@ -11,7 +11,7 @@ import { tempDataDir } from "./helpers.ts";
 import { chromiumAvailable, launchChromium } from "./playwright-browsers.ts";
 
 // Real Chromium (test/playwright-browsers.ts): the file chooser is refused where it opens, whatever way the page reaches it (ADR 0103).
-const available = chromiumAvailable;
+const available = await chromiumAvailable();
 
 const closers: (() => Promise<void>)[] = [];
 afterEach(async () => {

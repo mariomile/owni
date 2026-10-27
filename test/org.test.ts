@@ -218,7 +218,7 @@ describe("the organigramma's routes", () => {
 	});
 });
 
-describe.skipIf(!chromiumAvailable)("the organigramma as a tree, in real Chromium", () => {
+describe.skipIf(!(await chromiumAvailable()))("the organigramma as a tree, in real Chromium", () => {
 	const running: RunningOwni[] = [];
 	afterEach(async () => {
 		for (const a of running.splice(0)) await a.stop();

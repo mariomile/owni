@@ -1,11 +1,11 @@
-import { existsSync } from "node:fs";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
 import { type Browser, BrowseSessions } from "../src/core/web-session.ts";
+import { chromiumAvailable } from "./playwright-browsers.ts";
 
-// Real Chromium, found the way web-browse.test.ts finds it (and so run in CI): a page built with web components (ADR 0014).
-const chromium = existsSync(process.env.PLAYWRIGHT_BROWSERS_PATH ?? "/opt/pw-browsers");
+// Real Chromium, found by test/playwright-browsers.ts (and so run in CI): a page built with web components (ADR 0014).
+const chromium = await chromiumAvailable();
 
 const closers: (() => Promise<void>)[] = [];
 afterEach(async () => {

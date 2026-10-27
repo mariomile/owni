@@ -12,7 +12,7 @@ import { Workspace } from "../src/core/workspace.ts";
 import { tempDataDir } from "./helpers.ts";
 import { chromiumAvailable, launchChromium } from "./playwright-browsers.ts";
 
-const available = chromiumAvailable;
+const available = await chromiumAvailable();
 const scope = "acme/ops";
 const alice = sessionKey(scope, { channel: "web", threadId: "alice-main" });
 const sibling = sessionKey(scope, { channel: "web", threadId: "alice-other" });

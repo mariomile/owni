@@ -21,8 +21,8 @@ vi.unstubAllGlobals();
 
 // Safari and the Mac app (WKWebView) draw with WebKit: Playwright's build of it is the stand-in, used when installed (`playwright-core install webkit`).
 const engines = [
-	{ name: "Chromium", available: chromiumAvailable, launch: launchChromium },
-	{ name: "WebKit", available: webkitAvailable, launch: launchWebkit },
+	{ name: "Chromium", available: await chromiumAvailable(), launch: launchChromium },
+	{ name: "WebKit", available: await webkitAvailable(), launch: launchWebkit },
 ];
 
 const closers: (() => Promise<void>)[] = [];

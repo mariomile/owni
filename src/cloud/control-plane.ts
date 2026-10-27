@@ -309,13 +309,21 @@ export async function startControlPlane(options: ControlPlaneOptions): Promise<C
 	// --- cells ---
 	const cellOf = (tenant: string) => read().cells.find((c) => c.tenant === tenant);
 
-	async function ensureRunning(tenant: string): Promise<void> {
-		await stoppings.get(tenant)?.catch(() => {});
-		if ((await options.provider.status(tenant)) !== "running") {
-			await options.provider.start(tenant);
-			log(`cloud: cell ${tenant} started`);
-		}
-		lastSeen.set(tenant, Date.now());
+	/** One start at a time per tenant: requests that arrive during it wait for it, and start nothing. */
+	const starting = new Map<string, Promise<void>>();
+	function ensureRunning(tenant: string): Promise<void> {
+		const inFlight = starting.get(tenant);
+		if (inFlight !== undefined) return inFlight;
+		const start = (async () => {
+			await stoppings.get(tenant)?.catch(() => {});
+			if ((await options.provider.status(tenant)) !== "running") {
+				await options.provider.start(tenant);
+				log(`cloud: cell ${tenant} started`);
+			}
+			lastSeen.set(tenant, Date.now());
+		})().finally(() => starting.delete(tenant));
+		starting.set(tenant, start);
+		return start;
 	}
 
 	async function toCell(tenant: string, path: string, method: "GET" | "POST"): Promise<Response> {
@@ -741,8 +749,10 @@ export async function startControlPlane(options: ControlPlaneOptions): Promise<C
 		}
 		const awake = (await options.provider.status(tenant)) === "running" && !stoppings.has(tenant);
 		const secret = cellOf(tenant)?.secret;
-		if (!awake && !mayWake(req, path.pathname, tenant, secret)) return send(res, 503, SLEEPING);
-		if (!awake && !wakeAllowed(tenant)) {
+		const wake = awake ? undefined : wakeKind(req, path.pathname, tenant, secret);
+		if (!awake && wake === undefined) return send(res, 503, SLEEPING);
+		// Only a webhook-path wake is limited: anyone can send one, so it must not use up the owner's way in. A start already under way is not a new wake.
+		if (wake === "webhook" && !starting.has(tenant) && !wakeAllowed(tenant)) {
 			res.setHeader("retry-after", String(Math.ceil(WAKE_WINDOW_MS / 1000)));
 			return send(res, 429, { error: "Troppi tentativi di risveglio: riprova tra qualche minuto" });
 		}
@@ -816,16 +826,17 @@ export async function startControlPlane(options: ControlPlaneOptions): Promise<C
 	}
 
 	/**
-	 * A stopped cell wakes for its people (the wake credential this control plane signed after the
+	 * A stopped cell wakes for its people (a wake credential this control plane signed after the
 	 * cell accepted their session) and for the webhook addresses the cell serves; an anonymous
 	 * request does not, or anyone could keep any cell running. The sign-in link needs no wake: the
 	 * control plane starts the cell before handing it out.
 	 */
-	function mayWake(req: IncomingMessage, pathname: string, tenant: string, secret: string | undefined): boolean {
-		if (secret === undefined) return false;
-		if (WEBHOOK_PATHS.some((p) => p.test(pathname))) return true;
-		const credential = /(?:^|;\s*)owni_wake=([\w.]+)/.exec(String(req.headers.cookie ?? ""))?.[1];
-		return credential !== undefined && wakeCredentialValid(secret, tenant, credential, Date.now());
+	function wakeKind(req: IncomingMessage, pathname: string, tenant: string, secret: string | undefined): "credential" | "webhook" | undefined {
+		if (secret === undefined) return undefined;
+		// Any valid one among the cookies sent counts: a planted cookie of the same name cannot shadow the real one.
+		const credentials = [...String(req.headers.cookie ?? "").matchAll(/(?:^|;\s*)owni_wake=([\w.]+)/g)].map((m) => m[1] as string);
+		if (credentials.some((value) => wakeCredentialValid(secret, tenant, value, Date.now()))) return "credential";
+		return WEBHOOK_PATHS.some((p) => p.test(pathname)) ? "webhook" : undefined;
 	}
 
 	/** Headers for the cell: no credentials meant for the control plane, no hop-by-hop, our own forwarding facts. */
