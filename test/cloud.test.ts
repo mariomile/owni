@@ -193,6 +193,25 @@ describe("Owni Cloud control plane (cells as local processes)", () => {
 		expect(await c.provider.status(cell)).toBe("running");
 	}, 180_000);
 
+	it("a call to a disconnected line does not keep the cell awake, and a method no hook answers does not wake it", async () => {
+		const c = await cloud({ idleMs: 2_000 });
+		const anna = await signUp(c, "anna@studio.example");
+		const cell = (await c.provider.list())[0] as string;
+		await new Promise((r) => setTimeout(r, 2_100));
+		await c.cp.tick(new Date());
+		expect(await c.provider.status(cell)).toBe("stopped");
+		expect((await anna.cell("/hooks/telegram/owni")).status).toBe(503);
+		expect(await c.provider.status(cell)).toBe("stopped");
+		// The number still points here: the cell wakes and rejects the call, which is not anyone's use.
+		const call = await anna.cell("/hooks/phone/owni", { method: "POST", body: "CallSid=CA1" });
+		expect(call.status).toBe(200);
+		expect(call.body).toContain("<Reject/>");
+		expect(call.headers.get("x-owni-idle")).toBeNull();
+		expect(await c.provider.status(cell)).toBe("running");
+		await c.cp.tick(new Date());
+		expect(await c.provider.status(cell)).toBe("stopped");
+	}, 180_000);
+
 	it("a request an awake cell turns away does not count as activity: a stranger cannot keep it running", async () => {
 		const c = await cloud({ idleMs: 2_000 });
 		const anna = await signUp(c, "anna@studio.example");

@@ -23,6 +23,9 @@ export const HOOK_ROUTES = [
 	{ name: "whatsapp", pattern: /^\/hooks\/whatsapp\/([a-z0-9_-]+)$/, methods: ["GET", "POST"] },
 ] as const satisfies readonly { readonly name: string; readonly pattern: RegExp; readonly methods: readonly string[] }[];
 
+/** Set on an answer that serves nobody (a call to a disconnected line): the control plane does not count it as activity. */
+export const IDLE_ANSWER = "x-owni-idle";
+
 /** What other services call, outside the console's sessions: Twilio, an automazione's caller, Meta, Telegram. */
 export function webhooks(options: WebhooksDeps) {
 	const { runtime, tenantId } = options;
@@ -37,7 +40,7 @@ export function webhooks(options: WebhooksDeps) {
 		const adapter = options.phoneHooks?.get(instance);
 		// A number still pointing here after it was disconnected: refused before it is answered, so it costs nothing.
 		if (adapter === undefined) {
-			res.writeHead(200, { "content-type": "text/xml; charset=utf-8" });
+			res.writeHead(200, { "content-type": "text/xml; charset=utf-8", [IDLE_ANSWER]: "1" });
 			return void res.end('<?xml version="1.0" encoding="UTF-8"?><Response><Reject/></Response>');
 		}
 		let raw: Buffer;

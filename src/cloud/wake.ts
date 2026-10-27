@@ -30,12 +30,12 @@ export function wakeCredentialValid(cellSecret: string, tenant: string, value: s
 
 const CREDENTIALS = new RegExp(`(?:^|;\\s*)${WAKE_COOKIE}=([\\w.]+)`, "g");
 
-/** What may wake a stopped cell for this request: a person's credential, a webhook path, or nothing. */
-export function wakeKind(cookieHeader: string, pathname: string, tenant: string, secret: string, now: number): "credential" | "webhook" | undefined {
+/** What may wake a stopped cell for this request: a person's credential, a webhook the cell serves (path and method), or nothing. */
+export function wakeKind(cookieHeader: string, method: string, pathname: string, tenant: string, secret: string, now: number): "credential" | "webhook" | undefined {
 	// Any valid one among the cookies sent counts: a planted cookie of the same name cannot shadow the real one.
 	const credentials = [...cookieHeader.matchAll(CREDENTIALS)].map((m) => m[1] as string);
 	if (credentials.some((value) => wakeCredentialValid(secret, tenant, value, now))) return "credential";
-	return HOOK_ROUTES.some((r) => r.pattern.test(pathname)) ? "webhook" : undefined;
+	return HOOK_ROUTES.some((r) => (r.methods as readonly string[]).includes(method) && r.pattern.test(pathname)) ? "webhook" : undefined;
 }
 
 /**

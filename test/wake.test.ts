@@ -4,18 +4,18 @@ import { WAKE_TTL_MS, wakeCookies, wakeCredential, wakeKind } from "../src/cloud
 const SECRET = "s".repeat(43);
 const NOW = 1_800_000_000_000;
 const real = `owni_wake=${wakeCredential(SECRET, "anna", NOW + WAKE_TTL_MS)}`;
-const kind = (cookie: string, pathname = "/api/me", tenant = "anna") => wakeKind(cookie, pathname, tenant, SECRET, NOW);
+const kind = (cookie: string, pathname = "/api/me", tenant = "anna", method = "POST") => wakeKind(cookie, method, pathname, tenant, SECRET, NOW);
 
 describe("waking a stopped cell", () => {
 	it("wakes for the credential the control plane signed for this tenant, until it expires", () => {
 		expect(kind(`owni_session=x; ${real}`)).toBe("credential");
-		expect(wakeKind(real, "/api/me", "anna", SECRET, NOW + WAKE_TTL_MS)).toBeUndefined();
+		expect(wakeKind(real, "GET", "/api/me", "anna", SECRET, NOW + WAKE_TTL_MS)).toBeUndefined();
 	});
 
 	it("does not wake for a forged credential, one of another tenant or another cell's secret, or none", () => {
 		expect(kind(`owni_wake=${"1".repeat(13)}.${"a".repeat(64)}`)).toBeUndefined();
 		expect(kind(real, "/api/me", "luca")).toBeUndefined();
-		expect(wakeKind(real, "/api/me", "anna", "t".repeat(43), NOW)).toBeUndefined();
+		expect(wakeKind(real, "GET", "/api/me", "anna", "t".repeat(43), NOW)).toBeUndefined();
 		expect(kind(`owni_session=${"a".repeat(32)}`)).toBeUndefined();
 		expect(kind(`xowni_wake=${wakeCredential(SECRET, "anna", NOW + 1000)}`)).toBeUndefined();
 	});
@@ -27,6 +27,12 @@ describe("waking a stopped cell", () => {
 	it("wakes for the webhook paths a cell serves, and no other", () => {
 		for (const path of ["/hooks/telegram/owni", "/hooks/phone/owni", "/hooks/whatsapp/owni", "/hooks/automazione/owni/0123456789ab"]) expect(kind("", path)).toBe("webhook");
 		for (const path of ["/hooks/not-a-real-hook", "/hooks/telegram/a/b", "/hooks/automazione/owni/xyz", "/api/me"]) expect(kind("", path)).toBeUndefined();
+	});
+
+	it("wakes for a webhook only with a method the cell answers there", () => {
+		expect(kind("", "/hooks/whatsapp/owni", "anna", "GET")).toBe("webhook");
+		for (const path of ["/hooks/telegram/owni", "/hooks/phone/owni", "/hooks/automazione/owni/0123456789ab"]) expect(kind("", path, "anna", "GET")).toBeUndefined();
+		expect(kind("", "/hooks/telegram/owni", "anna", "PUT")).toBeUndefined();
 	});
 });
 

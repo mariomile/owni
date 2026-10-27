@@ -8,6 +8,7 @@ import { COMPUTER_LIMITS, ComputerError, type ComputerProvider, type ComputerRun
 import { computerToken, proxyToken, sameSecret } from "../web/compare.ts";
 import { readJsonFile, updateJsonFile } from "../core/locked-json.ts";
 import { RollingLimit } from "../core/rolling-limit.ts";
+import { IDLE_ANSWER } from "../web/hooks.ts";
 import { HttpError, pathPattern, readBody, readJson as readJsonBody, send } from "../web/http.ts";
 import type { CellState } from "../web/server.ts";
 import { type Access, type AccountBilling, accessOf, BillingRefused, live, mayCheckout, mayUse, type StripeBilling, type StripeEvent, type Subscription } from "./billing.ts";
@@ -744,7 +745,7 @@ export async function startControlPlane(options: ControlPlaneOptions): Promise<C
 			return send(res, 402, { error: `Il periodo di prova è finito: attiva l'abbonamento da ${publicUrl(options.domain)}` });
 		}
 		const awake = (await options.provider.status(tenant)) === "running" && !stoppings.has(tenant);
-		const wake = awake ? undefined : wakeKind(String(req.headers.cookie ?? ""), path.pathname, tenant, secret, Date.now());
+		const wake = awake ? undefined : wakeKind(String(req.headers.cookie ?? ""), req.method ?? "", path.pathname, tenant, secret, Date.now());
 		if (!awake && wake === undefined) return send(res, 503, SLEEPING);
 		// Only a webhook-path wake is limited: anyone can send one, so it must not use up the owner's way in. A start already under way is not a new wake.
 		if (wake === "webhook" && !starting.has(tenant) && !wakes.take(tenant)) {
@@ -754,7 +755,8 @@ export async function startControlPlane(options: ControlPlaneOptions): Promise<C
 		// Counted open before the start, so a tick meanwhile does not stop the cell under it; closed on every
 		// way out, a person who leaves while the cell starts included, or the cell would never sleep.
 		// Only an answer the cell accepted is activity: what it turns away (no session, bad signature, no
-		// such hook), a start that failed or a person who left first neither keeps it awake nor counts as use.
+		// such hook) or marks idle (a call to a disconnected line), a start that failed or a person who left
+		// first neither keeps it awake nor counts as use.
 		open.set(tenant, (open.get(tenant) ?? 0) + 1);
 		let accepted = false;
 		let upstream: ClientRequest | undefined;
@@ -776,10 +778,11 @@ export async function startControlPlane(options: ControlPlaneOptions): Promise<C
 		const call = target.protocol === "https:" ? httpsRequest : request;
 		upstream = call({ host: target.hostname, port: target.port, method: req.method, path: `${path.pathname}${path.search}`, headers: forwardHeaders(req, tenant, secret, target.host) }, (answer) => {
 			const status = answer.statusCode ?? 502;
-			accepted = status < 400;
-			const set = answer.headers["set-cookie"] ?? [];
+			const { [IDLE_ANSWER]: idle, ...headers } = answer.headers;
+			accepted = status < 400 && idle === undefined;
+			const set = headers["set-cookie"] ?? [];
 			const cookies = wakeCookies(set, { accepted, pathname: path.pathname, tenant, secret, secure: options.publicScheme === "https", now: Date.now() });
-			res.writeHead(status, withoutHopByHop(cookies === set ? answer.headers : { ...answer.headers, "set-cookie": [...cookies] }));
+			res.writeHead(status, withoutHopByHop(cookies === set ? headers : { ...headers, "set-cookie": [...cookies] }));
 			answer.pipe(res);
 		});
 		upstream.on("error", () => {
