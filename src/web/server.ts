@@ -35,7 +35,6 @@ import { WebChannel, type WebEntry } from "./channel.ts";
 import { boardRoutes } from "./board-routes.ts";
 import { capabilityRoutes } from "./capability-routes.ts";
 import { orgRoutes } from "./org-routes.ts";
-import { teamRoutes } from "./team-routes.ts";
 import { eventsRoutes } from "./events-routes.ts";
 import { filesRoutes } from "./files-routes.ts";
 import { mine, mineWatch, scheduleRoutes } from "./schedule-routes.ts";
@@ -448,30 +447,13 @@ export function createWebApp(options: WebAppOptions): Server {
 		await runtime.audit(tenantId).append({ type: "agents.allowed", instanceId: id, personId: person.id, allowed: from.length, from: from.join(",") });
 		return from;
 	};
-	const org = orgRoutes(route, {
+	orgRoutes(route, {
 		store: runtime.org(tenantId),
 		agents: async () =>
 			(await runtime.registry.listInstances(tenantId))
 				.map((r) => ({ id: r.id, name: r.name, accepts: r.egress.channels.includes(AGENT_CHANNEL) ? (r.allowedUsers[AGENT_CHANNEL] ?? []) : [] })),
 		allow: (person, id, from) => allowAgents(person, id, from),
 		audit: (event) => runtime.audit(tenantId).append(event),
-	});
-
-	// --- ready-made squadre (ADR 0068) ---
-	teamRoutes(route, {
-		canCreate: options.createInstance !== undefined,
-		exists: agentExists,
-		make: (person, input) => makeAgent(person, { ...input, persona: personaOf(input.persona) }),
-		place: org.save,
-		preview: org.preview,
-		room: async (person, title, agents) => {
-			if (options.rooms === undefined) return undefined;
-			const room = await options.rooms.create(person.id, title, agents).catch(roomError);
-			await runtime.audit(tenantId).append({ type: "room.created", personId: person.id, roomId: room.id, agents: room.seats.length });
-			return room.id;
-		},
-		audit: (event) => runtime.audit(tenantId).append(event),
-		log: (message) => options.log?.(message),
 	});
 
 	// --- chat ---

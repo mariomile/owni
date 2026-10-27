@@ -180,12 +180,12 @@ export const MEMORY_NOTE_MARKER = "\n\n[Memoria]";
 
 /**
  * The block added after a person's message: what the instance remembers that applies to them,
- * and `more` (the names of their liste), inside the same block so it stays out of their words.
+ * inside one block so it stays out of their words.
  */
-export function memoryNote(memories: readonly Memory[], more = "", archived = 0): string {
-	if (memories.length === 0 && more === "" && archived === 0) return "";
+export function memoryNote(memories: readonly Memory[], archived = 0): string {
+	if (memories.length === 0 && archived === 0) return "";
 	const lines = memories.map((m) => `- ${m.text} (${m.about === SHARED ? "condivisa, " : ""}id ${m.id})`);
 	const archive = archived === 0 ? "" : `\nAltre ${archived} in archivio: se la conversazione tocca qualcosa che potresti sapere (un cliente, una data, una decisione), cercale con memory_search.`;
 	const remembered = lines.length === 0 && archive === "" ? "" : ` Cose che ricordi di chi ti scrive; usale solo se servono, aggiornale con memory_remember e memory_forget:${lines.length === 0 ? "" : `\n${lines.join("\n")}`}${archive}`;
-	return `${MEMORY_NOTE_MARKER}${remembered}${more === "" ? "" : `${remembered === "" ? " " : "\n"}${more}`}`;
+	return `${MEMORY_NOTE_MARKER}${remembered}`;
 }

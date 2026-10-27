@@ -19,24 +19,14 @@ export type OrgRoutesDeps = {
 	readonly audit: (event: AuditEvent) => Promise<void>;
 };
 
-/** Change the organigramma and apply who may write to whom; the HttpError says what is wrong. */
-export type SaveOrg = (person: Person, change: (current: Org) => Org) => Promise<Org>;
-
 /** One permission a save would change: from now on `from` may write to `to`, or no longer. */
 export type OrgChange = { readonly from: string; readonly to: string; readonly allowed: boolean };
 
 /**
- * What saving `change` would do to who may write to whom, by name, for the owner to confirm
- * first. `extra` are agenti not made yet (a squadra pronta), that hear from nobody now.
- */
-export type PreviewOrg = (change: (current: Org) => Org, extra?: readonly OrgAgent[]) => Promise<OrgChange[]>;
-
-/**
  * The organigramma (ADR 0117), for the owner: read it with who may write to whom now, and save it
- * whole. Saving rewrites every agente's permission to hear from the others. Returns the save and
- * its preview, for the ready-made squadre.
+ * whole. Saving rewrites every agente's permission to hear from the others.
  */
-export function orgRoutes(route: AddRoute, deps: OrgRoutesDeps): { save: SaveOrg; preview: PreviewOrg } {
+export function orgRoutes(route: AddRoute, deps: OrgRoutesDeps): void {
 	const view = async () => {
 		const agents = await deps.agents();
 		const org = onlyKnown(deps.store.read(), new Map(agents.map((a) => [a.id, a.name])));
@@ -78,8 +68,9 @@ export function orgRoutes(route: AddRoute, deps: OrgRoutesDeps): { save: SaveOrg
 		if (missed.length > 0) throw new HttpError(500, `Organigramma salvato, ma chi può scrivere a ${missed.join(", ")} non è cambiato: salva di nuovo`);
 		return org;
 	};
-	const preview: PreviewOrg = async (change, extra = []) => {
-		const agents = [...(await deps.agents()), ...extra];
+	/** What saving `change` would do to who may write to whom, by name, for the owner to confirm first. */
+	const preview = async (change: (current: Org) => Org): Promise<OrgChange[]> => {
+		const agents = await deps.agents();
 		const names = new Map(agents.map((a) => [a.id, a.name]));
 		let next: Org;
 		try {
@@ -98,7 +89,7 @@ export function orgRoutes(route: AddRoute, deps: OrgRoutesDeps): { save: SaveOrg
 		}
 		return changes;
 	};
-	const save: SaveOrg = (person, change) => {
+	const save = (person: Person, change: (current: Org) => Org): Promise<Org> => {
 		const run = queue.then(() => saveNow(person, change));
 		queue = run.catch(() => {});
 		return run;
@@ -111,11 +102,10 @@ export function orgRoutes(route: AddRoute, deps: OrgRoutesDeps): { save: SaveOrg
 	route("PUT", "/api/org", "owner", async ({ person, req }) => {
 		const body = (await readJson(req)) as { org?: unknown; version?: unknown };
 		await save(person, (current) => {
-			// Two pages open, or a squadra pronta made meanwhile: the older page does not erase it.
+			// Two pages open: the older page does not erase the newer save.
 			if (body.version !== orgVersion(current)) throw new HttpError(409, "L'organigramma è cambiato da quando hai aperto la pagina: ricaricala e rifai la modifica");
 			return body.org as Org;
 		});
 		return view();
 	});
-	return { save, preview };
 }

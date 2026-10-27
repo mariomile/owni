@@ -1,8 +1,5 @@
 import type { WebSearchConfig } from "../core/web-search.ts";
-import { DEFAULT_RATES_URL, type ExchangeRatesConfig } from "../core/exchange-rates.ts";
-import { DEFAULT_NEWS_FEEDS, MAX_FEED_NAME, MAX_FEEDS, NEWS_SECTIONS, type NewsConfig, type NewsFeed, type NewsSection } from "../core/news.ts";
 import { DEFAULT_MAX_PER_DAY_SERVER, DEFAULT_VIES_URL, type ViesConfig } from "../core/vies.ts";
-import { DEFAULT_FORECAST_URL, DEFAULT_GEOCODING_URL, PAID_FORECAST_URL, type WeatherConfig } from "../core/weather.ts";
 import type { SpeakerConfig } from "../channels/speech.ts";
 import type { ImageGenerationConfig } from "../core/image-generation.ts";
 import { TIMESTAMP_STYLES, type TimestampStyle, type TranscriberConfig } from "../channels/voice.ts";
@@ -116,12 +113,6 @@ export type OwniConfig = {
 	readonly images: ImageGenerationConfig | undefined;
 	/** Web search for the instances (ADR 0017): Brave Search, or the same API elsewhere; off if unset. */
 	readonly webSearch: WebSearchConfig | undefined;
-	/** The weather tool (Open-Meteo, or the same APIs elsewhere), when the operator turns it on with OWNI_WEATHER=1; maxPerDay counts tool calls. */
-	readonly weather: WeatherConfig | undefined;
-	/** The exchange_rate tool (the ECB's reference rates), when the operator turns it on with OWNI_EXCHANGE_RATES=1. */
-	readonly exchangeRates: ExchangeRatesConfig | undefined;
-	/** The news_headlines tool (public RSS/Atom feeds, the built-in list or OWNI_NEWS_FEEDS), when the operator turns it on with OWNI_NEWS=1. */
-	readonly news: NewsConfig | undefined;
 	/** The VIES lookup of vat_check (the European Commission's VAT numbers), when the operator turns it on with OWNI_VAT_CHECK=1; without it vat_check checks on paper only. */
 	readonly vatCheck: ViesConfig | undefined;
 	/** Phone calls (ADR 0012): Twilio's REST API (the Ireland region for data in the EU) and the language spoken. */
@@ -151,61 +142,6 @@ function serviceUrl(name: string, value: string, example: string, allow: { reado
 }
 
 /**
- * OWNI_WEATHER=1 and its overrides: place names and coordinates leave the server only when
- * the operator says so. Open-Meteo is free only for private, non-commercial use: a business sets a plan's key.
- */
-function loadWeatherConfig(env: Readonly<Record<string, string | undefined>>): WeatherConfig | undefined {
-	const on = nonEmpty(env.OWNI_WEATHER);
-	if (on !== undefined && !["0", "1", "true", "false"].includes(on)) throw new ConfigError("OWNI_WEATHER: 1 to offer the weather tool (Open-Meteo), 0 (default) for no weather");
-	const overrides = ["OWNI_WEATHER_URL", "OWNI_WEATHER_GEOCODING_URL", "OWNI_WEATHER_API_KEY", "OWNI_WEATHER_MAX_PER_DAY"].filter((name) => nonEmpty(env[name]) !== undefined);
-	if (on !== "1" && on !== "true") {
-		if (overrides.length > 0) throw new ConfigError(`${overrides.join(", ")} set without OWNI_WEATHER=1`);
-		return undefined;
-	}
-	const apiKey = nonEmpty(env.OWNI_WEATHER_API_KEY);
-	// A paid plan: its forecast host by default; its geocoding address is the one Open-Meteo gives.
-	const forecastDefault = apiKey === undefined ? DEFAULT_FORECAST_URL : PAID_FORECAST_URL;
-	const forecastUrl = serviceUrl("OWNI_WEATHER_URL", nonEmpty(env.OWNI_WEATHER_URL) ?? forecastDefault, forecastDefault);
-	const geocoding = nonEmpty(env.OWNI_WEATHER_GEOCODING_URL);
-	if (apiKey !== undefined && geocoding === undefined) throw new ConfigError("OWNI_WEATHER_API_KEY needs OWNI_WEATHER_GEOCODING_URL: the geocoding address Open-Meteo gives with the plan");
-	const geocodingUrl = serviceUrl("OWNI_WEATHER_GEOCODING_URL", geocoding ?? DEFAULT_GEOCODING_URL, DEFAULT_GEOCODING_URL);
-	// Tool calls, each one a geocoding and a forecast request.
-	const maxPerDay = Number(nonEmpty(env.OWNI_WEATHER_MAX_PER_DAY) ?? "200");
-	if (!Number.isInteger(maxPerDay) || maxPerDay < 1 || maxPerDay > 100_000) throw new ConfigError("OWNI_WEATHER_MAX_PER_DAY: a whole number from 1 to 100000");
-	return { forecastUrl, geocodingUrl, ...(apiKey === undefined ? {} : { apiKey }), maxPerDay };
-}
-
-/**
- * OWNI_EXCHANGE_RATES=1 and its address: off unless the operator says so, like every service
- * Owni reaches. Only the ECB's public files are fetched; nothing about the person leaves.
- */
-function loadExchangeRatesConfig(env: Readonly<Record<string, string | undefined>>): ExchangeRatesConfig | undefined {
-	const on = nonEmpty(env.OWNI_EXCHANGE_RATES);
-	if (on !== undefined && !["0", "1", "true", "false"].includes(on)) throw new ConfigError("OWNI_EXCHANGE_RATES: 1 to offer the ECB exchange rates, 0 (default) for none");
-	const url = nonEmpty(env.OWNI_EXCHANGE_RATES_URL);
-	if (on !== "1" && on !== "true") {
-		if (url !== undefined) throw new ConfigError("OWNI_EXCHANGE_RATES_URL set without OWNI_EXCHANGE_RATES=1");
-		return undefined;
-	}
-	return { url: serviceUrl("OWNI_EXCHANGE_RATES_URL", url ?? DEFAULT_RATES_URL, DEFAULT_RATES_URL) };
-}
-
-/**
- * OWNI_NEWS=1 and its feeds: off unless the operator says so. Only the feeds' fixed addresses
- * are fetched; nothing the person writes, a topic included, leaves the server.
- */
-function loadNewsConfig(env: Readonly<Record<string, string | undefined>>): NewsConfig | undefined {
-	const on = nonEmpty(env.OWNI_NEWS);
-	if (on !== undefined && !["0", "1", "true", "false"].includes(on)) throw new ConfigError("OWNI_NEWS: 1 to offer the news headlines (public RSS/Atom feeds), 0 (default) for none");
-	const list = nonEmpty(env.OWNI_NEWS_FEEDS);
-	if (on !== "1" && on !== "true") {
-		if (list !== undefined) throw new ConfigError("OWNI_NEWS_FEEDS set without OWNI_NEWS=1");
-		return undefined;
-	}
-	return { feeds: list === undefined ? DEFAULT_NEWS_FEEDS : newsFeeds(list) };
-}
-
-/**
  * OWNI_VAT_CHECK=1 and its overrides: off unless the operator says so. Then the country and the
  * VAT number someone asks about go to the European Commission's VIES, nothing else.
  */
@@ -225,34 +161,6 @@ function loadVatCheckConfig(env: Readonly<Record<string, string | undefined>>): 
 	const maxPerDayServer = Number(nonEmpty(env.OWNI_VAT_CHECK_MAX_PER_DAY_SERVER) ?? String(DEFAULT_MAX_PER_DAY_SERVER));
 	if (!Number.isInteger(maxPerDayServer) || maxPerDayServer < 1 || maxPerDayServer > 1_000_000) throw new ConfigError("OWNI_VAT_CHECK_MAX_PER_DAY_SERVER: a whole number from 1 to 1000000");
 	return { url, maxPerDay, maxPerDayServer };
-}
-
-const FEEDS_EXAMPLE = "Il Post|https://www.ilpost.it/feed/|italia;BBC World|https://feeds.bbci.co.uk/news/world/rss.xml|mondo";
-
-/**
- * OWNI_NEWS_FEEDS: «Nome|https://indirizzo» or «Nome|https://indirizzo|sezione», separated by
- * semicolons. Names of 1 to 40 characters without control characters, each once; addresses
- * checked like every service address, a query allowed (some feeds need one), each once.
- */
-function newsFeeds(value: string): NewsFeed[] {
-	const parts = value.split(";").map((part) => part.trim()).filter((part) => part !== "");
-	if (parts.length === 0 || parts.length > MAX_FEEDS) throw new ConfigError(`OWNI_NEWS_FEEDS: 1 to ${MAX_FEEDS} feeds, e.g. ${FEEDS_EXAMPLE}`);
-	const feeds = parts.map((part): NewsFeed => {
-		const [name = "", url = "", section, ...rest] = part.split("|").map((field) => field.trim());
-		if (url === "" || rest.length > 0) throw new ConfigError(`OWNI_NEWS_FEEDS: each feed is Nome|https://indirizzo, with |sezione if you like, e.g. ${FEEDS_EXAMPLE}`);
-		if (name.length < 1 || name.length > MAX_FEED_NAME || /[\u0000-\u001f\u007f-\u009f]/.test(name)) throw new ConfigError(`OWNI_NEWS_FEEDS: a feed's name is 1 to ${MAX_FEED_NAME} characters, without control characters`);
-		if (section !== undefined && !(NEWS_SECTIONS as readonly string[]).includes(section)) throw new ConfigError(`OWNI_NEWS_FEEDS: the section of ${name} is one of ${NEWS_SECTIONS.join(", ")}`);
-		return { name, url: serviceUrl(`OWNI_NEWS_FEEDS (${name})`, url, "https://www.ilpost.it/feed/", { query: true }), ...(section === undefined ? {} : { section: section as NewsSection }) };
-	});
-	for (const key of ["name", "url"] as const) {
-		const seen = new Set<string>();
-		for (const feed of feeds) {
-			const value = key === "name" ? feed.name.toLowerCase() : feed.url;
-			if (seen.has(value)) throw new ConfigError(`OWNI_NEWS_FEEDS: ${key === "name" ? `the name ${feed.name}` : `the address of ${feed.name}`} is listed twice`);
-			seen.add(value);
-		}
-	}
-	return feeds;
 }
 
 export type ComputerConfig =
@@ -446,9 +354,6 @@ export function loadOwniConfig(env: Readonly<Record<string, string | undefined>>
 	} else if (nonEmpty(env.OWNI_SEARCH_URL) !== undefined) {
 		throw new ConfigError("OWNI_SEARCH_URL is set without OWNI_SEARCH_API_KEY");
 	}
-	const weather = loadWeatherConfig(env);
-	const exchangeRates = loadExchangeRatesConfig(env);
-	const news = loadNewsConfig(env);
 	const vatCheck = loadVatCheckConfig(env);
 	const computer = loadComputerConfig(env);
 	const desktop = loadDesktopConfig(env);
@@ -481,9 +386,6 @@ export function loadOwniConfig(env: Readonly<Record<string, string | undefined>>
 		speech,
 		images,
 		webSearch,
-		weather,
-		exchangeRates,
-		news,
 		vatCheck,
 		computer,
 		desktop,

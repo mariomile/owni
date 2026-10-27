@@ -14,7 +14,6 @@ import { type InstanceId, instanceId, type TenantId, tenantId } from "./ids.ts";
 import { InstanceLock } from "./lock.ts";
 import { Outbox, type OutboxEntry } from "./outbox.ts";
 import { MemoryStore, memoryNote, Participants, SHARED, subjectOf } from "./memory.ts";
-import { ListStore, listsLine } from "./lists.ts";
 import { nowLine } from "./turn-context.ts";
 import { agentAsksFile, connectorActionsDir, customToolsDir, engineDir, googleActionsDir, instanceDir, lockFile, outboxDir, proposalsDir, schedulesDir, tenantDir, watchesDir, webActionsDir, workspaceDir } from "./paths.ts";
 import { GoogleActionStore } from "./google-actions.ts";
@@ -201,11 +200,6 @@ export class OwniRuntime {
 	/** The skills of an instance (ADR 0059): procedures its people saved, shared by all of them. */
 	skills(tenant: string, instance: string): SkillStore {
 		return new SkillStore(instanceDir(this.options.dataDir, tenantId(tenant), instanceId(instance)));
-	}
-
-	/** The liste of an instance: each person's and the shared ones. */
-	lists(tenant: string, instance: string): ListStore {
-		return new ListStore(instanceDir(this.options.dataDir, tenantId(tenant), instanceId(instance)));
 	}
 
 	/** Whom a private thread is with, as "<channel>:<userId>"; undefined for a group or unknown thread. */
@@ -479,7 +473,6 @@ export class OwniRuntime {
 		const instructions = () => [own, place(), skillCatalog(skills.list())].filter((part) => part !== undefined && part !== "").join("\n\n");
 		const memory = this.memory(record.tenantId, record.id);
 		const participants = this.participants(record.tenantId, record.id);
-		const lists = this.lists(record.tenantId, record.id);
 		try {
 			toolSet = typeof this.options.tools === "function" ? await this.options.tools(record) : (this.options.tools ?? []);
 			session = await this.options.engine.open({
@@ -500,7 +493,7 @@ export class OwniRuntime {
 				turnContext: (key) => {
 					const subject = participants.get(key);
 					const remembered = memory.contextFor(subject ?? SHARED);
-					return `${nowLine(new Date())}${memoryNote(remembered.memories, listsLine(lists.visible(subject)), remembered.archived)}`;
+					return `${nowLine(new Date())}${memoryNote(remembered.memories, remembered.archived)}`;
 				},
 			});
 		} catch (error) {
@@ -531,7 +524,7 @@ export class OwniRuntime {
 			fresh,
 			reachable,
 			retry: { delaysMs: this.options.retryDelaysMs ?? DEFAULT_RETRY_DELAYS_MS, max: this.options.maxRetries ?? DEFAULT_MAX_RETRIES },
-			memory: { store: memory, participants, lists, skills },
+			memory: { store: memory, participants, skills },
 			emit: (reply) => {
 				for (const listener of this.listeners) {
 					try {
@@ -563,7 +556,7 @@ export interface OwniInstanceOptions {
 	/** The provider is allowed now and has a key: a chat's own model on it can answer. Never throws. */
 	readonly reachable: (provider: string) => Promise<boolean>;
 	readonly retry: { readonly delaysMs: readonly number[]; readonly max: number };
-	readonly memory: { readonly store: MemoryStore; readonly participants: Participants; readonly lists: ListStore; readonly skills: SkillStore };
+	readonly memory: { readonly store: MemoryStore; readonly participants: Participants; readonly skills: SkillStore };
 	readonly emit: (reply: Reply) => void;
 }
 

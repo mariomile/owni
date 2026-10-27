@@ -1452,13 +1452,6 @@ button.org-node:hover { border-color: var(--border-2); background: var(--hover);
 	.org-node { width: 100%; max-width: 360px; }
 }
 
-/* Squadre pronte (ADR 0068) */
-dialog.teams-form { max-width: 620px; }
-.teams { display: grid; gap: 10px; margin: 12px 0; }
-.team { border: 1px solid var(--border); border-radius: var(--r-card); padding: 14px 16px; display: grid; gap: 6px; justify-items: start; }
-.team p { margin: 0; }
-.team ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; }
-.team li { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; font-size: 13.5px; }
 /* a stanza in the list: the last thing said, one line */
 /* the stanze, one row each like a group chat: who is in it, the title, the last thing said, when */
 ul.room-list { list-style: none; margin: 0; padding: 4px; }

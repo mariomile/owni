@@ -1,5 +1,7 @@
 # Squadre pronte
 
+> Sostituito dall'[ADR 0127](0127-niente-squadre-pronte-ne-strumenti-per-cose-che-l-agente-fa-gia.md): le squadre pronte non ci sono più. Un agente si crea a mano e le squadre dell'organigramma ([ADR 0117](0117-organigramma-degli-agenti.md)) le fa il titolare.
+
 > Aggiornata dall'[ADR 0125](0125-stato-unico-degli-agenti-e-console-piu-chiara.md): i membri non hanno più un'emoji, e prima di creare la squadra la console elenca i permessi tra agenti che cambiano. «Squadre pronte» sta solo nella pagina Agenti.
 
 > Aggiornata da [ADR 0117](0117-organigramma-degli-agenti.md): una squadra pronta entra nell'organigramma con chi la coordina, i ruoli, le responsabilità e chi risponde a chi. Le istruzioni dei membri tengono solo il loro lavoro, chi parla con chi lo decide l'organigramma e «Fate squadra» non c'è più. Il resto di questa decisione vale ancora.

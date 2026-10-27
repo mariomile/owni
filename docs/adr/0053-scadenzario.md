@@ -1,5 +1,7 @@
 # Scadenzario delle fatture
 
+> Anche `date_calc`, citato qui, non c'è più ([ADR 0127](0127-niente-squadre-pronte-ne-strumenti-per-cose-che-l-agente-fa-gia.md)).
+
 > Sostituito dall'[ADR 0121](0121-registri-sostituiti-da-code-run-e-file.md): lo strumento `invoices` non c'è più, i conti e i dati stanno nei file del workspace e li fa `code_run`.
 
 Dalla settimana 47 Owni legge una fattura elettronica alla volta. Chi ha un'impresa però chiede altro: «quali fatture devo pagare questa settimana?», «cosa è scaduto?», «quanto devo ad Alfa?», «segna pagata la 153 di Alfa», «ricordami le scadenze ogni lunedì». Rispondere leggendo i file uno per uno con `file_search` è lento e porta a sommare a mente.

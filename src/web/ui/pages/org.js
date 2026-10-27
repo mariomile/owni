@@ -2,7 +2,38 @@
 // at #/organigramma/albero the same agenti as a tree of who answers to whom.
 import { agentHome, agentStatus, api, confirmDialog, emptyNote, face, faceColor, h, head, icon, mount, route, toast } from "../common.js";
 import { render } from "../shell.js";
-import { confirmLinks } from "../teams.js";
+
+/** At most this many permissions in the confirmation, the rest counted. */
+const SHOWN_LINKS = 12;
+
+/**
+ * Ask before changing who may write to whom (ADR 0125): each change by name, from the server's
+ * preview. Resolves true when the owner confirms.
+ */
+export function confirmLinks(title, lead, changes, okLabel) {
+	const line = (c) => (c.allowed ? `Da ora ${c.from} potrà scrivere a ${c.to}` : `${c.from} non potrà più scrivere a ${c.to}`);
+	const more = changes.length - SHOWN_LINKS;
+	return new Promise((resolve) => {
+		let ok = false;
+		const dialog = h(
+			"dialog.links-confirm",
+			h("h2", title),
+			h("p", lead),
+			h("ul.links-list", changes.slice(0, SHOWN_LINKS).map((c) => h(`li${c.allowed ? "" : ".off"}`, line(c))), more > 0 ? h("li.muted", `e altre ${more} modifiche`) : null),
+			h(
+				"div.actions",
+				h("button.btn.accent", { onclick: () => ((ok = true), dialog.close()) }, okLabel),
+				h("button.btn.ghost", { onclick: () => dialog.close() }, "Annulla"),
+			),
+		);
+		dialog.addEventListener("close", () => {
+			dialog.remove();
+			resolve(ok);
+		});
+		document.body.append(dialog);
+		dialog.showModal();
+	});
+}
 
 /** A squadra's ID from its name, free among the others: «Vendite» → vendite, vendite-2… */
 function teamId(name, teams) {
@@ -159,7 +190,7 @@ export async function viewOrg(main) {
 			h(
 				"div.org-body",
 				h("h3", h("a", { href: agentHome(id) }, a.name), leads ? h("span.tag", "coordina") : null, p.open ? h("span.tag", "a disposizione di tutti") : null),
-				// A ready-made squadra names each agente after its role: said once.
+				// A role that is the agente's own name is said once.
 				p.role === a.name ? null : h("p.org-role", p.role ?? h("span.muted", "Nessun ruolo")),
 				p.owns.length ? h("ul.org-owns", p.owns.map((o) => h("li", o))) : null,
 				h("p.muted.small", p.reportsTo ? `Risponde a ${name(p.reportsTo)}` : "Risponde alle persone", below.length ? ` · Rispondono a lui: ${list(below)}` : ""),
@@ -230,7 +261,7 @@ export async function viewOrg(main) {
 		// Which permissions are in effect, always in sight; the first save asks before changing them.
 		h("div.org-bar", agents.length ? views : null, h(`span.chip${saved ? ".accent" : ""}.org-mode`, saved ? "Permessi: dall'organigramma" : "Permessi: decisi a mano")),
 		agents.length === 0
-			? emptyNote("div.empty", "Nessun agente", "Crea un agente o una squadra pronta in ", h("a", { href: "#/agenti" }, "Agenti"), ".")
+			? emptyNote("div.empty", "Nessun agente", "Crea un agente in ", h("a", { href: "#/agenti" }, "Agenti"), ".")
 			: asTree
 				? tree()
 				: h(

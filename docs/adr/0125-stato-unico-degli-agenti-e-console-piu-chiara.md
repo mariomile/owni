@@ -1,5 +1,7 @@
 # 0125: Uno stato per agente, niente emoji, permessi confermati
 
+> In parte sostituito dall'[ADR 0127](0127-niente-squadre-pronte-ne-strumenti-per-cose-che-l-agente-fa-gia.md): «Squadre pronte» non c'è più; la conferma dei permessi resta nel salvataggio dell'organigramma.
+
 Una revisione dell'esperienza della console (26 ottobre 2026) ha trovato lo stesso agente descritto in modi diversi da una pagina all'altra: «Occupato da 40 s» negli Agenti, «Libero · scheda in corso» nel pannello, niente sulla board e nell'organigramma. Ogni agente aveva un'emoji oltre al volto ([ADR 0070](0070-volti-degli-agenti.md)), due modi di riconoscerlo. La configurazione dell'agente chiedeva di premere «Salva identità e accessi» per campi che stanno in sezioni diverse, mentre altri moduli salvavano da soli. Il primo salvataggio dell'organigramma ([ADR 0117](0117-organigramma-degli-agenti.md)) cambiava chi può scrivere a chi senza dire cosa, avvisato solo da un paragrafo. E la stessa cosa si chiamava incarico, scheda, task o board.
 
 ## Decisione

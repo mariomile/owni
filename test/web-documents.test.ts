@@ -7,6 +7,7 @@ import type { OwniTool } from "../src/core/engine.ts";
 import { createResearchTools } from "../src/core/tools/research-tools.ts";
 import { createWebTools } from "../src/core/tools/web-tools.ts";
 import { dispositionName, documentLimit, documentLinks, urlFileName } from "../src/core/web-documents.ts";
+import { withoutBlocks } from "../src/core/html-text.ts";
 import { publicAddress, webFetch } from "../src/core/web-fetch.ts";
 import { Workspace } from "../src/core/workspace.ts";
 import { tempDataDir } from "./helpers.ts";
@@ -14,6 +15,12 @@ import { tempDataDir } from "./helpers.ts";
 const closers: (() => Promise<void>)[] = [];
 afterEach(async () => {
 	for (const close of closers.splice(0).reverse()) await close();
+});
+
+describe("html-text", () => {
+	it("lower case that grows (İ is two characters) does not shift where a block is cut", () => {
+		expect(withoutBlocks("İİİİ<script>x</script>dopo", ["script"])).toBe("İİİİ dopo");
+	});
 });
 
 const fixture = (name: string) => readFileSync(new URL(`./fixtures/docs/${name}`, import.meta.url));

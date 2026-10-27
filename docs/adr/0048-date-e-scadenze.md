@@ -1,5 +1,7 @@
 # Date e scadenze: `date_calc`
 
+> Sostituito dall'[ADR 0127](0127-niente-squadre-pronte-ne-strumenti-per-cose-che-l-agente-fa-gia.md): lo strumento `date_calc` non c'è più; le date e le scadenze le calcola `code_run`.
+
 Chi lavora conta date tutto il giorno: «quanti giorni lavorativi mancano al 30?», «la fattura del 31 gennaio a 60 giorni fine mese quando scade?», «che giorno cade il 2 giugno?», «quanti anni ha chi è nato il 29/02/1980?». Un modello sbaglia questi conti a mente, soprattutto con festivi, fine mese e anni bisestili.
 
 ## Decisione

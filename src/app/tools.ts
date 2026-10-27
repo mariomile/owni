@@ -15,9 +15,7 @@ import { desktopConnector, type DesktopProvider } from "../core/desktop.ts";
 import type { AuditEvent } from "../core/audit.ts";
 import type { OwniTool } from "../core/engine.ts";
 import { EgressDenied, UserNotAllowed } from "../core/errors.ts";
-import type { ecbRates } from "../core/exchange-rates.ts";
 import type { imageGenerator } from "../core/image-generation.ts";
-import type { feedNews } from "../core/news.ts";
 import type { InstanceRecord } from "../core/registry.ts";
 import type { OwniRuntime, ToolSet } from "../core/runtime.ts";
 import type { ScreenViews } from "../core/screen-views.ts";
@@ -30,14 +28,10 @@ import { createChartTools } from "../core/tools/chart-tools.ts";
 import { createCodeTools } from "../core/tools/code-tools.ts";
 import { createComputerTools } from "../core/tools/computer-tools.ts";
 import { createCustomTools } from "../core/tools/custom-tools.ts";
-import { createDateTools } from "../core/tools/date-tools.ts";
 import { createDesktopTools } from "../core/tools/desktop-tools.ts";
 import { createDocumentTools } from "../core/tools/document-tools.ts";
-import { createExchangeTools } from "../core/tools/exchange-tools.ts";
 import { createImageTools } from "../core/tools/image-tools.ts";
-import { createListTools } from "../core/tools/list-tools.ts";
 import { createMemoryTools } from "../core/tools/memory-tools.ts";
-import { createNewsTools } from "../core/tools/news-tools.ts";
 import { createOpenuiTools } from "../core/tools/openui-tools.ts";
 import { createRecordingTools } from "../core/tools/recording-tools.ts";
 import { createResearchTools } from "../core/tools/research-tools.ts";
@@ -46,12 +40,10 @@ import { createSkillTools } from "../core/tools/skill-tools.ts";
 import { createVatTools } from "../core/tools/vat-tools.ts";
 import { createVoiceTools } from "../core/tools/voice-tools.ts";
 import { createWatchTools } from "../core/tools/watch-tools.ts";
-import { createWeatherTools } from "../core/tools/weather-tools.ts";
 import { createWebTools } from "../core/tools/web-tools.ts";
 import { createWorkspaceTools } from "../core/tools/workspace-tools.ts";
 import type { ToolProposal } from "../core/proposals.ts";
 import type { viesClient } from "../core/vies.ts";
-import type { openMeteo } from "../core/weather.ts";
 import type { WebAction } from "../core/web-actions.ts";
 import type { braveSearch, dailyCounter, dailyLimit } from "../core/web-search.ts";
 import type { Browser, BrowseSessions } from "../core/web-session.ts";
@@ -96,11 +88,6 @@ export type ToolsWiring = {
 	readonly speaksNow: (instance: string) => Promise<boolean>;
 	readonly search: ReturnType<typeof braveSearch> | undefined;
 	readonly searchesLeft: ReturnType<typeof dailyLimit>;
-	readonly weather: ReturnType<typeof openMeteo> | undefined;
-	readonly weatherLeft: ReturnType<typeof dailyCounter>;
-	readonly weatherTries: ReturnType<typeof dailyLimit>;
-	readonly exchangeRates: ReturnType<typeof ecbRates> | undefined;
-	readonly news: ReturnType<typeof feedNews> | undefined;
 	readonly vies: ReturnType<typeof viesClient> | undefined;
 	readonly vatChecksLeft: ReturnType<typeof dailyLimit>;
 	readonly generateImage: ReturnType<typeof imageGenerator> | undefined;
@@ -163,7 +150,6 @@ export async function assembleTools(w: ToolsWiring, record: InstanceRecord): Pro
 		}),
 		...createOpenuiTools(),
 		...createCodeTools({ workspace }),
-		...createDateTools({ timeZone: config.timeZone }),
 		...(w.transcribePiece === undefined || config.transcription === undefined
 			? []
 			: createRecordingTools({
@@ -199,11 +185,6 @@ export async function assembleTools(w: ToolsWiring, record: InstanceRecord): Pro
 					whoIs,
 					on: () => w.speaksNow(record.id),
 				})),
-		...createListTools({
-			store: runtime.lists(record.tenantId, record.id),
-			whoIs,
-			record: audit("owni"),
-		}),
 		...createBoardTools({
 			self: record.id,
 			store: w.board,
@@ -274,19 +255,6 @@ export async function assembleTools(w: ToolsWiring, record: InstanceRecord): Pro
 					record: audit(),
 					...(w.webAddressAllowed === undefined ? {} : { addressAllowed: w.webAddressAllowed }),
 				})),
-		...(w.weather === undefined
-			? []
-			: createWeatherTools({
-					weather: w.weather,
-					left: () => w.weatherLeft.left(record.tenantId),
-					attempt: () => w.weatherTries(record.tenantId),
-					spend: () => w.weatherLeft.spend(record.tenantId, 1),
-					record: async (days) => {
-						await runtime.audit(record.tenantId).append({ type: "weather.ran", instanceId: record.id, days });
-					},
-				})),
-		...(w.exchangeRates === undefined ? [] : createExchangeTools({ rates: w.exchangeRates })),
-		...(w.news === undefined ? [] : createNewsTools({ news: w.news, timeZone: config.timeZone })),
 		// Always offered: without the VIES it checks on paper, which needs nothing from outside.
 		...createVatTools({ ...(w.vies === undefined ? {} : { vies: w.vies }), tenant: record.tenantId, allow: () => w.vatChecksLeft(record.tenantId), offlineIn: isBriefThread, timeZone: config.timeZone }),
 		...(w.generateImage === undefined
