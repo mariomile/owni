@@ -1,5 +1,5 @@
 import { Type } from "typebox";
-import { defineOwniTool, type OwniTool } from "../engine.ts";
+import { defineOwniTool, type OwniTool, type ToolContext } from "../engine.ts";
 import { StringEnum } from "../tool-schema.ts";
 
 /** The emoji an agente reacts with (ADR 0132): each one shows on the web, Telegram and WhatsApp alike. */
@@ -7,6 +7,12 @@ export const REACTIONS = ["👍", "❤️", "🔥", "🎉", "👏", "😁", "�
 
 /** The channels that show a reaction on the message it answers. */
 const REACTING = new Set(["web", "telegram", "whatsapp"]);
+
+/** The id, on its channel, of the person's message the turn answers: the latest of the turn's inputs there. */
+export async function answeredMessage(ctx: ToolContext, channel: string): Promise<string | undefined> {
+	const prefix = `${channel}:`;
+	return (await ctx.inputs?.())?.findLast((id) => id.startsWith(prefix))?.slice(prefix.length);
+}
 
 /**
  * message_react (ADR 0132): an emoji on the person's message the agente is answering, as a person would.
@@ -32,8 +38,7 @@ export function createReactionTools(options: {
 				// Only a person's message is one of the channel's: a colleague's answer, a task programmato or a notice
 				// arrives as Owni's own note, with nothing to react to (and the person still has to hear it).
 				if (ctx.origin !== "person") return "Errore: non c'è un messaggio a cui reagire in questo turno: rispondi a parole.";
-				const prefix = `${thread.channel}:`;
-				const messageId = (await ctx.inputs?.())?.findLast((id) => id.startsWith(prefix))?.slice(prefix.length);
+				const messageId = await answeredMessage(ctx, thread.channel);
 				if (messageId === undefined) return "Errore: non trovo il messaggio a cui reagire: rispondi a parole.";
 				await options.react({ ...thread, messageId, emoji: args.emoji, key: ctx.callId });
 				return `Reazione ${args.emoji} messa. Se non hai altro da dire, termina senza scrivere niente.`;

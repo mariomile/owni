@@ -275,8 +275,10 @@ async function viewRoom(main, roomId, openId) {
 			return true;
 		}
 		if (panel.onEntry(event)) return true;
-		// A reply in a thread not on screen: counted under its message.
+		// A reply in a thread not on screen: counted under its message. An agente answering the canale
+		// there (ADR 0133) ends the wait.
 		if (event.parent === roomId || children.has(event.roomId)) {
+			if (event.parent === roomId && event.entry.from === "agent") typing.remove();
 			void refreshSummaries().then(refreshConversations).then(renderRail);
 			return true;
 		}

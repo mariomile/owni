@@ -248,6 +248,11 @@ export class Rooms {
 		});
 	}
 
+	/** An agente's seat in the thread under a message of a canale (ADR 0133), made on first use: where it answers there. */
+	async seatInThread(personId: string, roomId: string, entryId: string, instanceId: string): Promise<string | undefined> {
+		return (await this.thread(personId, roomId, entryId))?.seats.find((s) => s.instanceId === instanceId)?.threadId;
+	}
+
 	/**
 	 * A new name, or other agenti (2 to 5), for a canale; its threads follow. An empty name is the
 	 * agenti's names, as when the canale was made. One at a time with the threads made under it.
@@ -422,9 +427,10 @@ export class Rooms {
 			const present = await this.present(room);
 			const me = present.find((a) => a.instanceId === instanceId);
 			if (me === undefined) throw new RoomError(`${instanceId} non è più disponibile in questo canale`);
-			const nameOf = (id: string | undefined) => present.find((a) => a.instanceId === id)?.name ?? id ?? "?";
-			// Its own answers are no news to it.
-			const missed = entries.slice(seat.seen).filter((e) => e.from !== "note" && e.instanceId !== instanceId);
+			const nameOf = (id: string | undefined) => (id === instanceId ? `${me.name} (tu)` : (present.find((a) => a.instanceId === id)?.name ?? id ?? "?"));
+			// Its own answers are no news to it, except what it wrote in a thread from the canale before it was first called there (ADR 0133).
+			const first = room.parent !== undefined && seat.seen === 0;
+			const missed = entries.slice(seat.seen).filter((e) => e.from !== "note" && (first || e.instanceId !== instanceId));
 			const lastPerson = by === undefined ? [...missed].reverse().find((e) => e.from === "person") : undefined;
 			// The stanza's message this call carries: the one a reaction of the agente lands on.
 			const about = by === undefined ? lastPerson?.id : [...missed].reverse().find((e) => e.instanceId === by)?.id;
@@ -433,7 +439,7 @@ export class Rooms {
 			const short = handles(present);
 			const others = present.filter((a) => a.instanceId !== instanceId).map((a) => `${a.name} (@${short.get(a.instanceId)})`);
 			// A thread's first call to an agente: the message of the canale it answers, and who wrote it.
-			const root = room.parent !== undefined && seat.seen === 0 ? (await this.store.entries(room.parent.roomId)).find((e) => e.id === room.parent?.entryId) : undefined;
+			const root = first ? (await this.store.entries(room.parent.roomId)).find((e) => e.id === room.parent?.entryId) : undefined;
 			const parts = [
 				`[${room.parent === undefined ? "Stanza" : "Thread nel canale"} «${room.title}»: sei ${me.name}, con ${others.join(", ") || "nessun altro"}. Rispondi alla persona; per chiamare in causa un altro agente scrivi @nome. I file degli altri agenti sono nei loro workspace, non nel tuo.]`,
 				root === undefined

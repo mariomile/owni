@@ -124,7 +124,7 @@ Per l'uso di Mario basta la sua sottoscrizione di Claude Code o Codex: nessuna c
 - [x] Console divisa per pagina: `src/web/ui/app.js` (circa 5.900 righe) è ora un modulo ES per pagina (le pagine non si importano a vicenda), una tabella delle pagine in `shell.js` e un `common.js` che non importa nulla; il server serve i file elencando la cartella. Una pagina nuova: file, riga in `PAGES`, riga in `SHELL` ([ADR 0102](adr/0102-console-un-modulo-per-pagina.md))
 - [x] Chi sta facendo cosa: `agent_list` e la pagina Agenti dicono se un agente è occupato, da quanto e su quale scheda «In corso» o chat, solo dentro quello che chi guarda già vede; `agent_message` avvisa che un collega occupato può metterci di più ([ADR 0109](adr/0109-chi-sta-facendo-cosa.md))
 - [x] Reazioni: l'agente mette un'emoji sotto il messaggio a cui risponde (`message_react`), sulla console, nei canali, su Telegram e su WhatsApp; se la reazione dice tutto non scrive altro ([ADR 0132](adr/0132-reazioni-degli-agenti.md))
-- [ ] Risposte nei thread decise dall'agente, solo quando un thread ha senso
+- [x] Risposte nei thread decise dall'agente (`thread_reply`), solo quando un thread ha senso: nei messaggi diretti e nei canali, mai dentro un thread ([ADR 0133](adr/0133-risposte-nei-thread-decise-dall-agente.md))
 - [ ] Agenti che si passano informazioni quando la persona lo chiede, anche fuori dall'organigramma, e i canali che dicono a ogni agente di cosa si occupano i colleghi
 - [ ] Scansioni JBIG2 e JPEG 2000: oggi solo dal computer di Owni o con una foto
 

@@ -4,6 +4,8 @@ import { describe, expect, it } from "vitest";
 import type { InboundMessage } from "../src/channels/types.ts";
 import { WebChannel } from "../src/web/channel.ts";
 import { handles, mentioned, ROOM_LIMITS, type RoomEntry, type RoomEvent, RoomStore, Rooms } from "../src/web/rooms.ts";
+import type { OwniRuntime } from "../src/core/runtime.ts";
+import { threadUnder } from "../src/web/thread-replies.ts";
 import { tempDataDir, waitFor } from "./helpers.ts";
 
 const PERSON = "p_000000000001";
@@ -269,5 +271,47 @@ describe("stanze", () => {
 		expect(after.map((e) => e.id)).toEqual(before.map((e) => e.id));
 		expect(got.ricerca).toHaveLength(1);
 		expect(got.vendite).toHaveLength(1);
+	});
+
+	it("an agente answers the canale in the thread under the message, and is told what it wrote there when first called in it (ADR 0133)", async () => {
+		const { rooms, channels, got } = setup((id) => `ok ${id}`);
+		const events: RoomEvent[] = [];
+		rooms.events.on(PERSON, (e: RoomEvent) => events.push(e));
+		const room = await rooms.create(PERSON, "Bando", ["ricerca", "vendite"]);
+		const asked = await rooms.post(PERSON, room.id, "@ricercatore analizza il bando per intero");
+		await waitFor(() => events.some((e) => e.entry.text === "ok ricerca"));
+		const ricerca = channels.get("ricerca") as WebChannel;
+		const seat = room.seats.find((s) => s.instanceId === "ricerca")?.threadId as string;
+		const told = (await ricerca.transcript(seat)).find((e) => e.about === asked.id) as { id: string };
+		// A canale's thread needs no chat model: only the direct conversation's thread inherits one.
+		const web = { runtime: {} as OwniRuntime, channel: ricerca, rooms, tenantId: "acme", instanceId: "ricerca" };
+		// The thread under the person's message, and the agente's seat in it: the same one each time.
+		const under = (await threadUnder(web, { threadId: seat, messageId: told.id })) as string;
+		expect(await threadUnder(web, { threadId: seat, messageId: told.id })).toBe(under);
+		const thread = (await rooms.thread(PERSON, room.id, asked.id)) as NonNullable<Awaited<ReturnType<typeof rooms.thread>>>;
+		expect(thread.seats.find((s) => s.instanceId === "ricerca")?.threadId).toBe(under);
+		// Not under a message the seat did not carry, and never a thread inside a thread.
+		expect(await threadUnder(web, { threadId: seat, messageId: "m_nessuno" })).toBeUndefined();
+		expect(await threadUnder(web, { threadId: under, messageId: told.id })).toBeUndefined();
+
+		// What the outbox delivers there joins the thread, shown under the canale's message; the canale stays as it was.
+		await ricerca.send({ tenantId: "acme", instanceId: "ricerca", channel: "web", threadId: under, text: "Il bando, punto per punto: @vendite guarda i costi", idempotencyKey: "msg:1" });
+		await waitFor(() => events.some((e) => e.roomId === thread.id && e.entry.from === "agent" && e.entry.instanceId === "vendite"));
+		expect(events.find((e) => e.roomId === thread.id)).toMatchObject({ parent: room.id, entry: { from: "agent", instanceId: "ricerca", text: "Il bando, punto per punto: @vendite guarda i costi" } });
+		expect((await rooms.open(PERSON, room.id))?.entries.map((e) => e.text)).toEqual(["@ricercatore analizza il bando per intero", "ok ricerca"]);
+		// Its @nome calls a colleague into the thread, told what the thread answers.
+		expect(got.vendite?.[0]).toContain("Thread nel canale «Bando»");
+		expect(got.vendite?.[0]).toContain("analizza il bando per intero");
+		expect(got.vendite?.[0]).toContain("[Ricercatore] Il bando, punto per punto");
+
+		// The person answers in the thread: the agente first called there hears its own answer, as its own.
+		await rooms.post(PERSON, thread.id, "@ricercatore e le scadenze?");
+		await waitFor(() => (got.ricerca?.length ?? 0) === 2);
+		expect(got.ricerca?.[1]).toContain("[Ricercatore (tu)] Il bando, punto per punto");
+		expect(got.ricerca?.[1]).toContain("dati del thread");
+		await waitFor(() => events.filter((e) => e.roomId === thread.id && e.entry.text === "ok ricerca").length === 1);
+		await rooms.post(PERSON, thread.id, "@ricercatore grazie");
+		await waitFor(() => (got.ricerca?.length ?? 0) === 3);
+		expect(got.ricerca?.[2]).not.toContain("(tu)");
 	});
 });
