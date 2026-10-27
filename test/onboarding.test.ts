@@ -1,10 +1,12 @@
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import type { AddressInfo } from "node:net";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runInNewContext } from "node:vm";
 import { afterEach, describe, expect, it } from "vitest";
 import { type RunningOwni, startOwni } from "../src/app.ts";
 import { loadOwniConfig } from "../src/main/config.ts";
+import { versionOf } from "../src/web/assets.ts";
 import { tempDataDir } from "./helpers.ts";
 
 const running: RunningOwni[] = [];
@@ -126,9 +128,10 @@ describe("console as an app", () => {
 
 	it("the service worker keeps only the shell: never /api, other sites or uploads; offline, the page comes from the cache", async () => {
 		const code = readFileSync(join(import.meta.dirname, "..", "src", "web", "ui", "sw.js"), "utf8");
-		const handlers: Record<string, (event: unknown) => void> = {};
-		const cached = new Map<string, string>([["/", "shell page"]]);
-		const put: string[] = [];
+		const handlers: Record<string, (event: object) => void> = {};
+		const cached = new Map<string, string>([["/", "shell page"], ["/app.css", "shell style"]]);
+		const installed: { url: string; cache: string }[] = [];
+		const deleted: string[] = [];
 		let online = true;
 		const self = {
 			location: { origin: "https://owni.example" },
@@ -137,18 +140,41 @@ describe("console as an app", () => {
 			clients: { claim: async () => {} },
 		};
 		const caches = {
-			open: async () => ({ addAll: async () => {}, put: async (req: string | { url: string }) => put.push(typeof req === "string" ? req : new URL(req.url).pathname) }),
-			keys: async () => [],
-			match: async (key: string | { url: string }) => {
-				const path = typeof key === "string" ? key : new URL(key.url).pathname;
-				return cached.has(path) ? { body: cached.get(path) } : undefined;
-			},
+			open: async () => ({
+				addAll: async (requests: { url: string; cache: string }[]) => installed.push(...requests),
+				put: async () => expect.unreachable("a file is never kept on its own, only the whole shell at install"),
+			}),
+			keys: async () => ["owni-shell-v20", "owni-shell-__SHELL_VERSION__"],
+			delete: async (name: string) => deleted.push(name),
+			// Only the cache of this release is searched: an older one still waiting to go would mix releases.
+			match: async (key: string, options: { cacheName?: string }) =>
+				options.cacheName === "owni-shell-__SHELL_VERSION__" && cached.has(key) ? { body: cached.get(key) } : undefined,
 		};
 		const fetch = async (req: { url: string }) => {
 			if (!online) throw new TypeError("offline");
 			return { ok: true, type: "basic", body: `net ${new URL(req.url).pathname}`, clone: () => ({}) };
 		};
-		runInNewContext(code, { self, caches, fetch, URL, Response: { error: () => ({ error: true }) }, Promise });
+		class Request {
+			constructor(
+				readonly url: string,
+				readonly init: { cache: string },
+			) {}
+			get cache(): string {
+				return this.init.cache;
+			}
+		}
+		runInNewContext(code, { self, caches, fetch, URL, Request, Response: { error: () => ({ error: true }) }, Promise });
+		// The shell is fetched whole at install, past the browser's own cache: every file from the same release.
+		let installing: Promise<unknown> | undefined;
+		handlers.install?.({ waitUntil: (p: Promise<unknown>) => (installing = p) });
+		await installing;
+		expect(installed.map((r) => r.url)).toEqual(expect.arrayContaining(["/", "/app.js", "/app.css"]));
+		expect(installed.every((r) => r.cache === "reload")).toBe(true);
+		// The new worker drops every shell of an older release.
+		let activating: Promise<unknown> | undefined;
+		handlers.activate?.({ waitUntil: (p: Promise<unknown>) => (activating = p) });
+		await activating;
+		expect(deleted).toEqual(["owni-shell-v20"]);
 		const request = async (path: string, mode = "cors", method = "GET", origin = "https://owni.example") => {
 			let answer: Promise<unknown> | undefined;
 			handlers.fetch?.({ request: { url: `${origin}${path}`, mode, method }, respondWith: (p: Promise<unknown>) => (answer = p) });
@@ -162,13 +188,24 @@ describe("console as an app", () => {
 		expect(await request("/api/instances/owni/files/raw?path=a.pdf", "navigate")).toBe("not handled");
 		expect(await request("/oauth/google/callback?code=x", "navigate")).toBe("not handled");
 		expect(await request("/app.js")).toMatchObject({ body: "net /app.js" });
-		// The page opened online is the one kept for offline; another address is not kept as the page.
-		expect(await request("/", "navigate")).toMatchObject({ body: "net /" });
 		expect(await request("/qualcosa", "navigate")).toMatchObject({ body: "net /qualcosa" });
-		await new Promise((r) => setTimeout(r, 0));
-		expect(put).toEqual(["/app.js", "/"]);
 		online = false;
 		expect(await request("/qualsiasi", "navigate")).toMatchObject({ body: "shell page" });
-		expect(await request("/app.css")).toMatchObject({ error: true });
+		expect(await request("/app.css")).toMatchObject({ body: "shell style" });
+		expect(await request("/app.js")).toMatchObject({ error: true });
+	});
+
+	it("names the service worker's cache after the shell it serves, so a new release keeps a new whole shell", async () => {
+		const { base } = await boot();
+		const sw = await (await fetch(`${base}/sw.js`)).text();
+		expect(sw).not.toContain("__SHELL_VERSION__");
+		expect(sw).toMatch(/const CACHE = "owni-shell-[\w-]{12}";/);
+		const dir = mkdtempSync(join(tmpdir(), "owni-shell-"));
+		const files = ["app.js", "app.css"].map((name) => join(dir, name));
+		for (const file of files) writeFileSync(file, "one");
+		const before = await versionOf(files);
+		expect(await versionOf(files)).toBe(before);
+		writeFileSync(files[1] as string, "two, a little longer");
+		expect(await versionOf(files)).not.toBe(before);
 	});
 });

@@ -30,6 +30,13 @@ async function load(file: string): Promise<Asset> {
 	return asset;
 }
 
+/** One name for these files as they are now: it changes as soon as any of them does. */
+export async function versionOf(files: readonly string[]): Promise<string> {
+	const hash = createHash("sha1");
+	for (const file of files) hash.update((await load(file)).etag);
+	return hash.digest("base64url").slice(0, 12);
+}
+
 /** A file of the interface: compressed when the browser accepts it, and a 304 when it already has this version. */
 export async function sendAsset(req: IncomingMessage, res: ServerResponse, file: string, headers: Record<string, string>): Promise<void> {
 	const asset = await load(file);
