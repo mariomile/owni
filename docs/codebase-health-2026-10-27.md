@@ -4,6 +4,20 @@ Data: 27 ottobre 2026
 Baseline: `main`, commit `1e7cefc0d01f4f00ea39d91448e7dd258b6eb333`  
 Repository: `/Users/mariomiletta/Dev Projects/owni`
 
+## Stato al 27 ottobre
+
+Ogni problema e ogni voce di manutenzione di questo rapporto ha una PR che lo chiude.
+
+| Voce | PR |
+|---|---|
+| Manutenzione: dipendenze, mappa architetturale, packaging | #234 |
+| F1 Eventi privati dopo la revoca, F2 stato personale dopo il cambio di account, F8 palette per le tecnologie assistive | #235 |
+| F6 Chromium in CI senza salti silenziosi, F7 risveglio delle celle con credenziale firmata, controllo sintattico di tutti i moduli JS in CI, soglie temporali dei test | #236 |
+| F3 Tetto di spesa prima di ogni richiesta al modello, F4 registro come unica traccia della spesa, F5 chiusura robusta delle istanze | #237 |
+| Crescita degli storici: retention del registro dei consumi (l'audit era già a rotazione, ADR 0129) | questo branch, `chore/usage-retention` ([ADR 0130](adr/0130-registro-dei-consumi-a-rotazione-mensile.md)) |
+
+Ancora aperto: la palette non è stata provata con uno screen reader in un browser reale, e la notarizzazione macOS non è stata affrontata perché è fuori dal codice.
+
 ## Giudizio
 
 **Owni ha fondamenta valide per un agente locale durevole, ma non considererei chiusi i requisiti di isolamento delle sessioni e controllo dei costi.** Il runtime ha contratti espliciti per ripresa dopo crash, consegna, approvazione ed esiti incerti. La qualità è meno uniforme quando questi contratti attraversano frontend, eventi live, contabilità e distribuzione.

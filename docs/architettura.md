@@ -56,7 +56,7 @@ tenants/<tenant>/
   secrets.json                       0600, non cifrato (TenantSecrets)
   audit.jsonl + audit-AAAA-MM.jsonl  append-only, solo metadati; archivi mensili per 12 mesi
   people.json  sessions.json         persone della console e sessioni
-  usage.jsonl  usage-totals.json     registro dei consumi (src/core/usage.ts)
+  usage.jsonl + usage-AAAA-MM.jsonl  registro dei consumi (src/core/usage.ts); archivi mensili per 12 mesi
   board.json  board-routines.json    bacheca
   connectors.json  google-accounts.json
   rooms/                             stanze
@@ -80,13 +80,13 @@ I file JSON condivisi con la CLI si scrivono con `src/core/locked-json.ts` (lock
 | Confine | Cosa lo regge |
 |---|---|
 | Tenant contro tenant | directory, segreti, audit e storage separati; `TenantSecrets` e `AuditLog` sono legati a un solo tenant al costruttore. In Cloud, in più, una macchina per tenant e un dominio delle celle separato da quello di registrazione. |
-| Persona contro persona | ruoli `owner` e `member` della console; ogni persona vede le sue stanze e i suoi agenti consentiti. |
+| Persona contro persona | ruoli `owner` e `member` della console; ogni persona vede le sue stanze e i suoi agenti consentiti. Nel browser, `resetPerson()` (`src/web/ui/common.js`) cancella lo stato della persona (eventi live, dialoghi aperti, titoli e liste) all'uscita, a ogni risposta 401 e quando entra una persona diversa nella stessa scheda (`src/web/ui/session.js`, `src/web/ui/shell.js`). |
 | Utente di un canale | allowlist per istanza e per canale, default deny, controllata nel nucleo (`OwniInstance.submit`): un utente non consentito non raggiunge il modello e non riceve risposta. |
 | Owni contro il mondo | egress policy per istanza (provider del modello e canali, default deny), `src/core/web-guard.ts` per le richieste verso il web, connettori con fetch che non segue i redirect. |
 | Contenuto non fidato | pagine, file, mail e risultati dei connettori sono dati, non istruzioni (`src/core/untrusted.ts`); le azioni con effetti esterni passano da approvazioni decise dalla persona, non dal testo letto ([ADR 0088](adr/0088-conferme-solo-dalla-persona.md)). |
 | Codice scritto dall'agente | `code_run`: Python in Pyodide dentro un processo Node con il permission model, senza rete né file fuori da quelli dati ([ADR 0119](adr/0119-programmi-python.md), `src/core/code-run.ts`). Strumenti proposti: processo separato con file system limitato alla loro cartella e rete solo attraverso la `fetch` con egress ([ADR 0002](adr/0002-tool-proposti-sandbox-e-approvazione.md), `src/core/sandbox.ts`). |
 | Computer dell'agente | container senza capability e con radice in sola lettura, o macchina Fly; ha internet pubblico ma non la rete interna né i metadati del server ([ADR 0124](adr/0124-il-computer-dell-agente-ha-la-rete.md), `src/core/computer.ts`, `src/computer/`). |
-| Control plane contro cella | il control plane tiene il segreto di ogni cella e inoltra con un token di proxy; vede i messaggi in transito ma non li conserva ([ADR 0007](adr/0007-owni-cloud-a-celle.md)). |
+| Control plane contro cella | il control plane tiene il segreto di ogni cella e inoltra con un token di proxy; vede i messaggi in transito ma non li conserva ([ADR 0007](adr/0007-owni-cloud-a-celle.md)). Una cella spenta si sveglia solo con la credenziale `owni_wake`, firmata dal control plane con il segreto della cella, o con un indirizzo webhook valido e a frequenza limitata ([ADR 0128](adr/0128-risveglio-della-cella-con-credenziale-firmata.md), `src/cloud/control-plane.ts`). |
 | App desktop | le pagine del server non hanno IPC con l'app; nella finestra restano solo le pagine di quel server ([ADR 0034](adr/0034-app-desktop.md)). |
 
 Limiti dichiarati: `secrets.json` è in chiaro (permessi 0600), la policy di egress non è un firewall di rete, i lock POSIX non reggono NFS/SMB. I segreti e il backup coerente sono trattati nel [runbook](runbook.md).
@@ -117,7 +117,13 @@ Descritta ai confini di fiducia: `code_run` e strumenti proposti girano in proce
 
 ### Audit e consumi
 
-`audit.jsonl` registra chi, dove, che cosa e quanto grande, mai il testo dei messaggi né i valori dei segreti. Il file ruota ogni mese e gli archivi si tengono 12 mesi ([ADR 0129](adr/0129-audit-a-rotazione-mensile.md)); la lettura recente (`AuditLog.read(last)`) legge dalla coda dei file con memoria limitata e la dimensione totale è in `auditBytes` di `/api/usage`. I consumi stimati stanno in `usage.jsonl`; il tetto di spesa è in `src/core/usage.ts`, ma la sua applicazione su tutti i percorsi non è ancora uniforme (vedi [l'audit del codice](codebase-health-2026-10-27.md)).
+`audit.jsonl` registra chi, dove, che cosa e quanto grande, mai il testo dei messaggi né i valori dei segreti. Il file ruota ogni mese e gli archivi si tengono 12 mesi ([ADR 0129](adr/0129-audit-a-rotazione-mensile.md)); la lettura recente (`AuditLog.read(last)`) legge dalla coda dei file con memoria limitata e la dimensione totale è in `auditBytes` di `/api/usage`. I consumi stimati stanno in `usage.jsonl`, l'unica traccia della spesa: i totali del giorno e del mese sono somme delle sue righe (`src/core/usage.ts`). Anche il registro ruota ogni mese, con archivi `usage-AAAA-MM.jsonl` per 12 mesi, e un turno si conta una sola volta anche se il suo ritentativo arriva dopo il cambio di mese ([ADR 0130](adr/0130-registro-dei-consumi-a-rotazione-mensile.md)); la sua dimensione è in `usageBytes` di `/api/usage`.
+
+Il tetto giornaliero (`DEFAULT_COST_CAPS`) si applica prima di ogni richiesta al modello (`authorizeRequest` in `src/core/runtime.ts`): raggiunto il tetto la richiesta è rifiutata e l'audit registra `cost.denied`. Il limite è per conversazione, non globale: ogni conversazione somma la spesa registrata oggi e la propria non ancora registrata, quindi N conversazioni in corso insieme possono superare il tetto fino a N volte (tetto più una richiesta). Le azioni già approvate partono comunque, perché non chiamano il modello.
+
+### Verifiche in CI
+
+`.github/workflows/ci.yml` esegue typecheck, la sintassi di tutti i moduli JavaScript della console (`scripts/check-js.sh`) e la suite di test con Chromium e WebKit reali. Con `OWNI_REQUIRE_BROWSERS=1` (`test/playwright-browsers.ts`) un browser che non parte fa fallire l'esecuzione invece di far saltare le suite che lo usano.
 
 ## 6. Rischi di Pi Durable
 
