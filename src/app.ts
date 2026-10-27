@@ -461,6 +461,8 @@ export async function startOwni(config: OwniConfig, options: OwniOptions = {}): 
 					board,
 					boardWork,
 					webChannels,
+					// Made below, once the web channels are: used only when a tool runs.
+					rooms: () => rooms,
 					agentChannels,
 					agentRatesOf,
 					company,

@@ -132,7 +132,7 @@ export class WebChannel implements ChannelAdapter {
 		return this.serial(`dm:${personId}`, async () => {
 			const dm = await this.dm(personId);
 			if (dm === undefined) return undefined;
-			const root = (await this.transcript(dm.id)).find((e) => e.id === entryId);
+			const root = await this.entry(dm.id, entryId);
 			if (root === undefined) return undefined;
 			const kept = (await this.threads(personId)).find((t) => t.parent?.threadId === dm.id && t.parent.entryId === entryId);
 			return kept ?? this.createThread(personId, root.text !== undefined && root.text.trim() !== "" ? chatTitle(root.text) : "Thread", { parent: { threadId: dm.id, entryId } });
@@ -180,6 +180,11 @@ export class WebChannel implements ChannelAdapter {
 
 	async transcript(threadId: string): Promise<WebEntry[]> {
 		return foldReactions(await this.lines(threadId));
+	}
+
+	/** One message of the thread, after the thread's writes so far: the person's message an agente answers is there even while it is being written down. */
+	async entry(threadId: string, entryId: string): Promise<WebEntry | undefined> {
+		return (await this.serial(threadId, () => this.transcript(threadId))).find((e) => e.id === entryId);
 	}
 
 	private async lines(threadId: string): Promise<(WebEntry | WebReaction)[]> {

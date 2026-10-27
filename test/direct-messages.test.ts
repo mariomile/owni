@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { ConnectorStore } from "../src/connectors/mcp.ts";
 import { piDurableEngine } from "../src/core/adapters/pi-durable.ts";
 import { OwniRuntime } from "../src/core/index.ts";
+import { createThreadTools } from "../src/core/tools/thread-tools.ts";
 import { instanceDir } from "../src/core/paths.ts";
 import { instanceId, tenantId } from "../src/core/ids.ts";
 import { UsageLedger } from "../src/core/usage.ts";
@@ -12,6 +13,7 @@ import { connectChannel } from "../src/gateway.ts";
 import { PeopleStore, SessionStore } from "../src/web/auth.ts";
 import { WebChannel } from "../src/web/channel.ts";
 import { RoomStore, Rooms } from "../src/web/rooms.ts";
+import { threadUnder } from "../src/web/thread-replies.ts";
 import { createWebApp } from "../src/web/server.ts";
 import { FAUX_MODEL, tempDataDir } from "./helpers.ts";
 
@@ -31,7 +33,12 @@ afterEach(async () => {
 /** Two agenti, Ops (the general one) and Vendite; Anna writes to both, Luca to Ops; Mario owns the instance. */
 async function setup() {
 	const dataDir = tempDataDir();
-	const runtime = new OwniRuntime({ dataDir, engine: piDurableEngine });
+	// thread_reply as the app wires it (ADR 0133): the rest of an agente's tools are not needed here.
+	const runtime: OwniRuntime = new OwniRuntime({
+		dataDir,
+		engine: piDurableEngine,
+		tools: async (record) => createThreadTools({ open: (at) => threadUnder({ runtime, channel: channels.get(record.id) as WebChannel, rooms, tenantId: "acme", instanceId: record.id }, at), send: (m) => runtime.sendMessage("acme", record.id, m) }),
+	});
 	await runtime.registry.createTenant({ id: "acme", name: "acme" });
 	const tenantDir = join(dataDir, "tenants", "acme");
 	const people = new PeopleStore(tenantDir);
@@ -141,6 +148,37 @@ describe("direct conversations and threads (ADR 0113)", () => {
 		const owner = await h.as(h.owner.token);
 		expect((await owner("/api/instances/ops/dm", {})).status).toBe(403);
 		expect((await anna("/api/instances")).body.instances.map((i: any) => [i.id, i.main ?? false])).toEqual([["ops", true], ["sales", false]]);
+	});
+
+	it("the agente answers in the thread under the person's message, and the thread's first turn knows what it wrote there (ADR 0133)", async () => {
+		const h = await setup();
+		const anna = await h.as(h.anna.token);
+		const dm = (await anna("/api/instances/ops/dm", {})).body.thread;
+		const chosen = { provider: "faux", modelId: "owni-dev" };
+		await h.runtime.setChatModel("acme", "ops", { channel: "web", threadId: dm.id }, chosen, h.anna.person.id);
+		const sent = (await anna(`/api/instances/ops/threads/${dm.id}/messages`, { text: '/tool thread_reply {"text":"Il report, voce per voce"}' })).body.entry;
+		let timeline: any[] = [];
+		await until(async () => {
+			timeline = (await anna("/api/instances/ops/dm")).body.entries;
+			return timeline.some((e) => e.from === "owni") && timeline[0]?.thread !== undefined;
+		});
+		// In the conversation: the person's message with the thread under it, and the turn's short end.
+		expect(timeline.map((e) => [e.id === sent.id, e.from])).toEqual([[true, "person"], [false, "owni"]]);
+		expect(timeline[1].text).toContain("Risposta scritta nel thread");
+		expect(timeline[0].thread).toMatchObject({ count: 1, who: ["owni"] });
+		const thread = timeline[0].thread.id as string;
+		// The thread the agente opened answers with the model the person chose, as one the person opens.
+		expect(await h.runtime.chatModel("acme", "ops", "web", thread)).toEqual(chosen);
+		expect((await anna(`/api/instances/ops/threads/${thread}`)).body.entries.map((e: any) => [e.from, e.text])).toEqual([["owni", "Il report, voce per voce"]]);
+		// The thread's first turn is told the message it answers and what the agente already wrote there.
+		const first = await say(anna, "ops", thread, "più corto");
+		expect(first.answer.text).toContain("dati del thread");
+		expect(first.answer.text).toContain("Nel thread hai già risposto tu (Ops)");
+		expect(first.answer.text).toContain("Il report, voce per voce");
+		expect((await say(anna, "ops", thread, "grazie")).answer.text).not.toContain("hai già risposto");
+		// Inside the thread no other thread opens.
+		await anna(`/api/instances/ops/threads/${thread}/messages`, { text: '/tool thread_reply {"text":"ancora"}' });
+		await until(async () => ((await anna(`/api/instances/ops/threads/${thread}`)).body.entries as any[]).some((e) => e.text?.includes("qui non si apre un thread")));
 	});
 
 	it("a thread under a message: the same one each time, out of the lists, its first turn told what it answers", async () => {

@@ -242,13 +242,11 @@ function conversationView(inst, main, thread, entries, model) {
 	};
 	/** The replies under each message, as the server counts them now. */
 	const summaries = new Map();
-	const known = new Set(entries.flatMap((e) => (e.thread ? [e.thread.id] : [])));
 	const refreshSummaries = batched(async () => {
 		const { entries: now } = await api(`/api/instances/${inst.id}/dm`).catch(() => ({ entries: [] }));
 		for (const entry of now) {
 			const slot = summaries.get(entry.id);
 			if (!entry.thread || !slot) continue;
-			known.add(entry.thread.id);
 			mount(slot, summary(inst, entry, () => void replies.open(entry, entry.thread.id)));
 			// Its reply button opens the same thread from now on.
 			const button = slot.parentElement?.querySelector(".reply-thread");
@@ -306,8 +304,8 @@ function conversationView(inst, main, thread, entries, model) {
 		}
 		if (event.threadId !== threadId) {
 			if (replies.onEntry(event)) return true;
-			// A reply in a thread not on screen: counted under its message, and announced.
-			if (event.instanceId === inst.id && known.has(event.threadId)) void refreshSummaries();
+			// A reply in a thread not on screen, maybe one the agente just opened (ADR 0133): counted under its message, and announced.
+			if (event.instanceId === inst.id) void refreshSummaries();
 			return false;
 		}
 		stopTyping();

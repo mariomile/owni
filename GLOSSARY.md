@@ -12,7 +12,7 @@ La conversazione continua di una persona con un agente: una sola per agente, sem
 _Avoid_: nuova chat, DM nei testi per le persone
 
 **Thread di un messaggio**:
-Le risposte a un messaggio di un messaggio diretto o di un canale, tenute a parte: l'agente sa a quale messaggio rispondono, e la conversazione principale resta pulita. Vedi ADR 0113.
+Le risposte a un messaggio di un messaggio diretto o di un canale, tenute a parte: l'agente sa a quale messaggio rispondono, e la conversazione principale resta pulita. Lo apre la persona, o l'agente quando la risposta merita un posto suo. Vedi ADR 0113 e ADR 0133.
 _Avoid_: risposta citata
 
 **Reazione**:

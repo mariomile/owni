@@ -38,6 +38,7 @@ import { createRecordingTools } from "../core/tools/recording-tools.ts";
 import { createResearchTools } from "../core/tools/research-tools.ts";
 import { createScheduleTools } from "../core/tools/schedule-tools.ts";
 import { createSkillTools } from "../core/tools/skill-tools.ts";
+import { createThreadTools } from "../core/tools/thread-tools.ts";
 import { createVatTools } from "../core/tools/vat-tools.ts";
 import { createVoiceTools } from "../core/tools/voice-tools.ts";
 import { createWatchTools } from "../core/tools/watch-tools.ts";
@@ -50,6 +51,8 @@ import type { braveSearch, dailyCounter, dailyLimit } from "../core/web-search.t
 import type { Browser, BrowseSessions } from "../core/web-session.ts";
 import type { OwniConfig } from "../main/config.ts";
 import { WebChannel } from "../web/channel.ts";
+import type { Rooms } from "../web/rooms.ts";
+import { threadUnder } from "../web/thread-replies.ts";
 
 export type ToolsWiring = {
 	readonly runtime: OwniRuntime;
@@ -68,6 +71,7 @@ export type ToolsWiring = {
 	readonly board: BoardStore;
 	readonly boardWork: BoardWork;
 	readonly webChannels: ReadonlyMap<string, WebChannel>;
+	readonly rooms: () => Rooms;
 	readonly agentChannels: ReadonlyMap<string, AgentChannel>;
 	readonly agentRatesOf: (id: string) => { readonly rate: AgentRate; readonly total: AgentRate };
 	readonly company: (self: InstanceRecord) => Promise<{ accepts: boolean; colleague: { id: string; name: string; tagline?: string; place?: string } }[]>;
@@ -165,6 +169,13 @@ export async function assembleTools(w: ToolsWiring, record: InstanceRecord): Pro
 					record: audit(),
 				})),
 		...createReactionTools({ react: (reaction) => runtime.sendReaction(record.tenantId, record.id, reaction) }),
+		...createThreadTools({
+			open: async (at) => {
+				const channel = w.webChannels.get(record.id);
+				return channel === undefined ? undefined : threadUnder({ runtime, channel, rooms: w.rooms(), tenantId: record.tenantId, instanceId: record.id }, at);
+			},
+			send: (message) => runtime.sendMessage(record.tenantId, record.id, message),
+		}),
 		...createScheduleTools({ store: runtime.schedules(record.tenantId, record.id), defaultTimeZone: config.timeZone }),
 		...createAutomationTools({
 			store: runtime.automations(record.tenantId, record.id),
