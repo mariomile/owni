@@ -1,4 +1,3 @@
-import { DEFAULT_LEAD_STATUS } from "../connectors/hubspot.ts";
 import { computerLabel, createComputerProvider } from "../computer/create.ts";
 import { createDesktopProvider, desktopLabel } from "../desktop/create.ts";
 import { ecbRates, ExchangeRateError, type ExchangeRatesConfig } from "../core/exchange-rates.ts";
@@ -18,7 +17,6 @@ export type CheckResult = { readonly name: string; readonly ok: boolean; readonl
 const TIMEOUT_MS = 10_000;
 /** Each feed's time in the check: a slow feed is reported as slow, not as down. */
 const NEWS_TIMEOUT_MS = 15_000;
-const GMAIL_SCOPES = ["gmail.readonly", "gmail.send"] as const;
 
 export async function runChecks(config: OwniConfig, fetchImpl: typeof fetch = fetch): Promise<CheckResult[]> {
 	const call = (url: string, init: RequestInit = {}) => fetchImpl(url, { ...init, signal: AbortSignal.timeout(TIMEOUT_MS) });
@@ -26,12 +24,6 @@ export async function runChecks(config: OwniConfig, fetchImpl: typeof fetch = fe
 	if (config.telegram !== undefined) {
 		const token = config.telegram.token;
 		checks.push(check("Telegram (agente)", () => telegramCheck(token, call)));
-	}
-	const segreteria = config.segreteria;
-	if (segreteria !== undefined) {
-		checks.push(check("Telegram (segreteria)", () => telegramCheck(segreteria.telegramBotToken, call)));
-		checks.push(check("Gmail", () => gmailCheck(segreteria.gmail, call)));
-		checks.push(check("HubSpot", () => hubspotCheck(segreteria.hubspotAccessToken, call)));
 	}
 	const transcription = config.transcription;
 	if (transcription !== undefined) checks.push(check("Trascrizione dei vocali", () => transcriptionCheck(transcription, call)));
@@ -221,37 +213,4 @@ async function telegramCheck(token: string, call: Call): Promise<string> {
 	if (response.status === 401 || response.status === 404) throw new CheckFailed("token del bot rifiutato da Telegram: rigeneralo da @BotFather");
 	if (payload.ok !== true) throw new CheckFailed(`Telegram risponde ${response.status}`);
 	return `bot @${payload.result?.username ?? "?"}`;
-}
-
-async function gmailCheck(gmail: { clientId: string; clientSecret: string; refreshToken: string }, call: Call): Promise<string> {
-	const token = await reach(call, "https://oauth2.googleapis.com/token", {
-		method: "POST",
-		headers: { "content-type": "application/x-www-form-urlencoded" },
-		body: new URLSearchParams({ client_id: gmail.clientId, client_secret: gmail.clientSecret, refresh_token: gmail.refreshToken, grant_type: "refresh_token" }).toString(),
-	});
-	const granted = (await token.json().catch(() => ({}))) as { access_token?: string; scope?: string; error?: string };
-	if (granted.access_token === undefined) {
-		if (granted.error === "invalid_grant") throw new CheckFailed("refresh token scaduto o revocato (GMAIL_REFRESH_TOKEN): rigeneralo; un'app OAuth in «Testing» lo fa scadere dopo 7 giorni");
-		throw new CheckFailed(`Google rifiuta le credenziali OAuth (${granted.error ?? token.status}): controlla GMAIL_CLIENT_ID e GMAIL_CLIENT_SECRET`);
-	}
-	const missing = GMAIL_SCOPES.filter((scope) => !(granted.scope ?? "").includes(scope));
-	if (missing.length > 0) throw new CheckFailed(`al token mancano gli scope ${missing.join(", ")}: rigenera il refresh token con entrambi`);
-	const profile = await reach(call, "https://gmail.googleapis.com/gmail/v1/users/me/profile", { headers: { authorization: `Bearer ${granted.access_token}` } });
-	if (!profile.ok) throw new CheckFailed(`Gmail risponde ${profile.status}`);
-	const { emailAddress } = (await profile.json()) as { emailAddress?: string };
-	return `casella ${emailAddress ?? "?"}, scope di lettura e invio`;
-}
-
-async function hubspotCheck(accessToken: string, call: Call): Promise<string> {
-	const response = await reach(call, "https://api.hubapi.com/crm/v3/properties/contacts/hs_lead_status", { headers: { authorization: `Bearer ${accessToken}` } });
-	if (response.status === 401) throw new CheckFailed("token rifiutato (HUBSPOT_ACCESS_TOKEN)");
-	if (response.status === 403) throw new CheckFailed("il token non ha gli scope crm.objects.contacts.read e .write");
-	if (!response.ok) throw new CheckFailed(`HubSpot risponde ${response.status}`);
-	const property = (await response.json()) as { options?: { value: string }[] };
-	const values = (property.options ?? []).map((o) => o.value);
-	const listed = `valori di hs_lead_status nel portale: ${values.length > 0 ? values.join(", ") : "nessuno"}`;
-	// The segreteria sets these after a pratica; a portal without them only gets the note.
-	const missing = Object.values(DEFAULT_LEAD_STATUS).filter((v): v is string => v !== null && !values.includes(v));
-	if (missing.length > 0) throw new CheckFailed(`token valido, ma il portale non ha ${missing.join(", ")}, che la segreteria imposta: aggiungili o cambia la mappa (${listed})`);
-	return `token valido; ${listed}`;
 }

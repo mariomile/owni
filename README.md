@@ -12,7 +12,6 @@ Cosa fa:
 - **Riprende il browser dopo il tuo accesso**: nelle chat private puoi prendere il controllo, compilare un modulo semplice e restituirlo a Owni. I cookie restano separati per persona e agente, e puoi cancellarli dal pannello ([limiti](docs/adr/0106-browser-personale-e-controllo-umano.md)).
 - **Si estende da sola**: scrive nuovi tool, che girano isolati in sandbox e solo dopo l'approvazione di una persona.
 - **Lavora come un'azienda**: l'organigramma dice chi coordina, chi risponde a chi e chi è responsabile di cosa. Ogni agente lo sa e passa al collega giusto quello che non è suo ([ADR 0117](docs/adr/0117-organigramma-degli-agenti.md)).
-- **Segreteria commerciale**: legge le richieste di preventivo da Gmail, aggiorna HubSpot, prepara la bozza e la invia solo dopo Approva.
 
 Documenti: [prodotto e checklist](docs/prodotto.md) · [runbook](docs/runbook.md) · [architettura](docs/architettura.md) · [glossario](GLOSSARY.md) · [decisioni](docs/adr/) · [stato e cose da fare](docs/stato-e-todo.md) · settimane [1](docs/week1.md), [2](docs/week2.md), [3](docs/week3.md), [4](docs/week4.md), [5](docs/week5.md) · [come contribuire](docs/contributing.md) · [piano iniziale](docs/piano-iniziale.md)
 
@@ -28,7 +27,7 @@ pnpm install
 pnpm start               # al primo avvio il link dell'owner è in data/owner-login-link.txt
 ```
 
-Con Docker: `docker compose up -d --build`, poi `docker compose exec owni cat /data/owner-login-link.txt`. Installazione, persone, Telegram, segreteria, connettori, backup e aggiornamenti: [`docs/runbook.md`](docs/runbook.md).
+Con Docker: `docker compose up -d --build`, poi `docker compose exec owni cat /data/owner-login-link.txt`. Installazione, persone, Telegram, connettori, backup e aggiornamenti: [`docs/runbook.md`](docs/runbook.md).
 
 Per provare senza chiave: `OWNI_MODEL_PROVIDER=faux pnpm start` usa un modello locale deterministico (eco; `/tool <nome> <json>` chiama un tool).
 
@@ -37,7 +36,7 @@ Per provare senza chiave: `OWNI_MODEL_PROVIDER=faux pnpm start` usa un modello l
 ```bash
 pnpm typecheck
 pnpm test          # nessuna chiave, nessuna chiamata di rete esterna
-pnpm eval:segreteria
+pnpm eval:agente
 pnpm build
 ```
 
@@ -60,17 +59,6 @@ owni: Missing environment variable: ANTHROPIC_API_KEY. Set it in .env (see .env.
 
 Per provare senza chiave del modello: `OWNI_MODEL_PROVIDER=faux` usa il modello locale deterministico (risponde con un'eco; "conta fino a 5" chiama il tool `slow_counter`). Il token Telegram resta necessario.
 
-### Solo la segreteria (sviluppo)
-
-```bash
-cp .env.example .env
-# oltre alle variabili sopra: GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN,
-# HUBSPOT_ACCESS_TOKEN e i commerciali in OWNI_TELEGRAM_ALLOWED_USERS
-pnpm dev:segreteria
-```
-
-Legge la casella Gmail ogni minuto, prepara per ogni richiesta di preventivo una scheda con la bozza e la manda su Telegram ai commerciali con i pulsanti Approva, Modifica e Scarta. Nessuna mail parte senza Approva. Serve un bot Telegram diverso da quello di `dev:telegram`, e ogni commerciale deve aprire il bot e premere Start una volta. Dettagli in [`docs/week4.md`](docs/week4.md).
-
 ### Variabili d'ambiente
 
 | Variabile | Obbligatoria | Default |
@@ -82,13 +70,7 @@ Legge la casella Gmail ogni minuto, prepara per ogni richiesta di preventivo una
 | `OWNI_DATA_DIR` | no | `data` |
 | `OWNI_TENANT_ID` | no | `default` |
 | `OWNI_INSTANCE_ID` | no | `telegram` |
-| `OWNI_TELEGRAM_ALLOWED_USERS` | no, ma senza nessuno può scrivere al bot (sì per la segreteria) | nessuno (default deny) |
-| `GMAIL_CLIENT_ID`, `GMAIL_CLIENT_SECRET`, `GMAIL_REFRESH_TOKEN` | per la segreteria | |
-| `HUBSPOT_ACCESS_TOKEN` | per la segreteria | |
-| `OWNI_SEGRETERIA_MODEL` | no | `anthropic` (anche `faux`) |
-| `OWNI_SEGRETERIA_INSTANCE_ID` | no | `segreteria` |
-| `OWNI_MAIL_POLL_SECONDS` | no | `60` |
-| `OWNI_REQUIRE_VAT_NUMBER` | no | `false` |
+| `OWNI_TELEGRAM_ALLOWED_USERS` | no, ma senza nessuno può scrivere al bot | nessuno (default deny) |
 
 ## App desktop
 
@@ -97,19 +79,17 @@ Owni per Mac, Windows e Linux, con l'icona nella barra e una scorciatoia da qual
 ## Struttura
 
 ```text
-src/app.ts                    processo unico: istanze, canali, scheduler, segreteria, console web
-src/main/                     entry point (owni = pnpm start, cli = pnpm owni, telegram, segreteria)
+src/app.ts                    processo unico: istanze, canali, scheduler, console web
+src/main/                     entry point (owni = pnpm start, cli = pnpm owni, telegram)
 src/core/                     nucleo: runtime, tenant/istanze, segreti, audit, egress, outbox
 src/core/workspace.ts         file per istanza; schedules.ts + scheduler.ts + cron.ts: task programmati
 src/core/proposals.ts         tool proposti; approvals.ts decisioni; sandbox.ts esecuzione isolata
 src/core/tools/               tool dell'istanza: file_*, schedule_*, tool_propose, tool approvati
 src/core/adapters/pi-durable* unico punto che importa Pi Durable / pi-ai
 src/channels/                 interfaccia ChannelAdapter, adapter Telegram (pulsanti, documenti)
-src/connectors/               MCP, Gmail, HubSpot, fetch con egress
-src/segreteria/               pipeline, modello, callback, schede, servizio, avvio
+src/connectors/               MCP, Google, fetch con egress
 src/web/                      server HTTP, accesso, canale web, console (ui/: HTML, CSS, JS, font)
 desktop/                      app desktop Tauri: una finestra sul server (docs/desktop.md)
 src/gateway.ts                collega canali e nucleo
-evals/segreteria/             35 casi, controlli deterministici (CI), giudice notturno
 test/                         test (vitest), con processi figli reali per i crash
 ```

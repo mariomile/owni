@@ -4,7 +4,7 @@ import { EgressDenied, UserNotAllowed } from "./errors.ts";
  * What an instance may talk to. Default deny: an empty list allows nothing.
  * `modelProviders` are pi-ai provider IDs ("anthropic", "openai", ...; "faux" is the
  * local deterministic model). `channels` are channel adapter names ("telegram", ...).
- * `connectors` are external systems the instance's tools reach ("gmail", "hubspot");
+ * `connectors` are external systems the instance's tools reach ("google", ...);
  * missing means none, so policies written before week 4 still deny them.
  */
 export type EgressPolicy = {

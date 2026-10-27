@@ -5,7 +5,6 @@ data/
 .owni-run/
 *.log
 
-evals/segreteria/last-report/
 evals/agente/last-report/
 data-cloud/
 desktop/src-tauri/target/

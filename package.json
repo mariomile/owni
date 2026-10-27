@@ -30,15 +30,11 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest --run",
     "dev:telegram": "tsx src/main/telegram.ts",
-    "dev:segreteria": "tsx src/main/segreteria.ts",
     "eval:agente": "pnpm eval:agente:catalog && pnpm eval:agente:outcomes",
     "eval:agente:catalog": "tsx evals/agente/run.ts",
     "eval:agente:outcomes": "tsx evals/agente/outcome-run.ts",
     "eval:agente:real": "tsx evals/agente/real.ts",
     "eval:agente:conti": "tsx evals/agente/conti.ts",
-    "eval:segreteria": "tsx evals/segreteria/run.ts",
-    "eval:segreteria:judge": "tsx evals/segreteria/judge.ts",
-    "eval:segreteria:validate": "python3 evals/segreteria/scripts/validate_and_build.py",
     "cloud": "tsx src/main/cloud.ts"
   }
 }

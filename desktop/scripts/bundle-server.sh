@@ -24,8 +24,6 @@ pnpm install --frozen-lockfile
 pnpm exec tsc -p tsconfig.build.json --outDir "$out/dist" --sourceMap false
 cp -R src/web/ui "$out/dist/web/ui"
 cp -R src/web/openui "$out/dist/web/openui"
-mkdir -p "$out/evals/segreteria"
-cp evals/segreteria/checks.json "$out/evals/segreteria/"
 cp package.json pnpm-lock.yaml LICENSE NOTICE desktop/server-entry.mjs "$out/"
 # Real folders, no links: the app bundle copies files only.
 (cd "$out" && pnpm install --prod --frozen-lockfile --ignore-scripts --config.node-linker=hoisted)

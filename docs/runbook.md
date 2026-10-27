@@ -8,7 +8,7 @@ Le chiavi che servono, dove prenderle e dove metterle, passo per passo: [`chiavi
 
 - Un server Linux con Docker e Docker Compose, oppure Node.js 24+ e pnpm 10.
 - Disco locale per i dati (non NFS/SMB: il lock delle istanze usa lock POSIX).
-- La chiave di un modello: Anthropic, OpenAI, Gemini, Grok, Mistral, OpenRouter o un altro dei provider di [ADR 0032](adr/0032-qualsiasi-modello.md). Opzionali: un bot Telegram per l'agente, un secondo bot per la segreteria, OAuth Gmail e token HubSpot per la segreteria.
+- La chiave di un modello: Anthropic, OpenAI, Gemini, Grok, Mistral, OpenRouter o un altro dei provider di [ADR 0032](adr/0032-qualsiasi-modello.md). Opzionali: un bot Telegram per l'agente.
 - Un reverse proxy con https davanti alla console (Caddy, nginx, Traefik).
 
 ## 2. Installazione con Docker
@@ -64,7 +64,7 @@ Con Docker: `docker compose exec owni node_modules/.bin/tsx src/main/cli.ts pers
 
 Ognuno può attivare la verifica in due passaggi cliccando sul proprio nome nella console: da quel momento per entrare servono il link e il codice dell'app di autenticazione. Per chi gestisce dati di clienti conviene chiederla a tutti.
 
-Il link contiene il token nel frammento (`#...`): non finisce nei log del server né del proxy. Va dato alla persona in privato. In Impostazioni l'owner decide chi può **scrivere** all'istanza dal web e chi **approva** le sue azioni (tool proposti, pratiche della segreteria).
+Il link contiene il token nel frammento (`#...`): non finisce nei log del server né del proxy. Va dato alla persona in privato. In Impostazioni l'owner decide chi può **scrivere** all'istanza dal web e chi **approva** le sue azioni (tool proposti, azioni dei servizi).
 
 ## 5. Telegram
 
@@ -75,22 +75,7 @@ Ogni istanza può avere il suo bot, collegato dall'owner in Impostazioni → Tel
 3. Riavvia. Chi non è in elenco non riceve risposta (e finisce nell'audit).
 4. Facoltativo, webhook invece del long polling: con `OWNI_PUBLIC_URL` in https e `OWNI_TELEGRAM_WEBHOOK_SECRET` (lettere, cifre, `_` e `-`), all'avvio Owni registra il webhook e Telegram manda i messaggi a `OWNI_PUBLIC_URL/hooks/telegram/<istanza>`. Il reverse proxy deve far passare quel percorso. Serve quando il processo può spegnersi (Owni Cloud); in self-host il long polling va benissimo.
 
-## 6. Segreteria commerciale
-
-Richiede un **secondo** bot (due processi in long polling sullo stesso token si rubano gli update):
-
-```text
-OWNI_SEGRETERIA_TELEGRAM_BOT_TOKEN=...
-OWNI_SEGRETERIA_SALES=<ID Telegram dei commerciali>
-GMAIL_CLIENT_ID / GMAIL_CLIENT_SECRET / GMAIL_REFRESH_TOKEN    # scope gmail.readonly + gmail.send
-HUBSPOT_ACCESS_TOKEN                                         # scope crm.objects.contacts.read/write
-```
-
-Al primo avvio la segreteria ignora la posta già presente e parte da quella nuova. Le pratiche si gestiscono su Telegram o nella console (pagina Segreteria). Nessuna mail parte senza Approva. Un'app Google in modalità «Testing» ha refresh token che scadono dopo 7 giorni: per l'uso reale pubblica l'app OAuth.
-
-La segreteria controlla la partita IVA scritta nelle mail senza rete ([ADR 0049](adr/0049-partita-iva-nella-segreteria.md)): se è sbagliata non la salva, la scheda lo dice e la bozza chiede al cliente di ricontrollarla. Se un cliente dice che il suo numero è giusto, controllalo con `vat_check`: un numero di un paese fuori dal VIES (Regno Unito, Svizzera, Norvegia, San Marino) è controllato solo nella forma.
-
-## 6b. Google per persona (Gmail e Calendar; scrittura con approvazione)
+## 6. Google per persona (Gmail e Calendar; scrittura con approvazione)
 
 Ogni persona collega il proprio account Google dal menu del suo account nella console; Owni lo usa solo nelle conversazioni di quella persona dalla console e nel suo brief del mattino. Per attivarlo:
 
@@ -288,7 +273,7 @@ Azioni con approvazione (settimana 30, ADR 0025; per rischio dall'ADR 0120): gli
 
 ## 8. Backup e ripristino
 
-Tutto lo stato è nella cartella dati (`/data` nel container, `data/` senza Docker): istanze, conversazioni (SQLite), outbox, pratiche, file, task, persone, segreti, audit.
+Tutto lo stato è nella cartella dati (`/data` nel container, `data/` senza Docker): istanze, conversazioni (SQLite), outbox, file, task, persone, segreti, audit.
 
 Backup coerente (pochi secondi di fermo):
 
@@ -311,7 +296,7 @@ Le risposte rimaste a metà ripartono dall'outbox; quelle che potrebbero arrivar
 
 ## 10. Ruotare i segreti
 
-- **Chiave del modello, Gmail, HubSpot, token Telegram**: cambia `.env` e riavvia (i valori vengono riscritti nel secret store all'avvio).
+- **Chiave del modello, token Telegram**: cambia `.env` e riavvia (i valori vengono riscritti nel secret store all'avvio).
 - **Segreti dei connettori**: pagina Connettori → Modifica → nuovo valore.
 - **Auth token di Twilio**: dopo averlo ruotato su Twilio, Impostazioni → Telefono → nuovo auth token → Salva. Fino ad allora le chiamate ricevono 403.
 - **Link di una persona**: `pnpm owni person link <id>` o Persone → Nuovo link.
@@ -323,8 +308,7 @@ Le risposte rimaste a metà ripartono dall'outbox; quelle che potrebbero arrivar
 |---|---|
 | `Instance ... is already open in another process` | Due copie di Owni sulla stessa cartella dati. Fermane una. |
 | Il bot non risponde | L'utente non è in `OWNI_TELEGRAM_ALLOWED_USERS`, o non ha premuto Start. Controlla l'audit (Attività). |
-| La segreteria non legge la posta | Refresh token Gmail scaduto (`invalid_grant` nei log): rigenera il token. |
-| `does not allow connector "hubspot"` all'avvio | La egress policy dell'istanza è stata ristretta: Owni non la allarga da sola. Correggi `instance.json` o usa un'altra istanza. |
+| `does not allow connector "..."` all'avvio | La egress policy dell'istanza è stata ristretta: Owni non la allarga da sola. Correggi `instance.json` o usa un'altra istanza. |
 | Le risposte web arrivano solo ricaricando | Il proxy bufferizza `/api/events`: disattiva il buffering. |
 | La console dice «Non riesco a raggiungere Owni» | Il server non risponde (riavvio, cella che si sveglia): riprova da sola ogni 10 secondi. Se resta, guarda i log del server. |
 | Owni ha smesso di usare il modello | Tetto di spesa giornaliero raggiunto (Attività e spesa). Riprende il giorno dopo. |

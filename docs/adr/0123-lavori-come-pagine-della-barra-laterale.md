@@ -1,5 +1,7 @@
 # 0123: Incarichi, Automazioni e Pratiche come pagine della barra laterale
 
+> In parte sostituito dall'[ADR 0126](0126-togliere-la-segreteria-commerciale.md): la pagina Pratiche e la Segreteria non ci sono più; restano Incarichi e Automazioni.
+
 Mario: «Non mi interessa avere questi tab interni. Meglio più pagine nella sidebar». La voce «Lavori» apriva la Board e, sopra, una barra di linguette con Incarichi, Automazioni e Pratiche: due livelli di navigazione per tre posti, e il nome della voce non diceva cosa si apriva.
 
 ## Decisione

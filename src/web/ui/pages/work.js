@@ -46,7 +46,7 @@ async function readSource(sources, key, label, url, fields, agentId = "") {
 function invalidateBoardSnapshot(sources, previousInstances) {
 	const current = sources.get("instances");
 	if (current?.error || !current?.data) return;
-	const visibility = (instances) => JSON.stringify(instances.map((instance) => [instance.id, Boolean(instance.canChat), Boolean(instance.isApprover), Boolean(instance.hasSegreteria)]).sort((a, b) => a[0].localeCompare(b[0])));
+	const visibility = (instances) => JSON.stringify(instances.map((instance) => [instance.id, Boolean(instance.canChat), Boolean(instance.isApprover)]).sort((a, b) => a[0].localeCompare(b[0])));
 	if ((!previousInstances || visibility(previousInstances) !== visibility(current.data.instances)) && sources.get("board")?.error) delete sources.get("board").data;
 }
 
@@ -150,8 +150,7 @@ export async function viewPrograms(main) {
 			const instances = sources.get("instances")?.data?.instances ?? [];
 			const ids = new Set(instances.map((instance) => instance.id));
 			for (const [key, source] of sources) if (source.agentId && !ids.has(source.agentId)) sources.delete(key);
-			for (const instance of instances.filter((item) => item.hasSegreteria)) sources.delete(`runs:${instance.id}`);
-			await Promise.all(instances.flatMap((instance) => (instance.hasSegreteria ? ["schedules", "watches", "automations"] : ["schedules", "watches", "automations", "runs"]).map((name) => readSource(sources, `${name}:${instance.id}`, `${{ schedules: "Orari", watches: "Pagine", automations: "Eventi", runs: "Esiti" }[name]} · ${instance.name}`, `/api/instances/${encodeURIComponent(instance.id)}/${name}`, [name], instance.id))));
+			await Promise.all(instances.flatMap((instance) => ["schedules", "watches", "automations", "runs"].map((name) => readSource(sources, `${name}:${instance.id}`, `${{ schedules: "Orari", watches: "Pagine", automations: "Eventi", runs: "Esiti" }[name]} · ${instance.name}`, `/api/instances/${encodeURIComponent(instance.id)}/${name}`, [name], instance.id))));
 			updateAgentOptions(agent, instances);
 		})().finally(() => { refreshing = undefined; draw(); });
 		draw();

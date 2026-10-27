@@ -51,7 +51,6 @@ const ICONS = {
 	board: ["M4 5h4v14H4Z", "M10 5h4v9h-4Z", "M16 5h4v6h-4Z"],
 	organigramma: ["M9 3h6v5H9z", "M3 16h6v5H3z", "M15 16h6v5h-6z", "M12 8v4", "M6 16v-4h12v4"],
 	agenti: ["M8 4h8a3 3 0 0 1 3 3v6a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3Z", "M9.5 9.5h.01M14.5 9.5h.01", "M9 20h6", "M12 16v4"],
-	segreteria: ["M3 13h5l1.5 2.5h5L16 13h5", "M5.5 5h13L21 13v6H3v-6Z"],
 	approvazioni: ["M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Z", "m8.5 12.5 2.5 2.5 4.5-5"],
 	task: ["M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Z", "M12 7.5V12l3 2"],
 	file: ["M14 3H6v18h12V7Z", "M14 3v4h4"],
@@ -394,7 +393,7 @@ export function route() {
 	return { view: view || "dm", rest: rest.map(decode), instanceId: params.get("agent") ?? undefined, params };
 }
 
-const AGENT_VIEWS = new Set(["task", "automazioni", "impostazioni", "segreteria", "inizia"]);
+const AGENT_VIEWS = new Set(["task", "automazioni", "impostazioni", "inizia"]);
 
 /** A link carries its agent: opening it later never borrows another agent from the browser. */
 export function instanceHref(view, rest = [], instanceId = state.instance?.id) {

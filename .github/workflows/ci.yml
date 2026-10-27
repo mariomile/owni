@@ -32,7 +32,5 @@ jobs:
       - run: pnpm test
         env:
           PLAYWRIGHT_BROWSERS_PATH: ${{ runner.temp }}/pw-browsers
-      - name: Deterministic segreteria evals (incl. PII checks)
-        run: pnpm eval:segreteria
       - name: General agent catalog + deterministic outcome contracts (faux, no external calls)
         run: pnpm eval:agente

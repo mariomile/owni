@@ -1,5 +1,7 @@
 # Partita IVA nella segreteria
 
+> Sostituito dall'[ADR 0126](0126-togliere-la-segreteria-commerciale.md): la segreteria non c'è più; la partita IVA si controlla con `vat_check` ([ADR 0047](0047-partita-iva.md)).
+
 La segreteria legge le mail dei clienti e prepara la bozza di risposta. Fino alla settimana 45 prendeva la partita IVA scritta nella mail così com'era: un numero con una cifra sbagliata finiva nella pratica e nel CRM, e la fattura sarebbe partita con un dato falso.
 
 ## Decisione

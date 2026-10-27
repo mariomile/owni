@@ -12,7 +12,6 @@ import { closeModelMenu } from "./models.js";
 import { viewDm } from "./pages/chat.js";
 import { viewPeople } from "./pages/people.js";
 import { viewRooms } from "./pages/rooms.js";
-import { viewSegreteria } from "./pages/segreteria.js";
 import { viewSettings } from "./pages/settings.js";
 import { viewStart } from "./pages/start.js";
 import { viewTasks } from "./pages/tasks.js";
@@ -33,7 +32,6 @@ export const PAGES = [
 	{ id: "canali", label: "Canali", group: "Lavoro", when: () => state.instances.filter((i) => i.canChat).length > 1, view: viewRooms },
 	{ id: "board", label: "Incarichi", group: "Lavoro", sidebar: true, view: viewBoard },
 	{ id: "programmi", label: "Automazioni", group: "Lavoro", sidebar: true, view: viewPrograms },
-	{ id: "segreteria", label: "Pratiche", group: "Lavoro", sidebar: true, when: () => state.instances.some((i) => i.hasSegreteria), href: () => instanceHref("segreteria", [], state.instances.find((i) => i.hasSegreteria)?.id), view: viewSegreteria },
 	{ id: "approvazioni", label: "Richiede te", group: "Lavoro", view: viewApprovals },
 	{ id: "task", label: "Orari e pagine da controllare", group: "Lavoro", under: "programmi", view: viewTasks },
 	{ id: "automazioni", label: "Eventi esterni", group: "Lavoro", under: "programmi", view: viewAutomations },

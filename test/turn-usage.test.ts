@@ -207,7 +207,7 @@ describe("quanto costa un turno (ADR 0098)", () => {
 
 	it("sums the last 7 days per agente, with the tools called most", () => {
 		const turn = (at: string, instanceId: string, estimatedUsd: number, tools: string[]): UsageRecord => ({ at, provider: "p", model: "m", role: "agent", inputTokens: 150, outputTokens: 10, estimatedUsd, instanceId, tools });
-		const stats = turnStats([turn("2026-10-21T10:00:00Z", "ops", 0.01, ["web_search", "web_search"]), turn("2026-10-22T10:00:00Z", "casa", 0.03, ["memory_recall", "web_search"]), turn("2026-10-01T10:00:00Z", "ops", 5, ["old"]), { ...turn("2026-10-22T10:00:00Z", "ops", 7, []), role: "extract" }], new Date("2026-10-22T12:00:00Z"));
+		const stats = turnStats([turn("2026-10-21T10:00:00Z", "ops", 0.01, ["web_search", "web_search"]), turn("2026-10-22T10:00:00Z", "casa", 0.03, ["memory_recall", "web_search"]), turn("2026-10-01T10:00:00Z", "ops", 5, ["old"])], new Date("2026-10-22T12:00:00Z"));
 		expect(stats).toEqual({
 			turns: 2,
 			inputTokens: 300,

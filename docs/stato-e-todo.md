@@ -1,6 +1,6 @@
 # Stato del progetto e cose da fare
 
-Aggiornato al 26 ottobre 2026.
+Aggiornato al 27 ottobre 2026.
 
 ## Dove siamo
 
@@ -12,6 +12,8 @@ Su `main` ci sono le settimane da 1 a 75, e la CI controlla ogni PR con typechec
 - Settimana 3: logica della segreteria commerciale (pratiche, approvazione obbligatoria, routing dei modelli, tetti di spesa, 35 eval), provata solo con fake ([week3.md](week3.md), [spec](spec-segreteria-commerciale.md)).
 - Settimana 5 (branch `week-5`, parte da `week-4`): agente generale (connettori MCP, file, task programmati, tool proposti in sandbox con approvazione), console web, processo unico `pnpm start`, Docker e runbook ([week5.md](week5.md), [prodotto finito](prodotto.md)).
 - Settimana 4 (branch `week-4`): segreteria funzionante end-to-end. `pnpm dev:segreteria` con Gmail e HubSpot live, pulsanti su Telegram, estrazione con Haiku e bozza con Sonnet sotto i controlli della CI, avviso doppioni, giudice notturno sulla pipeline vera ([week4.md](week4.md)).
+
+- Tolta la segreteria commerciale (27 ottobre 2026): Owni non ha verticali già pronte. Una segreteria è un agente creato dal titolare con istruzioni, connettori e routine; spariscono `dev:segreteria`, gli adattatori Gmail e HubSpot, le pratiche, la pagina Pratiche e le eval della segreteria ([ADR 0126](adr/0126-togliere-la-segreteria-commerciale.md)). Le righe sopra su segreteria e settimane 3 e 4 sono storia.
 
 Documenti di riferimento: [piano iniziale](piano-iniziale.md), [architettura](architettura.md).
 
@@ -25,15 +27,13 @@ Lo stesso ramo aggiunge progressi live, Stop persistente per conversazione, stor
 
 ## Cose da fare
 
-### Per la prova reale (servono i segreti di Mario)
+### Per la prova reale
 
-- [ ] Un bot Telegram dedicato alla segreteria (da @BotFather), diverso da quello di `dev:telegram`
-- [ ] Chiave Anthropic
-- [ ] Client OAuth Google e refresh token con scope `gmail.readonly` e `gmail.send` (app in modalità «Testing»: il refresh token scade dopo 7 giorni)
-- [ ] Token di una private app HubSpot con scope `crm.objects.contacts.read` e `crm.objects.contacts.write`
-- [ ] User ID Telegram dei commerciali in `OWNI_TELEGRAM_ALLOWED_USERS`; ognuno apre il bot e preme Start
-- [ ] `OWNI_JUDGE_MODEL_KEY` tra i secret del repo, per il giudice notturno
-- [ ] Verifiche dal vivo: Gmail conserva il nostro `Message-ID`? Valori di `hs_lead_status` del portale (`GET /crm/v3/properties/contacts/hs_lead_status`). Costo per pratica (stima da verificare: 1-2 centesimi di dollaro). Primo report del giudice
+Per l'uso di Mario basta la sua sottoscrizione di Claude Code o Codex: nessuna chiave Anthropic, nessun account di terzi. Ogni cliente collega i suoi connettori e i suoi canali dalla console.
+
+- [ ] Prova dal vivo del computer dell'agente su Fly: servono `FLY_API_TOKEN`, `OWNI_TEST_FLY_ORG` e `OWNI_TEST_FLY_IMAGE`
+- [ ] Prova del computer dell'agente con gVisor
+- [ ] `OWNI_JUDGE_MODEL_KEY` tra i secret del repo, per il giudice notturno dell'agente
 
 ### Decisioni che spettano a Mario
 
@@ -92,7 +92,7 @@ Lo stesso ramo aggiunge progressi live, Stop persistente per conversazione, stor
 - [x] Schermo: un desktop Linux con Firefox per agente, guidato con Cua (guarda, clicca, scrive, tasti, scorre, apre programmi e indirizzi); senza internet di default, l'owner lo accende in Impostazioni ([ADR 0045](adr/0045-schermo-cua.md)). Serve `OWNI_DESKTOP` e l'immagine di Cua ([chiavi](chiavi.md) §19)
 - [x] Partita IVA e codice fiscale: controllo formale sempre, e con il VIES attiva o no con nome, indirizzo e ora del controllo (settimana 44, [week44.md](week44.md), [ADR 0047](adr/0047-partita-iva.md))
 - [x] Date e scadenze: giorni e giorni lavorativi, scadenze delle fatture anche fine mese, festivi con il 4 ottobre, età (settimana 45, [week45.md](week45.md), [ADR 0048](adr/0048-date-e-scadenze.md))
-- [x] Partita IVA nella segreteria: controllata senza rete, non salvata se sbagliata, la bozza chiede di ricontrollarla (settimana 46, [week46.md](week46.md), [ADR 0049](adr/0049-partita-iva-nella-segreteria.md))
+- [x] Partita IVA nella segreteria: controllata senza rete, non salvata se sbagliata, la bozza chiede di ricontrollarla (settimana 46, [week46.md](week46.md), [ADR 0049](adr/0049-partita-iva-nella-segreteria.md), tolta con la segreteria)
 - [x] Fatture elettroniche e documenti firmati: i `.p7m` letti come il documento che contengono, con la firma segnalata e non verificata (settimana 47, [week47.md](week47.md), [ADR 0052](adr/0052-fatture-elettroniche.md))
 - [x] Allegati nelle mail: file del workspace, con la card che mostra cosa parte e il controllo che il file non sia cambiato (settimana 51, [week51.md](week51.md), [ADR 0056](adr/0056-allegati-nelle-mail.md))
 - [ ] Schermo: prova dal vivo con Docker vero su un server amd64 (avvio dell'immagine con le sole capability previste e un init, tempo di avvio, indirizzo del container su una rete interna con il traffico fra container spento, strumenti di `cua-spacesd` 0.3.0 e `scope: "desktop"`, nomi dei tasti e combinazioni)
@@ -118,10 +118,9 @@ Lo stesso ramo aggiunge progressi live, Stop persistente per conversazione, stor
 - [x] Agente misurabile: l'ora e la memoria a ogni richiesta al modello, non nel testo salvato ([ADR 0097](adr/0097-contesto-del-turno.md)); per ogni turno token, costo e strumenti nel registro dei costi, con `pnpm owni usage` per gli ultimi 7 giorni ([ADR 0098](adr/0098-quanto-costa-un-turno.md)); eval dell'agente generale, che ogni notte misura col modello vero se sceglie lo strumento giusto ([ADR 0099](adr/0099-eval-dell-agente.md)). Serve `OWNI_JUDGE_MODEL_KEY` tra i secret del repo
 - [x] Niente registri fissi: i 25 registri dell'attività (fatture, preventivi, spese, ore, magazzino e gli altri), il registro di chi segue cosa e le richieste tra agenti da approvare sono tolti; i dati stanno nei file del workspace, i conti li fa `code_run`, le procedure di ogni cliente sono sue skill ([ADR 0121](adr/0121-registri-sostituiti-da-code-run-e-file.md))
 - [x] Gli strumenti dei connettori arrivano al modello solo quando li carica con `tool_search`; quelli di Owni sono sempre lì ([ADR 0122](adr/0122-strumenti-dei-connettori-caricati-su-richiesta.md))
-- [x] Incarichi, Automazioni e Pratiche sono pagine della barra laterale, senza linguette interne ([ADR 0123](adr/0123-lavori-come-pagine-della-barra-laterale.md))
-- [x] Il computer dell'agente ha la rete: installa pacchetti, clona repository, scarica dati e chiama API, su Docker e su Fly, verso internet pubblica e non verso metadati, rete locale e reti private (le stesse regole sui due provider); restano niente segreti dentro, niente in entrata, l'API di Fly chiusa, niente vsock né socket packet ([ADR 0124](adr/0124-il-computer-dell-agente-ha-la-rete.md)). Manca la prova nel job `computer` della CI, quella dal vivo su Fly e quella con gVisor
+- [x] Incarichi, Automazioni (e Pratiche, poi tolte con la segreteria) sono pagine della barra laterale, senza linguette interne ([ADR 0123](adr/0123-lavori-come-pagine-della-barra-laterale.md))
+- [x] Il computer dell'agente ha la rete: installa pacchetti, clona repository, scarica dati e chiama API, su Docker e su Fly, verso internet pubblica e non verso metadati, rete locale e reti private (le stesse regole sui due provider); restano niente segreti dentro, niente in entrata, l'API di Fly chiusa, niente vsock né socket packet ([ADR 0124](adr/0124-il-computer-dell-agente-ha-la-rete.md)). Il job `computer` della CI è verde; mancano la prova dal vivo su Fly e quella con gVisor
 - [x] Console divisa per pagina: `src/web/ui/app.js` (circa 5.900 righe) è ora un modulo ES per pagina (le pagine non si importano a vicenda), una tabella delle pagine in `shell.js` e un `common.js` che non importa nulla; il server serve i file elencando la cartella. Una pagina nuova: file, riga in `PAGES`, riga in `SHELL` ([ADR 0102](adr/0102-console-un-modulo-per-pagina.md))
-- [x] Eval della segreteria: prima di dare un punteggio, `pnpm eval:segreteria` prova i controlli su due bozze senza contenuto, una vuota e una generica, che devono fallire i controlli che pretendono qualcosa (domande, voci da citare, elenco e priorità del multi, saluto, registro); se un caso li viola, l'eval si ferma dicendo caso e controllo ([README](../evals/segreteria/README.md))
 - [x] Chi sta facendo cosa: `agent_list` e la pagina Agenti dicono se un agente è occupato, da quanto e su quale scheda «In corso» o chat, solo dentro quello che chi guarda già vede; `agent_message` avvisa che un collega occupato può metterci di più ([ADR 0109](adr/0109-chi-sta-facendo-cosa.md))
 - [ ] Scansioni JBIG2 e JPEG 2000: oggi solo dal computer di Owni o con una foto
 

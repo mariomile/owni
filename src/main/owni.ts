@@ -6,7 +6,6 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { startOwni } from "../app.ts";
 import { InstanceLocked } from "../core/errors.ts";
-import { SegreteriaConfigError } from "../segreteria/boot.ts";
 import { type OwniConfig, ConfigError, loadOwniConfig } from "./config.ts";
 
 if (existsSync(".env")) process.loadEnvFile(".env");
@@ -27,7 +26,7 @@ try {
 	const url = config.web.publicUrl ?? `http://${config.web.host === "0.0.0.0" ? "localhost" : config.web.host}:${config.web.port}`;
 	console.error(
 		`owni: tenant=${config.tenantId} instance=${config.instanceId} model=${config.modelProvider}/${config.modelId} ` +
-			`web=${url}${config.telegram === undefined ? "" : " telegram=on"}${owni.segreteria === undefined ? "" : ` segreteria=${owni.segreteria.instanceId}`}`,
+			`web=${url}${config.telegram === undefined ? "" : " telegram=on"}`,
 	);
 	if (owni.ownerLink !== undefined) {
 		// Not in the logs (docker compose logs keeps them): only on a terminal, and in a 0600 file.
@@ -41,7 +40,7 @@ try {
 		});
 	}
 } catch (error) {
-	if (error instanceof SegreteriaConfigError || error instanceof InstanceLocked) {
+	if (error instanceof InstanceLocked) {
 		console.error(`owni: ${error.message}`);
 		process.exit(1);
 	}

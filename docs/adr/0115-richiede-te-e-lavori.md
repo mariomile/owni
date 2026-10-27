@@ -1,5 +1,7 @@
 # 0115: Richiede te come casella unica, Lavori come la Board
 
+> In parte sostituito dall'[ADR 0126](0126-togliere-la-segreteria-commerciale.md): le pratiche non compaiono più in «Da decidere».
+
 Mario: «ora non si capisce nulla, né in termini di UX né di UI». Fino a oggi «Richiede te» compariva tre volte (nella barra laterale, nella barra di Lavori e come filtro della lista) e non era un posto: era un filtro della lista Lavori, le cui righe portavano a un'altra pagina, «Autorizzazioni», dove si decideva davvero. Gli incarichi avevano due viste, la lista di Lavori e la Board, con la Board dietro un pulsante. La lista mescolava incarichi, autorizzazioni e fino a 100 esecuzioni per agente, con quattro filtri e una riga di conteggi.
 
 ## Decisione
