@@ -246,7 +246,7 @@ describe("spend of a turn that ends unanswered", () => {
 		await waitFor(() => replies.length === 1);
 		expect(replies[0]).toMatchObject({ status: "unanswered", cancelled: true });
 		const run = (await runtime.listRuns("acme", "ops")).find((r) => r.id === runId);
-		expect(records(dataDir)).toEqual([expect.objectContaining({ threadId: "p", estimatedUsd: 3, submissionId: run?.submissionId })]);
+		expect(records(dataDir)).toEqual([expect.objectContaining({ threadId: "p", estimatedUsd: 3, submissionId: run?.submissionId, provider: "faux", model: expect.stringMatching(/.+/) })]);
 	});
 
 	it("turns of two conversations at the same time each see only their own unrecorded spend: together they pass the cap, each by at most one request", async () => {

@@ -507,7 +507,9 @@ class PiDurableSession implements EngineSession {
 				const refused = typeof settled.detail === "string" && settled.detail.includes(REFUSED);
 				// Billed like an answer, so its spend is on record and no longer counts against the conversation.
 				const usage = await (await this.harness.conversation(settled.conversationId, context))?.commit((tx) => unansweredUsage(tx, settled.conversationId, submissionId), context);
-				reply = { status: "unanswered", threadKey, submissionId, reason: settled.reason ?? settled.status, cancelled: settled.reason === "aborted", ...(refused ? { refused } : {}), ...(usage === undefined ? {} : { usage }) };
+				// The model the conversation answers with now: the one its spend is listed under.
+				const model = usage === undefined ? undefined : await this.modelOf(threadKey).catch(() => undefined);
+				reply = { status: "unanswered", threadKey, submissionId, reason: settled.reason ?? settled.status, cancelled: settled.reason === "aborted", ...(refused ? { refused } : {}), ...(usage === undefined ? {} : { usage }), ...(model === undefined ? {} : { model }) };
 			}
 		} catch (error) {
 			if (this.closing) return; // the next process resumes it

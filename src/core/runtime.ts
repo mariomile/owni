@@ -1175,7 +1175,7 @@ export class OwniInstance {
 			const existing = await this.outbox.get(key);
 			if (existing?.deliveredAt !== undefined) return;
 			// Counted once, answered or not: a reply the outbox already holds was counted when it first came.
-			if (existing?.reply === undefined && engineReply.usage !== undefined) await recordTurn(this.usage, this.audit, { instanceId: this.record.id, threadId, submissionId: engineReply.submissionId, model: engineReply.status === "answered" ? engineReply.model : undefined, usage: engineReply.usage }).catch((error: unknown) => console.error(`owni: usage of ${this.record.tenantId}/${this.record.id} not recorded: ${String(error)}`));
+			if (existing?.reply === undefined && engineReply.usage !== undefined) await recordTurn(this.usage, this.audit, { instanceId: this.record.id, threadId, submissionId: engineReply.submissionId, model: engineReply.model, usage: engineReply.usage }).catch((error: unknown) => console.error(`owni: usage of ${this.record.tenantId}/${this.record.id} not recorded: ${String(error)}`));
 			await this.handOff(
 				existing === undefined
 					? { key, submissionId: engineReply.submissionId, channel, threadId, reply, createdAt: new Date().toISOString(), attempts: 0 }
