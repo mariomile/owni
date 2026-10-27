@@ -120,6 +120,15 @@ export class PeopleStore {
 	}
 }
 
+/** The console's session cookie, and how long a session lasts. */
+export const SESSION_COOKIE = "owni_session";
+export const SESSION_TTL_S = 30 * 24 * 3600;
+
+/** The attributes of Owni's cookies: never read by scripts, never sent cross-site; `secure` over https. */
+export function cookieAttributes(secure: boolean): string {
+	return `HttpOnly; SameSite=Strict; Path=/${secure ? "; Secure" : ""}`;
+}
+
 type Session = { readonly idHash: string; readonly personId: string; readonly expiresAt: number };
 
 /** Web sessions, persisted so a restart does not log everyone out. */
@@ -128,7 +137,7 @@ export class SessionStore {
 
 	constructor(
 		tenantDir: string,
-		private readonly ttlMs = 30 * 24 * 60 * 60 * 1000,
+		private readonly ttlMs = SESSION_TTL_S * 1000,
 	) {
 		this.file = join(tenantDir, "sessions.json");
 	}

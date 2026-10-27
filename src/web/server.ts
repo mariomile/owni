@@ -30,7 +30,7 @@ import type { InstanceRecord, ModelSelection } from "../core/registry.ts";
 import { ChatModels } from "../core/chat-models.ts";
 import type { OwniRuntime } from "../core/runtime.ts";
 import { DEFAULT_COST_CAPS, type UsageLedger } from "../core/usage.ts";
-import { type PeopleStore, type Person, publicPerson, type SessionStore } from "./auth.ts";
+import { cookieAttributes, type PeopleStore, type Person, publicPerson, SESSION_COOKIE, SESSION_TTL_S, type SessionStore } from "./auth.ts";
 import { WebChannel, type WebEntry } from "./channel.ts";
 import { boardRoutes } from "./board-routes.ts";
 import { capabilityRoutes } from "./capability-routes.ts";
@@ -192,7 +192,6 @@ export type WebAppOptions = {
 	readonly log?: (message: string) => void;
 };
 
-const COOKIE = "owni_session";
 const MAX_CODE_ATTEMPTS = 5;
 const CODE_LOCK_MS = 10 * 60 * 1000;
 
@@ -262,7 +261,7 @@ export function createWebApp(options: WebAppOptions): Server {
 	/** An entry of a chat or a stanza with the name of the model that wrote it. */
 	const shown = <E extends WebEntry | RoomEntry>(entry: E): E => (entry.model === undefined ? entry : { ...entry, model: named(entry.model) });
 	const usageSummary = async () => ({ todayUsd: await options.usage.todaySpent(), softUsd: DEFAULT_COST_CAPS.softUsdPerDay, hardUsd: DEFAULT_COST_CAPS.hardUsdPerDay, auditBytes: await runtime.audit(tenantId).size(), usageBytes: await options.usage.size() });
-	const { phoneHook, automationHook, whatsappHook, telegramHook } = webhooks({ runtime, tenantId, phoneHooks: options.phoneHooks, whatsappHooks: options.whatsappHooks, telegramHooks: options.telegramHooks, log: options.log });
+	const { serveHook } = webhooks({ runtime, tenantId, phoneHooks: options.phoneHooks, whatsappHooks: options.whatsappHooks, telegramHooks: options.telegramHooks, log: options.log });
 
 	// --- session ---
 	route("POST", "/api/login", "none", async ({ req, res }) => {
@@ -277,14 +276,14 @@ export function createWebApp(options: WebAppOptions): Server {
 			}
 		}
 		const session = await options.sessions.create(person.id);
-		res.setHeader("set-cookie", `${COOKIE}=${session}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${30 * 24 * 3600}${options.secureCookies ? "; Secure" : ""}`);
+		res.setHeader("set-cookie", `${SESSION_COOKIE}=${session}; ${cookieAttributes(options.secureCookies)}; Max-Age=${SESSION_TTL_S}`);
 		await runtime.audit(tenantId).append({ type: "web.login", personId: person.id });
 		return { person: publicPerson(person) };
 	});
 	route("POST", "/api/logout", "person", async ({ req, res }) => {
-		const session = cookie(req, COOKIE);
+		const session = cookie(req, SESSION_COOKIE);
 		if (session !== undefined) await options.sessions.end(session);
-		res.setHeader("set-cookie", `${COOKIE}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0`);
+		res.setHeader("set-cookie", `${SESSION_COOKIE}=; ${cookieAttributes(options.secureCookies)}; Max-Age=0`);
 		return { ok: true };
 	});
 	route("GET", "/api/me", "person", async ({ person }) => ({ person: publicPerson(person) }));
@@ -297,7 +296,7 @@ export function createWebApp(options: WebAppOptions): Server {
 		const body = (await readJson(req)) as { code?: string };
 		if (!(await options.people.enableTotp(p.id, String(body.code ?? "")))) throw new HttpError(400, "Codice non valido: controlla l'ora del telefono e riprova");
 		// Sessions opened with the link alone (maybe a leaked one) end; this one stays.
-		await options.sessions.endAllOf(p.id, cookie(req, COOKIE));
+		await options.sessions.endAllOf(p.id, cookie(req, SESSION_COOKIE));
 		await runtime.audit(tenantId).append({ type: "web.2fa_enabled", personId: p.id });
 		return { ok: true };
 	});
@@ -469,7 +468,7 @@ export function createWebApp(options: WebAppOptions): Server {
 		},
 	});
 	// --- the console's live stream ---
-	eventsRoutes(route, { runtime, tenantId, sessions: options.sessions, people: options.people, channels: options.channels, board: options.board, rooms: options.rooms, sessionOf: (req) => cookie(req, COOKIE), ownThread, shown, streamAttachers });
+	eventsRoutes(route, { runtime, tenantId, sessions: options.sessions, people: options.people, channels: options.channels, board: options.board, rooms: options.rooms, sessionOf: (req) => cookie(req, SESSION_COOKIE), ownThread, shown, streamAttachers });
 
 	// --- files, and artifacts (ADR 0112) ---
 	filesRoutes(route, { runtime, tenantId, rooms: options.rooms, instanceAccess, channelOf, ownThread });
@@ -524,14 +523,8 @@ export function createWebApp(options: WebAppOptions): Server {
 		if (options.cell !== undefined && !sameSecret(String(req.headers["x-owni-proxy"] ?? ""), cellProxyToken)) return send(res, 404, { error: "Not found" });
 		if (req.method === "GET" && url.pathname in STATIC) return serveStatic(req, res, STATIC[url.pathname] as string);
 		if (req.method === "GET" && Object.hasOwn(OPENUI, url.pathname)) return serveOpenui(req, res, OPENUI[url.pathname] as string);
-		const hook = /^\/hooks\/telegram\/([a-z0-9_-]+)$/.exec(url.pathname);
-		if (req.method === "POST" && hook !== null) return telegramHook(req, res, hook[1] as string);
-		const phone = /^\/hooks\/phone\/([a-z0-9_-]+)$/.exec(url.pathname);
-		if (phone !== null && req.method === "POST") return phoneHook(req, res, url, phone[1] as string);
-		const automation = /^\/hooks\/automazione\/([a-z0-9_-]+)\/([a-f0-9]{12})$/.exec(url.pathname);
-		if (automation !== null && req.method === "POST") return automationHook(req, res, url, automation[1] as string, automation[2] as string);
-		const wa = /^\/hooks\/whatsapp\/([a-z0-9_-]+)$/.exec(url.pathname);
-		if (wa !== null && (req.method === "GET" || req.method === "POST")) return whatsappHook(req, res, url, wa[1] as string);
+		const hook = serveHook(req, res, url);
+		if (hook !== undefined) return hook;
 		if (req.method === "GET" && url.pathname === "/oauth/google/callback") return googleCallback(res, url);
 		if (req.method === "GET" && url.pathname === "/oauth/mcp/callback") return mcpCallback(res, url);
 		if (!url.pathname.startsWith("/api/")) return send(res, 404, { error: "Not found" });
@@ -541,7 +534,7 @@ export function createWebApp(options: WebAppOptions): Server {
 		if (req.method !== "GET" && req.headers["x-owni"] !== "1") return send(res, 403, { error: "Missing X-Owni header" });
 		let person: Person | undefined;
 		if (match.auth !== "none") {
-			const personId = await options.sessions.personOf(cookie(req, COOKIE));
+			const personId = await options.sessions.personOf(cookie(req, SESSION_COOKIE));
 			person = personId === undefined ? undefined : await options.people.get(personId);
 			if (person === undefined) return send(res, 401, { error: "Accesso richiesto" });
 			if (match.auth === "owner" && person.role !== "owner") return send(res, 403, { error: "Solo l'owner" });

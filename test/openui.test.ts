@@ -12,7 +12,7 @@ import { UsageLedger } from "../src/core/usage.ts";
 import { PeopleStore, SessionStore } from "../src/web/auth.ts";
 import { createWebApp } from "../src/web/server.ts";
 import { tempDataDir } from "./helpers.ts";
-import { chromiumAvailable, launchChromium, launchWebkit, webkitAvailable } from "./playwright-browsers.ts";
+import { chromiumFound, launchChromium, launchWebkit, webkitFound } from "./playwright-browsers.ts";
 
 vi.stubGlobal("document", { getElementById: () => null });
 // @ts-expect-error Browser modules intentionally use plain JavaScript.
@@ -21,8 +21,8 @@ vi.unstubAllGlobals();
 
 // Safari and the Mac app (WKWebView) draw with WebKit: Playwright's build of it is the stand-in, used when installed (`playwright-core install webkit`).
 const engines = [
-	{ name: "Chromium", available: await chromiumAvailable(), launch: launchChromium },
-	{ name: "WebKit", available: await webkitAvailable(), launch: launchWebkit },
+	{ name: "Chromium", available: chromiumFound, launch: launchChromium },
+	{ name: "WebKit", available: webkitFound, launch: launchWebkit },
 ];
 
 const closers: (() => Promise<void>)[] = [];

@@ -10,9 +10,8 @@ import { BrowserProfiles } from "../src/core/web-profiles.ts";
 import { type Browser, type BrowseAccounts, BrowseSessions, describeView, sessionKey, type View } from "../src/core/web-session.ts";
 import { Workspace } from "../src/core/workspace.ts";
 import { tempDataDir } from "./helpers.ts";
-import { chromiumAvailable, launchChromium } from "./playwright-browsers.ts";
+import { chromiumFound, launchChromium } from "./playwright-browsers.ts";
 
-const available = await chromiumAvailable();
 const scope = "acme/ops";
 const alice = sessionKey(scope, { channel: "web", threadId: "alice-main" });
 const sibling = sessionKey(scope, { channel: "web", threadId: "alice-other" });
@@ -123,7 +122,6 @@ async function start() {
 		await mkdir(join(dataDir, "tenants", tenant!, "instances", instance!), { recursive: true });
 	}
 	const site = await serve();
-	const { chromium } = await import("playwright-core");
 	const chromiumBrowser = await launchChromium();
 	const browser = chromiumBrowser as unknown as Browser;
 	const allowedUsers = new Set(["alice", "bob"]);
@@ -177,7 +175,7 @@ async function login(f: Fixture) {
 	expect((await f.sessions.view(alice, guard)).text).toContain("Signed in");
 }
 
-describe.skipIf(!available)("browser takeover, in real Chromium", () => {
+describe.skipIf(!chromiumFound)("browser takeover, in real Chromium", () => {
 	it("submits the person's basic login and restores only their saved cookies after a new BrowseSessions", async () => {
 		const f = await start();
 		await login(f);

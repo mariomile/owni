@@ -1,6 +1,7 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { join } from "node:path";
 import { readJsonFile, updateJsonFile } from "./locked-json.ts";
+import { RollingLimit } from "./rolling-limit.ts";
 import { fence } from "./untrusted.ts";
 
 /**
@@ -104,7 +105,7 @@ export class AutomationStore {
  * retried delivery is still run once (the core admits a message id once), only counted again.
  */
 export class AutomationRate {
-	private readonly calls = new Map<string, number[]>();
+	private readonly calls = new RollingLimit(AUTOMATION_LIMITS.perHour, 3_600_000);
 	private readonly keys = new Map<string, Set<string>>();
 
 	seen(where: string, key: string): boolean {
@@ -119,13 +120,7 @@ export class AutomationRate {
 	}
 
 	allow(key: string, now = Date.now()): boolean {
-		const recent = (this.calls.get(key) ?? []).filter((t) => now - t < 3_600_000);
-		if (recent.length >= AUTOMATION_LIMITS.perHour) {
-			this.calls.set(key, recent);
-			return false;
-		}
-		this.calls.set(key, [...recent, now]);
-		return true;
+		return this.calls.take(key, now);
 	}
 }
 

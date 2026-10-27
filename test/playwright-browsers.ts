@@ -1,38 +1,31 @@
+import { existsSync } from "node:fs";
+import { createRequire } from "node:module";
 import type { Browser } from "playwright-core";
 import { chromium, webkit } from "playwright-core";
 
 /**
  * The one place the browser suites find Playwright's browsers (the ones `playwright-core install` puts under
- * PLAYWRIGHT_BROWSERS_PATH, or its default cache). A suite asks only for the browsers it uses, and each is
- * probed once, on first ask. CI sets OWNI_REQUIRE_BROWSERS=1: a browser that cannot start then fails the
- * suite at import time instead of silently skipping it.
+ * PLAYWRIGHT_BROWSERS_PATH, or its default cache). CI sets OWNI_REQUIRE_BROWSERS=1: a browser that is not
+ * installed then fails the suite at import time instead of silently skipping it.
  */
 const required = process.env.OWNI_REQUIRE_BROWSERS === "1";
 
 export const launchChromium = (): Promise<Browser> => chromium.launch({ chromiumSandbox: false });
 export const launchWebkit = (): Promise<Browser> => webkit.launch();
 
-const probes = new Map<string, Promise<boolean>>();
+const found = (name: string, path: string): boolean => {
+	const ok = existsSync(path);
+	if (!ok && required) throw new Error(`OWNI_REQUIRE_BROWSERS=1 but ${name} is not installed at ${path}`);
+	return ok;
+};
 
-function probe(name: string, launch: () => Promise<Browser>): Promise<boolean> {
-	let found = probes.get(name);
-	if (found === undefined) {
-		found = launch().then(
-			async (browser) => {
-				await browser.close();
-				return true;
-			},
-			(error: unknown) => {
-				if (required) throw new Error(`OWNI_REQUIRE_BROWSERS=1 but ${name} does not start: ${error instanceof Error ? error.message : String(error)}`);
-				return false;
-			},
-		);
-		probes.set(name, found);
-	}
-	return found;
-}
+// Headless Chromium runs Playwright's headless shell, not the full browser `chromium.executablePath()` names:
+// the shell is the one that has to be there. Playwright's registry is where it says the shell lives.
+const { registry } = createRequire(import.meta.url)("playwright-core/lib/server/registry/index") as {
+	registry: { findExecutable(name: string): { executablePath(): string } };
+};
 
-/** Whether Chromium starts here; throws instead of false when OWNI_REQUIRE_BROWSERS=1. */
-export const chromiumAvailable = (): Promise<boolean> => probe("Chromium", launchChromium);
-/** Whether WebKit starts here; throws instead of false when OWNI_REQUIRE_BROWSERS=1. */
-export const webkitAvailable = (): Promise<boolean> => probe("WebKit", launchWebkit);
+/** Whether headless Chromium is installed here; throws instead of false when OWNI_REQUIRE_BROWSERS=1. */
+export const chromiumFound = found("chromium-headless-shell", registry.findExecutable("chromium-headless-shell").executablePath());
+/** Whether WebKit is installed here; throws instead of false when OWNI_REQUIRE_BROWSERS=1. */
+export const webkitFound = found("webkit", webkit.executablePath());

@@ -97,8 +97,8 @@ export function createAgentTools(options: {
 				const before = await ctx.step("busy", async () => (await options.activity?.(to.id, origin).catch(() => undefined)) ?? null);
 				const sent = await ctx.step("post", async () => {
 					const here = `${origin.channel}:${origin.threadId}`;
-					if (!rate.room(here)) return `Errore: questa conversazione ha raggiunto il limite di ${rate.perHour} messaggi ad altri agenti in un'ora. Rispondi con quello che hai.`;
-					if (!total.room(options.self)) return `Errore: hai raggiunto il limite di ${total.perHour} messaggi ad altri agenti in un'ora. Rispondi con quello che hai.`;
+					if (!rate.room(here)) return `Errore: questa conversazione ha raggiunto il limite di ${rate.limit} messaggi ad altri agenti in un'ora. Rispondi con quello che hai.`;
+					if (!total.room(options.self)) return `Errore: hai raggiunto il limite di ${total.limit} messaggi ad altri agenti in un'ora. Rispondi con quello che hai.`;
 					try {
 						await options.post({ to: to.id, origin, text, key: ctx.callId });
 					} catch (error) {

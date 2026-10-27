@@ -7,9 +7,7 @@ import { type RunningOwni, startOwni } from "../src/app.ts";
 import { pageText, publicAddress, webFetch } from "../src/core/web-fetch.ts";
 import { loadOwniConfig } from "../src/main/config.ts";
 import { tempDataDir } from "./helpers.ts";
-import { chromiumAvailable } from "./playwright-browsers.ts";
-
-const chromiumFound = await chromiumAvailable();
+import { chromiumFound } from "./playwright-browsers.ts";
 
 const closers: (() => Promise<void>)[] = [];
 afterEach(async () => {

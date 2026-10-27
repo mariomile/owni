@@ -12,6 +12,17 @@ export type WebhooksDeps = Pick<WebAppOptions, "phoneHooks" | "whatsappHooks" | 
 	readonly tenantId: string;
 };
 
+/**
+ * The webhook addresses a cell serves. The control plane wakes a stopped cell for these paths
+ * (src/cloud/wake.ts); each handler checks its caller's own signature.
+ */
+export const HOOK_ROUTES = [
+	{ name: "telegram", pattern: /^\/hooks\/telegram\/([a-z0-9_-]+)$/, methods: ["POST"] },
+	{ name: "phone", pattern: /^\/hooks\/phone\/([a-z0-9_-]+)$/, methods: ["POST"] },
+	{ name: "automazione", pattern: /^\/hooks\/automazione\/([a-z0-9_-]+)\/([a-f0-9]{12})$/, methods: ["POST"] },
+	{ name: "whatsapp", pattern: /^\/hooks\/whatsapp\/([a-z0-9_-]+)$/, methods: ["GET", "POST"] },
+] as const satisfies readonly { readonly name: string; readonly pattern: RegExp; readonly methods: readonly string[] }[];
+
 /** What other services call, outside the console's sessions: Twilio, an automazione's caller, Meta, Telegram. */
 export function webhooks(options: WebhooksDeps) {
 	const { runtime, tenantId } = options;
@@ -143,7 +154,24 @@ export function webhooks(options: WebhooksDeps) {
 		send(res, 200, { ok: true });
 	}
 
-	return { phoneHook, automationHook, whatsappHook, telegramHook };
+	/** The request answered by its hook; undefined when no hook serves this method and path. */
+	function serveHook(req: IncomingMessage, res: ServerResponse, url: URL): Promise<void> | undefined {
+		const route = HOOK_ROUTES.find((r) => (r.methods as readonly string[]).includes(req.method ?? "") && r.pattern.test(url.pathname));
+		if (route === undefined) return undefined;
+		const [instance, id] = (route.pattern.exec(url.pathname) ?? []).slice(1) as [string, string];
+		switch (route.name) {
+			case "telegram":
+				return telegramHook(req, res, instance);
+			case "phone":
+				return phoneHook(req, res, url, instance);
+			case "automazione":
+				return automationHook(req, res, url, instance, id);
+			case "whatsapp":
+				return whatsappHook(req, res, url, instance);
+		}
+	}
+
+	return { serveHook };
 }
 
 const MAX_WHATSAPP_BODY = 1024 * 1024;

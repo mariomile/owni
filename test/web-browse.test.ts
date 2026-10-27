@@ -6,7 +6,7 @@ import { publicAddress } from "../src/core/web-fetch.ts";
 import { type Browser, BrowseSessions } from "../src/core/web-session.ts";
 import { loadOwniConfig } from "../src/main/config.ts";
 import { tempDataDir } from "./helpers.ts";
-import { chromiumAvailable } from "./playwright-browsers.ts";
+import { chromiumFound } from "./playwright-browsers.ts";
 
 const closers: (() => Promise<void>)[] = [];
 afterEach(async () => {
@@ -105,9 +105,7 @@ function ref(view: string, text: string): number {
 	return Number(/^\[(\d+)\]/.exec(line)?.[1]);
 }
 
-const chromium = await chromiumAvailable();
-
-describe.skipIf(!chromium)("the browser with clicks (ADR 0014)", () => {
+describe.skipIf(!chromiumFound)("the browser with clicks (ADR 0014)", () => {
 	it("opens a page built with JavaScript, clicks, types a search, and follows links in the same page", async () => {
 		const s = await site();
 		const { owni, chat } = await boot();

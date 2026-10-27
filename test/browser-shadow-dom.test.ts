@@ -2,10 +2,9 @@ import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
 import { type Browser, BrowseSessions } from "../src/core/web-session.ts";
-import { chromiumAvailable } from "./playwright-browsers.ts";
+import { chromiumFound } from "./playwright-browsers.ts";
 
 // Real Chromium, found by test/playwright-browsers.ts (and so run in CI): a page built with web components (ADR 0014).
-const chromium = await chromiumAvailable();
 
 const closers: (() => Promise<void>)[] = [];
 afterEach(async () => {
@@ -68,7 +67,7 @@ async function start() {
 }
 const guard = { hostAllowed: () => true, addressAllowed: () => true };
 
-describe.skipIf(!chromium)("web components, in real Chromium", () => {
+describe.skipIf(!chromiumFound)("web components, in real Chromium", () => {
 	it("numbers the buttons, fields and links inside open shadow roots, and clicks and types on them", async () => {
 		const { base, sessions, browser } = await start();
 		const view = await sessions.open("k", browser, `${base}/`, guard);

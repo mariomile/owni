@@ -4,14 +4,13 @@ import { afterEach, describe, expect, it } from "vitest";
 import { type RunningOwni, startOwni } from "../src/app.ts";
 import { publicAddress } from "../src/core/web-fetch.ts";
 import { createWebTools } from "../src/core/tools/web-tools.ts";
-import { type Browser, BrowseSessions, sessionKey } from "../src/core/web-session.ts";
+import { BrowseSessions, sessionKey } from "../src/core/web-session.ts";
 import { type Workspace, WorkspaceError } from "../src/core/workspace.ts";
 import { loadOwniConfig } from "../src/main/config.ts";
 import { tempDataDir } from "./helpers.ts";
-import { chromiumAvailable, launchChromium } from "./playwright-browsers.ts";
+import { chromiumFound, launchChromium } from "./playwright-browsers.ts";
 
 // Real Chromium (test/playwright-browsers.ts): the file chooser is refused where it opens, whatever way the page reaches it (ADR 0103).
-const available = await chromiumAvailable();
 
 const closers: (() => Promise<void>)[] = [];
 afterEach(async () => {
@@ -56,8 +55,7 @@ async function serve(): Promise<string> {
 
 async function start(limits?: { max: number; idleMs: number }) {
 	const base = await serve();
-	const { chromium } = await import("playwright-core");
-	const browser = (await launchChromium()) as unknown as Browser;
+	const browser = await launchChromium();
 	const refused: string[] = [];
 	const sessions = new BrowseSessions(limits, (key, host) => refused.push(`${key} ${host}`));
 	closers.push(async () => {
@@ -68,7 +66,7 @@ async function start(limits?: { max: number; idleMs: number }) {
 }
 const guard = { hostAllowed: () => true, addressAllowed: () => true };
 
-describe.skipIf(!available)("no file uploads, in real Chromium", () => {
+describe.skipIf(!chromiumFound)("no file uploads, in real Chromium", () => {
 	for (const name of ["direct", "label", "shadow", "iframe", "button"]) {
 		it(`refuses a person's click that opens a file chooser: ${name}`, async () => {
 			const { base, sessions, browser } = await start();

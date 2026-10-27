@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { instanceId } from "./ids.ts";
+import { RollingLimit } from "./rolling-limit.ts";
 import type { OwniRuntime } from "./runtime.ts";
 
 /**
@@ -89,31 +90,9 @@ export function agentReplyText(from: { readonly id: string; readonly name: strin
 }
 
 /** At most `perHour` messages per conversation in a rolling hour. In memory, one per agente for the process: a restart forgets it. */
-export class AgentRate {
-	private readonly sent = new Map<string, number[]>();
-
-	constructor(readonly perHour: number = AGENT_LIMITS.perHour) {}
-
-	/** Whether `key` has room for one more message in the hour. */
-	room(key: string, now = Date.now()): boolean {
-		return this.recent(key, now).length < this.perHour;
-	}
-
-	/** Count one message for `key`, sent now. */
-	count(key: string, now = Date.now()): void {
-		this.sent.set(key, [...this.recent(key, now), now]);
-		if (this.sent.size > 2000) this.sent.delete(this.sent.keys().next().value as string);
-	}
-
-	/** Count one message for `key` if there is room; false when the hour is full. */
-	take(key: string, now = Date.now()): boolean {
-		if (!this.room(key, now)) return false;
-		this.count(key, now);
-		return true;
-	}
-
-	private recent(key: string, now: number): number[] {
-		return (this.sent.get(key) ?? []).filter((at) => now - at < 3_600_000);
+export class AgentRate extends RollingLimit {
+	constructor(perHour: number = AGENT_LIMITS.perHour) {
+		super(perHour, 3_600_000);
 	}
 }
 
