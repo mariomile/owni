@@ -1,4 +1,4 @@
-import { mkdir, readFile, appendFile, stat, truncate } from "node:fs/promises";
+import { mkdir, readFile, readdir, appendFile, rename, stat, truncate, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import type { AuditLog } from "./audit.ts";
 import type { TurnUsage } from "./engine.ts";
@@ -50,6 +50,14 @@ export function romeDayKey(date = new Date()): string {
 	return ROME_DAY.format(date);
 }
 
+/** Months of archives kept next to the live ledger (ADR 0130). */
+export const USAGE_RETENTION_MONTHS = 12;
+
+const ARCHIVE = /^usage-(\d{4}-\d{2})\.jsonl$/;
+
+const monthOf = (at: string): string => romeDayKey(new Date(at)).slice(0, 7);
+const monthIndex = (month: string): number => Number(month.slice(0, 4)) * 12 + Number(month.slice(5, 7)) - 1;
+
 /** The record being written for each ledger file: a read of the same tenant waits for it. */
 const recording = new SerialQueue();
 
@@ -82,6 +90,10 @@ async function identity(path: string): Promise<{ stamp: string; size: bigint } |
  * month totals are sums of its lines, kept in memory with the parsed file and computed again
  * whenever the file changes: a fault or a crash after a line is written leaves nothing to
  * reconcile, the next read (a retry, a new process) sums the same lines.
+ * It is kept by month (ADR 0130): the first record of a new month moves the live file to
+ * `usage-YYYY-MM.jsonl` (the month of its last record) and deletes archives older than twelve
+ * months. Today's total reads the live file alone; month totals, the stats and the dedup of a
+ * turn read the live file and the archives.
  * Soft cap: warn; hard cap: refuse new model requests (runtime.ts asks before each one).
  */
 export class UsageLedger {
@@ -98,8 +110,9 @@ export class UsageLedger {
 		await mkdir(this.tenantDir, { recursive: true });
 	}
 
+	/** Today is always in the live file: a rotation only moves months that are over. */
 	async todaySpent(): Promise<number> {
-		return (await this.days()).get(romeDayKey()) ?? 0;
+		return (await recording.run(this.usagePath(), () => this.ledger(this.usagePath(), false))).days.get(romeDayKey()) ?? 0;
 	}
 
 	/** One record at a time per tenant in this process: the ledger is read, checked for the turn and appended to. */
@@ -107,23 +120,79 @@ export class UsageLedger {
 		return recording.run(this.usagePath(), () => this.write(rec, audit));
 	}
 
-	/** Every record written, oldest first: only whole lines, read between two records being written. */
+	/** Every record kept, archives first, oldest first: only whole lines, read between two records being written. */
 	records(): Promise<UsageRecord[]> {
-		return recording.run(this.usagePath(), async () => [...(await this.ledger(false)).records]);
+		return recording.run(this.usagePath(), async () => (await this.allFiles()).flatMap((l) => l.records));
 	}
 
-	private days(): Promise<ReadonlyMap<string, number>> {
-		return recording.run(this.usagePath(), async () => (await this.ledger(false)).days);
+	private days(): Promise<Map<string, number>> {
+		return recording.run(this.usagePath(), async () => {
+			const days = new Map<string, number>();
+			for (const l of await this.allFiles()) for (const [day, usd] of l.days) days.set(day, (days.get(day) ?? 0) + usd);
+			return days;
+		});
 	}
 
-	/** The ledger's whole lines; `repair`: first drop a line a crash cut short, so the next record does not glue to it. */
-	private async ledger(repair: boolean): Promise<Ledger> {
-		const path = this.usagePath();
+	private async allFiles(): Promise<Ledger[]> {
+		return Promise.all([...(await this.archives()).map((a) => a.path), this.usagePath()].map((path) => this.ledger(path, false)));
+	}
+
+	/** Archived months, oldest first. */
+	private async archives(): Promise<{ month: string; path: string }[]> {
+		let names: string[];
+		try {
+			names = await readdir(this.tenantDir);
+		} catch (err) {
+			if ((err as NodeJS.ErrnoException).code === "ENOENT") return [];
+			throw err;
+		}
+		return names
+			.flatMap((name) => {
+				const month = ARCHIVE.exec(name)?.[1];
+				return month === undefined ? [] : [{ month, path: join(this.tenantDir, name) }];
+			})
+			.sort((a, b) => a.month.localeCompare(b.month));
+	}
+
+	/** Bytes the ledger takes on disk: the live file and its archives. */
+	async size(): Promise<number> {
+		let total = 0;
+		for (const path of [...(await this.archives()).map((a) => a.path), this.usagePath()]) {
+			try {
+				total += (await stat(path)).size;
+			} catch (err) {
+				if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+			}
+		}
+		return total;
+	}
+
+	/** Moves the live file to the archive of its month, then deletes the archives past the retention. */
+	private async rotate(lastMonth: string, month: string): Promise<void> {
+		const live = this.usagePath();
+		const archive = join(this.tenantDir, `usage-${lastMonth}.jsonl`);
+		// An archive of that month already there (a clock that went back) is added to, never replaced.
+		if ((await identity(archive)) === undefined) await rename(live, archive);
+		else {
+			await appendFile(archive, await readFile(live), { mode: 0o600 });
+			await unlink(live);
+		}
+		ledgers.delete(live);
+		for (const old of await this.archives()) {
+			if (monthIndex(month) - monthIndex(old.month) > USAGE_RETENTION_MONTHS) {
+				await unlink(old.path).catch(() => undefined);
+				ledgers.delete(old.path);
+			}
+		}
+	}
+
+	/** A file's whole lines; `repair`: first drop a line a crash cut short, so the next record does not glue to it. */
+	private async ledger(path: string, repair: boolean): Promise<Ledger> {
 		const before = await identity(path);
 		if (before === undefined) return { records: [], days: new Map() };
 		const cached = ledgers.get(path);
 		if (cached?.stamp === before.stamp) return cached;
-		const log = await this.readLog();
+		const log = await this.readLog(path);
 		const whole = log.lastIndexOf("\n") + 1;
 		if (repair && whole < log.length) await truncate(path, Buffer.byteLength(log.slice(0, whole)));
 		const records = parseRecords(log, path);
@@ -134,9 +203,9 @@ export class UsageLedger {
 		return read;
 	}
 
-	private async readLog(): Promise<string> {
+	private async readLog(path: string): Promise<string> {
 		try {
-			return await readFile(this.usagePath(), "utf8");
+			return await readFile(path, "utf8");
 		} catch (err) {
 			if ((err as NodeJS.ErrnoException).code === "ENOENT") return "";
 			throw err;
@@ -145,14 +214,21 @@ export class UsageLedger {
 
 	private async write(rec: UsageRecord, audit?: AuditLog): Promise<{ softExceeded: boolean; hardExceeded: boolean }> {
 		await this.ensure();
-		const log = await this.ledger(true);
+		let log = await this.ledger(this.usagePath(), true);
 		const day = romeDayKey(new Date(rec.at));
-		// A turn is billed once: a recovery that delivers it again finds it already on record (ADR 0098).
+		const last = log.records[log.records.length - 1];
+		if (last !== undefined && monthOf(last.at) < day.slice(0, 7)) {
+			await this.rotate(monthOf(last.at), day.slice(0, 7));
+			log = { records: [], days: new Map() };
+		}
+		// A turn is billed once: a recovery that delivers it again finds it already on record, in
+		// the live file or in any month still archived (ADR 0098, 0130).
+		const same = (r: UsageRecord) => r.role === "agent" && r.instanceId === rec.instanceId && r.submissionId === rec.submissionId;
 		const billed =
 			rec.role === "agent" &&
 			rec.instanceId !== undefined &&
 			rec.submissionId !== undefined &&
-			log.records.some((r) => r.role === "agent" && r.instanceId === rec.instanceId && r.submissionId === rec.submissionId);
+			(log.records.some(same) || (await Promise.all((await this.archives()).map((a) => this.ledger(a.path, false)))).some((l) => l.records.some(same)));
 		if (billed) {
 			const spent = log.days.get(day) ?? 0;
 			return { softExceeded: spent >= this.caps.softUsdPerDay, hardExceeded: spent >= this.caps.hardUsdPerDay };

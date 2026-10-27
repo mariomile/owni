@@ -13,4 +13,4 @@
 
 - Chi deve conservare l'audit più a lungo (obblighi del cliente) lo copia fuori dalla cartella del tenant prima dei 12 mesi: la durata non è configurabile.
 - Il mese si calcola in UTC dalla data dell'ultima scrittura del file.
-- Il registro dei consumi (`usage.jsonl`) ha lo stesso problema e si tratta a parte.
+- Il registro dei consumi (`usage.jsonl`) ha lo stesso problema e lo risolve l'[ADR 0130](0130-registro-dei-consumi-a-rotazione-mensile.md).

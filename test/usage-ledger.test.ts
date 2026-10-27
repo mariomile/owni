@@ -1,5 +1,5 @@
 import { mkdtempSync } from "node:fs";
-import { appendFile, readFile } from "node:fs/promises";
+import { appendFile, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
@@ -107,5 +107,72 @@ describe("the usage ledger (ADR 0098)", () => {
 		expect(await after.todaySpent()).toBe(25);
 		expect(await after.monthSpent()).toBe(25);
 		expect(await after.isHardCapped()).toBe(true);
+	});
+});
+
+describe("the ledger kept by month (ADR 0130)", () => {
+	const at = (iso: string, submissionId: string, estimatedUsd = 1): UsageRecord => ({ ...turn(submissionId, estimatedUsd), at: iso });
+	/** A date in the Europe/Rome month `back` months before this one, mid-month so no timezone moves it. */
+	const monthsAgo = (back: number): string => {
+		const d = new Date();
+		d.setUTCDate(15);
+		d.setUTCMonth(d.getUTCMonth() - back);
+		return d.toISOString();
+	};
+	const names = async (dir: string) => (await readdir(dir)).filter((n) => n.startsWith("usage")).sort();
+
+	it("moves the live file to the archive of its month on the first record of a new month", async () => {
+		const { dir, ledger } = ledgerIn();
+		await ledger.record(at("2026-08-10T10:00:00Z", "a"));
+		await ledger.record(at("2026-08-20T10:00:00Z", "b"));
+		expect(await names(dir)).toEqual(["usage.jsonl"]);
+		await ledger.record(at("2026-09-02T10:00:00Z", "c"));
+		expect(await names(dir)).toEqual(["usage-2026-08.jsonl", "usage.jsonl"]);
+		expect((await readFile(join(dir, "usage-2026-08.jsonl"), "utf8")).trim().split("\n")).toHaveLength(2);
+		expect((await readFile(join(dir, "usage.jsonl"), "utf8")).trim().split("\n")).toHaveLength(1);
+		expect((await ledger.records()).map((r) => r.submissionId)).toEqual(["a", "b", "c"]);
+		expect(await ledger.byMonth()).toEqual({ "2026-08": 2, "2026-09": 1 });
+		expect(await ledger.size()).toBe((await Promise.all(["usage-2026-08.jsonl", "usage.jsonl"].map((n) => stat(join(dir, n))))).reduce((sum, s) => sum + s.size, 0));
+	});
+
+	it("deletes archives older than twelve months and keeps the twelfth", async () => {
+		const { dir, ledger } = ledgerIn();
+		const line = (iso: string) => `${JSON.stringify(at(iso, iso))}\n`;
+		await writeFile(join(dir, "usage-2025-09.jsonl"), line("2025-09-10T10:00:00Z"));
+		await writeFile(join(dir, "usage-2025-10.jsonl"), line("2025-10-10T10:00:00Z"));
+		await writeFile(join(dir, "usage.jsonl"), line("2026-09-10T10:00:00Z"));
+		await ledger.record(at("2026-10-27T10:00:00Z", "now"));
+		expect(await names(dir)).toEqual(["usage-2025-10.jsonl", "usage-2026-09.jsonl", "usage.jsonl"]);
+		expect(Object.keys(await ledger.byMonth())).toEqual(["2025-10", "2026-09", "2026-10"]);
+	});
+
+	it("keeps today's total and the month's right after a rotation, and the hard cap reads them", async () => {
+		const { dir, ledger } = ledgerIn();
+		await ledger.record(at(monthsAgo(1), "old", 19));
+		expect(await ledger.isHardCapped()).toBe(false);
+		const first = await ledger.record(turn("new1", 15));
+		expect(await names(dir)).toHaveLength(2);
+		// Last month's 19 is not today's spend: the cap sees 15, then 30.
+		expect(first.hardExceeded).toBe(false);
+		expect(await ledger.todaySpent()).toBe(15);
+		expect(await ledger.monthSpent()).toBe(15);
+		expect(await ledger.monthSpent(monthsAgo(1).slice(0, 7))).toBe(19);
+		expect((await ledger.record(turn("new2", 5))).hardExceeded).toBe(true);
+		expect(await ledger.isHardCapped()).toBe(true);
+		// A new process reads the same totals from the files.
+		expect(await new UsageLedger(dir, { softUsdPerDay: 5, hardUsdPerDay: 20 }).todaySpent()).toBe(20);
+	});
+
+	it("bills a submission once even when its retry arrives after the month changed", async () => {
+		const { dir, ledger } = ledgerIn();
+		await ledger.record(at("2026-09-30T21:59:00Z", "s1", 3));
+		await ledger.record(at("2026-10-01T10:00:00Z", "s1", 3));
+		// The retry rotated the ledger, found the turn in the archive and wrote nothing: no live file yet.
+		expect(await names(dir)).toEqual(["usage-2026-09.jsonl"]);
+		expect(await ledger.records()).toHaveLength(1);
+		expect(await ledger.byMonth()).toEqual({ "2026-09": 3 });
+		// Another instance with the same submission id is a different turn.
+		await ledger.record({ ...at("2026-10-01T11:00:00Z", "s1", 2), instanceId: "other" });
+		expect(await ledger.byMonth()).toEqual({ "2026-09": 3, "2026-10": 2 });
 	});
 });
