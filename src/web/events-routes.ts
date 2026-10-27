@@ -81,36 +81,34 @@ export function eventsRoutes(route: AddRoute, options: EventsRoutesDeps): void {
 		};
 		for (const channel of options.channels.values()) attach(channel);
 		streamAttachers.add(attach);
-		// A scheda of this person an agente finished (ADR 0051): the console tells them.
-		const review = ({ card, people }: BoardReview) => {
-			if (people.includes(p.id)) enqueue(`board:${++counter}`, { allowed: always, frame: `event: board\ndata: ${JSON.stringify({ kind: "review", id: card.id, n: card.n, title: card.title })}\n\n` });
+		/** News of a scheda of this person; with `text`, only when it has something to say. */
+		const boardEvent = (kind: string, text?: (card: BoardReview["card"]) => string | undefined) => ({ card, people }: BoardReview) => {
+			const said = text?.(card);
+			if (!people.includes(p.id) || (text !== undefined && said === undefined)) return;
+			enqueue(`board:${++counter}`, { allowed: always, frame: `event: board\ndata: ${JSON.stringify({ kind, id: card.id, n: card.n, title: card.title, ...(said === undefined ? {} : { text: said }) })}\n\n` });
 		};
-		options.board?.work.events.on("review", review);
-		// A scheda of this person due today or late (ADR 0074).
-		const due = ({ card, people }: BoardReview) => {
-			if (people.includes(p.id) && card.due !== undefined) enqueue(`board:${++counter}`, { allowed: always, frame: `event: board\ndata: ${JSON.stringify({ kind: "due", id: card.id, n: card.n, title: card.title, text: dueText(card.due) })}\n\n` });
-		};
-		options.board?.work.events.on("due", due);
-		// A scheda of this person that started by itself (ADR 0076).
-		const started = ({ card, people }: BoardReview) => {
-			if (people.includes(p.id)) enqueue(`board:${++counter}`, { allowed: always, frame: `event: board\ndata: ${JSON.stringify({ kind: "started", id: card.id, n: card.n, title: card.title })}\n\n` });
-		};
-		options.board?.work.events.on("started", started);
+		const board = [
+			// One an agente finished (ADR 0051): the console tells them.
+			["review", boardEvent("review")],
+			// One due today or late (ADR 0074).
+			["due", boardEvent("due", (card) => (card.due === undefined ? undefined : dueText(card.due)))],
+			// One that started by itself (ADR 0076).
+			["started", boardEvent("started")],
+		] as const;
+		for (const [name, listener] of board) options.board?.work.events.on(name, listener);
 		// A stanza the person still has.
 		const roomEntry = (event: RoomEvent) => enqueue(`room:${++counter}`, {
 			allowed: async (person) => { if (await options.rooms?.get(person.id, event.roomId) === undefined) throw new Error("No such room"); },
 			frame: `event: room\ndata: ${JSON.stringify({ roomId: event.roomId, entry: shown(event.entry), ...(event.parent === undefined ? {} : { parent: event.parent }) })}\n\n`,
 		});
 		options.rooms?.events.on(p.id, roomEntry);
-		// A quiet stream still ends with its session.
-		const ping = setInterval(() => { void current().then((person) => { if (person === undefined) res.end(); else if (!res.writableEnded) res.write(": ping\n\n"); }, () => res.end()); }, 25_000);
+		// A quiet stream still ends with its session: the ping is checked like any event.
+		const ping = setInterval(() => enqueue("ping", { allowed: always, frame: ": ping\n\n" }), 25_000);
 		await new Promise<void>((resolve) => req.on("close", resolve));
 		clearInterval(ping);
 		streamAttachers.delete(attach);
 		for (const [channel, listener] of listeners) channel.events.off(p.id, listener);
-		options.board?.work.events.off("review", review);
-		options.board?.work.events.off("due", due);
-		options.board?.work.events.off("started", started);
+		for (const [name, listener] of board) options.board?.work.events.off(name, listener);
 		options.rooms?.events.off(p.id, roomEntry);
 		return STREAMED;
 	});

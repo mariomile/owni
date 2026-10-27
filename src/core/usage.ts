@@ -1,8 +1,9 @@
-import { mkdir, readFile, readdir, appendFile, rename, stat, truncate, unlink } from "node:fs/promises";
-import { join } from "node:path";
+import { mkdir, readFile, appendFile, stat, truncate } from "node:fs/promises";
 import type { AuditLog } from "./audit.ts";
-import type { TurnUsage } from "./engine.ts";
+import { type EngineOpenOptions, ModelRequestRefused, type TurnUsage } from "./engine.ts";
+import { MonthlyLog } from "./monthly-log.ts";
 import { SerialQueue } from "./serial-queue.ts";
+import { parseThreadKey } from "./thread-key.ts";
 
 export type UsageRecord = {
 	readonly at: string;
@@ -50,13 +51,7 @@ export function romeDayKey(date = new Date()): string {
 	return ROME_DAY.format(date);
 }
 
-/** Months of archives kept next to the live ledger (ADR 0130). */
-export const USAGE_RETENTION_MONTHS = 12;
-
-const ARCHIVE = /^usage-(\d{4}-\d{2})\.jsonl$/;
-
 const monthOf = (at: string): string => romeDayKey(new Date(at)).slice(0, 7);
-const monthIndex = (month: string): number => Number(month.slice(0, 4)) * 12 + Number(month.slice(5, 7)) - 1;
 
 /** The record being written for each ledger file: a read of the same tenant waits for it. */
 const recording = new SerialQueue();
@@ -94,16 +89,20 @@ async function identity(path: string): Promise<{ stamp: string; size: bigint } |
  * `usage-YYYY-MM.jsonl` (the month of its last record) and deletes archives older than twelve
  * months. Today's total reads the live file alone; month totals, the stats and the dedup of a
  * turn read the live file and the archives.
- * Soft cap: warn; hard cap: refuse new model requests (runtime.ts asks before each one).
+ * Soft cap: warn; hard cap: refuse new model requests (capGate, asked before each one).
  */
 export class UsageLedger {
+	private readonly log: MonthlyLog;
+
 	constructor(
 		private readonly tenantDir: string,
 		private readonly caps: CostCaps = DEFAULT_COST_CAPS,
-	) {}
+	) {
+		this.log = new MonthlyLog(tenantDir, "usage");
+	}
 
 	private usagePath(): string {
-		return join(this.tenantDir, "usage.jsonl");
+		return this.log.live;
 	}
 
 	async ensure(): Promise<void> {
@@ -134,56 +133,18 @@ export class UsageLedger {
 	}
 
 	private async allFiles(): Promise<Ledger[]> {
-		return Promise.all([...(await this.archives()).map((a) => a.path), this.usagePath()].map((path) => this.ledger(path, false)));
-	}
-
-	/** Archived months, oldest first. */
-	private async archives(): Promise<{ month: string; path: string }[]> {
-		let names: string[];
-		try {
-			names = await readdir(this.tenantDir);
-		} catch (err) {
-			if ((err as NodeJS.ErrnoException).code === "ENOENT") return [];
-			throw err;
-		}
-		return names
-			.flatMap((name) => {
-				const month = ARCHIVE.exec(name)?.[1];
-				return month === undefined ? [] : [{ month, path: join(this.tenantDir, name) }];
-			})
-			.sort((a, b) => a.month.localeCompare(b.month));
+		return Promise.all((await this.log.files()).map((path) => this.ledger(path, false)));
 	}
 
 	/** Bytes the ledger takes on disk: the live file and its archives. */
-	async size(): Promise<number> {
-		let total = 0;
-		for (const path of [...(await this.archives()).map((a) => a.path), this.usagePath()]) {
-			try {
-				total += (await stat(path)).size;
-			} catch (err) {
-				if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
-			}
-		}
-		return total;
+	size(): Promise<number> {
+		return this.log.size();
 	}
 
 	/** Moves the live file to the archive of its month, then deletes the archives past the retention. */
 	private async rotate(lastMonth: string, month: string): Promise<void> {
-		const live = this.usagePath();
-		const archive = join(this.tenantDir, `usage-${lastMonth}.jsonl`);
-		// An archive of that month already there (a clock that went back) is added to, never replaced.
-		if ((await identity(archive)) === undefined) await rename(live, archive);
-		else {
-			await appendFile(archive, await readFile(live), { mode: 0o600 });
-			await unlink(live);
-		}
-		ledgers.delete(live);
-		for (const old of await this.archives()) {
-			if (monthIndex(month) - monthIndex(old.month) > USAGE_RETENTION_MONTHS) {
-				await unlink(old.path).catch(() => undefined);
-				ledgers.delete(old.path);
-			}
-		}
+		const deleted = await this.log.roll(lastMonth, month);
+		for (const path of [this.usagePath(), ...deleted]) ledgers.delete(path);
 	}
 
 	/** A file's whole lines; `repair`: first drop a line a crash cut short, so the next record does not glue to it. */
@@ -224,11 +185,7 @@ export class UsageLedger {
 		// A turn is billed once: a recovery that delivers it again finds it already on record, in
 		// the live file or in any month still archived (ADR 0098, 0130).
 		const same = (r: UsageRecord) => r.role === "agent" && r.instanceId === rec.instanceId && r.submissionId === rec.submissionId;
-		const billed =
-			rec.role === "agent" &&
-			rec.instanceId !== undefined &&
-			rec.submissionId !== undefined &&
-			(log.records.some(same) || (await Promise.all((await this.archives()).map((a) => this.ledger(a.path, false)))).some((l) => l.records.some(same)));
+		const billed = rec.role === "agent" && rec.instanceId !== undefined && rec.submissionId !== undefined && (await this.allFiles()).some((l) => l.records.some(same));
 		if (billed) {
 			const spent = log.days.get(day) ?? 0;
 			return { softExceeded: spent >= this.caps.softUsdPerDay, hardExceeded: spent >= this.caps.hardUsdPerDay };
@@ -246,7 +203,7 @@ export class UsageLedger {
 		const spent = days.get(day) ?? 0;
 		const softExceeded = spent >= this.caps.softUsdPerDay;
 		const hardExceeded = spent >= this.caps.hardUsdPerDay;
-		// Over the hard cap, the next model request is refused and that refusal audited (cost.denied, runtime.ts).
+		// Over the hard cap, the next model request is refused and that refusal audited (cost.denied, capGate).
 		if (audit !== undefined && softExceeded && !hardExceeded) await audit.append({ type: "cost.warn", day, spentUsd: spent, softUsd: this.caps.softUsdPerDay });
 		return { softExceeded, hardExceeded };
 	}
@@ -258,11 +215,6 @@ export class UsageLedger {
 		return months;
 	}
 
-	/** Spent this month (Europe/Rome), or in the month "YYYY-MM". */
-	async monthSpent(month = romeDayKey().slice(0, 7)): Promise<number> {
-		return (await this.byMonth())[month] ?? 0;
-	}
-
 	/**
 	 * Today's hard cap reached, with `unrecordedUsd` (spent by work still running, on no record
 	 * yet) counted: new model requests must be refused. What counts as spent today, then.
@@ -271,18 +223,28 @@ export class UsageLedger {
 		const spentUsd = (await this.todaySpent()) + unrecordedUsd;
 		return spentUsd >= this.caps.hardUsdPerDay ? { day: romeDayKey(), spentUsd, hardUsd: this.caps.hardUsdPerDay } : undefined;
 	}
-
-	/** true when new model requests must be refused. */
-	async isHardCapped(): Promise<boolean> {
-		return (await this.hardCapped()) !== undefined;
-	}
-
-	async isSoftCapped(): Promise<boolean> {
-		return (await this.todaySpent()) >= this.caps.softUsdPerDay;
-	}
 }
 
-/** The whole lines of the ledger; a whole line that is not a record is an error, never skipped. */
+/**
+ * The daily hard cap, asked before every new model request of every turn, whoever started it.
+ * It counts what is recorded today plus this conversation's own spend not recorded yet; a
+ * turn is recorded when it settles, answered or not. So it is a limit per conversation, not a
+ * global one: each of N conversations running at the same time can reach the cap on its own
+ * and send one more request, so the day can end at up to N times (cap + one request). Actions
+ * already approved run all the same (they call no model); the turn that would tell about them
+ * is refused like any other.
+ */
+export function capGate(usage: UsageLedger, audit: AuditLog, instanceId: string): NonNullable<EngineOpenOptions["authorizeRequest"]> {
+	return async ({ threadKey: key, unbilledUsd }) => {
+		const capped = await usage.hardCapped(unbilledUsd);
+		if (capped === undefined) return;
+		// On record before the refusal, and so before any spend it would stop.
+		await audit.append({ type: "cost.denied", instanceId, ...capped, ...(key === undefined ? {} : parseThreadKey(key)) });
+		throw new ModelRequestRefused(`Daily spending cap reached: ${capped.spentUsd.toFixed(2)} of ${capped.hardUsd} USD`);
+	};
+}
+
+/** The whole lines of the ledger; one that is not a record is said and skipped. */
 function parseRecords(log: string, path: string): UsageRecord[] {
 	const lines = log.slice(0, log.lastIndexOf("\n") + 1).split("\n");
 	lines.pop();

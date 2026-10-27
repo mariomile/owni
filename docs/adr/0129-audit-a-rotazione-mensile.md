@@ -4,7 +4,7 @@
 
 ## Decisione
 
-- **Un file per mese.** Il primo evento di un mese nuovo sposta `audit.jsonl` in `audit-AAAA-MM.jsonl` (il mese dell'ultima scrittura) accanto al file vivo e ne apre uno nuovo. Le scritture dello stesso file si eseguono una dopo l'altra, quindi la rotazione non si incrocia con un evento.
+- **Un file per mese.** Il primo evento di un mese nuovo sposta `audit.jsonl` in `audit-AAAA-MM.jsonl` (il mese dell'ultima scrittura) accanto al file vivo e ne apre uno nuovo. Un archivio di quel mese già presente (un orologio tornato indietro, un file ripristinato) si allunga, non si sostituisce: la rotazione è la stessa del registro dei consumi (`src/core/monthly-log.ts`). Le scritture dello stesso file si eseguono una dopo l'altra, quindi la rotazione non si incrocia con un evento.
 - **Dodici mesi di archivio.** Alla rotazione si cancellano gli archivi più vecchi di 12 mesi. L'audit registra metadati e mai testi, ma resta una traccia di persone e azioni: non va tenuta per sempre senza una ragione.
 - **La lettura attraversa i file.** `read(n)` restituisce gli ultimi `n` eventi anche quando il mese corrente ne ha meno, e legge solo la coda di ogni file; `read()` li restituisce tutti, dal più vecchio.
 - **La dimensione si vede.** `/api/usage` (la stessa risposta che la console già mostra per i consumi) porta `auditBytes`: byte del file vivo e degli archivi.

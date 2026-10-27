@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import type { AuditLog } from "../src/core/audit.ts";
-import { UsageLedger, type UsageRecord } from "../src/core/usage.ts";
+import { romeDayKey, UsageLedger, type UsageRecord } from "../src/core/usage.ts";
 
 /** A fault in the next file replaced atomically, the way a full disk or a crash would leave it. */
 const fault = vi.hoisted(() => ({ atomicWrite: false }));
@@ -69,8 +69,8 @@ describe("the usage ledger (ADR 0098)", () => {
 			await ledger.record(turn("s2", 6));
 			expect((await ledger.records()).map((r) => r.submissionId)).toEqual(["s1", "s2"]);
 			expect(await ledger.todaySpent()).toBe(21);
-			expect(await ledger.monthSpent()).toBe(21);
-			expect(await ledger.isHardCapped()).toBe(true);
+			expect((await ledger.byMonth())[romeDayKey().slice(0, 7)]).toBe(21);
+			expect(await ledger.hardCapped()).toBeDefined();
 			expect(said.mock.calls.map(([message]) => String(message))).toEqual(expect.arrayContaining([expect.stringMatching(/usage\.jsonl: line 2 is not a usage record, skipped/), expect.stringMatching(/line 3 /), expect.stringMatching(/line 4 /)]));
 		} finally {
 			said.mockRestore();
@@ -98,15 +98,15 @@ describe("the usage ledger (ADR 0098)", () => {
 		await ledger.record(turn("s1", 25), audit);
 		expect(await ledger.records()).toEqual([expect.objectContaining({ submissionId: "s1", estimatedUsd: 25 })]);
 		expect(await ledger.todaySpent()).toBe(25);
-		expect(await ledger.isHardCapped()).toBe(true);
+		expect(await ledger.hardCapped()).toBeDefined();
 		// A restart: nothing of this process is left.
 		vi.resetModules();
 		const { UsageLedger: Restarted } = await import("../src/core/usage.ts");
 		const after = new Restarted(dir, { softUsdPerDay: 5, hardUsdPerDay: 20 });
 		expect(await after.records()).toHaveLength(1);
 		expect(await after.todaySpent()).toBe(25);
-		expect(await after.monthSpent()).toBe(25);
-		expect(await after.isHardCapped()).toBe(true);
+		expect((await after.byMonth())[romeDayKey().slice(0, 7)]).toBe(25);
+		expect(await after.hardCapped()).toBeDefined();
 	});
 });
 
@@ -149,16 +149,16 @@ describe("the ledger kept by month (ADR 0130)", () => {
 	it("keeps today's total and the month's right after a rotation, and the hard cap reads them", async () => {
 		const { dir, ledger } = ledgerIn();
 		await ledger.record(at(monthsAgo(1), "old", 19));
-		expect(await ledger.isHardCapped()).toBe(false);
+		expect(await ledger.hardCapped()).toBeUndefined();
 		const first = await ledger.record(turn("new1", 15));
 		expect(await names(dir)).toHaveLength(2);
 		// Last month's 19 is not today's spend: the cap sees 15, then 30.
 		expect(first.hardExceeded).toBe(false);
 		expect(await ledger.todaySpent()).toBe(15);
-		expect(await ledger.monthSpent()).toBe(15);
-		expect(await ledger.monthSpent(monthsAgo(1).slice(0, 7))).toBe(19);
+		expect((await ledger.byMonth())[romeDayKey().slice(0, 7)]).toBe(15);
+		expect((await ledger.byMonth())[monthsAgo(1).slice(0, 7)]).toBe(19);
 		expect((await ledger.record(turn("new2", 5))).hardExceeded).toBe(true);
-		expect(await ledger.isHardCapped()).toBe(true);
+		expect(await ledger.hardCapped()).toBeDefined();
 		// A new process reads the same totals from the files.
 		expect(await new UsageLedger(dir, { softUsdPerDay: 5, hardUsdPerDay: 20 }).todaySpent()).toBe(20);
 	});
