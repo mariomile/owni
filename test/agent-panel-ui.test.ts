@@ -1,63 +1,35 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { allNodes, fakeH, type FakeNode } from "./fake-dom.ts";
 
-type TestNode = {
-	tag: string;
-	attrs: Record<string, unknown>;
-	children: (TestNode | string)[];
-	hidden: boolean;
-	id: string;
-	textContent: string;
-	readonly dataset: Record<string, unknown>;
-	setAttribute(name: string, value: unknown): void;
-	remove(): void;
-};
-
-const mocks = vi.hoisted(() => {
-	const text = (node: TestNode | string): string => typeof node === "string" ? node : node.children.map(text).join(" ");
-	const h = (spec: string, attrs?: unknown, ...children: unknown[]): TestNode => {
-		const attributes = attrs && typeof attrs === "object" && !Array.isArray(attrs) && !("tag" in attrs) ? attrs as Record<string, unknown> : {};
-		if (attributes !== attrs) children.unshift(attrs);
-		return {
-			tag: spec,
-			attrs: { ...attributes },
-			children: children.flat(Infinity).filter((child) => child != null && child !== false).map((child) => typeof child === "object" ? child as TestNode : String(child)),
-			hidden: Boolean(attributes.hidden),
-			id: "",
-			get textContent() { return text(this); },
-			set textContent(value) { this.children = [value]; },
-			get dataset() { return { section: this.attrs["data-section"] }; },
-			setAttribute(name, value) { this.attrs[name] = value; },
-			remove() { this.attrs.removed = true; },
-		};
-	};
-	const mount = (node: TestNode, ...children: unknown[]) => { node.children = children.flat(Infinity).filter((child) => child != null && child !== false) as (TestNode | string)[]; };
-	const state = { me: { id: "person", role: "owner" } };
+const mocks = vi.hoisted(() => ({
+	state: { me: { id: "person", role: "owner" } },
+	api: vi.fn(),
+	toast: vi.fn(),
+	confirmDialog: vi.fn(),
+	fmt: { time: (at: string) => `alle ${at.slice(11, 16)}` },
+	channelName: (title: string) => `#${title.toLowerCase().replace(/\s+/g, "-")}`,
+	dmHref: (id: string, thread?: string) => `#/dm/${id}${thread ? `/t/${thread}` : ""}`,
+	instanceHref: (view: string, rest: string[] = [], id?: string) => `#/${[view, ...rest].join("/")}${id ? `?agent=${id}` : ""}`,
+	materials: { memorySection: vi.fn(), filesSection: vi.fn(), skillsSection: vi.fn() },
+}));
+vi.mock("../src/web/ui/common.js", async () => {
+	const { fakeH, fakeMount } = await import("./fake-dom.ts");
 	return {
-		h,
-		mount,
-		state,
-		api: vi.fn(),
-		toast: vi.fn(),
-		confirmDialog: vi.fn(),
-		face: (agent: { name?: string }) => h("span.face", agent.name ?? ""),
-		agentStatus: (agent?: { statusText?: string; doing?: string }) => (agent?.statusText ? h("span.agent-status", h("span.chip", agent.statusText), agent.doing ? h("span.agent-doing", agent.doing) : null) : null),
-		icon: (name: string) => h("svg", name),
-		emptyNote: (spec: string, title: string, ...children: unknown[]) => h(spec, h("b", title), ...children),
-		fmt: { time: (at: string) => `alle ${at.slice(11, 16)}` },
-		channelName: (title: string) => `#${title.toLowerCase().replace(/\s+/g, "-")}`,
-		dmHref: (id: string, thread?: string) => `#/dm/${id}${thread ? `/t/${thread}` : ""}`,
-		instanceHref: (view: string, rest: string[] = [], id?: string) => `#/${[view, ...rest].join("/")}${id ? `?agent=${id}` : ""}`,
-		materials: { memorySection: vi.fn(), filesSection: vi.fn(), skillsSection: vi.fn() },
+		...mocks,
+		h: fakeH,
+		mount: fakeMount,
+		face: (agent: { name?: string }) => fakeH("span.face", agent.name ?? ""),
+		agentStatus: (agent?: { statusText?: string; doing?: string }) => (agent?.statusText ? fakeH("span.agent-status", fakeH("span.chip", agent.statusText), agent.doing ? fakeH("span.agent-doing", agent.doing) : null) : null),
+		icon: (name: string) => fakeH("svg", name),
+		emptyNote: (spec: string, title: string, ...children: unknown[]) => fakeH(spec, fakeH("b", title), ...children),
 	};
 });
-vi.mock("../src/web/ui/common.js", () => mocks);
 vi.mock("../src/web/ui/agent-materials.js", () => mocks.materials);
 
 // @ts-expect-error Console modules intentionally use plain JavaScript.
 import { agentPanel, folded, madeIn, routineRows } from "../src/web/ui/agent-panel.js";
 
-const flatten = (node: TestNode): TestNode[] => [node, ...node.children.flatMap((child) => typeof child === "string" ? [] : flatten(child))];
-const find = (node: TestNode, prefix: string) => flatten(node).filter((item) => item.tag.startsWith(prefix));
+const find = (node: FakeNode, prefix: string) => allNodes(node).filter((item) => item.spec.startsWith(prefix));
 const inst = { id: "sales", name: "Vendite", tagline: "Segue i clienti" };
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -78,15 +50,15 @@ describe("the agente's panel", () => {
 	});
 
 	it("shows the first rows of a long list and the rest on request", () => {
-		const rows = Array.from({ length: 9 }, (_, i) => mocks.h("li", `Riga ${i}`));
-		const [list, more] = folded(rows, mocks.h("p", "vuoto"));
+		const rows = Array.from({ length: 9 }, (_, i) => fakeH("li", `Riga ${i}`));
+		const [list, more] = folded(rows, fakeH("p", "vuoto"));
 		expect(list.children).toHaveLength(6);
 		expect(more.textContent).toBe("Mostra tutti (9)");
-		(more.attrs.onclick as () => void)();
+		more.fire("click");
 		expect(list.children).toHaveLength(9);
-		expect(more.attrs.removed).toBe(true);
-		expect(folded([], mocks.h("p", "vuoto")).textContent).toBe("vuoto");
-		expect(folded(rows.slice(0, 3), null).tag).toBe("ul.task-list");
+		expect(more.removed).toBe(true);
+		expect(folded([], fakeH("p", "vuoto")).textContent).toBe("vuoto");
+		expect(folded(rows.slice(0, 3), null).spec).toBe("ul.task-list");
 	});
 
 	it("lists every kind of routine in a line, with resume only for a sentinella that stopped", () => {
@@ -99,7 +71,7 @@ describe("the agente's panel", () => {
 			automations: [{ id: "a1", name: "Nuovo ordine", runs: 2 }],
 			routines: [{ title: "Chiusura del mese", whenText: "Il primo del mese", paused: true }],
 		}, () => {});
-		const said = rows.map((row: TestNode) => row.textContent);
+		const said = rows.map((row: FakeNode) => row.textContent);
 		expect(said[0]).toContain("Manda il report");
 		expect(said[0]).toContain("Ogni lunedì alle 9 · prossima alle 09:00");
 		expect(said[1]).toContain("example.com/prezzi");
@@ -118,11 +90,11 @@ describe("the agente's panel", () => {
 		const changed = vi.fn();
 		mocks.api.mockResolvedValue({});
 		const rows = routineRows(inst, { watches: [{ id: "w2", url: "https://example.com/", everyMinutes: 30, disabledReason: "Troppi errori", failures: 3 }] }, changed);
-		const [resume, remove] = find(rows[0], "button.btn") as [TestNode, TestNode];
-		(resume.attrs.onclick as () => void)();
+		const [resume, remove] = find(rows[0], "button.btn") as [FakeNode, FakeNode];
+		resume.fire("click");
 		await tick();
 		expect(mocks.api).toHaveBeenCalledWith("/api/instances/sales/watches/w2/resume", { method: "POST" });
-		(remove.attrs.onclick as () => void)();
+		remove.fire("click");
 		expect(mocks.api).toHaveBeenCalledTimes(1);
 		const [, , okLabel, ok] = mocks.confirmDialog.mock.calls[0]!;
 		expect(okLabel).toBe("Elimina");
@@ -148,7 +120,7 @@ describe("the agente's panel", () => {
 		await tick();
 		expect(find(panel.el, "p.agent-panel-status")[0]!.textContent).toContain("Al lavoro Offerta Rossi");
 		// Another tab: loaded once, and the page keeps the address.
-		(tabs[0]!.attrs.onclick as () => void)();
+		tabs[0]!.fire("click");
 		expect(onShow).toHaveBeenLastCalledWith("attivita");
 		await tick();
 		expect(mocks.api).toHaveBeenCalledWith("/api/instances/sales/runs");
@@ -162,7 +134,7 @@ describe("the agente's panel", () => {
 	});
 
 	it("gives the configuration only to the owner", () => {
-		const href = (panel: { el: TestNode }) => find(panel.el, "a.icon-btn").map((a) => a.attrs.href);
+		const href = (panel: { el: FakeNode }) => find(panel.el, "a.icon-btn").map((a) => a.attrs.href);
 		expect(href(agentPanel(inst))).toEqual(["#/impostazioni?agent=sales"]);
 		mocks.state.me = { id: "luca", role: "member" };
 		expect(href(agentPanel(inst))).toEqual([]);
@@ -176,7 +148,7 @@ describe("the agente's panel", () => {
 		await tick();
 		expect(panel.el.textContent).toContain("Messaggi diretti · v2 · alle 09:30");
 		const open = find(panel.el, "button.btn.small").find((b) => b.textContent === "Apri");
-		(open?.attrs.onclick as () => void)();
+		open?.fire("click");
 		expect(openArtifact).toHaveBeenCalledWith("t1", { id: "report", version: 2, title: "Report" });
 	});
 });

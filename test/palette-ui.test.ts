@@ -92,15 +92,18 @@ describe("command palette as an ARIA combobox", () => {
 		expect(status.children).toEqual([]);
 	});
 
-	it("option ids come from the item, so the active descendant changes when the results change", async () => {
+	it("an entry keeps its option id while the results change, so the active descendant follows the entry", async () => {
 		const { input, options } = await opened();
+		const idOf = (label: string) => options().find((o) => JSON.stringify(o.children).includes(label))?.attrs.id;
 		const before = input.attrs["aria-activedescendant"];
-		expect(before).toContain("incarichi");
+		const agenti = idOf("Agenti");
+		expect(agenti).toBeTruthy();
 		input.value = "agent";
 		input.fire("input");
 		const after = input.attrs["aria-activedescendant"];
 		expect(after).not.toBe(before);
 		expect(after).toBe(options()[0]?.attrs.id);
+		expect(idOf("Agenti")).toBe(agenti);
 		expect(new Set(options().map((o) => o.attrs.id)).size).toBe(options().length);
 	});
 });

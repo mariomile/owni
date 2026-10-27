@@ -37,19 +37,19 @@ export function reviewRows(board, viewer) {
 /** Richiede te: every decision and every result that waits for this person, across the agenti they can see. */
 export async function viewApprovals(main) {
 	const person = state.me;
-	const { generation } = state;
 	const title = "Richiede te";
 	mount(main, head(null, title, "Le decisioni e i risultati che aspettano te."), h("p.muted", { role: "status" }, "Carico le richieste…"));
 	let inbox;
 	let board;
 	try {
-		[inbox, board] = await Promise.all([api("/api/approvals"), api("/api/board").catch((error) => ({ error }))]);
+		// A board that cannot load is a warning on the page; a session that closed is nothing to show.
+		[inbox, board] = await Promise.all([api("/api/approvals"), api("/api/board").catch((error) => { if (error.status === 0) throw error; return { error }; })]);
 	} catch (error) {
-		if (!main.isConnected || state.me !== person || state.generation !== generation) return;
+		if (!main.isConnected || error.status === 0) return;
 		mount(main, head(null, title, "Non sono riuscita a caricare tutte le richieste."), h("div.card.pad", { role: "alert" }, h("p", error.message), h("p.muted", "Questo non significa che non ci sia niente da decidere."), h("button.btn", { onclick: () => void viewApprovals(main) }, "Riprova")));
 		return;
 	}
-	if (!main.isConnected || state.me !== person || state.generation !== generation) return;
+	if (!main.isConnected) return;
 	const groups = inbox.groups.map(approvalGroup);
 	const pending = groups.flatMap((group) => group.pending);
 	const reviews = board.error ? [] : reviewRows(board, person);

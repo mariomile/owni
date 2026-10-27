@@ -1,10 +1,8 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { deferred, fakeFetch } from "./fake-fetch.ts";
 
+// The real api(): a person leaving cancels what was asked for them, the way the browser does.
 const mocks = vi.hoisted(() => ({ api: vi.fn() }));
-vi.mock("../src/web/ui/common.js", async () => {
-	const real = await vi.importActual<Record<string, unknown>>("../src/web/ui/common.js");
-	return { ...real, api: mocks.api };
-});
 vi.mock("../src/web/ui/shell.js", () => ({ render: vi.fn(), renderRail: vi.fn(), refreshConversations: vi.fn(async () => {}) }));
 vi.mock("../src/web/ui/login.js", () => ({}));
 vi.mock("../src/web/ui/google.js", () => ({}));
@@ -18,6 +16,7 @@ beforeEach(() => {
 	vi.stubGlobal("window", { addEventListener: vi.fn() });
 	vi.stubGlobal("location", { hash: "", pathname: "/" });
 	vi.stubGlobal("EventSource", class { addEventListener() {} close() {} });
+	vi.stubGlobal("fetch", fakeFetch(mocks.api));
 });
 afterEach(() => vi.unstubAllGlobals());
 
@@ -64,12 +63,6 @@ async function loadSession() {
 	return { state, resetPerson, ...session };
 }
 
-const deferred = () => {
-	let release!: (value: unknown) => void;
-	const promise = new Promise((resolve) => { release = resolve; });
-	return { promise, release };
-};
-
 it("a late list of agents for a person who has left is not kept", async () => {
 	const { state, resetPerson, refreshInstances } = await loadSession();
 	state.me = { id: "alice", role: "member" };
@@ -79,7 +72,8 @@ it("a late list of agents for a person who has left is not kept", async () => {
 	resetPerson();
 	state.me = { id: "alice", role: "member" };
 	late.release({ instances: [{ id: "alice-only", name: "Segreto di Alice" }] });
-	await reading;
+	// The caller hears a closed session, which the toasts keep quiet about.
+	await expect(reading).rejects.toMatchObject({ status: 0, message: "Sessione chiusa" });
 	expect(state.instances).toEqual([]);
 	expect(state.instance).toBeUndefined();
 });

@@ -1,5 +1,5 @@
 // Agenti page.
-import { agentHome, agentStatus, api, dmHref, emptyNote, face, faceColor, h, head, icon, instanceHref, mount, state, store, toast } from "../common.js";
+import { agentHome, agentStatus, api, dmHref, emptyNote, face, faceColor, h, head, icon, instanceHref, mount, sessionSignal, state, store, toast } from "../common.js";
 import { TONES } from "../tones.js";
 import { refreshInstances, refreshSetup } from "../session.js";
 import { render } from "../shell.js";
@@ -66,11 +66,12 @@ export function agentForm() {
 	draw();
 	const create = async () => {
 		try {
-			const { generation } = state;
+			const signal = sessionSignal();
 			const { instance } = await api("/api/instances", { method: "POST", body: { id: id.value.trim(), name: name.value.trim(), instructions: instructions.value, persona: { tagline: tagline.value, tone: tone.value } } });
 			dialog.close();
 			await refreshInstances();
-			if (state.generation !== generation) return;
+			// The counters swallow a cancelled read: refreshInstances returns even when the person left meanwhile.
+			if (signal.aborted) return;
 			state.instance = state.instances.find((i) => i.id === instance.id) ?? state.instance;
 			store("owni.instance", state.instance.id);
 			// Straight into its conversation: the first thing to do with a new agente is to write to it.

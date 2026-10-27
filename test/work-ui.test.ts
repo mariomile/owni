@@ -1,44 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-
-type TestNode = {
-	tag: string;
-	attrs: Record<string, unknown>;
-	children: (TestNode | string)[];
-	value: string;
-	textContent: string;
-	isConnected: boolean;
-	disabled: boolean;
-	selectedOptions: { textContent: string }[];
-	setAttribute(name: string, value: unknown): void;
-	addEventListener(name: string, handler: unknown): void;
-};
+import { allNodes, fakeNode, type FakeNode } from "./fake-dom.ts";
 
 const mocks = vi.hoisted(() => {
-	const text = (node: TestNode | string): string => typeof node === "string" ? node : node.children.map(text).join(" ");
-	const h = (spec: string, attrs?: unknown, ...children: unknown[]): TestNode => {
-		const attributes = attrs && typeof attrs === "object" && !Array.isArray(attrs) && !("tag" in attrs) ? attrs as Record<string, unknown> : {};
-		if (attributes !== attrs) children.unshift(attrs);
-		const node: TestNode = {
-			tag: spec,
-			attrs: { ...attributes },
-			children: children.flat(Infinity).filter((child) => child != null && child !== false).map((child) => typeof child === "object" ? child as TestNode : String(child)),
-			value: String(attributes.value ?? ""),
-			get textContent() { return text(this); },
-			set textContent(value) { this.children = [value]; },
-			isConnected: true,
-			disabled: Boolean(attributes.disabled),
-			selectedOptions: [],
-			setAttribute(name, value) { this.attrs[name] = value; },
-			addEventListener(name, handler) { this.attrs[`on${name}`] = handler; },
-		};
-		return node;
-	};
-	const mount = (node: TestNode, ...children: unknown[]) => { node.children = children.flat(Infinity).filter((child) => child != null && child !== false) as (TestNode | string)[]; };
 	const state = { me: { id: "person", role: "owner" }, instance: { id: "unrelated", name: "Unrelated" }, instances: [] as unknown[], onRun: undefined as unknown, onRunsReconnect: undefined as unknown, onBoard: undefined as unknown };
 	const instanceHref = (view: string, rest: string[] = [], instanceId: string | null = state.instance.id) => `#/${[view, ...rest].map(encodeURIComponent).join("/")}${instanceId ? `?agent=${encodeURIComponent(instanceId)}` : ""}`;
-	return { h, mount, state, instanceHref, dmHref: (id: string, thread?: string) => `#/dm/${encodeURIComponent(id)}${thread ? `/t/${encodeURIComponent(thread)}` : ""}`, api: vi.fn(), route: vi.fn(() => ({ view: "programmi", rest: [] as string[] })), icon: (name: string) => h("svg", name), emptyNote: (spec: string, title: string, ...children: unknown[]) => h(spec, h("h2", title), ...children), head: (_: unknown, title: string, description: string, ...actions: unknown[]) => h("header", h("h1", title), description, ...actions) };
+	return { state, instanceHref, dmHref: (id: string, thread?: string) => `#/dm/${encodeURIComponent(id)}${thread ? `/t/${encodeURIComponent(thread)}` : ""}`, api: vi.fn(), route: vi.fn(() => ({ view: "programmi", rest: [] as string[] })) };
 });
-vi.mock("../src/web/ui/common.js", () => mocks);
+vi.mock("../src/web/ui/common.js", async () => {
+	const { fakeH, fakeMount } = await import("./fake-dom.ts");
+	return { ...mocks, h: fakeH, mount: fakeMount, icon: (name: string) => fakeH("svg", name), emptyNote: (spec: string, title: string, ...children: unknown[]) => fakeH(spec, fakeH("h2", title), ...children), head: (_: unknown, title: string, description: string, ...actions: unknown[]) => fakeH("header", fakeH("h1", title), description, ...actions) };
+});
 
 // @ts-expect-error Console modules intentionally use plain JavaScript.
 import { programRows, runOutcome, viewPrograms } from "../src/web/ui/pages/work.js";
@@ -49,8 +20,7 @@ const viewer = { id: "person", role: "owner" };
 const card = (id: string, status: string, extra = {}) => ({ id, n: Number(id) || 1, title: `Lavoro ${id}`, status, description: "Obiettivo reale", createdAt: at, updatedAt: at, events: [], ...extra });
 const routine = (title: string) => ({ id: "r1", title, assignee: inst.id, personId: viewer.id, whenText: "ogni lunedì", next: at, createdAt: at });
 const run = (id: string, status: string, extra = {}) => ({ id, status, source: "message", sourceId: id, instanceId: "sales", threadId: `thread-${id}`, createdAt: at, updatedAt: at, ...extra });
-const flatten = (node: TestNode): TestNode[] => [node, ...node.children.flatMap((child) => typeof child === "string" ? [] : flatten(child))];
-const nodes = (node: TestNode, prefix: string) => flatten(node).filter((item) => item.tag.startsWith(prefix));
+const nodes = (node: FakeNode, prefix: string) => allNodes(node).filter((item) => item.spec.startsWith(prefix));
 
 beforeEach(() => {
 	vi.useFakeTimers();
@@ -114,7 +84,7 @@ describe("automation overview transformations", () => {
 describe("automation overview reads and recovery", () => {
 	it("provides the four program choices without creating or executing anything", async () => {
 		mocks.api.mockImplementation(async (url: string) => url === "/api/instances" ? { instances: [] } : { cards: [], agents: [], routines: [] });
-		const main = mocks.h("main");
+		const main = fakeNode("main");
 		await viewPrograms(main);
 		const choices = nodes(main, "button.work-program-choice");
 		expect(choices).toHaveLength(4);
@@ -131,7 +101,7 @@ describe("automation overview reads and recovery", () => {
 			for (const name of ["runs", "threads", "schedules", "watches", "automations"]) if (url.endsWith(`/${name}`)) return { [name]: [] };
 			throw new Error(`Unexpected request ${url}`);
 		});
-		const main = mocks.h("main");
+		const main = fakeNode("main");
 		await viewPrograms(main);
 		const filter = nodes(main, "select")[0]!;
 		expect(filter.textContent).toContain(inst.name);
@@ -148,7 +118,7 @@ describe("automation overview reads and recovery", () => {
 			if (url === "/api/board" && revoked) throw Object.assign(new Error("Accesso revocato"), { status: 403 });
 			return { cards: [], agents: [inst], routines: [routine("Contenuto precedentemente autorizzato")] };
 		});
-		const main = mocks.h("main");
+		const main = fakeNode("main");
 		await viewPrograms(main);
 		expect(main.textContent).toContain("Contenuto precedentemente autorizzato");
 		revoked = true;
@@ -168,7 +138,7 @@ describe("automation overview reads and recovery", () => {
 			for (const name of ["runs", "schedules", "watches", "automations"]) if (url.endsWith(`/${name}`)) return { [name]: [] };
 			throw new Error(`Unexpected request ${url}`);
 		});
-		const main = mocks.h("main");
+		const main = fakeNode("main");
 		await viewPrograms(main);
 		expect(main.textContent).toContain("Descrizione riservata");
 		revoked = true;
@@ -189,7 +159,7 @@ describe("automation overview reads and recovery", () => {
 			if (url.endsWith("/runs")) return { runs: [] };
 			throw new Error(`Unexpected request ${url}`);
 		});
-		const main = mocks.h("main");
+		const main = fakeNode("main");
 		await viewPrograms(main);
 		expect(main.textContent).toContain("Controlla preventivi");
 		expect(main.textContent).toContain("1 automazione");

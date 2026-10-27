@@ -68,17 +68,12 @@ describe("live console counters", () => {
 		expect(mocks.state.boardReview).toBe(1);
 	});
 
-	it("ignores a late response from another login and does not request data while signed out", async () => {
-		let release!: (value: unknown) => void;
-		mocks.api.mockImplementationOnce(() => new Promise((resolve) => { release = resolve; }));
-		const { refreshCounters } = await session();
-		const pending = refreshCounters();
+	it("does not request data while signed out (a late answer is cancelled by the sign-out: console-identity-enter)", async () => {
 		mocks.state.me = undefined;
-		release({ usage: {}, pendingApprovals: 99, boardReview: 99 });
-		await pending;
+		const { refreshCounters } = await session();
+		await refreshCounters();
+		expect(mocks.api).not.toHaveBeenCalled();
 		expect(mocks.state.pendingApprovals).toBe(7);
 		expect(mocks.renderRail).not.toHaveBeenCalled();
-		await refreshCounters();
-		expect(mocks.api).toHaveBeenCalledTimes(1);
 	});
 });

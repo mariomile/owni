@@ -1,5 +1,5 @@
 // Starting the app: who is signed in, the agents, the counters, the live events.
-import { $app, api, ApiError, emptyNote, h, mount, resetPerson, route, state, store, toast } from "./common.js";
+import { $app, adoptPerson, api, ApiError, emptyNote, h, mount, resetPerson, route, state, store, toast } from "./common.js";
 import { renderCode, renderLogin } from "./login.js";
 import { finishGoogle } from "./google.js";
 import { setupLeft } from "./setup.js";
@@ -7,13 +7,16 @@ import { finishConnector } from "./signin.js";
 import { refreshConversations, render, renderRail } from "./shell.js";
 
 // ---------- boot ----------
-// api() says a session is gone with this event (common.js imports nothing): show the login.
 let counterTimer;
-window.addEventListener("owni:unauthorized", () => {
+
+/** The person leaves: nothing of theirs stays, and the login shows. */
+export function signOut() {
 	resetPerson();
 	clearInterval(counterTimer);
 	renderLogin();
-});
+}
+// api() says a session is gone with this event (common.js imports nothing).
+window.addEventListener("owni:unauthorized", signOut);
 
 export async function boot() {
 	applyTheme();
@@ -35,10 +38,7 @@ export async function boot() {
 /** With a session: load who this is and the instances, then show the console. */
 export async function enter() {
 	try {
-		const me = (await api("/api/me")).person;
-		// Another person in the same tab: nothing of the one before stays.
-		if (state.me?.id !== me.id) resetPerson();
-		state.me = me;
+		adoptPerson((await api("/api/me")).person);
 		await refreshInstances();
 	} catch (error) {
 		// No network, or the server not answering (a restart, a cell waking up): say so and try again by itself.
@@ -89,10 +89,7 @@ function unreachable() {
 }
 
 export async function refreshInstances() {
-	const { generation } = state;
 	const { instances } = await api("/api/instances");
-	// A late answer for a person who has since left is nobody's.
-	if (state.generation !== generation) return;
 	state.instances = instances;
 	const saved = store("owni.instance");
 	state.instance = state.instances.find((i) => i.id === saved) ?? state.instances[0];
@@ -101,13 +98,11 @@ export async function refreshInstances() {
 
 /** How many «Primi passi» are left, for the owner of the current instance. */
 export async function refreshSetup() {
-	const { generation } = state;
 	state.setupLeft = 0;
 	state.setup = undefined;
 	if (state.me?.role !== "owner" || !state.instance || setupHidden(state.instance.id)) return;
 	try {
 		const { setup } = await api(`/api/instances/${state.instance.id}/setup`);
-		if (state.generation !== generation) return;
 		state.setup = setup;
 		state.setupLeft = setupLeft(setup);
 	} catch {
@@ -138,13 +133,9 @@ export function refreshCounters() {
 	counterRefresh = (async () => {
 		do {
 			countersChanged = false;
-			const person = state.me;
-			const { generation } = state;
-			if (!person) break;
+			if (!state.me) break;
 			try {
 				const summary = await api("/api/console-summary");
-				// A late response from a previous login must not overwrite this person's counters.
-				if (state.me !== person || state.generation !== generation) continue;
 				state.usage = summary.usage;
 				state.pendingApprovals = summary.pendingApprovals;
 				state.boardReview = summary.boardReview;
