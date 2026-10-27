@@ -1,4 +1,5 @@
 import { closeSync, fsyncSync, openSync, readFileSync, renameSync, writeSync } from "node:fs";
+import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
 /**
@@ -24,6 +25,13 @@ export function updateJsonFile<T>(file: string, empty: T, change: (current: T) =
 			closeSync(fd);
 		}
 		renameSync(temp, file);
+		// The rename lives in the directory entry: fsync it, as writeFileAtomic does.
+		const dirFd = openSync(dirname(file), "r");
+		try {
+			fsyncSync(dirFd);
+		} finally {
+			closeSync(dirFd);
+		}
 		return next;
 	} finally {
 		db.close();

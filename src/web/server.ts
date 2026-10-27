@@ -502,8 +502,7 @@ export function createWebApp(options: WebAppOptions): Server {
 	route("GET", "/api/usage", "person", async () => ({ usage: await usageSummary() }));
 	route("GET", "/api/audit", "owner", async ({ url }) => {
 		const limit = Math.min(500, Math.max(1, Number(url.searchParams.get("limit") ?? 100)));
-		const all = await runtime.audit(tenantId).read();
-		return { events: all.slice(-limit).reverse() };
+		return { events: (await runtime.audit(tenantId).read(limit)).reverse() };
 	});
 
 	const server = createServer((req, res) => {
