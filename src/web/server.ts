@@ -261,7 +261,7 @@ export function createWebApp(options: WebAppOptions): Server {
 	const named = (model: ModelSelection) => chats.named(model);
 	/** An entry of a chat or a stanza with the name of the model that wrote it. */
 	const shown = <E extends WebEntry | RoomEntry>(entry: E): E => (entry.model === undefined ? entry : { ...entry, model: named(entry.model) });
-	const usageSummary = async () => ({ todayUsd: await options.usage.todaySpent(), softUsd: DEFAULT_COST_CAPS.softUsdPerDay, hardUsd: DEFAULT_COST_CAPS.hardUsdPerDay });
+	const usageSummary = async () => ({ todayUsd: await options.usage.todaySpent(), softUsd: DEFAULT_COST_CAPS.softUsdPerDay, hardUsd: DEFAULT_COST_CAPS.hardUsdPerDay, auditBytes: await runtime.audit(tenantId).size() });
 	const { phoneHook, automationHook, whatsappHook, telegramHook } = webhooks({ runtime, tenantId, phoneHooks: options.phoneHooks, whatsappHooks: options.whatsappHooks, telegramHooks: options.telegramHooks, log: options.log });
 
 	// --- session ---

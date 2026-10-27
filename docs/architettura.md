@@ -54,7 +54,7 @@ owner-login-link.txt                 link dell'owner, scritto una volta (da canc
 tenants/<tenant>/
   tenant.json
   secrets.json                       0600, non cifrato (TenantSecrets)
-  audit.jsonl                        append-only, solo metadati
+  audit.jsonl + audit-AAAA-MM.jsonl  append-only, solo metadati; archivi mensili per 12 mesi
   people.json  sessions.json         persone della console e sessioni
   usage.jsonl  usage-totals.json     registro dei consumi (src/core/usage.ts)
   board.json  board-routines.json    bacheca
@@ -117,7 +117,7 @@ Descritta ai confini di fiducia: `code_run` e strumenti proposti girano in proce
 
 ### Audit e consumi
 
-`audit.jsonl` registra chi, dove, che cosa e quanto grande, mai il testo dei messaggi né i valori dei segreti. La lettura recente (`AuditLog.read(last)`) legge dalla coda del file con memoria limitata. I consumi stimati stanno in `usage.jsonl`; il tetto di spesa è in `src/core/usage.ts`, ma la sua applicazione su tutti i percorsi non è ancora uniforme (vedi [l'audit del codice](codebase-health-2026-10-27.md)).
+`audit.jsonl` registra chi, dove, che cosa e quanto grande, mai il testo dei messaggi né i valori dei segreti. Il file ruota ogni mese e gli archivi si tengono 12 mesi ([ADR 0129](adr/0129-audit-a-rotazione-mensile.md)); la lettura recente (`AuditLog.read(last)`) legge dalla coda dei file con memoria limitata e la dimensione totale è in `auditBytes` di `/api/usage`. I consumi stimati stanno in `usage.jsonl`; il tetto di spesa è in `src/core/usage.ts`, ma la sua applicazione su tutti i percorsi non è ancora uniforme (vedi [l'audit del codice](codebase-health-2026-10-27.md)).
 
 ## 6. Rischi di Pi Durable
 

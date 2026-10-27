@@ -1,0 +1,31 @@
+name: Server bundle
+# The Mac app's server (docs/desktop.md, «Owni sul Mac») is built and started only at release.
+# This runs the release's own step, desktop/scripts/bundle-server.sh (compile, production
+# packages, Node, and the smoke that starts the server and waits for /healthz), when a change
+# touches what the bundle is made of, so a broken server/launcher contract fails the PR.
+on:
+  pull_request:
+    paths:
+      - "src/main/**"
+      - "src/app.ts"
+      - "desktop/server-entry.mjs"
+      - "desktop/scripts/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "tsconfig.build.json"
+      - ".github/workflows/server-bundle.yml"
+concurrency:
+  group: server-bundle-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  bundle:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6   # version read from packageManager (pnpm@10.17.1)
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Bundle Owni's server and start it
+        run: bash desktop/scripts/bundle-server.sh
