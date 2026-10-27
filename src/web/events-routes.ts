@@ -30,39 +30,52 @@ export function eventsRoutes(route: AddRoute, options: EventsRoutesDeps): void {
 		res.writeHead(200, { "content-type": "text/event-stream; charset=utf-8", "cache-control": "no-store", connection: "keep-alive", "x-accel-buffering": "no" });
 		res.write(": connected\n\n");
 		let disconnected = false;
-		let drainingRuns = false;
-		const pendingRuns = new Map<string, RunRecord>();
-		const drainRuns = async () => {
-			if (drainingRuns || disconnected) return;
-			drainingRuns = true;
+		let draining = false;
+		// Everything this stream is about to write, in order. A run keeps its place and its latest state.
+		type Pending = { readonly allowed: (person: Person) => Promise<unknown>; readonly frame: string };
+		const pending = new Map<string, Pending>();
+		let counter = 0;
+		/** The person this session belongs to now, or nothing: revoked, expired, or removed. */
+		const current = async (): Promise<Person | undefined> => {
+			if (await options.sessions.personOf(sessionOf(req)) !== p.id) return undefined;
+			return options.people.get(p.id);
+		};
+		const drain = async () => {
+			if (draining || disconnected) return;
+			draining = true;
 			try {
-				while (pendingRuns.size > 0 && !disconnected) {
-					const [id, run] = pendingRuns.entries().next().value as [string, RunRecord];
-					pendingRuns.delete(id);
-					// Recheck session, membership and thread ownership on each delivered event.
-					if (await options.sessions.personOf(sessionOf(req)) !== p.id) { res.end(); break; }
-					const currentPerson = await options.people.get(p.id);
-					if (currentPerson === undefined) { res.end(); break; }
-					try { await ownThread(currentPerson, run.instanceId, run.threadId); }
-					catch { continue; }
-					if (disconnected || res.writableEnded) break;
-					res.write(`event: run\ndata: ${JSON.stringify({ run: publicRun(run) })}\n\n`);
-					// A slow client reconnects and reads persisted state instead of retaining unbounded output.
-					if (res.writableLength > 512 * 1024) { res.end(); break; }
+				while (pending.size > 0 && !disconnected) {
+					// One check per pass, before any event of any kind: the identity captured at open proves nothing later.
+					const batch = [...pending.values()];
+					pending.clear();
+					const person = await current();
+					if (person === undefined) { res.end(); break; }
+					for (const item of batch) {
+						try { await item.allowed(person); }
+						catch { continue; }
+						if (disconnected || res.writableEnded) return;
+						res.write(item.frame);
+						// Only a client that really stalls is cut: it reconnects and reads persisted state.
+						if (res.writableLength > 512 * 1024) { res.end(); return; }
+					}
 				}
 			} catch { res.end(); }
-			finally { drainingRuns = false; }
+			finally { draining = false; }
 		};
+		const enqueue = (key: string, item: Pending) => {
+			if (disconnected) return;
+			pending.set(key, item);
+			void drain();
+		};
+		const always = async () => {};
 		const offRuns = runtime.onRunEvent(({ run }) => {
-			if (run.tenantId !== tenantId || run.channel !== "web" || WebChannel.ownerOf(run.threadId) !== p.id || disconnected) return;
-			pendingRuns.set(run.id, run);
-			if (pendingRuns.size > 200) { res.end(); return; }
-			void drainRuns();
+			if (run.tenantId !== tenantId || run.channel !== "web" || WebChannel.ownerOf(run.threadId) !== p.id) return;
+			enqueue(run.id, { allowed: (person) => ownThread(person, run.instanceId, run.threadId), frame: `event: run\ndata: ${JSON.stringify({ run: publicRun(run) })}\n\n` });
 		});
-		req.once("close", () => { disconnected = true; pendingRuns.clear(); offRuns(); });
+		req.once("close", () => { disconnected = true; pending.clear(); offRuns(); });
 		const listeners: [WebChannel, (e: WebEvent) => void][] = [];
 		const attach = (channel: WebChannel) => {
-			const listener = (event: WebEvent) => res.write(`event: entry\ndata: ${JSON.stringify({ ...event, entry: shown(event.entry) })}\n\n`);
+			const listener = (event: WebEvent) => enqueue(`entry:${++counter}`, { allowed: (person) => ownThread(person, event.instanceId, event.threadId), frame: `event: entry\ndata: ${JSON.stringify({ ...event, entry: shown(event.entry) })}\n\n` });
 			channel.events.on(p.id, listener);
 			listeners.push([channel, listener]);
 		};
@@ -70,22 +83,27 @@ export function eventsRoutes(route: AddRoute, options: EventsRoutesDeps): void {
 		streamAttachers.add(attach);
 		// A scheda of this person an agente finished (ADR 0051): the console tells them.
 		const review = ({ card, people }: BoardReview) => {
-			if (people.includes(p.id)) res.write(`event: board\ndata: ${JSON.stringify({ kind: "review", id: card.id, n: card.n, title: card.title })}\n\n`);
+			if (people.includes(p.id)) enqueue(`board:${++counter}`, { allowed: always, frame: `event: board\ndata: ${JSON.stringify({ kind: "review", id: card.id, n: card.n, title: card.title })}\n\n` });
 		};
 		options.board?.work.events.on("review", review);
 		// A scheda of this person due today or late (ADR 0074).
 		const due = ({ card, people }: BoardReview) => {
-			if (people.includes(p.id) && card.due !== undefined) res.write(`event: board\ndata: ${JSON.stringify({ kind: "due", id: card.id, n: card.n, title: card.title, text: dueText(card.due) })}\n\n`);
+			if (people.includes(p.id) && card.due !== undefined) enqueue(`board:${++counter}`, { allowed: always, frame: `event: board\ndata: ${JSON.stringify({ kind: "due", id: card.id, n: card.n, title: card.title, text: dueText(card.due) })}\n\n` });
 		};
 		options.board?.work.events.on("due", due);
 		// A scheda of this person that started by itself (ADR 0076).
 		const started = ({ card, people }: BoardReview) => {
-			if (people.includes(p.id)) res.write(`event: board\ndata: ${JSON.stringify({ kind: "started", id: card.id, n: card.n, title: card.title })}\n\n`);
+			if (people.includes(p.id)) enqueue(`board:${++counter}`, { allowed: always, frame: `event: board\ndata: ${JSON.stringify({ kind: "started", id: card.id, n: card.n, title: card.title })}\n\n` });
 		};
 		options.board?.work.events.on("started", started);
-		const roomEntry = (event: RoomEvent) => res.write(`event: room\ndata: ${JSON.stringify({ roomId: event.roomId, entry: shown(event.entry), ...(event.parent === undefined ? {} : { parent: event.parent }) })}\n\n`);
+		// A stanza the person still has.
+		const roomEntry = (event: RoomEvent) => enqueue(`room:${++counter}`, {
+			allowed: async (person) => { if (await options.rooms?.get(person.id, event.roomId) === undefined) throw new Error("No such room"); },
+			frame: `event: room\ndata: ${JSON.stringify({ roomId: event.roomId, entry: shown(event.entry), ...(event.parent === undefined ? {} : { parent: event.parent }) })}\n\n`,
+		});
 		options.rooms?.events.on(p.id, roomEntry);
-		const ping = setInterval(() => res.write(": ping\n\n"), 25_000);
+		// A quiet stream still ends with its session.
+		const ping = setInterval(() => { void current().then((person) => { if (person === undefined) res.end(); else if (!res.writableEnded) res.write(": ping\n\n"); }, () => res.end()); }, 25_000);
 		await new Promise<void>((resolve) => req.on("close", resolve));
 		clearInterval(ping);
 		streamAttachers.delete(attach);

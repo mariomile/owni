@@ -9,7 +9,10 @@ export function accountDialog() {
 	const body = h("div");
 	const dialog = h("dialog", h("h2", "Il tuo account"), googleSection(), body);
 	const draw = async () => {
+		const { generation } = state;
 		const me = (await api("/api/me")).person;
+		// The person left while this was in flight: it must not sign them back in.
+		if (state.generation !== generation) return;
 		state.me = me;
 		if (me.twoFactor) {
 			const code = codeInput();

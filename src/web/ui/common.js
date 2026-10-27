@@ -323,7 +323,7 @@ export async function api(path, { method = "GET", body, raw } = {}) {
 	});
 	const data = (res.headers.get("content-type") ?? "").includes("json") ? await res.json() : {};
 	if (res.status === 401 && !path.startsWith("/api/login")) {
-		state.me = undefined;
+		resetPerson();
 		// The session shows the login: this module imports nothing.
 		window.dispatchEvent(new Event("owni:unauthorized"));
 		throw new ApiError(401, data.error ?? "Accesso richiesto");
@@ -381,7 +381,37 @@ export const state = {
 	onRun: undefined,
 	onRunsReconnect: undefined,
 	onBoard: undefined,
+	/** Counts every sign-out and change of person: an answer asked before it belongs to nobody now. */
+	generation: 0,
 };
+
+/** Everything of the person who was here, gone: on sign-out, session end, and a different person coming in. */
+export function resetPerson() {
+	state.events?.close();
+	// Dialogs live on the body: one left open would keep showing the previous person's names over the login.
+	for (const dialog of document.querySelectorAll("dialog")) {
+		dialog.close();
+		dialog.remove();
+	}
+	Object.assign(state, {
+		me: undefined,
+		instances: [],
+		instance: undefined,
+		usage: undefined,
+		pendingApprovals: 0,
+		boardReview: 0,
+		conversations: { direct: [], channels: [] },
+		setupLeft: 0,
+		setup: undefined,
+		events: undefined,
+		onEntry: undefined,
+		onRoom: undefined,
+		onRun: undefined,
+		onRunsReconnect: undefined,
+		onBoard: undefined,
+		generation: state.generation + 1,
+	});
+}
 
 export function route() {
 	const hash = location.hash.replace(/^#\/?/, "");

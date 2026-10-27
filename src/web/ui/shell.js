@@ -1,6 +1,6 @@
 // Shell: sidebar, account menu, theme.
 import { accountDialog } from "./account.js";
-import { $app, agentHome, api, ApiError, batched, channelHref, channelName, dmHref, emptyNote, face, go, h, icon, initials, instanceHref, mount, movedHref, route, selectInstance, state, store, toast } from "./common.js";
+import { $app, agentHome, api, ApiError, batched, channelHref, channelName, dmHref, emptyNote, face, go, h, icon, initials, instanceHref, mount, movedHref, resetPerson, route, selectInstance, state, store, toast } from "./common.js";
 import { renderLogin } from "./login.js";
 import { viewActivity } from "./pages/activity.js";
 import { agentForm, viewAgents } from "./pages/agents.js";
@@ -225,11 +225,11 @@ function syncRailControls() {
 let conversationsRead = 0;
 export const refreshConversations = batched(async () => {
 	const read = ++conversationsRead;
-	const person = state.me;
+	const { me: person, generation } = state;
 	if (!person) return;
-	// A failed read keeps the last known list: an unavailable source does not empty the rail.
+	// A failed read keeps the last known list of this same person: an unavailable source does not empty the rail.
 	const conversations = await api("/api/conversations").catch(() => undefined);
-	if (conversations === undefined || state.me !== person || read !== conversationsRead) return;
+	if (conversations === undefined || state.generation !== generation || state.me?.id !== person.id || read !== conversationsRead) return;
 	state.conversations = conversations;
 });
 
@@ -370,7 +370,7 @@ function openMenu() {
 			entry("keyboard", "Scorciatoie da tastiera", shortcutsDialog),
 			entry("logout", "Esci", async () => {
 				await api("/api/logout", { method: "POST" }).catch(() => {});
-				state.me = undefined;
+				resetPerson();
 				renderLogin();
 			}),
 		),
