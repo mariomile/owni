@@ -123,7 +123,7 @@ Il tetto giornaliero (`DEFAULT_COST_CAPS`) si applica prima di ogni richiesta al
 
 ### Verifiche in CI
 
-`.github/workflows/ci.yml` esegue typecheck, la sintassi di tutti i moduli JavaScript della console (`scripts/check-js.sh`) e la suite di test con Chromium e WebKit reali. Con `OWNI_REQUIRE_BROWSERS=1` (`test/playwright-browsers.ts`) un browser che non parte fa fallire l'esecuzione invece di far saltare le suite che lo usano.
+`.github/workflows/ci.yml` esegue typecheck, la sintassi di tutti i moduli JavaScript della console (`scripts/check-js.sh`) e la suite di test con Chromium e WebKit reali. Con `OWNI_REQUIRE_BROWSERS=1` (`test/playwright-browsers.ts`) un browser che non è installato fa fallire l'esecuzione invece di far saltare le suite che lo usano.
 
 ## 6. Rischi di Pi Durable
 

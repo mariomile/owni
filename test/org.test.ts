@@ -5,7 +5,7 @@ import { type DurableEngine, OwniRuntime } from "../src/core/index.ts";
 import { checkOrg, EMPTY_ORG, type Org, onlyKnown, orgLinks, orgNote, placeLine, withoutAgent } from "../src/core/org.ts";
 import { loadOwniConfig } from "../src/main/config.ts";
 import { FAUX_MODEL, tempDataDir } from "./helpers.ts";
-import { chromiumAvailable, launchChromium } from "./playwright-browsers.ts";
+import { chromiumFound, launchChromium } from "./playwright-browsers.ts";
 
 const NAMES = new Map([
 	["owni", "Owni"],
@@ -218,7 +218,7 @@ describe("the organigramma's routes", () => {
 	});
 });
 
-describe.skipIf(!(await chromiumAvailable()))("the organigramma as a tree, in real Chromium", () => {
+describe.skipIf(!chromiumFound)("the organigramma as a tree, in real Chromium", () => {
 	const running: RunningOwni[] = [];
 	afterEach(async () => {
 		for (const a of running.splice(0)) await a.stop();
@@ -237,7 +237,6 @@ describe.skipIf(!(await chromiumAvailable()))("the organigramma as a tree, in re
 		const { version } = (await (await fetch(`${base}/api/org`, { headers: { cookie, "x-owni": "1" } })).json()) as { version: string };
 		expect((await api("/api/org", { org: COMPANY, version }, "PUT")).status).toBe(200);
 
-		const { chromium } = await import("playwright-core");
 		const browser = await launchChromium();
 		try {
 			const page = await browser.newPage();

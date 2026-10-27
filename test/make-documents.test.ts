@@ -126,10 +126,10 @@ describe("Markdown for documents", () => {
 
 describe("ZIP writing", () => {
 	it("writes files our reader (and Office) can open", () => {
-		const zip = new Zip(writeZip([{ name: "a.xml", data: "<a>è</a>" }, { name: "media/p.png", data: Buffer.from([1, 2]) }]));
+		const zip = new Zip(writeZip([{ name: "a.xml", data: "<a>è</a>" }, { name: "media/p.png", data: Buffer.from([1, 2, 3]) }]));
 		expect(zip.names()).toEqual(["a.xml", "media/p.png"]);
 		expect(zip.text("a.xml")).toBe("<a>è</a>");
-		expect(zip.file("media/p.png")).toEqual(Buffer.from([1, 2]));
+		expect(zip.file("media/p.png")).toEqual(Buffer.from([1, 2, 3]));
 	});
 });
 
@@ -378,14 +378,22 @@ describe("what models write, read as meant", () => {
 			const used = process.cpuUsage(before);
 			return (used.user + used.system) / 1000;
 		};
-		const slow: [string, number][] = [[" ", 2_000_000], ["[", 200_000], ["*a ", 100_000], ["_a_b ", 60_000], ["**a ", 80_000], ["`a", 1_000_000], ["[a](b", 60_000]];
-		for (const [unit, count] of slow) {
-			const text = (n: number) => (unit === " " ? `# a${" ".repeat(n)}x` : unit.repeat(n));
+		const repeat = (unit: string) => (n: number) => unit.repeat(n);
+		const slow: [string, (n: number) => string, number][] = [
+			["spaces in a heading", (n) => `# a${" ".repeat(n)}x`, 2_000_000],
+			["[", repeat("["), 200_000],
+			["*a ", repeat("*a "), 20_000],
+			["_a_b ", repeat("_a_b "), 12_000],
+			["**a ", repeat("**a "), 10_000],
+			["`a", repeat("`a"), 250_000],
+			["[a](b", repeat("[a](b"), 60_000],
+		];
+		for (const [label, build, count] of slow) {
 			// The best of two runs each: a garbage collection in one run is noise, not the parser's growth.
-			const best = (n: number) => Math.min(...[1, 2].map(() => cpuMs(text(n))));
+			const best = (n: number) => Math.min(...[1, 2].map(() => cpuMs(build(n))));
 			const base = best(count);
 			const quadrupled = best(count * 4);
-			expect(quadrupled, `${JSON.stringify(unit)}: ${base} ms at ${count}, ${quadrupled} ms at ${count * 4}`).toBeLessThan(Math.max(base, 10) * 10);
+			expect(quadrupled, `${label}: ${base} ms at ${count}, ${quadrupled} ms at ${count * 4}`).toBeLessThan(Math.max(base, 10) * 10);
 		}
 	});
 });

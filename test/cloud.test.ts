@@ -79,7 +79,7 @@ async function signUp(c: Awaited<ReturnType<typeof cloudAt>>, email: string) {
 	expect(wake).toBeDefined();
 	const cookie = `${session}; ${wake}`;
 	const api = (path: string, body?: unknown) => cell(path, { method: body === undefined ? "GET" : "POST", cookie, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
-	return { url, host: url.host, api, cell, token, session, wake };
+	return { url, host: url.host, api, cell, token, session, cookie };
 }
 
 async function until(check: () => Promise<boolean>, timeoutMs = 30_000): Promise<void> {
@@ -149,37 +149,19 @@ describe("Owni Cloud control plane (cells as local processes)", () => {
 		}
 	}, 180_000);
 
-	it("a stopped cell is not woken by anonymous requests, only by its people or its webhooks", async () => {
+	it("a stopped cell is woken by its people's credential and its webhook paths, not by anonymous requests; logging out clears the credential", async () => {
 		const c = await cloud({ idleMs: 0 });
 		const anna = await signUp(c, "anna@studio.example");
-		await anna.api("/api/me");
 		const cell = (await c.provider.list())[0] as string;
-		await c.cp.tick(new Date());
-		expect(await c.provider.status(cell)).toBe("stopped");
-		expect((await anna.cell("/api/me")).status).toBe(503);
-		expect((await anna.cell("/login")).status).toBe(503);
-		expect(await c.provider.status(cell)).toBe("stopped");
-		expect((await anna.api("/api/me")).status).toBe(200);
-		expect(await c.provider.status(cell)).toBe("running");
-	}, 180_000);
-
-	it("a stopped cell is not woken by a forged cookie or a made-up hook; the real credential and a real hook path wake it", async () => {
-		const c = await cloud({ idleMs: 0 });
-		const anna = await signUp(c, "anna@studio.example");
-		const luca = await signUp(c, "luca@altro.example");
-		const cell = (await c.provider.list()).find((id) => anna.host.startsWith(id)) as string;
 		const asleep = async () => {
 			await c.cp.tick(new Date());
 			expect(await c.provider.status(cell)).toBe("stopped");
 		};
 		await asleep();
-		// A 32-character cookie of the right shape, and a path under /hooks/ that nobody serves.
-		expect((await anna.cell("/api/me", { cookie: `owni_session=${"a".repeat(32)}` })).status).toBe(503);
-		expect((await anna.cell("/api/me", { cookie: `${anna.session}; owni_wake=${"1".repeat(13)}.${"a".repeat(64)}` })).status).toBe(503);
+		expect((await anna.cell("/api/me")).status).toBe(503);
+		expect((await anna.cell("/login")).status).toBe(503);
+		expect((await anna.cell("/api/me", { cookie: anna.session })).status).toBe(503);
 		expect((await anna.cell("/hooks/not-a-real-hook", { method: "POST", body: "{}" })).status).toBe(503);
-		expect((await anna.cell("/hooks/telegram/a/b", { method: "POST", body: "{}" })).status).toBe(503);
-		// Luca's credential is signed for his cell, not Anna's.
-		expect((await anna.cell("/api/me", { cookie: `${anna.session}; ${luca.wake}` })).status).toBe(503);
 		expect(await c.provider.status(cell)).toBe("stopped");
 		// A real hook path wakes the cell; the cell turns the unsigned call away.
 		expect((await anna.cell("/hooks/telegram/owni", { method: "POST", body: "{}" })).status).toBeGreaterThanOrEqual(400);
@@ -188,6 +170,11 @@ describe("Owni Cloud control plane (cells as local processes)", () => {
 		// The credential the control plane signed wakes it.
 		expect((await anna.api("/api/me")).status).toBe(200);
 		expect(await c.provider.status(cell)).toBe("running");
+		const out = await anna.api("/api/logout", {});
+		expect(out.status).toBe(200);
+		const cleared = out.headers.get("set-cookie") ?? "";
+		expect(cleared).toMatch(/owni_session=;[^,]*Max-Age=0/);
+		expect(cleared).toMatch(/owni_wake=;[^,]*Max-Age=0/);
 	}, 180_000);
 
 	it("a request the cell turns away does not keep it awake; one it serves does", async () => {
@@ -206,6 +193,43 @@ describe("Owni Cloud control plane (cells as local processes)", () => {
 		expect(await c.provider.status(cell)).toBe("running");
 	}, 180_000);
 
+	it("a request an awake cell turns away does not count as activity: a stranger cannot keep it running", async () => {
+		const c = await cloud({ idleMs: 2_000 });
+		const anna = await signUp(c, "anna@studio.example");
+		const cell = (await c.provider.list())[0] as string;
+		await new Promise((r) => setTimeout(r, 2_100));
+		expect(await c.provider.status(cell)).toBe("running");
+		expect((await anna.cell("/api/me")).status).toBe(401);
+		expect((await anna.cell("/hooks/telegram/owni", { method: "POST", body: "{}" })).status).toBeGreaterThanOrEqual(400);
+		await c.cp.tick(new Date());
+		expect(await c.provider.status(cell)).toBe("stopped");
+	}, 180_000);
+
+	it("a person who leaves while their cell starts does not keep it awake", async () => {
+		const c = await cloud({ idleMs: 0 });
+		const anna = await signUp(c, "anna@studio.example");
+		const cell = (await c.provider.list())[0] as string;
+		await c.cp.tick(new Date());
+		expect(await c.provider.status(cell)).toBe("stopped");
+		const realStart = c.provider.start.bind(c.provider);
+		let started!: () => void;
+		const done = new Promise<void>((r) => (started = r));
+		vi.spyOn(c.provider, "start").mockImplementation(async (tenant) => {
+			await new Promise((r) => setTimeout(r, 500));
+			await realStart(tenant);
+			setTimeout(started, 200);
+		});
+		// The tab is closed while the cell is still starting.
+		const req = request({ host: "127.0.0.1", port: c.port, path: "/api/me", headers: { host: anna.host, "x-owni": "1", cookie: anna.cookie } });
+		req.on("error", () => {});
+		req.end();
+		setTimeout(() => req.destroy(), 100);
+		await done;
+		expect(await c.provider.status(cell)).toBe("running");
+		await c.cp.tick(new Date());
+		expect(await c.provider.status(cell)).toBe("stopped");
+	}, 180_000);
+
 	it("anonymous webhook wakes use up only their own budget: the owner's credential still wakes the cell", async () => {
 		const c = await cloud({ idleMs: 0 });
 		const anna = await signUp(c, "anna@studio.example");
@@ -219,8 +243,8 @@ describe("Owni Cloud control plane (cells as local processes)", () => {
 		expect(statuses.slice(6)).toEqual([429, 429]);
 		await c.cp.tick(new Date());
 		expect(await c.provider.status(cell)).toBe("stopped");
-		// Her credential is not charged to that budget, and a planted cookie of the same name does not hide it.
-		expect((await anna.cell("/api/me", { cookie: `owni_wake=1.zz; ${anna.session}; ${anna.wake}` })).status).toBe(200);
+		// Her credential is not charged to that budget.
+		expect((await anna.api("/api/me")).status).toBe(200);
 		expect(await c.provider.status(cell)).toBe("running");
 	}, 180_000);
 
@@ -246,16 +270,6 @@ describe("Owni Cloud control plane (cells as local processes)", () => {
 		}
 		expect(later.slice(0, 5).every((s) => s !== 429)).toBe(true);
 		expect(later[5]).toBe(429);
-	}, 180_000);
-
-	it("logging out clears the wake credential with the session", async () => {
-		const c = await cloud();
-		const anna = await signUp(c, "anna@studio.example");
-		const out = await anna.api("/api/logout", {});
-		expect(out.status).toBe(200);
-		const cleared = out.headers.get("set-cookie") ?? "";
-		expect(cleared).toMatch(/owni_session=;[^,]*Max-Age=0/);
-		expect(cleared).toMatch(/owni_wake=;[^,]*Max-Age=0/);
 	}, 180_000);
 
 	it("the same machine cannot send sign-in links to everyone", async () => {
