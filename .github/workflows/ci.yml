@@ -22,15 +22,17 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
-      - name: Web console syntax
-        run: node --check src/web/ui/app.js
-      # The browser tests (web_screenshot, web_browse) run on a real Chromium.
-      - name: Chromium for the browser tests
-        run: pnpm exec playwright-core install --with-deps chromium
+      - name: Browser-side JS syntax (console, OpenUI frame, cloud UI, desktop connect)
+        run: sh scripts/check-js.sh
+      # The browser tests run on real Chromium and WebKit (OpenUI), found through PLAYWRIGHT_BROWSERS_PATH.
+      - name: Chromium and WebKit for the browser tests
+        run: pnpm exec playwright-core install --with-deps chromium webkit
         env:
           PLAYWRIGHT_BROWSERS_PATH: ${{ runner.temp }}/pw-browsers
+      # OWNI_REQUIRE_BROWSERS=1: a browser that does not start fails the run instead of skipping its suites.
       - run: pnpm test
         env:
           PLAYWRIGHT_BROWSERS_PATH: ${{ runner.temp }}/pw-browsers
+          OWNI_REQUIRE_BROWSERS: "1"
       - name: General agent catalog + deterministic outcome contracts (faux, no external calls)
         run: pnpm eval:agente

@@ -1,4 +1,3 @@
-import { existsSync } from "node:fs";
 import { mkdir, readFile, readdir, rm } from "node:fs/promises";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -11,10 +10,9 @@ import { BrowserProfiles } from "../src/core/web-profiles.ts";
 import { type Browser, type BrowseAccounts, BrowseSessions, describeView, sessionKey, type View } from "../src/core/web-session.ts";
 import { Workspace } from "../src/core/workspace.ts";
 import { tempDataDir } from "./helpers.ts";
+import { chromiumAvailable, launchChromium } from "./playwright-browsers.ts";
 
-// Match browser-file-chooser.test.ts: use the installed browser, never download one.
-const chrome = process.env.OWNI_CHROMIUM_PATH ?? (existsSync("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome") ? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" : undefined);
-const available = chrome !== undefined && existsSync(chrome);
+const available = chromiumAvailable;
 const scope = "acme/ops";
 const alice = sessionKey(scope, { channel: "web", threadId: "alice-main" });
 const sibling = sessionKey(scope, { channel: "web", threadId: "alice-other" });
@@ -126,7 +124,7 @@ async function start() {
 	}
 	const site = await serve();
 	const { chromium } = await import("playwright-core");
-	const chromiumBrowser = await chromium.launch({ executablePath: chrome, args: ["--no-sandbox"] });
+	const chromiumBrowser = await launchChromium();
 	const browser = chromiumBrowser as unknown as Browser;
 	const allowedUsers = new Set(["alice", "bob"]);
 	const submissions: [string, string, string][] = [];

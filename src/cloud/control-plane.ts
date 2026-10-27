@@ -5,7 +5,7 @@ import { request as httpsRequest } from "node:https";
 import { extname, join } from "node:path";
 import { googleReturnQuery } from "../connectors/google.ts";
 import { COMPUTER_LIMITS, ComputerError, type ComputerProvider, type ComputerRun, computerKey, workPath } from "../core/computer.ts";
-import { computerToken, proxyToken, sameSecret } from "../web/compare.ts";
+import { computerToken, proxyToken, sameSecret, WAKE_TTL_MS, wakeCredential, wakeCredentialValid } from "../web/compare.ts";
 import { readJsonFile, updateJsonFile } from "../core/locked-json.ts";
 import { HttpError, pathPattern, readBody, readJson as readJsonBody, send } from "../web/http.ts";
 import type { CellState } from "../web/server.ts";
@@ -142,6 +142,11 @@ function clientAddress(req: IncomingMessage): string {
 	const last = (Array.isArray(forwarded) ? forwarded.join(",") : (forwarded ?? "")).split(",").at(-1)?.trim();
 	return last === undefined || last === "" ? socket : last;
 }
+/** The webhook addresses a cell serves (src/web/server.ts): the only paths, besides a person's credential, that wake a stopped cell. The cell checks each one's own signature. */
+const WEBHOOK_PATHS = [/^\/hooks\/(?:telegram|phone|whatsapp)\/[a-z0-9_-]+$/, /^\/hooks\/automazione\/[a-z0-9_-]+\/[a-f0-9]{12}$/];
+const WAKE_COOKIE = "owni_wake";
+const WAKES_PER_WINDOW = 6;
+const WAKE_WINDOW_MS = 10 * 60 * 1000;
 const SLEEPING = { error: "Owni dorme: entra dal link di accesso per svegliarla" };
 const CELL_TIMEOUT_MS = 5_000;
 const LINKS_PER_HOUR = 5;
@@ -735,23 +740,38 @@ export async function startControlPlane(options: ControlPlaneOptions): Promise<C
 			return send(res, 402, { error: `Il periodo di prova è finito: attiva l'abbonamento da ${publicUrl(options.domain)}` });
 		}
 		const awake = (await options.provider.status(tenant)) === "running" && !stoppings.has(tenant);
-		if (!awake && !mayWake(req, path.pathname)) return send(res, 503, SLEEPING);
+		const secret = cellOf(tenant)?.secret;
+		if (!awake && !mayWake(req, path.pathname, tenant, secret)) return send(res, 503, SLEEPING);
+		if (!awake && !wakeAllowed(tenant)) {
+			res.setHeader("retry-after", String(Math.ceil(WAKE_WINDOW_MS / 1000)));
+			return send(res, 429, { error: "Troppi tentativi di risveglio: riprova tra qualche minuto" });
+		}
+		const seenBefore = lastSeen.get(tenant);
 		try {
 			await ensureRunning(tenant);
 		} catch (error) {
 			log(`cloud: cell ${tenant} did not start: ${error instanceof Error ? error.message : String(error)}`);
 			return send(res, 503, { error: "Owni si sta svegliando: riprova tra qualche secondo" });
 		}
+		const wokeAt = awake ? undefined : lastSeen.get(tenant);
 		const target = new URL(await options.provider.baseUrl(tenant));
 		open.set(tenant, (open.get(tenant) ?? 0) + 1);
+		// What the cell turns away (no session, bad signature, no such hook) does not keep it awake: the wake it caused is taken back.
+		let rejected = false;
 		const done = () => {
 			open.set(tenant, Math.max(0, (open.get(tenant) ?? 1) - 1));
-			lastSeen.set(tenant, Date.now());
+			if (!rejected) lastSeen.set(tenant, Date.now());
+			else if (wokeAt !== undefined && lastSeen.get(tenant) === wokeAt) {
+				if (seenBefore === undefined) lastSeen.delete(tenant);
+				else lastSeen.set(tenant, seenBefore);
+			}
 		};
 		// A cell on this host speaks http; one on a platform (Railway) is reached over https.
 		const call = target.protocol === "https:" ? httpsRequest : request;
 		const upstream = call({ host: target.hostname, port: target.port, method: req.method, path: `${path.pathname}${path.search}`, headers: forwardHeaders(req, tenant, target.host) }, (answer) => {
-			res.writeHead(answer.statusCode ?? 502, withoutHopByHop(answer.headers));
+			const status = answer.statusCode ?? 502;
+			rejected = status >= 400;
+			res.writeHead(status, withoutHopByHop(withWakeCredential(answer.headers, status, path.pathname, tenant, secret)));
 			answer.pipe(res);
 		});
 		upstream.on("error", () => {
@@ -763,6 +783,49 @@ export async function startControlPlane(options: ControlPlaneOptions): Promise<C
 			done();
 		});
 		req.pipe(upstream);
+	}
+
+	/** Wakes of a stopped cell by requests, per tenant: starting a cell costs money, so even well-formed requests are counted. */
+	const wakesByTenant = new Map<string, number[]>();
+	function wakeAllowed(tenant: string): boolean {
+		const now = Date.now();
+		const recent = (wakesByTenant.get(tenant) ?? []).filter((t) => now - t < WAKE_WINDOW_MS);
+		if (recent.length >= WAKES_PER_WINDOW) {
+			wakesByTenant.set(tenant, recent);
+			return false;
+		}
+		wakesByTenant.set(tenant, [...recent, now]);
+		return true;
+	}
+
+	/**
+	 * The answer of a cell, with the wake credential added once the cell itself has accepted the
+	 * person: right after a login (it sets a session), or when it answers `/api/me` to one. A
+	 * logout (it clears the session) clears the credential too.
+	 */
+	function withWakeCredential(headers: NodeJS.Dict<string | string[]>, status: number, pathname: string, tenant: string, secret: string | undefined): NodeJS.Dict<string | string[]> {
+		if (secret === undefined || status >= 400) return headers;
+		const set = headers["set-cookie"];
+		const cookies = Array.isArray(set) ? set : set === undefined ? [] : [set];
+		const session = cookies.find((c) => c.startsWith("owni_session="));
+		const attributes = `HttpOnly; SameSite=Strict; Path=/${options.publicScheme === "https" ? "; Secure" : ""}`;
+		if (session !== undefined && /^owni_session=;/.test(session)) return { ...headers, "set-cookie": [...cookies, `${WAKE_COOKIE}=; ${attributes}; Max-Age=0`] };
+		if (session === undefined && !(pathname === "/api/me" && status === 200)) return headers;
+		const expiresAt = Date.now() + WAKE_TTL_MS;
+		return { ...headers, "set-cookie": [...cookies, `${WAKE_COOKIE}=${wakeCredential(secret, tenant, expiresAt)}; ${attributes}; Max-Age=${Math.floor(WAKE_TTL_MS / 1000)}`] };
+	}
+
+	/**
+	 * A stopped cell wakes for its people (the wake credential this control plane signed after the
+	 * cell accepted their session) and for the webhook addresses the cell serves; an anonymous
+	 * request does not, or anyone could keep any cell running. The sign-in link needs no wake: the
+	 * control plane starts the cell before handing it out.
+	 */
+	function mayWake(req: IncomingMessage, pathname: string, tenant: string, secret: string | undefined): boolean {
+		if (secret === undefined) return false;
+		if (WEBHOOK_PATHS.some((p) => p.test(pathname))) return true;
+		const credential = /(?:^|;\s*)owni_wake=([\w.]+)/.exec(String(req.headers.cookie ?? ""))?.[1];
+		return credential !== undefined && wakeCredentialValid(secret, tenant, credential, Date.now());
 	}
 
 	/** Headers for the cell: no credentials meant for the control plane, no hop-by-hop, our own forwarding facts. */
@@ -877,16 +940,6 @@ function cellPath(target: string): { pathname: string; search: string } | undefi
 	} catch {
 		return undefined;
 	}
-}
-
-/**
- * A stopped cell wakes for its people (a session cookie), the sign-in link, and the webhooks
- * of Telegram and WhatsApp; an anonymous request does not, or anyone could keep any cell running.
- */
-function mayWake(req: IncomingMessage, pathname: string): boolean {
-	if (pathname.startsWith("/hooks/")) return true;
-	// The sign-in link needs no wake: the control plane starts the cell before handing it out.
-	return /(?:^|;\s*)owni_session=[\w-]{20,}/.test(String(req.headers.cookie ?? ""));
 }
 
 const HOP_BY_HOP = new Set(["connection", "keep-alive", "proxy-authenticate", "proxy-authorization", "te", "trailer", "transfer-encoding", "upgrade"]);

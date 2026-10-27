@@ -1,0 +1,15 @@
+# 0128: Il risveglio della cella vuole una credenziale firmata dal control plane
+
+Una cella spenta si sveglia a una richiesta ([ADR 0007](0007-owni-cloud-a-celle.md)). Il control plane decideva se svegliarla guardando la forma della richiesta: un cookie `owni_session` lungo almeno 20 caratteri, oppure un percorso qualsiasi sotto `/hooks/`. Il cookie lo emette la cella e il control plane non può controllarlo, quindi un cookie inventato o `/hooks/non-esiste` bastavano a far partire la cella di un tenant (che si conosce dal sottodominio). Il costo è di macchina e di pressione sul server, non un accesso ai dati: la cella rifiuta comunque la richiesta. In più la cella veniva avviata prima di essere interrogata, e la richiesta rifiutata contava come attività, quindi la teneva accesa.
+
+## Decisione
+
+- **Credenziale di risveglio.** Quando una cella accetta una sessione (la risposta al login imposta `owni_session`, oppure risponde 200 a `/api/me`), il control plane aggiunge un secondo cookie `owni_wake`: scadenza e firma HMAC con il segreto della cella (lo stesso da cui derivano `proxyToken` e `computerToken`), legata al tenant. Alla richiesta successiva a una cella spenta, il control plane la verifica da solo, senza interrogare nessuno. Il logout della cella cancella anche questo cookie. Una sessione già aperta prima di questa modifica prende il cookie alla prima risposta di `/api/me` a cella accesa.
+- **Webhook solo su indirizzi veri.** Svegliano la cella soltanto gli indirizzi che la cella serve: `/hooks/telegram|phone|whatsapp/<istanza>` e `/hooks/automazione/<istanza>/<12 esadecimali>`. Il control plane non conosce le istanze di una cella, quindi un indirizzo ben formato ma inesistente può ancora svegliarla; la firma del webhook la controlla la cella. Lo accettiamo perché il costo è limitato dai due punti sotto.
+- **Tentativi limitati per tenant.** Al più 6 risvegli da richieste in 10 minuti per tenant; oltre, 429 con `Retry-After`. Un risveglio legittimo capita una volta per ogni spegnimento, quindi il limite non si incontra in uso normale. I task programmati non passano di qui.
+- **Le richieste rifiutate non contano come attività.** Se la cella risponde con un errore (400 o più), non rinnova l'attività; se quella richiesta l'aveva svegliata, il rinnovo fatto all'avvio viene ripristinato e la cella torna spegnibile al giro successivo, salvo altre richieste nel frattempo.
+
+## Alternative scartate
+
+- **Cookie di sessione firmato dal control plane al posto di quello della cella.** Spostava l'emissione delle sessioni fuori dalla cella, che oggi le tiene e le revoca.
+- **Registro degli indirizzi webhook nel control plane**, riempito dalle celle: un secondo stato da tenere allineato, per chiudere un residuo che il limite già contiene.

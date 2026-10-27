@@ -370,9 +370,22 @@ describe("what models write, read as meant", () => {
 	});
 
 	it("parses text made to be slow in linear time", () => {
-		const started = Date.now();
-		for (const text of [`# a${" ".repeat(20_000)}x`, "[".repeat(200_000), "*a ".repeat(100_000), "_a_b ".repeat(60_000), "**a ".repeat(80_000), "`".repeat(200_000), "[a](b".repeat(60_000)]) markdownBlocks(text);
-		expect(Date.now() - started).toBeLessThan(3000);
+		// Not a wall-clock bound (it fails under a loaded suite): CPU time at 3x the input must stay near 3x, not 9x as a quadratic parser would.
+		const cpuMs = (text: string): number => {
+			const before = process.cpuUsage();
+			const blocks = markdownBlocks(text);
+			expect(blocks.length).toBeGreaterThan(0);
+			const used = process.cpuUsage(before);
+			return (used.user + used.system) / 1000;
+		};
+		const slow: [string, number][] = [[" ", 20_000], ["[", 200_000], ["*a ", 100_000], ["_a_b ", 60_000], ["**a ", 80_000], ["`", 200_000], ["[a](b", 60_000]];
+		for (const [unit, count] of slow) {
+			const text = (n: number) => (unit === " " ? `# a${" ".repeat(n)}x` : unit.repeat(n));
+			cpuMs(text(count)); // warm up
+			const base = cpuMs(text(count));
+			const tripled = cpuMs(text(count * 3));
+			expect(tripled, `${JSON.stringify(unit)}: ${base} ms at ${count}, ${tripled} ms at ${count * 3}`).toBeLessThan(Math.max(base, 10) * 6);
+		}
 	});
 });
 

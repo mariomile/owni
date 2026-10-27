@@ -1,4 +1,3 @@
-import { existsSync } from "node:fs";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
@@ -9,10 +8,10 @@ import { type Browser, BrowseSessions, sessionKey } from "../src/core/web-sessio
 import { type Workspace, WorkspaceError } from "../src/core/workspace.ts";
 import { loadOwniConfig } from "../src/main/config.ts";
 import { tempDataDir } from "./helpers.ts";
+import { chromiumAvailable, launchChromium } from "./playwright-browsers.ts";
 
-// Real Chromium: the file chooser is refused where it opens, whatever way the page reaches it (ADR 0103).
-const chrome = process.env.OWNI_CHROMIUM_PATH ?? (existsSync("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome") ? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" : undefined);
-const available = chrome !== undefined && existsSync(chrome);
+// Real Chromium (test/playwright-browsers.ts): the file chooser is refused where it opens, whatever way the page reaches it (ADR 0103).
+const available = chromiumAvailable;
 
 const closers: (() => Promise<void>)[] = [];
 afterEach(async () => {
@@ -58,7 +57,7 @@ async function serve(): Promise<string> {
 async function start(limits?: { max: number; idleMs: number }) {
 	const base = await serve();
 	const { chromium } = await import("playwright-core");
-	const browser = (await chromium.launch({ executablePath: chrome, args: ["--no-sandbox"] })) as unknown as Browser;
+	const browser = (await launchChromium()) as unknown as Browser;
 	const refused: string[] = [];
 	const sessions = new BrowseSessions(limits, (key, host) => refused.push(`${key} ${host}`));
 	closers.push(async () => {
@@ -210,7 +209,7 @@ describe.skipIf(!available)("no file uploads, in real Chromium", () => {
 
 	it("a person's click through the panel leaves a late chooser for the agent's next view", async () => {
 		const site = await serve();
-		const config = loadOwniConfig({ OWNI_DATA_DIR: tempDataDir(), OWNI_MODEL_PROVIDER: "faux", OWNI_WEB_PORT: "1", OWNI_SCREENSHOTS_WITHOUT_SANDBOX: "1", OWNI_CHROMIUM_PATH: chrome as string });
+		const config = loadOwniConfig({ OWNI_DATA_DIR: tempDataDir(), OWNI_MODEL_PROVIDER: "faux", OWNI_WEB_PORT: "1", OWNI_SCREENSHOTS_WITHOUT_SANDBOX: "1" });
 		const owni: RunningOwni = await startOwni({ ...config, web: { ...config.web, port: 0 } }, { webAddressAllowed: (address) => address === "127.0.0.1" || publicAddress(address), schedulerIntervalMs: 60_000, log: () => {} });
 		closers.push(() => owni.stop());
 		const policy = (await owni.runtime.registry.getInstance("default", "owni")).egress;

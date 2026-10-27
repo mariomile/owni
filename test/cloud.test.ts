@@ -73,9 +73,13 @@ async function signUp(c: Awaited<ReturnType<typeof cloudAt>>, email: string) {
 	const cell = c.at(url.host);
 	const login = await cell("/api/login", { method: "POST", body: JSON.stringify({ token: url.hash.slice(1) }) });
 	expect(login.status).toBe(200);
-	const cookie = (login.headers.get("set-cookie") ?? "").split(";")[0] as string;
+	const setCookie = login.headers.get("set-cookie") ?? "";
+	const session = /owni_session=[^;]+/.exec(setCookie)?.[0] as string;
+	const wake = /owni_wake=[^;]+/.exec(setCookie)?.[0] as string;
+	expect(wake).toBeDefined();
+	const cookie = `${session}; ${wake}`;
 	const api = (path: string, body?: unknown) => cell(path, { method: body === undefined ? "GET" : "POST", cookie, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
-	return { url, host: url.host, api, cell, token };
+	return { url, host: url.host, api, cell, token, session, wake };
 }
 
 async function until(check: () => Promise<boolean>, timeoutMs = 30_000): Promise<void> {
@@ -157,6 +161,61 @@ describe("Owni Cloud control plane (cells as local processes)", () => {
 		expect(await c.provider.status(cell)).toBe("stopped");
 		expect((await anna.api("/api/me")).status).toBe(200);
 		expect(await c.provider.status(cell)).toBe("running");
+	}, 180_000);
+
+	it("a stopped cell is not woken by a forged cookie or a made-up hook; the real credential and a real hook path wake it", async () => {
+		const c = await cloud({ idleMs: 0 });
+		const anna = await signUp(c, "anna@studio.example");
+		const luca = await signUp(c, "luca@altro.example");
+		const cell = (await c.provider.list()).find((id) => anna.host.startsWith(id)) as string;
+		const asleep = async () => {
+			await c.cp.tick(new Date());
+			expect(await c.provider.status(cell)).toBe("stopped");
+		};
+		await asleep();
+		// A 32-character cookie of the right shape, and a path under /hooks/ that nobody serves.
+		expect((await anna.cell("/api/me", { cookie: `owni_session=${"a".repeat(32)}` })).status).toBe(503);
+		expect((await anna.cell("/api/me", { cookie: `${anna.session}; owni_wake=${"1".repeat(13)}.${"a".repeat(64)}` })).status).toBe(503);
+		expect((await anna.cell("/hooks/not-a-real-hook", { method: "POST", body: "{}" })).status).toBe(503);
+		expect((await anna.cell("/hooks/telegram/a/b", { method: "POST", body: "{}" })).status).toBe(503);
+		// Luca's credential is signed for his cell, not Anna's.
+		expect((await anna.cell("/api/me", { cookie: `${anna.session}; ${luca.wake}` })).status).toBe(503);
+		expect(await c.provider.status(cell)).toBe("stopped");
+		// A real hook path wakes the cell; the cell turns the unsigned call away.
+		expect((await anna.cell("/hooks/telegram/owni", { method: "POST", body: "{}" })).status).toBeGreaterThanOrEqual(400);
+		expect(await c.provider.status(cell)).toBe("running");
+		await asleep();
+		// The credential the control plane signed wakes it.
+		expect((await anna.api("/api/me")).status).toBe(200);
+		expect(await c.provider.status(cell)).toBe("running");
+	}, 180_000);
+
+	it("a request the cell turns away does not keep it awake; one it serves does", async () => {
+		const c = await cloud({ idleMs: 2_000 });
+		const anna = await signUp(c, "anna@studio.example");
+		const cell = (await c.provider.list())[0] as string;
+		await new Promise((r) => setTimeout(r, 2_100));
+		await c.cp.tick(new Date());
+		expect(await c.provider.status(cell)).toBe("stopped");
+		expect((await anna.cell("/hooks/telegram/owni", { method: "POST", body: "{}" })).status).toBeGreaterThanOrEqual(400);
+		expect(await c.provider.status(cell)).toBe("running");
+		await c.cp.tick(new Date());
+		expect(await c.provider.status(cell)).toBe("stopped");
+		expect((await anna.api("/api/me")).status).toBe(200);
+		await c.cp.tick(new Date());
+		expect(await c.provider.status(cell)).toBe("running");
+	}, 180_000);
+
+	it("wake attempts are limited per tenant", async () => {
+		const c = await cloud({ idleMs: 0 });
+		const anna = await signUp(c, "anna@studio.example");
+		const statuses: number[] = [];
+		for (let i = 0; i < 8; i++) {
+			await c.cp.tick(new Date());
+			statuses.push((await anna.cell("/hooks/telegram/owni", { method: "POST", body: "{}" })).status);
+		}
+		expect(statuses.slice(0, 6).every((s) => s !== 429 && s !== 503)).toBe(true);
+		expect(statuses.slice(6)).toEqual([429, 429]);
 	}, 180_000);
 
 	it("the same machine cannot send sign-in links to everyone", async () => {

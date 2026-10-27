@@ -1,4 +1,3 @@
-import { existsSync } from "node:fs";
 import { request } from "node:http";
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
@@ -13,19 +12,17 @@ import { UsageLedger } from "../src/core/usage.ts";
 import { PeopleStore, SessionStore } from "../src/web/auth.ts";
 import { createWebApp } from "../src/web/server.ts";
 import { tempDataDir } from "./helpers.ts";
+import { chromiumAvailable, launchChromium, launchWebkit, webkitAvailable } from "./playwright-browsers.ts";
 
 vi.stubGlobal("document", { getElementById: () => null });
 // @ts-expect-error Browser modules intentionally use plain JavaScript.
 const { actionText } = (await import("../src/web/ui/openui.js")) as { actionText(action: unknown): string };
 vi.unstubAllGlobals();
 
-// Match browser-file-chooser.test.ts: use the installed browser, never download one.
-const chrome = process.env.OWNI_CHROMIUM_PATH ?? (existsSync("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome") ? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" : undefined);
 // Safari and the Mac app (WKWebView) draw with WebKit: Playwright's build of it is the stand-in, used when installed (`playwright-core install webkit`).
-const { chromium, webkit } = await import("playwright-core");
 const engines = [
-	{ name: "Chromium", available: chrome !== undefined && existsSync(chrome), launch: () => chromium.launch({ executablePath: chrome, args: ["--no-sandbox"] }) },
-	{ name: "WebKit", available: existsSync(webkit.executablePath()), launch: () => webkit.launch() },
+	{ name: "Chromium", available: chromiumAvailable, launch: launchChromium },
+	{ name: "WebKit", available: webkitAvailable, launch: launchWebkit },
 ];
 
 const closers: (() => Promise<void>)[] = [];
