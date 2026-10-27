@@ -56,7 +56,7 @@ import type { RoomEntry, Rooms } from "./rooms.ts";
 import { ABOUT_MAX, INSTRUCTIONS_MAX, withAbout } from "./setup.ts";
 import { proxyToken, sameSecret } from "./compare.ts";
 import { otpauthUri } from "./totp.ts";
-import { sendAsset } from "./assets.ts";
+import { sendAsset, versionOf } from "./assets.ts";
 
 /** What a cell tells the control plane of Owni Cloud before being stopped. */
 export type CellState = {
@@ -207,6 +207,8 @@ export function createWebApp(options: WebAppOptions): Server {
 		const name = file.split(sep).join("/");
 		if (extname(name) in TYPES) STATIC[`/${name}`] = name;
 	}
+	// The files the service worker keeps offline: its cache is named after them, so it is always one release.
+	const shellFiles = [...new Set(Object.values(STATIC))].filter((name) => name !== "sw.js").map((name) => join(options.uiDir, name));
 	// The OpenUI frame (ADR 0118), next to the UI and outside the service worker's shell.
 	const openuiDir = join(options.uiDir, "..", "openui");
 	const OPENUI: Record<string, string> = { "/openui/frame": "frame.html", "/openui/frame.js": "frame.js", "/openui/frame.css": "frame.css", "/openui/openui-bundle.min.js": "openui-bundle.min.js", "/openui/openui-styles.css": "openui-styles.css" };
@@ -605,6 +607,12 @@ export function createWebApp(options: WebAppOptions): Server {
 	}
 
 	async function serveStatic(req: IncomingMessage, res: ServerResponse, name: string): Promise<void> {
+		if (name === "sw.js") {
+			const code = (await readFile(join(options.uiDir, name), "utf8")).replace("__SHELL_VERSION__", await versionOf(shellFiles));
+			res.writeHead(200, { "content-type": TYPES[".js"] as string, "cache-control": "no-cache" });
+			res.end(code);
+			return;
+		}
 		// Scripts and the stylesheet are checked at every visit (and the service worker with them): the files of one deploy must load together, never a mix with an older cached one.
 		const cache = name === "index.html" ? "no-store" : [".js", ".css"].includes(extname(name)) ? "no-cache" : name.startsWith("fonts/") ? "public, max-age=31536000, immutable" : "public, max-age=300";
 		// A font is always fetched with CORS: the OpenUI frame, with no origin of its own, may use them too.

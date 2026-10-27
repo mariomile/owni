@@ -1,8 +1,10 @@
 // Owni's service worker: the console opens from the home screen and without network shows its
 // shell. Only the shell is kept (page, script, style, fonts, icons): never /api, never anything a
 // person wrote or received. Network first, so a new version is used as soon as it is online.
-// Bump CACHE when the shell list changes; the page itself is refreshed on every visit online.
-const CACHE = "owni-shell-v20";
+// The kept shell is one release, whole: the server names CACHE after the files it serves, so a new
+// release installs a new worker that fetches every file afresh, and nothing is kept one file at a time.
+// A page drawn by new scripts with an older stylesheet comes out broken (the Mac app at 0.12.0).
+const CACHE = "owni-shell-__SHELL_VERSION__";
 /** Addresses that are never the shell, also when opened as a page (a file link, a login with Google). */
 const NOT_SHELL = /^\/(api|oauth|hooks|login|openui)(\/|$)/;
 const SHELL = ["/", "/account.js", "/agent-materials.js", "/agent-panel.js", "/app.js", "/artifacts.js", "/browser-panel.js", "/cards.js", "/commands.js", "/common.js", "/connectors.js", "/google.js", "/listen.js", "/login.js", "/models.js", "/markdown.js", "/openui.js", "/sources.js", "/palette.js", "/pwa.js", "/runs.js", "/screen-panel.js", "/session.js", "/setup.js", "/shell.js", "/signin.js", "/threads.js", "/tones.js", "/pages/activity.js", "/pages/agents.js", "/pages/approvals.js", "/pages/automations.js", "/pages/board.js", "/pages/chat.js", "/pages/org.js", "/pages/people.js", "/pages/rooms.js", "/pages/settings.js", "/pages/start.js", "/pages/tasks.js", "/app.css", "/icon.svg", "/manifest.webmanifest", "/fonts/archivo-latin.woff2", "/fonts/archivo-latin-ext.woff2", "/fonts/monaspace-neon-latin-400.woff2", "/fonts/monaspace-neon-latin-500.woff2", "/pages/work.js"];
@@ -11,7 +13,7 @@ self.addEventListener("install", (event) => {
 	event.waitUntil(
 		caches
 			.open(CACHE)
-			.then((cache) => cache.addAll(SHELL))
+			.then((cache) => cache.addAll(SHELL.map((path) => new Request(path, { cache: "reload" }))))
 			.then(() => self.skipWaiting()),
 	);
 });
@@ -33,17 +35,6 @@ self.addEventListener("fetch", (event) => {
 	if (NOT_SHELL.test(url.pathname)) return;
 	const navigation = request.mode === "navigate";
 	if (!navigation && !SHELL.includes(url.pathname)) return;
-	event.respondWith(
-		fetch(request)
-			.then((response) => {
-				// The page is kept as "/" (whatever #/view it was opened on), the files under their own address.
-				if (response.ok && response.type === "basic" && (!navigation || url.pathname === "/")) {
-					const copy = response.clone();
-					void caches.open(CACHE).then((cache) => cache.put(navigation ? "/" : request, copy));
-				}
-				return response;
-			})
-			// Offline: the page from the shell (it says it is offline), the files as last seen.
-			.catch(() => caches.match(navigation ? "/" : request).then((hit) => hit ?? Response.error())),
-	);
+	// Offline: the page from the shell (it says it is offline), the files of the same release with it.
+	event.respondWith(fetch(request).catch(() => caches.match(navigation ? "/" : url.pathname, { cacheName: CACHE }).then((hit) => hit ?? Response.error())));
 });
