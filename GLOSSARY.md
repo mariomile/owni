@@ -15,6 +15,10 @@ _Avoid_: nuova chat, DM nei testi per le persone
 Le risposte a un messaggio di un messaggio diretto o di un canale, tenute a parte: l'agente sa a quale messaggio rispondono, e la conversazione principale resta pulita. Vedi ADR 0113.
 _Avoid_: risposta citata
 
+**Reazione**:
+Un'emoji che l'agente mette sotto il messaggio a cui risponde, come in una chat. Se dice tutto, l'agente non scrive altro. Vedi ADR 0132.
+_Avoid_: like, emoji di risposta
+
 **Pannello dell'agente**:
 Quello che un agente fa e sa, a destra della conversazione: attività, artifact, routine, memoria, documenti e procedure. La configurazione non ci sta: è una pagina dell'owner. Vedi ADR 0114.
 _Avoid_: scheda dell'agente, profilo

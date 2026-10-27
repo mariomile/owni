@@ -52,8 +52,8 @@ export function startBoard(w: BoardWiring): BoardWork {
 	});
 	// «Esegui da solo» (ADR 0061): each reply in the conversation of a scheda may be followed by «go on».
 	runtime.onReply((reply) => {
-		// Only answers to what was written in the conversation: not files or messages sent mid-turn.
-		if (reply.tenantId !== tenant || reply.channel !== "web" || reply.status === "file" || reply.submissionId === "message") return;
+		// Only answers to what was written in the conversation: not files, reactions or messages sent mid-turn.
+		if (reply.tenantId !== tenant || reply.channel !== "web" || (reply.status !== "answered" && reply.status !== "unanswered") || reply.submissionId === "message") return;
 		void work.afterReply(reply.instanceId, reply.threadId, reply.deliveryId, reply.status === "unanswered" ? reply.reason : undefined).catch((error: unknown) => log(`owni: board after reply in ${reply.threadId}: ${error instanceof Error ? error.message : String(error)}`));
 	});
 	// A scheda to review (ADR 0051): when it is the owner's, a line in the owner's chat with the main agente too.

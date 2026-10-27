@@ -6,7 +6,7 @@ import { agentCommands, commandMenu } from "../commands.js";
 import { chatModelCache, modelPill } from "../models.js";
 import { browserPanel } from "../browser-panel.js";
 import { screenPanel } from "../screen-panel.js";
-import { markRead, meAvatar, threadPanel, threadSummary } from "../threads.js";
+import { markRead, meAvatar, reactionRow, showReaction, threadPanel, threadSummary } from "../threads.js";
 import { stepsLeftText } from "../setup.js";
 import { install, installed, installOffer } from "../pwa.js";
 import { refreshCounters } from "../session.js";
@@ -235,7 +235,8 @@ function conversationView(inst, main, thread, entries, model) {
 		const by = entry.model ? h("span.by", { title: `${entry.model.provider} · ${entry.model.modelId}` }, entry.model.name ?? entry.model.modelId) : null;
 		const slot = threaded ? h("div.thread-slot", summary(inst, entry, () => void replies.open(entry, entry.thread?.id))) : null;
 		if (slot) summaries.set(entry.id, slot);
-		const el = h(`div.msg.${entry.from}`, h("div.meta", entry.from === "owni" ? [face(inst, 20), h("b.who", inst.name)] : null, fmt.time(entry.at), by), pictures, entry.text || entry.file || !pictures ? body : null, actions, slot);
+		const reactions = reactionRow(entry.reaction ? [{ instanceId: inst.id, emoji: entry.reaction }] : []);
+		const el = h(`div.msg.${entry.from}`, { "data-entry": entry.id }, h("div.meta", entry.from === "owni" ? [face(inst, 20), h("b.who", inst.name)] : null, fmt.time(entry.at), by), pictures, entry.text || entry.file || !pictures ? body : null, reactions, actions, slot);
 		into(el);
 		return el;
 	};
@@ -296,6 +297,13 @@ function conversationView(inst, main, thread, entries, model) {
 	});
 	transcript.append(work.el);
 	state.onEntry = (event) => {
+		// A reaction (ADR 0132) changes a message on screen, and is the agente's answer: the wait in a thread ends, nothing is counted.
+		if (event.reaction) {
+			if (event.instanceId !== inst.id) return true;
+			showReaction(event.entry.id, event.entry.reaction ? [{ instanceId: inst.id, emoji: event.entry.reaction }] : []);
+			if (event.threadId === replies.current()) replies.stopTyping();
+			return true;
+		}
 		if (event.threadId !== threadId) {
 			if (replies.onEntry(event)) return true;
 			// A reply in a thread not on screen: counted under its message, and announced.

@@ -1,10 +1,13 @@
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { appendFileSync, readdirSync, readFileSync, statSync } from "node:fs";
 import type { AddressInfo } from "node:net";
 import { join, sep } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { type RunningOwni, startOwni } from "../src/app.ts";
+import { instanceId, tenantId } from "../src/core/ids.ts";
+import { instanceDir } from "../src/core/paths.ts";
 import { loadOwniConfig } from "../src/main/config.ts";
 import { tempDataDir } from "./helpers.ts";
+import { chromiumFound, launchChromium } from "./playwright-browsers.ts";
 
 const ui = join(import.meta.dirname, "..", "src", "web", "ui");
 const scripts = readdirSync(ui, { recursive: true, encoding: "utf8" })
@@ -117,5 +120,51 @@ describe("console served from the UI directory", () => {
 		const again = await fetch(`${base}/app.js`, { headers: { "if-none-match": etag } });
 		expect(again.status).toBe(304);
 		expect((await fetch(`${base}/fonts/archivo-latin.woff2`, { headers: { "accept-encoding": "br" } })).headers.get("content-encoding")).toBeNull();
+	});
+});
+
+describe.skipIf(!chromiumFound)("the agente's reaction under a message, in real Chromium (ADR 0132)", () => {
+	const running: RunningOwni[] = [];
+	afterEach(async () => {
+		for (const a of running.splice(0)) await a.stop();
+	});
+
+	it("a message of the direct conversation shows the reaction as a chip under it, and a live one replaces it", async () => {
+		const dataDir = tempDataDir();
+		const config = loadOwniConfig({ OWNI_DATA_DIR: dataDir, OWNI_MODEL_PROVIDER: "faux", OWNI_WEB_PORT: "1" });
+		const owni = await startOwni({ ...config, web: { ...config.web, port: 0 } }, { schedulerIntervalMs: 60_000, log: () => {} });
+		running.push(owni);
+		const base = `http://127.0.0.1:${(owni.server.address() as AddressInfo).port}`;
+		const token = (owni.ownerLink as string).split("#")[1];
+		const res = await fetch(`${base}/api/login`, { method: "POST", headers: { "x-owni": "1" }, body: JSON.stringify({ token }) });
+		const cookie = (res.headers.get("set-cookie") ?? "").split(";")[0] as string;
+		const api = (path: string, body?: unknown) => fetch(`${base}${path}`, { method: body === undefined ? "GET" : "POST", headers: { cookie, "x-owni": "1", "content-type": "application/json" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+		// A message written and answered, then the reaction as the channel writes it into the transcript.
+		const { thread } = (await (await api("/api/instances/owni/dm", {})).json()) as { thread: { id: string } };
+		const { entry } = (await (await api(`/api/instances/owni/threads/${thread.id}/messages`, { text: "grazie" })).json()) as { entry: { id: string } };
+		const entriesOf = async () => ((await (await api(`/api/instances/owni/threads/${thread.id}`)).json()) as { entries: unknown[] }).entries.length;
+		for (let tries = 0; (await entriesOf()) < 2; tries++) {
+			if (tries > 500) throw new Error("the answer never came");
+			await new Promise((resolve) => setTimeout(resolve, 20));
+		}
+		appendFileSync(join(instanceDir(dataDir, tenantId(config.tenantId), instanceId("owni")), "web", "messages", `${thread.id}.jsonl`), `${JSON.stringify({ id: "r_0123456789abcdef01234567", at: new Date().toISOString(), to: entry.id, emoji: "👍" })}\n`);
+
+		const browser = await launchChromium();
+		try {
+			const page = await browser.newPage();
+			const [name, value] = cookie.split("=") as [string, string];
+			await page.context().addCookies([{ name, value, url: base }]);
+			await page.goto(`${base}/#/`);
+			const chips = page.locator(`[data-entry="${entry.id}"] > .reactions .reaction`);
+			await chips.first().waitFor();
+			expect(await chips.allInnerTexts()).toEqual(["👍"]);
+			// The answer has none: no empty row of chips is drawn.
+			expect(await page.locator(".msg.owni .reaction").count()).toBe(0);
+			// A reaction arriving live changes the same row; the script is the page's own module.
+			await page.evaluate(`(async () => (await import("/threads.js")).showReaction(${JSON.stringify(entry.id)}, [{ instanceId: "owni", emoji: "🔥" }]))()`);
+			expect(await chips.allInnerTexts()).toEqual(["🔥"]);
+		} finally {
+			await browser.close();
+		}
 	});
 });

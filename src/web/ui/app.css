@@ -704,6 +704,13 @@ main.is-chat { position: relative; }
 .thread-summary .who { display: inline-flex; }
 .thread-summary .who > * + * { margin-left: -4px; }
 .avatar.mini { width: 18px; height: 18px; font-size: 8.5px; }
+/* The agenti's reactions to a message (ADR 0132), under it like a chat app puts them. */
+.reactions { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.reactions:empty { display: none; }
+.reaction { display: inline-grid; place-items: center; min-width: 32px; height: 26px; padding: 0 8px; border: 1px solid var(--border); border-radius: 13px; background: var(--hover); font-size: 14px; line-height: 1; cursor: default; animation: reaction-in 0.24s var(--ease); }
+@keyframes reaction-in { from { transform: scale(0.6); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .reaction { animation: none; } }
+.msg.person .reactions { justify-content: flex-end; }
 .msg.person .thread-slot, .msg.person .msg-actions { display: flex; justify-content: flex-end; }
 .msg.person .msg-actions { margin: 4px -12px 0 0; }
 /* Answering in a thread shows on hover with a mouse, always on touch. */

@@ -159,6 +159,8 @@ function connectEvents() {
 	es.addEventListener("open", () => state.onRunsReconnect?.());
 	es.addEventListener("entry", (e) => {
 		const event = JSON.parse(e.data);
+		// A reaction (ADR 0132) changes a message on screen, if it is: no reply, nothing to announce.
+		if (event.reaction) return void state.onEntry?.(event);
 		// A reply can carry news for the counters (a tool proposed, a task created).
 		void refreshCounters();
 		// The rail says what is unread (ADR 0113); a reply nobody has on screen is also announced.
@@ -168,7 +170,7 @@ function connectEvents() {
 	});
 	es.addEventListener("room", (e) => {
 		const event = JSON.parse(e.data);
-		if (state.onRoom?.(event)) return;
+		if (state.onRoom?.(event) || event.reaction) return;
 		if (event.entry.from === "agent") toast("Nuova risposta in un canale");
 		void refreshConversations().then(renderRail);
 	});

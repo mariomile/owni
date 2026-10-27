@@ -14,6 +14,22 @@ export function markRead(key, url) {
 /** The signed-in person's mark, among the avatars of a thread. */
 export const meAvatar = () => h("span.avatar.mini", { "aria-hidden": "true" }, initials(state.me.name));
 
+/** Under a message, the agenti's reactions to it (ADR 0132): one emoji each, who put it on hover. `[data-entry]` finds it again. */
+export function reactionRow(reactions = []) {
+	return h(
+		"div.reactions",
+		reactions.map(({ instanceId, emoji }) => {
+			const name = state.instances.find((i) => i.id === instanceId)?.name ?? "L'agente";
+			return h("span.reaction", { title: `${name} ha reagito`, "aria-label": `${name} ha reagito con ${emoji}` }, emoji);
+		}),
+	);
+}
+
+/** A reaction just put: the message shows it wherever it is on screen, the conversation or a thread, without counting as a reply. */
+export function showReaction(id, reactions) {
+	for (const row of document.querySelectorAll(`[data-entry="${CSS.escape(id)}"] > .reactions`)) row.replaceWith(reactionRow(reactions));
+}
+
 /** Under a message with a thread: who answered, how many replies, the last one. Nothing when none yet. `avatar(who)`: one answerer's mark. */
 export function threadSummary(thread, avatar, open) {
 	if (!thread || thread.count === 0) return null;

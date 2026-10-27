@@ -1,8 +1,9 @@
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { InboundMessage } from "../src/channels/types.ts";
 import { WebChannel } from "../src/web/channel.ts";
-import { handles, mentioned, ROOM_LIMITS, type RoomEntry, RoomStore, Rooms } from "../src/web/rooms.ts";
+import { handles, mentioned, ROOM_LIMITS, type RoomEntry, type RoomEvent, RoomStore, Rooms } from "../src/web/rooms.ts";
 import { tempDataDir, waitFor } from "./helpers.ts";
 
 const PERSON = "p_000000000001";
@@ -35,7 +36,7 @@ function setup(reply: (instanceId: string, text: string) => string | undefined |
 	for (const c of channels.values()) rooms.attach(c);
 	const seen: RoomEntry[] = [];
 	rooms.events.on(PERSON, (e: { entry: RoomEntry }) => seen.push(e.entry));
-	return { rooms, channels, got, commands, seen };
+	return { rooms, channels, got, commands, seen, dir };
 }
 
 describe("stanze", () => {
@@ -221,5 +222,52 @@ describe("stanze", () => {
 		await rooms.post(PERSON, room.id, "@vendite guardalo");
 		await waitFor(() => (got.vendite?.length ?? 0) === 1);
 		expect(got.vendite?.[0]).toContain("[Ricercatore] (artifact «Cruscotto bandi», versione 1)");
+	});
+
+	it("an agente's reaction in its seat lands on the stanza's message, one per agente, and calls nobody (ADR 0132)", async () => {
+		const { rooms, channels, got, seen, dir } = setup((id) => `ok ${id}`);
+		const reacted: RoomEvent[] = [];
+		rooms.events.on(PERSON, (e: RoomEvent) => e.reaction === true && reacted.push(e));
+		const room = await rooms.create(PERSON, "Bando", ["ricerca", "vendite"]);
+		const person = await rooms.post(PERSON, room.id, "@tutti grazie");
+		await waitFor(() => seen.filter((e) => e.from === "agent").length === 2);
+		const before = (await rooms.open(PERSON, room.id))?.entries ?? [];
+		expect(before.map((e) => e.from)).toEqual(["person", "agent", "agent"]);
+		const lines = async () => (await readFile(join(dir, "rooms", `${room.id}.jsonl`), "utf8")).split("\n").filter((l) => l !== "").length;
+		const written = await lines();
+		// What each seat was told carries the message it answers: the reaction goes there.
+		const react = async (id: string, emoji: string, key: string) => {
+			const channel = channels.get(id) as WebChannel;
+			const seat = room.seats.find((s) => s.instanceId === id)?.threadId as string;
+			const told = (await channel.transcript(seat)).find((e) => e.about !== undefined);
+			expect(told?.about).toBe(person.id);
+			await channel.react({ tenantId: "acme", instanceId: id, channel: "web", threadId: seat, idempotencyKey: key, messageId: told?.id as string, emoji });
+		};
+
+		await react("ricerca", "👍", "react:1");
+		await waitFor(() => reacted.length === 1);
+		expect(reacted).toEqual([{ roomId: room.id, entry: expect.objectContaining({ id: person.id, from: "person", reactions: [{ instanceId: "ricerca", emoji: "👍" }] }), reaction: true }]);
+		await react("vendite", "❤️", "react:2");
+		await waitFor(() => reacted.length === 2);
+		// A new emoji of the same agente replaces its old one.
+		await react("ricerca", "🔥", "react:3");
+		await waitFor(() => reacted.length === 3);
+		expect(reacted[2]?.entry.reactions).toEqual(expect.arrayContaining([{ instanceId: "ricerca", emoji: "🔥" }, { instanceId: "vendite", emoji: "❤️" }]));
+		expect(reacted[2]?.entry.reactions).toHaveLength(2);
+		const folded = (await rooms.open(PERSON, room.id))?.entries.find((e) => e.id === person.id)?.reactions;
+		expect(folded).toEqual(expect.arrayContaining([{ instanceId: "ricerca", emoji: "🔥" }, { instanceId: "vendite", emoji: "❤️" }]));
+		expect(folded).toHaveLength(2);
+
+		// The same emoji again: nothing written, nothing shown.
+		await react("ricerca", "🔥", "react:4");
+		await new Promise((resolve) => setTimeout(resolve, 100));
+		expect(reacted).toHaveLength(3);
+		expect(await lines()).toBe(written + 3);
+
+		// No reaction is a message of the stanza, and nobody was called by one.
+		const after = (await rooms.open(PERSON, room.id))?.entries ?? [];
+		expect(after.map((e) => e.id)).toEqual(before.map((e) => e.id));
+		expect(got.ricerca).toHaveLength(1);
+		expect(got.vendite).toHaveLength(1);
 	});
 });

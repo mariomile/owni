@@ -12,7 +12,7 @@ async function setup(tools: (record: InstanceRecord) => Promise<ToolSet>) {
 		await runtime.registry.createInstance("acme", { id, name: id, model: FAUX_MODEL, egress: { modelProviders: ["faux"], channels: ["test"] }, allowedUsers: { test: ["u"] } });
 	}
 	const replies: Record<string, string[]> = { a: [], b: [] };
-	runtime.onReply((r) => replies[r.instanceId]?.push(r.status === "answered" ? r.text : r.status === "unanswered" ? r.reason : r.path));
+	runtime.onReply((r) => replies[r.instanceId]?.push(r.status === "answered" ? r.text : r.status === "unanswered" ? r.reason : r.status === "file" ? r.path : r.emoji));
 	return { runtime, replies };
 }
 

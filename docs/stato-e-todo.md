@@ -123,6 +123,9 @@ Per l'uso di Mario basta la sua sottoscrizione di Claude Code o Codex: nessuna c
 - [x] Il computer dell'agente ha la rete: installa pacchetti, clona repository, scarica dati e chiama API, su Docker e su Fly, verso internet pubblica e non verso metadati, rete locale e reti private (le stesse regole sui due provider); restano niente segreti dentro, niente in entrata, l'API di Fly chiusa, niente vsock né socket packet ([ADR 0124](adr/0124-il-computer-dell-agente-ha-la-rete.md)). Il job `computer` della CI è verde; mancano la prova dal vivo su Fly e quella con gVisor
 - [x] Console divisa per pagina: `src/web/ui/app.js` (circa 5.900 righe) è ora un modulo ES per pagina (le pagine non si importano a vicenda), una tabella delle pagine in `shell.js` e un `common.js` che non importa nulla; il server serve i file elencando la cartella. Una pagina nuova: file, riga in `PAGES`, riga in `SHELL` ([ADR 0102](adr/0102-console-un-modulo-per-pagina.md))
 - [x] Chi sta facendo cosa: `agent_list` e la pagina Agenti dicono se un agente è occupato, da quanto e su quale scheda «In corso» o chat, solo dentro quello che chi guarda già vede; `agent_message` avvisa che un collega occupato può metterci di più ([ADR 0109](adr/0109-chi-sta-facendo-cosa.md))
+- [x] Reazioni: l'agente mette un'emoji sotto il messaggio a cui risponde (`message_react`), sulla console, nei canali, su Telegram e su WhatsApp; se la reazione dice tutto non scrive altro ([ADR 0132](adr/0132-reazioni-degli-agenti.md))
+- [ ] Risposte nei thread decise dall'agente, solo quando un thread ha senso
+- [ ] Agenti che si passano informazioni quando la persona lo chiede, anche fuori dall'organigramma, e i canali che dicono a ogni agente di cosa si occupano i colleghi
 - [ ] Scansioni JBIG2 e JPEG 2000: oggi solo dal computer di Owni o con una foto
 
 ### Prima di rendere pubblico il repo

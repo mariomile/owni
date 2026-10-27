@@ -1,7 +1,7 @@
 import { IMAGE_LIMITS, imageType, isPhoto } from "../core/images.ts";
 import { audioName, isRecording, RECORDING_TOO_LARGE, TRANSCRIBED, type Transcribe, voiceText } from "./voice.ts";
 import { DUPLICATE_NOTICE, splitText as splitPieces } from "./text.ts";
-import { type ActionButton, type ChannelAdapter, ChannelRefused, type InboundAction, type InboundMessage, type OutboundFile, type OutboundMessage, type OutboundVoice } from "./types.ts";
+import { type ActionButton, type ChannelAdapter, ChannelRefused, type InboundAction, type InboundMessage, type OutboundFile, type OutboundMessage, type OutboundReaction, type OutboundVoice } from "./types.ts";
 
 /** Largest photo the Bot API takes; larger pictures go as documents. */
 const TELEGRAM_MAX_PHOTO = 10 * 1024 * 1024;
@@ -197,6 +197,15 @@ export class TelegramAdapter implements ChannelAdapter {
 			this.options.log?.(`telegram: voice note refused, text only: ${error.message}`);
 		}
 		for (const chunk of splitText(text)) await this.call("sendMessage", { chat_id: voice.threadId, text: chunk });
+	}
+
+	/** setMessageReaction: the bot's reaction replaces its earlier one on the message. */
+	async react(reaction: OutboundReaction): Promise<void> {
+		// Inbound ids are "<chat>:<message>" (the chat can be negative).
+		const id = Number(reaction.messageId.slice(reaction.messageId.lastIndexOf(":") + 1));
+		if (!Number.isSafeInteger(id) || id <= 0) throw new ChannelRefused(`Not a Telegram message: ${reaction.messageId}`);
+		// Telegram's emoji have no variation selector: ❤, not ❤️.
+		await this.call("setMessageReaction", { chat_id: reaction.threadId, message_id: id, reaction: [{ type: "emoji", emoji: reaction.emoji.replace(/\uFE0F/g, "") }] });
 	}
 
 	async recording(threadId: string): Promise<void> {

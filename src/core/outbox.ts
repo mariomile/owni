@@ -19,7 +19,9 @@ export type OutboxEntry = {
 		| { readonly status: "answered"; readonly text: string; readonly model?: ModelSelection }
 		| { readonly status: "unanswered"; readonly reason: string; readonly cancelled?: true }
 		/** A workspace file the instance sends to the thread. */
-		| { readonly status: "file"; readonly path: string; readonly caption?: string };
+		| { readonly status: "file"; readonly path: string; readonly caption?: string }
+		/** An emoji on a message of the thread (ADR 0132), by the channel's id of that message. */
+		| { readonly status: "reaction"; readonly emoji: string; readonly messageId: string };
 	readonly createdAt: string;
 	/** Times the entry was handed to a channel. Above 1, the user may have received it before. */
 	readonly attempts: number;
