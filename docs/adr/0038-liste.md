@@ -1,5 +1,7 @@
 # Liste: la spesa, le cose da fare, i regali
 
+> Sostituito dall'[ADR 0127](0127-niente-squadre-pronte-ne-strumenti-per-cose-che-l-agente-fa-gia.md): gli strumenti `list_*` non ci sono più; le liste sono file del workspace e le tiene l'agente con `file_*` e `code_run`.
+
 Le persone usano un assistente per tenere a mente le cose: «aggiungi latte e pane alla spesa», «ho preso il latte», «cosa devo ancora fare?», la lista della spesa di casa che tengono in due. Owni aveva la memoria (fatti su una persona) e i task programmati (un messaggio a un'ora), ma nessun posto per un elenco che cambia ogni giorno: la memoria non è fatta per spuntare, e un file nel workspace non distingue chi lo vede.
 
 ## Decisione

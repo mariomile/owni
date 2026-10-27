@@ -1,7 +1,6 @@
 /**
- * Text out of HTML and XML for the tools that read pages and feeds (web_read, the sentinelle,
- * news_headlines): elements dropped whole, comments dropped, entities decoded. Every scan moves
- * forward with indexOf, so a hostile document is read in linear time.
+ * Text out of HTML and XML for the tools that read pages (web_read, the sentinelle): elements
+ * dropped whole, comments dropped, entities decoded. Every scan moves forward with indexOf, so a hostile document is read in linear time.
  */
 
 /** ASCII letters in lower case, nothing else: the text keeps its length, so an index in it is an index in the original («İ» would grow under toLowerCase). */

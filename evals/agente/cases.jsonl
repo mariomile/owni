@@ -1,10 +1,8 @@
 {"id":"ricorda-commercialista","text":"Ricordati che il mio commercialista si chiama Paolo Verdi","expect":["memory_remember"]}
 {"id":"cosa-ricordi","text":"Cosa ti ricordi di me?","expect":["memory_list","memory_search"]}
 {"id":"dimentica","text":"Dimentica quello che sai sul mio commercialista","expect":["memory_search","memory_list","memory_forget"]}
-{"id":"lista-aggiungi","text":"Aggiungi latte e pane alla lista della spesa","expect":["list_add"]}
-{"id":"lista-mostra","text":"Cosa c'è nella lista della spesa?","expect":["list_show"]}
 {"id":"calcolo-iva","text":"Quanto fa il 22% di 1.350,40 euro? Dammi il numero esatto","expect":["code_run"]}
-{"id":"giorni-lavorativi","text":"Quanti giorni lavorativi ci sono tra il 3 novembre e il 19 dicembre di quest'anno?","expect":["date_calc"]}
+{"id":"giorni-lavorativi","text":"Quanti giorni lavorativi ci sono tra il 3 novembre e il 19 dicembre di quest'anno?","expect":["code_run"]}
 {"id":"promemoria","text":"Ricordami domani alle 9 di chiamare il fornitore","expect":["schedule_create"]}
 {"id":"automazione-settimanale","text":"Ogni lunedì alle 8 mandami un riepilogo delle fatture non ancora incassate","expect":["automation_create","schedule_create"]}
 {"id":"promemoria-lista","text":"Quali promemoria e automazioni ho attivi?","expect":["schedule_list","automation_list"]}

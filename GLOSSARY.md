@@ -162,10 +162,6 @@ _Avoid_: gateway, integrazione
 Una conversazione su un canale: una chat Telegram, una chat nell'interfaccia web.
 _Avoid_: sessione, chat (nel codice)
 
-**Squadra pronta**:
-Tre agenti creati insieme dalla pagina Agenti, ciascuno con un compito (per esempio Caporedattore, Ricercatore, Scrittore): entrano nell'organigramma come una squadra, il primo la coordina e divide il lavoro, e hanno una stanza. Dopo sono agenti come gli altri. Vedi ADR 0068 e 0117.
-_Avoid_: team, modello di agenti
-
 **Stanza**:
 Una conversazione della console fra una persona e da 2 a 5 agenti: la persona chiama chi le serve con @nome, ogni agente risponde dal suo posto (una sua conversazione con la persona, nascosta fra le chat) e può chiamarne un altro. Nella console si chiama canale e si legge `#nome`. Vedi ADR 0063 e 0113.
 _Avoid_: gruppo (è di Telegram e WhatsApp), room
@@ -235,28 +231,12 @@ _Avoid_: transcript, sbobinatura
 Quello che fa `file_search`: le parole chiave della domanda cercate dentro il testo di tutti i file del workspace (documenti, trascrizioni, note) e nei loro nomi, con i passaggi trovati e il punto da cui leggere il seguito. Senza accenti e maiuscole, all'inizio delle parole. Vedi ADR 0035.
 _Avoid_: ricerca full-text, indice, grep
 
-**Lista**:
-Un elenco che Owni tiene per chi le scrive (la spesa, le cose da fare, i regali), con voci da fare e fatte, numerate come le mostra `list_show`. Di una persona sola, o condivisa con tutti quelli che scrivono all'istanza quando lo chiedono; in un gruppo solo le condivise. Vedi ADR 0038.
-_Avoid_: checklist, todo, elenco puntato
-
-**Meteo**:
-Quello che dà `weather`: le condizioni di adesso, le fasce di oggi e domani (notte, mattina, pomeriggio, sera) e le previsioni giorno per giorno fino a 16 giorni compreso oggi, per un posto cercato per nome. Acceso dall'operatore con `OWNI_WEATHER`. Vedi ADR 0039.
-_Avoid_: previsioni del tempo (quando si intende il tool), forecast
-
-**Cambio BCE**:
-Il tasso di riferimento dell'euro pubblicato dalla Banca Centrale Europea nei giorni lavorativi verso le 16:00, che `exchange_rate` usa per convertire importi, oggi o alla data di una fattura. Per un giorno senza pubblicazione vale l'ultimo giorno lavorativo prima. Acceso dall'operatore con `OWNI_EXCHANGE_RATES`. Vedi ADR 0040.
-_Avoid_: tasso di mercato, quotazione (quando si intende il cambio BCE)
-
-**Feed di notizie**:
-Il file RSS o Atom pubblico di un giornale, da cui `news_headlines` prende i titoli recenti con fonte, ora e link. La lista la sceglie l'operatore (`OWNI_NEWS_FEEDS`), con una di partenza; acceso con `OWNI_NEWS`. Vedi ADR 0043.
-_Avoid_: notiziario, rassegna stampa (quando si intendono i titoli dei feed)
-
 **VIES**:
 Il servizio della Commissione europea che dice se un numero IVA è attivo per gli scambi intra-UE, con nome e indirizzo quando il paese li dà; `vat_check` lo usa con `OWNI_VAT_CHECK`. «Non attiva nel VIES» non vuol dire che la partita IVA non esista. Vedi ADR 0047.
 _Avoid_: registro delle partite IVA, anagrafe tributaria
 
 **Scadenza fine mese**:
-Una scadenza di fattura come «60 gg d.f.f.m.»: Owni conta i giorni dalla data fattura e poi va all'ultimo giorno del mese; alcuni gestionali contano invece a mesi, e `date_calc` dà anche quella data quando è diversa. Una scadenza festiva non viene spostata. Vedi ADR 0048.
+Una scadenza di fattura come «60 gg d.f.f.m.»: Owni conta i giorni dalla data fattura e poi va all'ultimo giorno del mese; alcuni gestionali contano invece a mesi, e l'agente calcola anche quella data quando è diversa. Una scadenza festiva non viene spostata. Vedi ADR 0048.
 _Avoid_: fine mese commerciale, scadenza a 30 giorni come mese
 
 **Partita IVA da ricontrollare**:

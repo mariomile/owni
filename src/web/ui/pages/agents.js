@@ -3,13 +3,12 @@ import { agentHome, agentStatus, api, dmHref, emptyNote, face, faceColor, h, hea
 import { TONES } from "../tones.js";
 import { refreshInstances, refreshSetup } from "../session.js";
 import { render } from "../shell.js";
-import { teamsForm } from "../teams.js";
 
 // ---------- agenti (ADR 0041) ----------
 /** Starting points for a new agente: they only fill the form. */
 const AGENT_TEMPLATES = [
 	{ label: "Da zero", name: "", tagline: "", tone: "naturale", about: "" },
-	{ label: "Assistente", name: "Assistente", tagline: "Agenda, promemoria, mail e cose da fare", tone: "amichevole", about: "Aiuta una persona a organizzare la giornata: impegni, promemoria, liste, risposte alle mail." },
+	{ label: "Assistente", name: "Assistente", tagline: "Agenda, promemoria, mail e cose da fare", tone: "amichevole", about: "Aiuta una persona a organizzare la giornata: impegni, promemoria, risposte alle mail." },
 	{ label: "Ricercatore", name: "Ricercatore", tagline: "Cerca, confronta e cita le fonti", tone: "conciso", about: "Fa ricerche sul web e nei file, confronta opzioni e fornitori, scrive report brevi con le fonti." },
 	{ label: "Scrittore", name: "Scrittore", tagline: "Testi, post e mail con la nostra voce", tone: "naturale", about: "Scrive e rivede testi: post, articoli, newsletter, mail. Chiede sempre a chi sono rivolti e che tono usare." },
 	{ label: "Analista", name: "Analista", tagline: "Numeri, tabelle e grafici", tone: "conciso", about: "Risponde a domande su tabelle CSV ed Excel, fa i conti con i tool e prepara grafici e report." },
@@ -136,7 +135,6 @@ export async function viewAgents(main) {
 			null,
 			h("h1", "Agenti"),
 			owner ? ["Il tuo assistente e gli agenti con responsabilità separate. Ruoli e chi scrive a chi sono nell'", h("a", { href: "#/organigramma" }, "organigramma"), "."] : "Il tuo assistente e gli agenti con responsabilità separate.",
-			owner ? h("button.btn.ghost", { title: "Più agenti già pronti a lavorare insieme", onclick: () => teamsForm() }, "Squadre pronte") : null,
 			owner ? h("button.btn.accent", { onclick: () => agentForm() }, icon("plus"), "Nuovo agente") : null,
 		),
 		agents.length === 0 ? emptyNote("div.empty", "Nessun agente", owner ? "Crea il primo con Nuovo agente." : "Chiedi all'owner di aggiungerti a un agente.") : h("div.agents", agents.map(card)),

@@ -1,5 +1,7 @@
 # Meteo: adesso, stasera e i prossimi giorni
 
+> Sostituito dall'[ADR 0127](0127-niente-squadre-pronte-ne-strumenti-per-cose-che-l-agente-fa-gia.md): lo strumento `weather` e `OWNI_WEATHER` non ci sono più; il meteo si cerca sul web.
+
 Chi usa un assistente ogni giorno gli chiede che tempo fa: «piove stasera a Milano?», «che tempo fa nel weekend a Torino?», «serve l'ombrello domani?». Grok risponde con dati del momento. Owni poteva solo cercare sul web e riassumere una pagina di previsioni, quando la ricerca era accesa: lento, impreciso, e spesso con la pagina di un'altra città.
 
 ## Decisione

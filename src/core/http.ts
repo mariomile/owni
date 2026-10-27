@@ -1,5 +1,5 @@
 /**
- * JSON or text from the operator's services (search, weather, exchange rates): one GET with a
+ * JSON or text from the operator's services (search, the VIES): one GET with a
  * timeout and a size cap, every failure handed to the caller to name in its own words. Never the
  * address or the key.
  */

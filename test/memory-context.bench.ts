@@ -19,11 +19,11 @@ function baseline(subject: string): string {
 	const all = readJsonFile<Memory[]>(file, []).filter((m) => m.archived !== true);
 	const essential = [...all.filter((m) => m.about === subject), ...all.filter((m) => m.about === SHARED && subject !== SHARED)];
 	const archived = readJsonFile<Memory[]>(file, []).filter((m) => m.archived === true && (m.about === subject || m.about === SHARED)).length;
-	return memoryNote(essential, "", archived);
+	return memoryNote(essential, archived);
 }
 function prepare(store: MemoryStore, subject: string): string {
 	const context = store.contextFor(subject);
-	return memoryNote(context.memories, "", context.archived);
+	return memoryNote(context.memories, context.archived);
 }
 function measure(call: (subject: string) => string) {
 	const durations: number[] = [];
@@ -50,5 +50,5 @@ try {
 	const store = new MemoryStore(dir);
 	const after = measure((subject) => prepare(store, subject));
 	assert.equal(before.outputCharacters, after.outputCharacters);
-	console.log(JSON.stringify({ node: process.version, fixtureBytes: statSync(file).size, users: subjects.length, records: records.length, before, after, scope: "Includes synchronous filesystem reads/stat, parsing, filtering and memoryNote; warmed OS file cache, fresh store for measured after run. Excludes engine, model, network, lists, and customer data." }, null, 2));
+	console.log(JSON.stringify({ node: process.version, fixtureBytes: statSync(file).size, users: subjects.length, records: records.length, before, after, scope: "Includes synchronous filesystem reads/stat, parsing, filtering and memoryNote; warmed OS file cache, fresh store for measured after run. Excludes engine, model, network, and customer data." }, null, 2));
 } finally { rmSync(dir, { recursive: true, force: true }); }

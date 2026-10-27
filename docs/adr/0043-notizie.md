@@ -1,5 +1,7 @@
 # Notizie: i titoli dai feed dei giornali
 
+> Sostituito dall'[ADR 0127](0127-niente-squadre-pronte-ne-strumenti-per-cose-che-l-agente-fa-gia.md): lo strumento `news_headlines` e `OWNI_NEWS` non ci sono più; le notizie si cercano e si leggono con `web_search` e `web_read`.
+
 Il vantaggio di Grok è sapere cosa succede adesso. Owni rispondeva a «che notizie ci sono oggi?» solo con la ricerca sul web, quando c'era una chiave Brave, e senza un ordine per ora né una fonte chiara.
 
 ## Decisione

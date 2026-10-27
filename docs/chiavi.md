@@ -186,41 +186,6 @@ Senza queste variabili Owni non crea immagini. Con queste, quando glielo chiedon
 
 Va bene qualunque servizio con la stessa API di OpenAI (`POST /images/generations` e `/images/edits`, immagini in `b64_json`); per un altro servizio indica anche il modello.
 
-### 16. Meteo: `OWNI_WEATHER=1` (e una chiave per un uso aziendale)
-
-Senza questa variabile Owni non sa che tempo fa. Con `OWNI_WEATHER=1` risponde a «che tempo fa a Roma?», «piove stasera a Milano?» o «meteo del weekend a Torino» con le condizioni di adesso, le fasce di oggi e domani (notte, mattina, pomeriggio, sera) e le previsioni fino a 16 giorni (tool `weather`). Il servizio è Open-Meteo, con server in Europa e in Nord America: gli vanno solo il nome del posto e le sue coordinate. I dati gratuiti sono sotto licenza CC BY 4.0: Owni cita Open-Meteo quando dà le previsioni.
-
-1. **Uso gratuito: solo privato o non commerciale.** Basta `OWNI_WEATHER=1`. Limiti del piano gratuito: 10.000 chiamate al giorno, 5.000 all'ora, 600 al minuto, 300.000 al mese. Ogni richiesta meteo di Owni fa 2 chiamate (cerca il posto, poi le previsioni), e Open-Meteo conta come frazioni di chiamata in più le richieste con molte variabili o molti giorni.
-2. **Per l'uso aziendale (anche self-host in un'azienda, e Owni Cloud) serve un piano a pagamento e la sua chiave**: https://open-meteo.com/en/pricing (prezzi e limiti aggiornati sulla stessa pagina: controllali prima di scegliere). La chiave va in `OWNI_WEATHER_API_KEY`: con la chiave le previsioni vanno da sole a `https://customer-api.open-meteo.com/v1/forecast` (Owni aggiunge `&apikey=`; `OWNI_WEATHER_URL` solo per un altro indirizzo), e `OWNI_WEATHER_GEOCODING_URL` diventa obbligatoria: l'indirizzo di ricerca dei posti che ti dà Open-Meteo con il piano.
-3. Facoltativo: `OWNI_WEATHER_MAX_PER_DAY`, le richieste meteo (chiamate al tool, 2 chiamate al servizio ciascuna) al giorno per ogni account: 200 se non lo metti. Contano solo quelle andate a buon fine; i tentativi, anche falliti, si fermano al triplo, così un errore ripetuto non consuma il piano.
-4. In Owni Cloud basta metterle sul control plane: passano a tutte le celle.
-5. `pnpm owni check` cerca un posto e chiede le previsioni di un giorno: dice se i due indirizzi rispondono (e se la chiave va, quando c'è).
-6. Domini: `api.open-meteo.com` e `geocoding-api.open-meteo.com`; con un piano, `customer-api.open-meteo.com` e il dominio di ricerca che ti indica Open-Meteo.
-
-### 17. Cambi delle valute: `OWNI_EXCHANGE_RATES=1`
-
-Senza questa variabile Owni non ha i cambi. Con `OWNI_EXCHANGE_RATES=1` converte le valute con i cambi di riferimento ufficiali della Banca centrale europea (tool `exchange_rate`): «quanto fanno 1.250 dollari in euro?», «a quanto sta la sterlina?», anche alla data di una fattura, più importi insieme con il totale, l'andamento fino a un anno indietro e l'elenco delle valute del giorno. La BCE pubblica i cambi verso le 16:00 nei giorni lavorativi TARGET: nel 2026 sono 29 valute contro l'euro (non c'è più il lev bulgaro, perché la Bulgaria è entrata nell'euro il 1º gennaio 2026). Il cambio del rublo è sospeso dal 2 marzo 2022. Per le vecchie valute dell'area euro (lira, marco, franco francese, peseta, kuna, lev) Owni usa il cambio fisso irrevocabile.
-
-La BCE pubblica questi cambi solo a titolo informativo: non valgono per le operazioni di mercato, e una banca o una carta applicano il proprio cambio. Owni cita la fonte («Cambio BCE del …»).
-
-1. **Non serve una chiave.** Owni scarica solo i file pubblici della BCE: non parte niente di chi scrive. Si accende con `OWNI_EXCHANGE_RATES=1`, come ogni servizio esterno.
-2. Facoltativo, solo per i test o per un mirror con gli stessi file: `OWNI_EXCHANGE_RATES_URL` (di default `https://www.ecb.europa.eu/stats/eurofxref`).
-3. In Owni Cloud basta metterle sul control plane: passano a tutte le celle.
-4. `pnpm owni check` scarica i cambi del giorno e dice di che data sono.
-5. Dominio: `www.ecb.europa.eu`.
-
-### 18. Notizie: `OWNI_NEWS=1`
-
-Senza questa variabile Owni non legge le notizie. Con `OWNI_NEWS=1` risponde a «che notizie ci sono oggi?», «novità su Stellantis?», «le ultime di economia» o «cosa dice il Post sulle elezioni?» con i titoli recenti dei feed RSS e Atom di giornali e agenzie (tool `news_headlines`, il primo che Owni usa per le notizie; la ricerca sul web resta per i giornali che non ci sono e i fatti più vecchi di 72 ore): per ogni notizia la fonte, l'ora («alle 14:32», «ieri alle 9:10») e il link, che Owni apre con `web_read` quando ha gli strumenti web. Le notizie di oggi o di ieri, o fino a 72 ore indietro, al più 20 titoli per risposta; lo stesso titolo o lo stesso link una volta sola. L'argomento chiesto si cerca nei titoli e nei riassunti, singolare e plurale insieme, anche con sinonimi.
-
-L'elenco predefinito ha feed pubblici noti, ognuno con la sua sezione: ANSA (ultima ora, cronaca, politica, mondo, economia, tecnologia, sport), Rai News, Sky TG24, Corriere della Sera, la Repubblica, Il Post, Il Sole 24 Ore, BBC World e BBC Technology. Per le notizie in generale Owni legge solo quelli di ultima ora e Italia; gli altri quando la persona chiede un argomento, un giornale o una sezione.
-
-1. **Non serve una chiave.** Owni scarica solo gli indirizzi fissi dei feed: l'argomento chiesto si cerca nei titoli e nei riassunti sul server e non parte niente di chi scrive. Un feed che rimanda altrove si segue al più 3 volte, solo verso indirizzi https pubblici (mai la rete interna del server). Si accende con `OWNI_NEWS=1`, come ogni servizio esterno.
-2. Facoltativo: `OWNI_NEWS_FEEDS` sostituisce l'elenco predefinito. Al più 30 feed separati da `;`, ognuno `Nome|https://indirizzo`, con `|sezione` se vuoi (`ultima ora`, `italia`, `politica`, `mondo`, `economia`, `tecnologia`, `sport`): per esempio `Il Post|https://www.ilpost.it/feed/|italia;BBC World|https://feeds.bbci.co.uk/news/world/rss.xml|mondo`. Nomi da 1 a 40 caratteri, ognuno una volta; solo indirizzi https (`http://localhost` o `http://127.0.0.1` solo per i test), e un indirizzo non può contenere `;` (né `|`), che separano i feed. Il nome è quello che Owni mostra accanto a ogni titolo e che la persona usa per scegliere la fonte.
-3. In Owni Cloud basta metterle sul control plane: passano a tutte le celle.
-4. `pnpm owni check` scarica ogni feed (15 secondi ciascuno) e li elenca tutti per nome, con l'esito, mai per indirizzo: se qualcuno non va, o risponde senza notizie datate, è un avviso che li nomina, se non ne risponde nessuno è un errore. Gli indirizzi dell'elenco predefinito vanno verificati così alla prima sessione con la rete.
-5. Domini: `www.ansa.it`, `www.rainews.it`, `tg24.sky.it`, `xml2.corriereobjects.it`, `www.repubblica.it`, `www.ilpost.it`, `www.ilsole24ore.com`, `feeds.bbci.co.uk`, o quelli dei feed in `OWNI_NEWS_FEEDS` (e dei siti a cui rimandano).
-
 ### 19. Lo schermo (Cua): `OWNI_DESKTOP`, nessuna chiave da comprare
 
 Lo schermo è un desktop Linux con Firefox per ogni agente, dove Owni guarda, clicca e scrive attraverso Cua ([ADR 0045](adr/0045-schermo-cua.md)). **È gratis e non serve nessuna chiave a pagamento**: Cua pubblica l'immagine, Owni la avvia sul server e si inventa da sola token e password di ogni schermo.
@@ -259,10 +224,7 @@ Anche senza questa variabile Owni controlla «sulla carta» partite IVA, numeri 
 | WhatsApp | `graph.facebook.com`, `lookaside.fbsbx.com` |
 | Vocali | `api.mistral.ai` (o il servizio scelto) |
 | Ricerca sul web | `api.search.brave.com` |
-| Cambi delle valute | `www.ecb.europa.eu` |
 | Partita IVA | `ec.europa.eu` |
-| Notizie | `www.ansa.it`, `www.rainews.it`, `tg24.sky.it`, `xml2.corriereobjects.it`, `www.repubblica.it`, `www.ilpost.it`, `www.ilsole24ore.com`, `feeds.bbci.co.uk` (o i domini dei feed in `OWNI_NEWS_FEEDS`, e dei siti a cui rimandano) |
-| Meteo | `api.open-meteo.com`, `geocoding-api.open-meteo.com` (con un piano, `customer-api.open-meteo.com` e il dominio di ricerca indicato da Open-Meteo) |
 | Risposte a voce | `api.openai.com` (o il servizio scelto) |
 | Immagini | `api.openai.com` (o il servizio scelto) |
 | Telefono | `api.twilio.com` (o la regione scelta) |

@@ -1,5 +1,7 @@
 # Cambi delle valute: i tassi di riferimento della BCE
 
+> Sostituito dall'[ADR 0127](0127-niente-squadre-pronte-ne-strumenti-per-cose-che-l-agente-fa-gia.md): lo strumento `exchange_rate` e `OWNI_EXCHANGE_RATES` non ci sono più; i cambi si cercano sul web o si scaricano con `code_run`.
+
 Una piccola impresa riceve fatture in dollari, paga fornitori in franchi svizzeri, fa preventivi in sterline. «Quanto fanno 1.250 dollari in euro?», «il cambio del dollaro alla data della fattura», «com'è andata la sterlina questo mese?». Owni faceva i conti con `calculate`, ma senza un cambio: il modello avrebbe dovuto inventarlo.
 
 ## Decisione

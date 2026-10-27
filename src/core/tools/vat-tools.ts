@@ -28,7 +28,7 @@ const ADE = "«Verifica partita IVA» sul sito dell'Agenzia delle Entrate";
  * omocodia), then, for a VAT number written right and when the operator turned it on, the VIES.
  * The tool is always offered: the formal check needs nothing from outside, and a malformed number
  * deserves a precise answer even without the VIES. Names and addresses come from the member
- * states and are fenced as data. No audit line: nothing changes, like weather and exchange rates,
+ * states and are fenced as data. No audit line: nothing changes,
  * and a line without the number (which is never written down) would say nothing.
  */
 export function createVatTools(options: VatToolsOptions): OwniTool[] {

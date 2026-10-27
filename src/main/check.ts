@@ -1,8 +1,6 @@
 import { computerLabel, createComputerProvider } from "../computer/create.ts";
 import { createDesktopProvider, desktopLabel } from "../desktop/create.ts";
-import { ecbRates, ExchangeRateError, type ExchangeRatesConfig } from "../core/exchange-rates.ts";
 import { DEV_PROVIDER, modelProvider } from "../core/model-providers.ts";
-import { feedNews, type NewsConfig } from "../core/news.ts";
 import { viesClient, type ViesConfig, ViesError } from "../core/vies.ts";
 import type { OwniConfig } from "./config.ts";
 
@@ -15,8 +13,6 @@ import type { OwniConfig } from "./config.ts";
 export type CheckResult = { readonly name: string; readonly ok: boolean; readonly detail: string };
 
 const TIMEOUT_MS = 10_000;
-/** Each feed's time in the check: a slow feed is reported as slow, not as down. */
-const NEWS_TIMEOUT_MS = 15_000;
 
 export async function runChecks(config: OwniConfig, fetchImpl: typeof fetch = fetch): Promise<CheckResult[]> {
 	const call = (url: string, init: RequestInit = {}) => fetchImpl(url, { ...init, signal: AbortSignal.timeout(TIMEOUT_MS) });
@@ -31,13 +27,6 @@ export async function runChecks(config: OwniConfig, fetchImpl: typeof fetch = fe
 	if (speech !== undefined) checks.push(check("Risposte a voce", () => speechCheck(speech, call)));
 	const search = config.webSearch;
 	if (search !== undefined) checks.push(check("Ricerca sul web", () => searchCheck(search, call)));
-	const weather = config.weather;
-	if (weather !== undefined) checks.push(check("Meteo", () => weatherCheck(weather, call)));
-	const rates = config.exchangeRates;
-	if (rates !== undefined) checks.push(check("Cambi", () => exchangeRatesCheck(rates, call)));
-	const news = config.news;
-	// Its own timeout per feed, longer than a person waits: not the checks' 10 seconds.
-	if (news !== undefined) checks.push(check("Notizie", () => newsCheck(news, fetchImpl)));
 	const vatCheck = config.vatCheck;
 	if (vatCheck !== undefined) checks.push(check("Partita IVA", () => vatCheckCheck(vatCheck, call)));
 	const computer = config.computer;
@@ -135,53 +124,6 @@ async function searchCheck(config: { url: string; apiKey: string; country: strin
 	if (response.status === 401 || response.status === 403) throw new CheckFailed("chiave rifiutata: controlla OWNI_SEARCH_API_KEY");
 	if (!response.ok) throw new CheckFailed(`il servizio risponde ${response.status}: controlla OWNI_SEARCH_URL`);
 	return `chiave valida, ${url.host} risponde`;
-}
-
-/** One place and a one-day forecast for it: both addresses answer (with the key, on a paid plan). Bodies are not read. */
-async function weatherCheck(config: { forecastUrl: string; geocodingUrl: string; apiKey?: string }, call: Call): Promise<string> {
-	const geocoding = new URL(config.geocodingUrl);
-	for (const [name, value] of [["name", "Roma"], ["count", "1"], ["format", "json"]]) geocoding.searchParams.set(name as string, value as string);
-	const forecast = new URL(config.forecastUrl);
-	for (const [name, value] of [["latitude", "41.89"], ["longitude", "12.51"], ["daily", "weather_code"], ["forecast_days", "1"]]) forecast.searchParams.set(name as string, value as string);
-	for (const [url, variable] of [[geocoding, "OWNI_WEATHER_GEOCODING_URL"], [forecast, "OWNI_WEATHER_URL"]] as const) {
-		if (config.apiKey !== undefined) url.searchParams.set("apikey", config.apiKey);
-		const response = await reach(call, url.toString(), { headers: { accept: "application/json" } });
-		await response.body?.cancel().catch(() => {});
-		if (response.status === 401 || response.status === 403) throw new CheckFailed(config.apiKey === undefined ? "richiesta rifiutata: per un uso commerciale serve un piano e OWNI_WEATHER_API_KEY" : "chiave rifiutata: controlla OWNI_WEATHER_API_KEY");
-		if (!response.ok) throw new CheckFailed(`il servizio risponde ${response.status}: controlla ${variable}`);
-	}
-	return `${geocoding.host} e ${forecast.host} rispondono${config.apiKey === undefined ? "" : ", chiave valida"}`;
-}
-
-/** The day's file of reference rates, downloaded and read: the host answers and the file makes sense. */
-async function exchangeRatesCheck(config: ExchangeRatesConfig, call: Call): Promise<string> {
-	const host = new URL(config.url).host;
-	// The check's own call and timeout, like the other checks.
-	const fetchImpl = ((input: string | URL | Request, init?: RequestInit) => call(String(input), init)) as typeof fetch;
-	try {
-		const { day } = await ecbRates(config, fetchImpl).rateOn();
-		return `${host} risponde, cambi del ${day.date} per ${day.rates.size} valute`;
-	} catch (error) {
-		if (error instanceof ExchangeRateError) throw new CheckFailed(`${error.message}: controlla che ${host} sia raggiungibile, o OWNI_EXCHANGE_RATES_URL`);
-		throw error;
-	}
-}
-
-/**
- * Every feed downloaded and read, four at a time, each with 15 seconds: each named with what came
- * of it, never its address (an operator's feed may carry a query). Some feeds failing is a
- * warning, as for a model the service does not list; none answering is a failure.
- */
-async function newsCheck(config: NewsConfig, fetchImpl: typeof fetch): Promise<string> {
-	const results = await feedNews(config, fetchImpl, undefined, { timeoutMs: NEWS_TIMEOUT_MS }).read(config.feeds);
-	const report = results.map((r) => ("error" in r ? `${r.feed.name} ${r.error}` : r.headlines.some((h) => h.published !== undefined) ? `${r.feed.name} ok` : `${r.feed.name} senza notizie datate`));
-	const failed = results.filter((r) => "error" in r).map((r) => r.feed.name);
-	// A feed without a single dated headline shows nothing either: it counts toward the warning.
-	const undated = results.flatMap((r) => ("error" in r || r.headlines.some((h) => h.published !== undefined) ? [] : [r.feed.name]));
-	const summary = `${results.length - failed.length} feed su ${results.length} rispondono: ${report.join("; ")}`;
-	if (failed.length === results.length) throw new CheckFailed(`${summary}. Controlla la rete e OWNI_NEWS_FEEDS`);
-	const warnings = [...(failed.length === 0 ? [] : [`non vanno ${failed.join(", ")}`]), ...(undated.length === 0 ? [] : [`senza notizie datate ${undated.join(", ")}`])];
-	return warnings.length === 0 ? summary : `${summary}. Attenzione: ${warnings.join("; ")}. Controlla OWNI_NEWS_FEEDS, o togli quei feed`;
 }
 
 /**
