@@ -1,4 +1,3 @@
-import { existsSync } from "node:fs";
 import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
 import { type RunningOwni, startOwni } from "../src/app.ts";
@@ -6,6 +5,7 @@ import { type DurableEngine, OwniRuntime } from "../src/core/index.ts";
 import { checkOrg, EMPTY_ORG, type Org, onlyKnown, orgLinks, orgNote, placeLine, withoutAgent } from "../src/core/org.ts";
 import { loadOwniConfig } from "../src/main/config.ts";
 import { FAUX_MODEL, tempDataDir } from "./helpers.ts";
+import { chromiumAvailable, launchChromium } from "./playwright-browsers.ts";
 
 const NAMES = new Map([
 	["owni", "Owni"],
@@ -218,10 +218,7 @@ describe("the organigramma's routes", () => {
 	});
 });
 
-// Match browser-file-chooser.test.ts: use the installed browser, never download one.
-const chrome = process.env.OWNI_CHROMIUM_PATH ?? (existsSync("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome") ? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" : undefined);
-
-describe.skipIf(chrome === undefined || !existsSync(chrome))("the organigramma as a tree, in real Chromium", () => {
+describe.skipIf(!(await chromiumAvailable()))("the organigramma as a tree, in real Chromium", () => {
 	const running: RunningOwni[] = [];
 	afterEach(async () => {
 		for (const a of running.splice(0)) await a.stop();
@@ -241,7 +238,7 @@ describe.skipIf(chrome === undefined || !existsSync(chrome))("the organigramma a
 		expect((await api("/api/org", { org: COMPANY, version }, "PUT")).status).toBe(200);
 
 		const { chromium } = await import("playwright-core");
-		const browser = await chromium.launch({ executablePath: chrome, args: ["--no-sandbox"] });
+		const browser = await launchChromium();
 		try {
 			const page = await browser.newPage();
 			const [name, value] = cookie.split("=") as [string, string];

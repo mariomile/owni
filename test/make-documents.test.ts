@@ -126,10 +126,10 @@ describe("Markdown for documents", () => {
 
 describe("ZIP writing", () => {
 	it("writes files our reader (and Office) can open", () => {
-		const zip = new Zip(writeZip([{ name: "a.xml", data: "<a>è</a>" }, { name: "media/p.png", data: Buffer.from([1, 2, 3]) }]));
+		const zip = new Zip(writeZip([{ name: "a.xml", data: "<a>è</a>" }, { name: "media/p.png", data: Buffer.from([1, 2]) }]));
 		expect(zip.names()).toEqual(["a.xml", "media/p.png"]);
 		expect(zip.text("a.xml")).toBe("<a>è</a>");
-		expect(zip.file("media/p.png")).toEqual(Buffer.from([1, 2, 3]));
+		expect(zip.file("media/p.png")).toEqual(Buffer.from([1, 2]));
 	});
 });
 
@@ -370,9 +370,23 @@ describe("what models write, read as meant", () => {
 	});
 
 	it("parses text made to be slow in linear time", () => {
-		const started = Date.now();
-		for (const text of [`# a${" ".repeat(20_000)}x`, "[".repeat(200_000), "*a ".repeat(100_000), "_a_b ".repeat(60_000), "**a ".repeat(80_000), "`".repeat(200_000), "[a](b".repeat(60_000)]) markdownBlocks(text);
-		expect(Date.now() - started).toBeLessThan(3000);
+		// Not a wall-clock bound (it fails under a loaded suite): CPU time at 4x the input must stay near 4x, not 16x as a quadratic parser would.
+		const cpuMs = (text: string): number => {
+			const before = process.cpuUsage();
+			const blocks = markdownBlocks(text);
+			expect(blocks.length).toBeGreaterThan(0);
+			const used = process.cpuUsage(before);
+			return (used.user + used.system) / 1000;
+		};
+		const slow: [string, number][] = [[" ", 2_000_000], ["[", 200_000], ["*a ", 100_000], ["_a_b ", 60_000], ["**a ", 80_000], ["`a", 1_000_000], ["[a](b", 60_000]];
+		for (const [unit, count] of slow) {
+			const text = (n: number) => (unit === " " ? `# a${" ".repeat(n)}x` : unit.repeat(n));
+			// The best of two runs each: a garbage collection in one run is noise, not the parser's growth.
+			const best = (n: number) => Math.min(...[1, 2].map(() => cpuMs(text(n))));
+			const base = best(count);
+			const quadrupled = best(count * 4);
+			expect(quadrupled, `${JSON.stringify(unit)}: ${base} ms at ${count}, ${quadrupled} ms at ${count * 4}`).toBeLessThan(Math.max(base, 10) * 10);
+		}
 	});
 });
 

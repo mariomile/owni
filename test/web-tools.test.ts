@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
@@ -7,6 +7,9 @@ import { type RunningOwni, startOwni } from "../src/app.ts";
 import { pageText, publicAddress, webFetch } from "../src/core/web-fetch.ts";
 import { loadOwniConfig } from "../src/main/config.ts";
 import { tempDataDir } from "./helpers.ts";
+import { chromiumAvailable } from "./playwright-browsers.ts";
+
+const chromiumFound = await chromiumAvailable();
 
 const closers: (() => Promise<void>)[] = [];
 afterEach(async () => {
@@ -150,8 +153,7 @@ describe("web tools in an instance", () => {
 		expect(await reply(`/tool web_read {"url":"${s.base}/"}`)).toContain("non è tra i siti");
 	});
 
-	const chromium = existsSync(process.env.PLAYWRIGHT_BROWSERS_PATH ?? "/opt/pw-browsers");
-	it.skipIf(!chromium)("takes a screenshot into the workspace, and blocks what the page loads from elsewhere", async () => {
+	it.skipIf(!chromiumFound)("takes a screenshot into the workspace, and blocks what the page loads from elsewhere", async () => {
 		const other = await site({ "/pixel.png": { type: "image/png", body: "" } });
 		const s = await site({ "/": { body: `<title>Pagina</title><h1>Ciao</h1><img src="http://localhost:${new URL(other.base).port}/pixel.png">` } });
 		const { owni, reply } = await boot(tempDataDir(), { OWNI_SCREENSHOTS_WITHOUT_SANDBOX: "1" });

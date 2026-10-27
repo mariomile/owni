@@ -1,4 +1,3 @@
-import { existsSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
@@ -7,6 +6,7 @@ import { publicAddress } from "../src/core/web-fetch.ts";
 import { type Browser, BrowseSessions } from "../src/core/web-session.ts";
 import { loadOwniConfig } from "../src/main/config.ts";
 import { tempDataDir } from "./helpers.ts";
+import { chromiumAvailable } from "./playwright-browsers.ts";
 
 const closers: (() => Promise<void>)[] = [];
 afterEach(async () => {
@@ -105,7 +105,7 @@ function ref(view: string, text: string): number {
 	return Number(/^\[(\d+)\]/.exec(line)?.[1]);
 }
 
-const chromium = existsSync(process.env.PLAYWRIGHT_BROWSERS_PATH ?? "/opt/pw-browsers");
+const chromium = await chromiumAvailable();
 
 describe.skipIf(!chromium)("the browser with clicks (ADR 0014)", () => {
 	it("opens a page built with JavaScript, clicks, types a search, and follows links in the same page", async () => {

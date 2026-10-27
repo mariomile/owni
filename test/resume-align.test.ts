@@ -436,7 +436,8 @@ describe("restart after the configuration changed", () => {
 		await first.setThreadModel("web:t1", DEV);
 		await first.submit("web:t1", "hello");
 		// The first deferred fetch reports pending: the request is durably in the poll phase.
-		await waitFor(() => faux.state.deferredFetchCount === 1);
+		// The waits in this test end on a condition, not a clock: the budget is only how long a loaded machine may take (the test has 60 s).
+		await waitFor(() => faux.state.deferredFetchCount === 1, 45_000);
 		if (change === "model changed") await first.setThreadModel("web:t1", GROK);
 		await first.close();
 		const instructions = change === "instructions cleared" ? undefined : unchanged ? "OLD" : "NEW";
@@ -449,7 +450,7 @@ describe("restart after the configuration changed", () => {
 		session.onReply((reply) => replies.push(reply));
 		try {
 			expect(await session.resume()).toEqual({ pending: 1 });
-			await waitFor(() => replies.length === 1);
+			await waitFor(() => replies.length === 1, 45_000);
 			expect(replies[0]).toMatchObject({ status: "answered", text: "current", model: change === "model changed" || change === "provider revoked" ? GROK : DEV });
 			expect(staleTool).not.toHaveBeenCalled();
 			expect(sent).toEqual([instructions === undefined ? null : `<instructions>\n${instructions}\n</instructions>`]);
