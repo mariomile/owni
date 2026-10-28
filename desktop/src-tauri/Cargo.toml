@@ -1,6 +1,6 @@
 [package]
 name = "owni-desktop"
-version = "0.12.1"
+version = "0.12.2"
 description = "Owni as a desktop app: a window on an Owni server"
 license = "Apache-2.0"
 edition = "2021"
