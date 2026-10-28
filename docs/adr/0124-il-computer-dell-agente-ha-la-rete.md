@@ -1,5 +1,7 @@
 # 0124: Il computer dell'agente ha la rete
 
+> Aggiornata dall'[ADR 0135](0135-schermo-nel-computer-dell-agente.md): le regole di rete valgono anche per il browser dello schermo, che sta nella stessa macchina.
+
 Mario (26 ottobre 2026): il computer dell'agente ha la rete verso internet, come Grok Bot di xAI, dove ogni agente ha una macchina Linux nel cloud, persistente, con browser e rete. Fino a oggi il computer era chiuso: un container con rete `none` ([ADR 0013](0013-terminale-in-un-computer-senza-rete.md)) o una micro-VM sigillata da iptables ([ADR 0015](0015-computer-su-micro-vm.md)).
 
 Perché: un agente che lavora davvero deve poter installare un pacchetto che l'immagine non ha, clonare un repository, scaricare un file pubblico, chiamare un'API, aprire una pagina. Senza rete ognuna di queste cose diventa un rifiuto, o un giro dalla persona che scarica e carica il file. Il computer chiuso proteggeva da un rischio (i file che escono) togliendo all'agente quasi tutto quello che un computer serve a fare.

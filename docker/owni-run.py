@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/python3 -I
 """
 The computer's runner on a micro-VM (ADR 0015). The provider reaches the machine only through
 Fly's exec API, which answers within 60 seconds and takes its input as a string: so a command
@@ -16,6 +16,7 @@ starts here in the background and is waited for in slices, and files go in and o
   egress check              exit 0 only if those rules are the ones in place
   egress rules              the rules for this /etc/resolv.conf, as JSON (for tests)
   guard nft|legacy          the Docker computer's first process: egress apply, `ready`, then idles
+  screen JSON               on a machine, as root: the screen's action (owni-screen) as uid 1001
 
 Run as root it drops to uid 1000 for everything that touches /work, and walks /work without
 following links. A command starts only once the machine's first process has closed Fly's API
@@ -53,6 +54,9 @@ STATE = os.environ.get("OWNI_RUN_STATE", "/run/owni")
 WORK = os.environ.get("OWNI_RUN_WORK", "/work")
 # Tests run as root on a shared host give an unused uid: sweeping it ends nobody else's processes.
 UID = int(os.environ.get("OWNI_RUN_UID", "1000"))
+# The screen (ADR 0135): another user, so the sweep after a command leaves it, in the commands' group for the downloads.
+SCREEN_UID = 1001
+SCREEN = "/usr/local/bin/owni-screen"
 # As a normal user (tests) there is nothing to drop, and nothing broad to kill.
 ROOT = os.getuid() == 0
 MAX_STREAM = 64 * 1024
@@ -311,9 +315,19 @@ def egress_holds():
     return True
 
 
+def x11_dir():
+    """X's socket folder, root's with the sticky bit: no command can put its own socket where the screen's goes."""
+    try:
+        os.mkdir("/tmp/.X11-unix", 0o1777)
+    except FileExistsError:
+        pass
+    os.chmod("/tmp/.X11-unix", 0o1777)
+
+
 def guard(backend):
-    """The Docker computer's first process, as root with only NET_ADMIN: the rules, `ready`, then nothing."""
+    """The Docker computer's first process, as root with only NET_ADMIN: the rules, X's folder, `ready`, then nothing."""
     egress_apply(backend)
+    x11_dir()
     with open(os.path.join(STATE, "ready"), "w") as f:
         f.write("container")
     while True:
@@ -567,6 +581,22 @@ def idle(seconds):
             return
 
 
+def screen(request):
+    """On a machine: the screen's action as uid 1001, with the commands' filter (no_side_sockets)."""
+    # Read as root: /run/owni is closed to 1001.
+    machine = on_machine()
+    if not os.path.exists(os.path.join(STATE, "ready")) or (machine and not egress_holds()):
+        fail("not ready: the egress rules are not in place")
+    if ROOT:
+        os.setgroups([UID])
+        os.setgid(SCREEN_UID)
+        os.setuid(SCREEN_UID)
+        no_new_privs()
+        if machine:
+            no_side_sockets()
+    os.execve(SCREEN, [SCREEN, request], {"HOME": "/screen", "LANG": "C.UTF-8", "PATH": "/usr/local/bin:/usr/bin:/bin"})
+
+
 def number(text):
     try:
         return int(text)
@@ -576,9 +606,11 @@ def number(text):
 
 def main(argv):
     if len(argv) < 2:
-        fail("usage: owni-run start|wait|kill|write|stat|read|idle|egress|guard ...")
+        fail("usage: owni-run start|wait|kill|write|stat|read|idle|egress|guard|screen ...")
     what, args = argv[1], argv[2:]
-    touch()
+    # As uid 1000 (stat on Docker, whose root cannot drop to it) there is no idle clock to keep.
+    if ROOT:
+        touch()
     try:
         if what == "start" and len(args) == 3:
             return start(args[0], max(1, number(args[1])), args[2] == "1")
@@ -603,13 +635,15 @@ def main(argv):
             return out(egress_rules(nameservers()))
         if what == "guard" and len(args) == 1:
             return guard(args[0])
+        if what == "screen" and len(args) == 1:
+            return screen(args[0])
     except Refused as refused:
         fail(str(refused))
     except OSError as error:
         if error.errno == 40:  # ELOOP: a link where a file or folder was expected
             fail("not a file")
         fail(f"{type(error).__name__}: {error.strerror or error}")
-    fail("usage: owni-run start|wait|kill|write|stat|read|idle|egress|guard ...")
+    fail("usage: owni-run start|wait|kill|write|stat|read|idle|egress|guard|screen ...")
 
 
 if __name__ == "__main__":

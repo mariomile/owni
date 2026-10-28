@@ -3,6 +3,8 @@
 > Aggiornata dall'[ADR 0015](0015-computer-su-micro-vm.md): il computer può girare su micro-VM Fly.io, e così anche in Owni Cloud.
 >
 > Aggiornata dall'[ADR 0124](0124-il-computer-dell-agente-ha-la-rete.md): il computer ha la rete verso internet. Restano senza segreti e senza approvazione per comando; non vale più «niente può uscire».
+>
+> Aggiornata dall'[ADR 0135](0135-schermo-nel-computer-dell-agente.md): la macchina porta anche lo schermo dell'agente (Chromium), con più memoria di default.
 
 Owni esegue comandi (`computer_run`) in un computer suo, separato dalla cella: un container per istanza, con i suoi file in `/work`, **senza rete** e senza segreti. Ci copia i file del workspace che servono, lancia i comandi (Python, `jq`, `sqlite3`, `pandoc`, `pdftotext` e gli altri strumenti dell'immagine) e riporta nel workspace i file che produce. Il browser con clic resta per il passo dopo, sullo stesso computer.
 

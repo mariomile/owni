@@ -23,6 +23,13 @@ export type ComputerRun = {
 	readonly diskFull: boolean;
 };
 
+/** What the screen gave back: its text, a PNG when it looked, and what it measured. */
+export type ComputerScreen = {
+	readonly text: string;
+	readonly image?: Uint8Array;
+	readonly structured?: Readonly<Record<string, unknown>>;
+};
+
 export type ComputerProvider = {
 	/** Run `command` with sh in /work. Starts the computer if it is not running. */
 	run(key: string, command: string, options: { readonly timeoutS: number; readonly signal?: AbortSignal }): Promise<ComputerRun>;
@@ -30,13 +37,53 @@ export type ComputerProvider = {
 	put(key: string, files: readonly { readonly path: string; readonly data: Uint8Array }[]): Promise<void>;
 	/** A file under /work, at most `maxBytes`. */
 	get(key: string, path: string, maxBytes: number): Promise<Uint8Array>;
-	/** Remove the computer and everything in /work. */
+	/**
+	 * One action on the computer's screen (ADR 0135): Chromium on a virtual display, as uid 1001.
+	 * Starts the computer, the display and the browser when they are not running. What the screen
+	 * refuses (a coordinate off the screen, an app that is not the browser) is a ComputerError.
+	 */
+	screen(key: string, tool: string, args: Readonly<Record<string, unknown>>, signal?: AbortSignal): Promise<ComputerScreen>;
+	/** Remove the computer, everything in /work and the screen's browser profile. */
 	reset(key: string): Promise<void>;
 	/** What keeps the computers from working on this server, or undefined when they can. */
 	check(): Promise<string | undefined>;
 	/** Stop every computer of this process (they keep their files). */
 	close(): Promise<void>;
 };
+
+/** The screen's tool in the image (docker/owni-screen.py), and the longest an action may take: a first start of Chromium included. */
+export const SCREEN_TIMEOUT_S = 50;
+/** A screenshot of 1280×800 in base64 with its JSON: well under this. */
+export const SCREEN_MAX_BYTES = 8 * 1024 * 1024;
+
+/**
+ * The screen tool's answer: JSON on stdout when it worked, its reason on stderr with exit code 3
+ * when it refused (a ComputerError, said to the model), anything else an error of the computer.
+ */
+export function screenAnswer(exitCode: number | null, stdout: string, stderr: string): ComputerScreen {
+	if (exitCode === 3) throw new ComputerError(stderr.trim().slice(0, 300) || "lo schermo ha rifiutato l'azione");
+	if (exitCode !== 0) throw new Error(`computer: screen failed (${exitCode}): ${stderr.trim().slice(-300)}`);
+	try {
+		return screenFromJson(JSON.parse(stdout));
+	} catch {
+		throw new Error("computer: unreadable answer from the screen");
+	}
+}
+
+/** A screen's answer as the screen tool and the control plane send it: the PNG in base64. */
+export function screenFromJson(value: unknown): ComputerScreen {
+	const answer = (typeof value === "object" && value !== null ? value : {}) as { text?: unknown; image?: unknown; structured?: unknown };
+	const structured = typeof answer.structured === "object" && answer.structured !== null ? (answer.structured as Record<string, unknown>) : undefined;
+	return {
+		text: typeof answer.text === "string" ? answer.text : "",
+		...(typeof answer.image === "string" ? { image: new Uint8Array(Buffer.from(answer.image, "base64")) } : {}),
+		...(structured === undefined ? {} : { structured }),
+	};
+}
+
+export function screenToJson(screen: ComputerScreen): Record<string, unknown> {
+	return { text: screen.text, ...(screen.image === undefined ? {} : { image: Buffer.from(screen.image).toString("base64") }), ...(screen.structured === undefined ? {} : { structured: screen.structured }) };
+}
 
 /** Something the person or Owni can fix (a missing file, a file too big): said as it is. */
 export class ComputerError extends Error {

@@ -126,14 +126,8 @@ const CAPABILITY_CARDS = [
 		skip: (c) => c.kind === "local",
 		missing: () => h("div.card.pad", h("h2", "Schermo remoto"), h("p.muted", "Lo schermo remoto non è attivo su questo server: chiedi a chi gestisce Owni di attivarlo.")),
 		text: (c, inst) => {
-			const network =
-				c.network === "internet"
-					? "Arriva a internet, e il suo browser non segue l'elenco dei siti consentiti."
-					: c.network === "none"
-						? "Non ha internet: usa solo i suoi programmi."
-						: "Gira altrove ed è lo stesso per tutti gli agenti che lo usano. Se arriva a internet, il suo browser non segue l'elenco dei siti consentiti.";
 			const many = c.shared ? "" : " Se più agenti usano lo schermo insieme, quello usato meno di recente si chiude per fare posto.";
-			return `${inst.name} ha un computer tutto suo, con un browser, dove guarda lo schermo, clicca e scrive. ${network} Quello che fa sullo schermo non chiede approvazione: prima di inviare, pagare o accedere a un account si ferma e chiede in chat.${many}`;
+			return `${inst.name} ha un computer tutto suo, con un browser, dove guarda lo schermo, clicca e scrive. Arriva a internet, e il suo browser non segue l'elenco dei siti consentiti. Quello che fa sullo schermo non chiede approvazione: prima di inviare, pagare o accedere a un account si ferma e chiede in chat.${many}`;
 		},
 		before: (c) => [c.problem ? h("p.warn", "Lo schermo per ora non funziona: chi gestisce Owni deve sistemarlo.") : null, c.problem ? h("details", h("summary", "Dettagli per chi gestisce Owni"), h("p.mono", c.problem)) : null],
 		label: "Consenti lo schermo a questo agente",

@@ -1,7 +1,7 @@
 import { createHash, createHmac, randomBytes } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { COMPUTER_LIMITS, ComputerError, type ComputerProvider, type ComputerRun } from "../core/computer.ts";
+import { COMPUTER_LIMITS, ComputerError, type ComputerProvider, type ComputerRun, type ComputerScreen, SCREEN_TIMEOUT_S, screenAnswer } from "../core/computer.ts";
 import { PerKey, Slots } from "./queue.ts";
 
 export type FlyComputerOptions = {
@@ -15,7 +15,7 @@ export type FlyComputerOptions = {
 	readonly image: string;
 	readonly memoryMb?: number;
 	readonly cpus?: number;
-	/** Quota of /work; the volume is this, rounded up to whole gigabytes. */
+	/** Quota of /work; the volume is this, rounded up to whole gigabytes, and one more for the screen. */
 	readonly diskMb?: number;
 	/** A machine with no call for this long stops by itself (its files stay). */
 	readonly idleS?: number;
@@ -62,7 +62,9 @@ const TIMED_OUT = Symbol("timed out");
  * process closes Fly's API inside it (docker/owni-fly-init) and stops it after a while with
  * nothing to do. Commands and files go through Fly's exec API to
  * docker/owni-run, which runs them as uid 1000: a command starts in the background and is
- * waited for in slices, because an exec answers within 60 seconds.
+ * waited for in slices, because an exec answers within 60 seconds. The screen (ADR 0135) runs
+ * in the same machine as uid 1001; the volume holds /work and the browser profile side by side,
+ * mounted apart by owni-fly-init.
  */
 export class FlyComputerProvider implements ComputerProvider {
 	private readonly locks = new PerKey();
@@ -73,7 +75,7 @@ export class FlyComputerProvider implements ComputerProvider {
 	private readonly fetch: typeof fetch;
 
 	constructor(private readonly options: FlyComputerOptions) {
-		const memory = options.memoryMb ?? 1024;
+		const memory = options.memoryMb ?? 2048;
 		const cpus = options.cpus ?? 1;
 		if (!Number.isInteger(cpus) || cpus < 1 || cpus > 8) throw new Error("Computer: Fly machines have 1 to 8 whole CPUs");
 		if (!Number.isInteger(memory) || memory < 256 || memory % 256 !== 0 || memory > cpus * 2048) throw new Error("Computer: Fly memory in steps of 256 MB, at most 2048 MB per CPU");
@@ -156,6 +158,14 @@ export class FlyComputerProvider implements ComputerProvider {
 			}
 			return new Uint8Array(Buffer.concat(parts));
 		});
+	}
+
+	/** Under the lock only to start the machine: a screen action does not wait for a running command. */
+	async screen(key: string, tool: string, args: Readonly<Record<string, unknown>>, signal?: AbortSignal): Promise<ComputerScreen> {
+		const machine = this.machines.get(key) ?? (await this.locks.run(key, () => this.launch(key)));
+		const out = await this.exec(key, machine, [RUNNER, "screen", JSON.stringify({ tool, args })], SCREEN_TIMEOUT_S, undefined, signal);
+		if (/not ready/.test(out.stderr) && out.exitCode === 2) throw new Error("computer: the machine is not ready for the screen (owni-fly-init failed?)");
+		return screenAnswer(out.exitCode, out.stdout, out.stderr);
 	}
 
 	reset(key: string): Promise<void> {
@@ -340,7 +350,7 @@ export class FlyComputerProvider implements ComputerProvider {
 		return {
 			key,
 			image: this.options.image,
-			guest: { cpu_kind: "shared", cpus: this.options.cpus ?? 1, memory_mb: this.options.memoryMb ?? 1024 },
+			guest: { cpu_kind: "shared", cpus: this.options.cpus ?? 1, memory_mb: this.options.memoryMb ?? 2048 },
 			idleS: this.options.idleS ?? 600,
 			volumeGb: this.volumeGb(),
 		};
@@ -351,7 +361,8 @@ export class FlyComputerProvider implements ComputerProvider {
 			image: spec.image,
 			guest: spec.guest,
 			env: { OWNI_IDLE_S: String(spec.idleS) },
-			mounts: [{ volume, path: "/work" }],
+			// owni-fly-init mounts /data/work on /work and /data/screen (the browser's profile) on /screen.
+			mounts: [{ volume, path: "/data" }],
 			// No services: nothing reaches it through Fly's proxy, and it has no public address.
 			services: [],
 			// Its first process ending (idle) stops the machine; nothing starts it again but a command.
@@ -366,8 +377,9 @@ export class FlyComputerProvider implements ComputerProvider {
 		return this.options.diskMb ?? 2048;
 	}
 
+	/** The quota of /work, plus one gigabyte for the browser's profile and cache. */
 	private volumeGb(): number {
-		return Math.max(1, Math.ceil(this.diskMb() / 1024));
+		return Math.max(1, Math.ceil(this.diskMb() / 1024)) + 1;
 	}
 
 	private chunk(): number {

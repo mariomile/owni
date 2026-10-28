@@ -45,11 +45,11 @@ export function capabilityRoutes(route: AddRoute, { runtime, tenantId, knownInst
 		if (desktop === undefined) return {};
 		if (desktop.kind === "local" && desktop.permissions !== undefined) {
 			const permissions = await desktop.permissions();
-			return { kind: "local", connector: desktopConnector(desktop), network: desktop.network, shared: desktop.shared, permissions, ...(permissions.problem === undefined ? {} : { problem: permissions.problem }) };
+			return { kind: "local", connector: desktopConnector(desktop), shared: desktop.shared, permissions, ...(permissions.problem === undefined ? {} : { problem: permissions.problem }) };
 		}
 		if (desktopCheck === undefined || Date.now() - desktopCheck.at > 30_000) desktopCheck = { at: Date.now(), problem: desktop.check() };
 		const problem = await desktopCheck.problem;
-		return { network: desktop.network, shared: desktop.shared, ...(problem === undefined ? {} : { problem }) };
+		return { shared: desktop.shared, ...(problem === undefined ? {} : { problem }) };
 	};
 	const specs: readonly Capability[] = [
 		{ name: "web-actions", connector: WEB_ACTIONS_CONNECTOR, auditType: "web_actions.allowed", available: true, missing: "" },

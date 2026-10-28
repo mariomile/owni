@@ -20,7 +20,7 @@ describe("the local Mac's separate permission boundary", () => {
 
 	it("remote-screen consent does not authorize a tool on the person's Mac", async () => {
 		let calls = 0;
-		const desktop: DesktopProvider = { kind: "local", shared: true, network: "internet", call: async () => { calls++; return { text: "", images: [] }; }, reset: async () => {}, check: async () => undefined, close: async () => {} };
+		const desktop: DesktopProvider = { kind: "local", shared: true, call: async () => { calls++; return { text: "", images: [] }; }, reset: async () => {}, check: async () => undefined, close: async () => {} };
 		const tools = createDesktopTools({ desktop, key: "agent", policy: async () => ({ modelProviders: ["faux"], channels: ["web"], connectors: ["schermo"] }), record: async () => {} });
 		const look = tools.find(t => t.name === "desktop_look")!;
 		expect(look.description).toContain("person's Mac");
@@ -33,7 +33,7 @@ describe("the local Mac's separate permission boundary", () => {
 		let checks = 0;
 		const requested: string[] = [];
 		const desktop: DesktopProvider = {
-			kind: "local", shared: true, network: "internet",
+			kind: "local", shared: true,
 			call: async () => ({ text: "", images: [] }), reset: async () => {}, close: async () => {}, check: async () => undefined,
 			permissions: async () => { checks++; return { ...permissions }; },
 			requestPermission: async (permission) => { requested.push(permission); return { ...permissions }; },

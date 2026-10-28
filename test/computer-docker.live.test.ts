@@ -26,7 +26,7 @@ for name, r in [('io_uring', lambda: libc.syscall(425, 1, ctypes.create_string_b
 "`;
 
 describe.skipIf(image === undefined)("the computer on a real Docker host", () => {
-	const computer = new DockerComputerProvider({ image: image as string, ...(process.env.OWNI_TEST_COMPUTER_RUNTIME ? { runtime: process.env.OWNI_TEST_COMPUTER_RUNTIME } : {}) });
+	const computer = new DockerComputerProvider({ image: image as string, ...(process.env.OWNI_DOCKER_SOCKET ? { socketPath: process.env.OWNI_DOCKER_SOCKET } : {}), ...(process.env.OWNI_TEST_COMPUTER_RUNTIME ? { runtime: process.env.OWNI_TEST_COMPUTER_RUNTIME } : {}) });
 	afterAll(() => computer.reset(key));
 
 	it("runs as uid 1000 in /work, reaches the public internet and nothing private, with no capabilities, no secrets and a read-only system", async () => {
@@ -80,4 +80,62 @@ describe.skipIf(image === undefined)("the computer on a real Docker host", () =>
 		// A file past the per-file limit cannot be written.
 		expect((await computer.run(key, "ulimit -f", { timeoutS: 10 })).stdout.trim()).not.toBe("unlimited");
 	}, 60_000);
+
+	it("the screen: Chromium in the same machine; the commands cannot read its profile, see it, stop it or plant code in it; no file:// pages; its downloads reach them; a restart keeps the profile", async () => {
+		const look = await computer.screen(key, "get_desktop_state", { max_image_dimension: 1280 });
+		expect(Buffer.from((look.image as Uint8Array).subarray(1, 4)).toString()).toBe("PNG");
+		expect(Buffer.from(look.image as Uint8Array).readUInt32BE(16)).toBe(1280);
+		expect(Buffer.from(look.image as Uint8Array).readUInt32BE(20)).toBe(800);
+		expect(look.structured).toEqual({ screenshot_original_width: 1280, screenshot_original_height: 800 });
+		await computer.screen(key, "launch_app", { urls: ["https://example.com/"] });
+		let title = "";
+		for (let i = 0; i < 30 && !title.includes("Example Domain"); i++) {
+			await new Promise((r) => setTimeout(r, 500));
+			title = (await computer.screen(key, "get_desktop_state", { max_image_dimension: 640 })).text;
+		}
+		expect(title).toContain("Example Domain");
+		// The profile, with the cookies, is 1001's alone; X wants a cookie that is in it.
+		expect((await computer.run(key, "ls /screen", { timeoutS: 10 })).exitCode).not.toBe(0);
+		const x = await computer.run(key, "for d in 0 1 2 3 4 5 6 7 8 9; do DISPLAY=:$d xdotool getmouselocation 2>/dev/null && echo visto; done; true", { timeoutS: 30 });
+		expect(x.stdout).not.toContain("visto");
+		// uid 1000 cannot signal 1001: this ends only the command itself.
+		await computer.run(key, "pkill -9 chromium; kill -9 -1", { timeoutS: 10 });
+		expect((await computer.screen(key, "get_desktop_state", { max_image_dimension: 640 })).text).toContain("Example Domain");
+		// A python3 and a .pth that the commands leave in their own PATH and site-packages: they run for
+		// uid 1000 alone, never for the screen (1001) or for root, whose interpreter and PATH are fixed.
+		const site = (await computer.run(key, "python3 -c 'import site; print(site.getusersitepackages())'", { timeoutS: 10 })).stdout.trim();
+		const plant = `mkdir -p /work/.local/bin ${site} && printf '#!/bin/sh\\ntouch /work/preso-$(id -u)\\nexec /usr/bin/python3 "$@"\\n' > /work/.local/bin/python3 && chmod +x /work/.local/bin/python3 && echo "import os; open('/work/preso-%d' % os.getuid(), 'w')" > ${site}/preso.pth`;
+		expect((await computer.run(key, plant, { timeoutS: 10 })).exitCode).toBe(0);
+		await computer.screen(key, "get_desktop_state", { max_image_dimension: 640 });
+		await computer.put(key, [{ path: "radice.txt", data: Buffer.from("ok") }]);
+		expect(Buffer.from(await computer.get(key, "radice.txt", 1024)).toString()).toBe("ok");
+		expect((await computer.run(key, "python3 -c 1; ls /work | grep '^preso-' | tr '\\n' ' '", { timeoutS: 10 })).stdout).toBe("preso-1000 ");
+		// Files go in and come out of /work only: not through a link to the profile.
+		expect((await computer.run(key, "ln -s /screen /work/s", { timeoutS: 10 })).exitCode).toBe(0);
+		await expect(computer.get(key, "s/profile/Default/Preferences", 1024 * 1024)).rejects.toThrow("collegamento");
+		await expect(computer.put(key, [{ path: "s/profile/Default/Preferences", data: Buffer.from("{}") }])).rejects.toThrow("collegamento");
+		// No file:// pages, typed in the address bar either: the managed policy blocks them.
+		await computer.screen(key, "hotkey", { keys: ["ctrl", "l"] });
+		await computer.screen(key, "type_text", { text: "file:///etc/passwd\n" });
+		await new Promise((r) => setTimeout(r, 2000));
+		expect((await computer.screen(key, "get_desktop_state", { max_image_dimension: 640 })).text).toBe("file:///etc/passwd - Chromium");
+		// What the browser downloads, the commands read: a file served from inside the computer.
+		const serving = computer.run(key, "mkdir -p /tmp/srv && head -c 1000 /dev/urandom > /tmp/srv/dati.bin && cd /tmp/srv && timeout 25 python3 -m http.server 8765 --bind 127.0.0.1", { timeoutS: 30 });
+		await new Promise((r) => setTimeout(r, 1500));
+		await computer.screen(key, "launch_app", { urls: ["http://127.0.0.1:8765/dati.bin"] });
+		let size = "";
+		for (let i = 0; i < 20 && size !== "1000"; i++) {
+			await new Promise((r) => setTimeout(r, 500));
+			size = (await computer.run(key, "stat -c %s /work/Downloads/dati.bin 2>/dev/null || true", { timeoutS: 10 })).stdout.trim();
+		}
+		expect(size).toBe("1000");
+		await serving;
+		// Restart: the browser and the display close, the next action opens them again.
+		await computer.screen(key, "restart", {});
+		// The first actions after it, at once, open one display and one browser between them.
+		const again = await Promise.all([1, 2, 3].map(() => computer.screen(key, "get_desktop_state", { max_image_dimension: 1280 })));
+		for (const shot of again) expect(Buffer.from((shot.image as Uint8Array).subarray(1, 4)).toString()).toBe("PNG");
+		expect((await computer.run(key, "pgrep -cx Xvfb", { timeoutS: 10 })).stdout).toBe("1\n");
+		await expect(computer.screen(key, "launch_app", { name: "xterm" })).rejects.toThrow("solo il browser");
+	}, 180_000);
 });

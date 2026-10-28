@@ -6,6 +6,9 @@
 # /work or /tmp (pip install, a clone, a download). A custom image keeps uid 1000, /work owned by
 # it, sh, timeout, du, chmod, python3, iptables and /usr/local/bin/owni-run.
 #
+# The agente's screen runs here too (ADR 0135): Xvfb and Chromium as uid 1001 (owni-screen), in
+# the commands' group for /work/Downloads, with its profile in /screen (0700, 1001's).
+#
 # On micro-VMs (ADR 0015) the same tools run from the `fly` target:
 #   docker build -f docker/computer.Dockerfile --target fly -t <registry>/owni-computer:fly docker
 FROM debian:bookworm-slim AS tools
@@ -15,9 +18,11 @@ RUN apt-get update \
       ca-certificates coreutils file bc jq sqlite3 zip unzip xz-utils curl git python3-pip iptables \
       python3 python3-pandas python3-openpyxl python3-xlrd python3-matplotlib python3-pypdf weasyprint \
       pandoc poppler-utils qpdf imagemagick ghostscript fonts-dejavu-core procps \
+      chromium xvfb xkb-data x11-xkb-utils xdotool fonts-liberation fonts-noto-color-emoji \
  && rm -rf /var/lib/apt/lists/* \
  && groupadd -g 1000 owni && useradd -u 1000 -g 1000 -d /tmp -s /bin/sh owni \
- && mkdir /work && chown 1000:1000 /work \
+ && groupadd -g 1001 owni-screen && useradd -u 1001 -g 1001 -G owni -d /screen -s /usr/sbin/nologin owni-screen \
+ && mkdir /work /screen && chown 1000:1000 /work && chmod 775 /work && chown 1001:1001 /screen && chmod 700 /screen \
  && printf '[global]\nuser = true\nbreak-system-packages = true\n' > /etc/pip.conf \
  # Nothing for uid 1000 to gain privileges from: no setuid or setgid programs.
  && find / -xdev -perm /6000 -type f -exec chmod a-s {} +
@@ -25,6 +30,11 @@ RUN apt-get update \
 ENV HOME=/tmp LANG=C.UTF-8 MPLBACKEND=Agg PYTHONUSERBASE=/work/.local PATH=/work/.local/bin:/usr/local/bin:/usr/bin:/bin
 # The egress rules and the runner, the same on both targets (ADR 0124).
 COPY --chmod=755 owni-run.py /usr/local/bin/owni-run
+COPY --chmod=755 owni-screen.py /usr/local/bin/owni-screen
+# The screen's browser, set by root where 1001 cannot change it: downloads to /work/Downloads
+# without asking, no file:// pages (the profile and its cookies are files), no developer tools.
+# No --chmod: it would give the directories it creates the same 644, and Chromium could not enter them.
+COPY chromium-policy.json /etc/chromium/policies/managed/owni.json
 
 # A micro-VM: its first process runs as root to close Fly's API and private addresses, then
 # idles; commands arrive through Fly's exec API and run as uid 1000 through owni-run.

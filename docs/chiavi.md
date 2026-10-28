@@ -186,17 +186,15 @@ Senza queste variabili Owni non crea immagini. Con queste, quando glielo chiedon
 
 Va bene qualunque servizio con la stessa API di OpenAI (`POST /images/generations` e `/images/edits`, immagini in `b64_json`); per un altro servizio indica anche il modello.
 
-### 19. Lo schermo (Cua): `OWNI_DESKTOP`, nessuna chiave da comprare
+### 19. Lo schermo: nessuna chiave, viene con il computer
 
-Lo schermo è un desktop Linux con Firefox per ogni agente, dove Owni guarda, clicca e scrive attraverso Cua ([ADR 0045](adr/0045-schermo-cua.md)). **È gratis e non serve nessuna chiave a pagamento**: Cua pubblica l'immagine, Owni la avvia sul server e si inventa da sola token e password di ogni schermo.
+Lo schermo è Chromium su un display virtuale dentro il computer dell'agente, la stessa macchina dei comandi ([ADR 0135](adr/0135-schermo-nel-computer-dell-agente.md)). **Non ha chiavi, impostazioni né immagini da scaricare a parte**: si accende da solo dove c'è un computer.
 
-1. Serve un server **amd64** (x86_64) con Docker: l'immagine di Cua non esiste per ARM. Scaricala una volta, circa 8 GB: `docker pull trycua/cua-xfce:0.3.0`. Owni usa esattamente questo tag; non scaricarlo con `latest`.
-2. In `.env`: `OWNI_DESKTOP=docker`. Usa lo stesso socket del computer (`OWNI_DOCKER_SOCKET`, di default `/var/run/docker.sock`): vale la stessa avvertenza, il socket equivale a root sul server ([runbook](runbook.md), 6n).
-3. Facoltativo: `OWNI_DESKTOP_NETWORK=internet`, per dare internet agli schermi e usare il web dal loro Firefox. Senza (o con `none`) gli schermi non hanno internet. **Con internet il browser dello schermo non segue l'elenco dei siti consentiti dell'agente**, e quello che Owni fa sullo schermo non chiede approvazione: accendilo sapendolo.
-4. In alternativa a Docker, uno schermo che fai girare altrove: `OWNI_DESKTOP=remote`, `OWNI_DESKTOP_URL` (l'indirizzo del demone di Cua, in https, per esempio `https://schermo.example:3211`) e `OWNI_DESKTOP_TOKEN` (il `CUA_ENV_TOKEN` che hai dato a quel container). È **uno schermo solo per tutti gli agenti** che lo usano.
-5. `pnpm owni check` dice se Docker risponde, se il server è amd64 e se l'immagine c'è, oppure se lo schermo remoto risponde e accetta il token. Lo stesso controllo compare nella console (Impostazioni, Schermo) e nel log all'avvio.
-6. Poi, in ogni agente che deve usarlo: Impostazioni → **Schermo** → spunta «Consenti lo schermo a questo agente».
-7. Domini: con Docker nessuno per Owni; solo per scaricare l'immagine, una volta, `registry-1.docker.io` (Docker Hub). Con uno schermo altrove, l'unico dominio è quello di `OWNI_DESKTOP_URL`.
+1. Serve il computer (§12): `OWNI_COMPUTER=docker` o `fly`, oppure Owni Cloud, che lo ha già. L'immagine del computer porta Chromium e cresce di circa 400 MB; la memoria di default passa a 2048 MB.
+2. `pnpm owni check` e la console (Impostazioni, Schermo) dicono se lo schermo è pronto, come per il computer.
+3. Poi, in ogni agente che deve usarlo: Impostazioni → **Schermo** → spunta «Consenti lo schermo a questo agente».
+4. Domini: nessuno in più rispetto al computer (§12). Le regole di rete del computer valgono anche per il browser: internet pubblico sì, indirizzi privati no. Il browser non segue l'elenco dei siti consentiti dell'agente, e quello che Owni fa sullo schermo non chiede approvazione.
+5. Le vecchie impostazioni di Cua (`OWNI_DESKTOP=docker` o `remote`, `OWNI_DESKTOP_NETWORK`, `OWNI_DESKTOP_URL`, `OWNI_DESKTOP_TOKEN`) non esistono più: Owni non parte finché ci sono, e il messaggio dice di toglierle. `OWNI_DESKTOP=local` (Computer Use sul Mac, [desktop](desktop.md)) è un'altra cosa e resta.
 
 ### 20. Partita IVA: `OWNI_VAT_CHECK=1`
 
@@ -228,7 +226,7 @@ Anche senza questa variabile Owni controlla «sulla carta» partite IVA, numeri 
 | Risposte a voce | `api.openai.com` (o il servizio scelto) |
 | Immagini | `api.openai.com` (o il servizio scelto) |
 | Telefono | `api.twilio.com` (o la regione scelta) |
-| Schermo | `registry-1.docker.io` (con Docker, solo per scaricare l'immagine di Cua), o il dominio di `OWNI_DESKTOP_URL` |
+| Schermo | nessuno in più: come il computer (§12) |
 | Connettori in un clic | `mcp.notion.com`, `mcp.linear.app`, `mcp.monday.com`, `mcp.atlassian.com`, `mcp.stripe.com`, `api.githubcopilot.com`, `mcp.sentry.dev`, `mcp.supabase.com`, `mcp.context7.com`, `huggingface.co` (e i loro server di autorizzazione) |
 
 ## Cosa succede dopo

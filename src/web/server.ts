@@ -142,8 +142,8 @@ export type WebAppOptions = {
 	readonly computer?: { reset(instanceId: string): Promise<void>; check(): Promise<string | undefined> };
 	/** What each agente last saw on its screen, per conversation (ADR 0067). */
 	readonly screens?: ScreenViews;
-	/** The agenti's screens through Cua (ADR 0045), when this server has them: whether they reach the internet, and whether one screen is shared. */
-	readonly desktop?: { reset(instanceId: string): Promise<void>; check(): Promise<string | undefined>; readonly network: "none" | "internet" | "unknown"; readonly shared: boolean; readonly kind?: "local" | "remote"; permissions?(): Promise<DesktopPermissions>; requestPermission?(permission: DesktopPermission): Promise<DesktopPermissions> };
+	/** The agenti's screens (ADR 0135), or the Mac's own: whether one screen is shared. */
+	readonly desktop?: { reset(instanceId: string): Promise<void>; check(): Promise<string | undefined>; readonly shared: boolean; readonly kind?: "local" | "remote"; permissions?(): Promise<DesktopPermissions>; requestPermission?(permission: DesktopPermission): Promise<DesktopPermissions> };
 	/** Sends a form a person approved (ADR 0011), for an instance. */
 	readonly sendWebAction?: (instanceId: string) => (action: WebAction) => Promise<WebActionResult>;
 	/** Runs an approved connector call on the instance's live connection (ADR 0025). */

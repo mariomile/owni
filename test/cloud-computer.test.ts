@@ -8,7 +8,7 @@ import { MemoryMailer } from "../src/cloud/mailer.ts";
 import type { CellProvider } from "../src/cloud/provider.ts";
 import { createComputerProvider } from "../src/computer/create.ts";
 import { RemoteComputerProvider } from "../src/computer/remote-computer.ts";
-import { ComputerError, type ComputerProvider, type ComputerRun, computerKey } from "../src/core/computer.ts";
+import { ComputerError, type ComputerProvider, type ComputerRun, type ComputerScreen, computerKey } from "../src/core/computer.ts";
 import { ConfigError, loadOwniConfig, loadComputerConfig } from "../src/main/config.ts";
 import { tempDataDir } from "./helpers.ts";
 
@@ -52,6 +52,11 @@ class Recorder implements ComputerProvider {
 	}
 	async reset(key: string): Promise<void> {
 		this.calls.push(`reset ${key}`);
+	}
+	async screen(key: string, tool: string, args: Readonly<Record<string, unknown>>): Promise<ComputerScreen> {
+		this.calls.push(`screen ${key} ${tool} ${JSON.stringify(args)}`);
+		if (tool === "rifiuta") throw new ComputerError("lo schermo non ha risposto in tempo");
+		return { text: `ok ${tool}`, image: new Uint8Array([0x89, 0x50, 0x4e, 0x47]), structured: { capture_id: "c" } };
 	}
 	async check(): Promise<string | undefined> {
 		return undefined;
@@ -107,6 +112,18 @@ describe("computers through the control plane", () => {
 		await a.reset(KEY);
 		expect(recorder.calls.at(-1)).toBe(`reset ${computerKey("aaaa", KEY)}`);
 		expect(await a.check()).toBeUndefined();
+	});
+
+	it("the screen of a cell's agente is in its tenant's computer: the picture comes back whole, a refusal stays a refusal, bad input is refused", async () => {
+		const recorder = new Recorder();
+		const url = await controlPlane(recorder);
+		const a = new RemoteComputerProvider({ url, tenant: "aaaa", cellSecret: SECRET_A });
+		expect(await a.screen(KEY, "get_desktop_state", { max_image_dimension: 1280 })).toEqual({ text: "ok get_desktop_state", image: new Uint8Array([0x89, 0x50, 0x4e, 0x47]), structured: { capture_id: "c" } });
+		expect(recorder.calls).toEqual([`screen ${computerKey("aaaa", KEY)} get_desktop_state {"max_image_dimension":1280}`]);
+		await expect(a.screen(KEY, "rifiuta", {})).rejects.toThrow(ComputerError);
+		await expect(a.screen(KEY, "Rm -rf", {})).rejects.toThrow("HTTP 400");
+		await expect(a.screen("non-una-chiave", "click", {})).rejects.toThrow("HTTP 400");
+		await expect(new RemoteComputerProvider({ url, tenant: "aaaa", cellSecret: SECRET_B }).screen(KEY, "click", {})).rejects.toThrow("HTTP 404");
 	});
 
 	it("answers no one without the cell's token, and never with the cell's secret itself", async () => {
@@ -202,7 +219,7 @@ describe("computer settings", () => {
 	it("reads Docker, Fly and the cell's computers, and refuses what Fly cannot give", () => {
 		expect(loadComputerConfig({ OWNI_COMPUTER: "docker" })).toMatchObject({ kind: "docker", image: "owni-computer:latest" });
 		const fly = { OWNI_COMPUTER: "fly", FLY_API_TOKEN: "t", OWNI_FLY_ORG: "owni", OWNI_COMPUTER_IMAGE: "registry.fly.io/owni-computer:fly" };
-		expect(loadComputerConfig(fly)).toEqual({ kind: "fly", token: "t", org: "owni", region: "fra", image: "registry.fly.io/owni-computer:fly", memoryMb: 1024, cpus: 1, diskMb: 2048 });
+		expect(loadComputerConfig(fly)).toEqual({ kind: "fly", token: "t", org: "owni", region: "fra", image: "registry.fly.io/owni-computer:fly", memoryMb: 2048, cpus: 1, diskMb: 2048 });
 		expect(() => loadComputerConfig({ ...fly, OWNI_COMPUTER_IMAGE: "" })).toThrow(ConfigError);
 		expect(() => loadComputerConfig({ ...fly, OWNI_COMPUTER_MEMORY_MB: "1000" })).toThrow("256");
 		expect(() => loadComputerConfig({ ...fly, OWNI_COMPUTER_CPUS: "0.5" })).toThrow("whole CPUs");

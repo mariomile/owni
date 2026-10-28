@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -7,7 +7,7 @@ import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { type RunningOwni, startOwni } from "../src/app.ts";
 import { DockerComputerProvider } from "../src/computer/docker-computer.ts";
-import { ComputerError, computerKey, tarFiles, untarFirstFile, workPath } from "../src/core/computer.ts";
+import { ComputerError, computerKey, screenAnswer, screenFromJson, screenToJson, tarFiles, untarFirstFile, workPath } from "../src/core/computer.ts";
 import { readOnlyInBriefs } from "../src/core/brief.ts";
 import { createComputerTools, report } from "../src/core/tools/computer-tools.ts";
 import { Workspace } from "../src/core/workspace.ts";
@@ -97,10 +97,6 @@ async function fakeDocker(options: { stopsBehindOurBack?: boolean; garbage?: boo
 				return json(res, 200);
 			}
 			if (!existsSync(file)) return json(res, 404, { message: "Could not find the file" });
-			const st = statSync(file);
-			const mode = st.isDirectory() ? 0x80000000 | 0o755 : 0o644;
-			res.setHeader("x-docker-container-path-stat", Buffer.from(JSON.stringify({ name: where, size: st.size, mode })).toString("base64"));
-			if (req.method === "HEAD") return json(res, 200);
 			res.writeHead(200, { "content-type": "application/x-tar" });
 			return res.end(tarFiles([{ path: where.split("/").at(-1) as string, data: readFileSync(file) }]));
 		}
@@ -120,7 +116,7 @@ async function fakeDocker(options: { stopsBehindOurBack?: boolean; garbage?: boo
 			const c = containers.get(e.container) as { work: string };
 			// The first process's egress rules, read back as root: in place, or (egressFails) its first process
 			// could not apply them and ended, the container with it.
-			if (e.cmd[0] === "/usr/local/bin/owni-run") {
+			if (e.cmd[0] === "/usr/local/bin/owni-run" && e.cmd[1] === "egress") {
 				e.exitCode = options.egressFails === true ? 2 : 0;
 				if (options.egressFails === true) (containers.get(e.container) as { running: boolean }).running = false;
 				res.writeHead(200, { "content-type": "application/vnd.docker.multiplexed-stream" });
@@ -134,15 +130,40 @@ async function fakeDocker(options: { stopsBehindOurBack?: boolean; garbage?: boo
 				header.writeUInt32BE(data.length, 4);
 				res.write(Buffer.concat([header, data]));
 			};
+			// What is at a path, walked without following links: the real runner, on the folder that stands for /work.
+			if (e.cmd[0] === "/usr/local/bin/owni-run" && e.cmd[1] === "stat") {
+				const child = spawn("python3", [join(import.meta.dirname, "..", "docker", "owni-run.py"), ...e.cmd.slice(1)], { env: { PATH: process.env.PATH, OWNI_RUN_WORK: c.work, OWNI_RUN_STATE: join(root, "state") } });
+				child.stdout.on("data", (d: Buffer) => frame(1, d));
+				child.stderr.on("data", (d: Buffer) => frame(2, d));
+				child.on("close", (code) => {
+					e.exitCode = code ?? 1;
+					res.end();
+				});
+				return;
+			}
 			// A command's capability sets, read once per launch: none (or, capsHeld, NET_ADMIN effective).
-			if (e.cmd[0] === "grep" && e.cmd.includes("/proc/self/status")) {
+			if (e.cmd[0] === "/usr/bin/grep" && e.cmd.includes("/proc/self/status")) {
 				const eff = options.capsHeld === true ? "0000000000001000" : "0000000000000000";
 				frame(1, Buffer.from(`CapPrm:\t${eff}\nCapEff:\t${eff}\nCapAmb:\t0000000000000000\n`));
 				e.exitCode = 0;
 				return res.end();
 			}
-			// Here the computer is this machine: `kill -9 -1` would end the tests, and /work is a folder.
-			const cmd = e.cmd[0] === "sh" && e.cmd[1] === "-c" ? ["sh", "-c", `kill() { echo "kill $*" >> "${root}/kills"; }; ${(e.cmd[2] as string).replaceAll("/work", c.work)}`, ...e.cmd.slice(3)] : e.cmd;
+			// The screen's tool: a look answers with a picture, "rifiuta" is refused (exit 3).
+			if (e.cmd[0] === "/usr/local/bin/owni-screen") {
+				const { tool } = JSON.parse(e.cmd[1] as string) as { tool: string };
+				if (tool === "rifiuta") frame(2, Buffer.from("su questo schermo c'è solo il browser"));
+				else frame(1, Buffer.from(JSON.stringify({ text: "Chromium", image: Buffer.from([0x89, 0x50, 0x4e, 0x47]).toString("base64"), structured: { screenshot_original_width: 1280 } })));
+				e.exitCode = tool === "rifiuta" ? 3 : 0;
+				return res.end();
+			}
+			// /work open to the screen's group, once per launch: on the folder that stands for it.
+			if (e.cmd[0] === "/bin/chmod" && e.cmd.at(-1) === "/work") {
+				chmodSync(c.work, Number.parseInt(e.cmd[1] as string, 8));
+				e.exitCode = 0;
+				return res.end();
+			}
+			// Here the computer is this machine: `kill -9 -1` would end the tests, /work is a folder, and timeout is GNU's wherever it is.
+			const cmd = e.cmd[0] === "/bin/sh" && e.cmd[1] === "-c" ? ["sh", "-c", `kill() { echo "kill $*" >> "${root}/kills"; }; ${(e.cmd[2] as string).replaceAll("/work", c.work).replaceAll("/usr/bin/timeout", "timeout")}`, ...e.cmd.slice(3)] : e.cmd;
 			const child = spawn(cmd[0] as string, cmd.slice(1), { cwd: c.work, env: { PATH: process.env.PATH, HOME: c.work } });
 			child.stdout.on("data", (d: Buffer) => frame(1, d));
 			child.stderr.on("data", (d: Buffer) => frame(2, d));
@@ -240,10 +261,13 @@ describe("Docker computer", () => {
 				SecurityOpt: ["no-new-privileges:true"],
 				Init: true,
 				Memory: 512 * 1024 * 1024,
-				PidsLimit: 128,
+				// Chromium's threads count here too; each command keeps its own limit of 128.
+				PidsLimit: 512,
+				ShmSize: 512 * 1024 * 1024,
 				Ulimits: [{ Name: "fsize", Soft: 1024 ** 3, Hard: 1024 ** 3 }],
 				Runtime: "runsc",
-				Binds: ["owni-computer-default-owni:/work"],
+				// The screen's browser profile has a volume of its own, next to /work.
+				Binds: ["owni-computer-default-owni:/work", "owni-computer-default-owni-screen:/screen"],
 			},
 		});
 		expect(JSON.stringify(create)).not.toMatch(/PortBindings|Privileged|docker\.sock/);
@@ -257,11 +281,11 @@ describe("Docker computer", () => {
 		const execs = docker.calls.filter((c) => c.path.endsWith("/exec")).map((c) => c.body);
 		expect(execs[0]).toMatchObject({ User: "0:0", Cmd: ["/usr/local/bin/owni-run", "egress", "check"] });
 		// Then, once, that uid 1000 holds no capability.
-		expect(execs[1]).toMatchObject({ User: "1000:1000", Cmd: ["grep", "-E", "^Cap(Prm|Eff|Amb):", "/proc/self/status"] });
-		const exec = execs.find((body) => body.User === "1000:1000" && (body.Cmd as string[])[0] === "sh");
+		expect(execs[1]).toMatchObject({ User: "1000:1000", Cmd: ["/usr/bin/grep", "-E", "^Cap(Prm|Eff|Amb):", "/proc/self/status"] });
+		const exec = execs.find((body) => body.User === "1000:1000" && (body.Cmd as string[])[0] === "/bin/sh");
 		expect(execs.filter((body) => body.User !== "1000:1000")).toHaveLength(1);
-		expect(exec).toMatchObject({ User: "1000:1000", WorkingDir: "/work", Cmd: ["sh", "-c", 'timeout -s KILL 10 sh -c "$1"; s=$?; kill -9 -1 2>/dev/null; exit $s', "owni", "echo ciao"] });
-		expect(exec?.Env).toEqual(["HOME=/tmp", "MPLCONFIGDIR=/tmp", "LANG=C.UTF-8"]);
+		expect(exec).toMatchObject({ User: "1000:1000", WorkingDir: "/work", Cmd: ["/bin/sh", "-c", '/usr/bin/timeout -s KILL 10 /usr/bin/env PATH=/work/.local/bin:/usr/local/bin:/usr/bin:/bin /bin/sh -c "$1"; s=$?; kill -9 -1 2>/dev/null; exit $s', "owni", "echo ciao"] });
+		expect(exec?.Env).toEqual(["PATH=/usr/local/bin:/usr/bin:/bin", "HOME=/tmp", "MPLCONFIGDIR=/tmp", "LANG=C.UTF-8"]);
 		expect(docker.kills()).toContain("kill -9 -1");
 		// A second command reuses the running computer.
 		await computer.run("default-owni", "true", { timeoutS: 5 });
@@ -285,7 +309,7 @@ describe("Docker computer", () => {
 		closers.push(() => computer.close());
 		await expect(computer.run("k", "echo fuori", { timeoutS: 5 })).rejects.toThrow(/capability/);
 		const cmds = docker.calls.filter((c) => c.path.endsWith("/exec")).map((c) => (c.body.Cmd as string[])[0]);
-		expect(cmds).toEqual(["/usr/local/bin/owni-run", "grep"]);
+		expect(cmds).toEqual(["/usr/local/bin/owni-run", "/usr/bin/grep"]);
 	});
 
 	it("exit codes, stderr, a command killed at its time, output kept to 64 KB", async () => {
@@ -316,6 +340,12 @@ describe("Docker computer", () => {
 		await expect(computer.get("k", "manca.txt", 1024)).rejects.toThrow("non c'è");
 		await expect(computer.get("k", "dati", 1024)).rejects.toThrow("cartella");
 		await expect(computer.get("k", "dati/vendite.csv", 4)).rejects.toBeInstanceOf(ComputerError);
+		// Docker reads and writes as root and follows a link on the way: a folder made into a link to the screen's profile is refused both ways.
+		expect((await computer.run("k", "ln -s /screen s && ln -s vendite.csv dati/l", { timeoutS: 5 })).exitCode).toBe(0);
+		await expect(computer.get("k", "s/profile/Default/Cookies", 1024)).rejects.toThrow("collegamento");
+		await expect(computer.put("k", [{ path: "s/profile/Default/Preferences", data: Buffer.from("{}") }])).rejects.toThrow("collegamento");
+		await expect(computer.get("k", "dati/l", 1024)).rejects.toThrow("collegamento");
+		expect(docker.calls.filter((c) => c.method === "PUT")).toHaveLength(1);
 	});
 
 	it("a computer stopped behind our back starts again; idle ones stop; reset removes container and volume", async () => {
@@ -328,8 +358,21 @@ describe("Docker computer", () => {
 		await new Promise((r) => setTimeout(r, 300));
 		expect(docker.calls.some((c) => c.path.startsWith("/containers/owni-computer-k/stop"))).toBe(true);
 		await computer.reset("k");
-		expect(docker.calls.map((c) => `${c.method} ${c.path}`)).toEqual(expect.arrayContaining(["DELETE /containers/owni-computer-k?force=true", "DELETE /volumes/owni-computer-k"]));
+		expect(docker.calls.map((c) => `${c.method} ${c.path}`)).toEqual(expect.arrayContaining(["DELETE /containers/owni-computer-k?force=true", "DELETE /volumes/owni-computer-k", "DELETE /volumes/owni-computer-k-screen"]));
 		expect(docker.containers.size).toBe(0);
+	});
+
+	it("the screen's actions run as its own user, with its home in /screen; a refusal is the person's to read, the rest is the operator's", async () => {
+		const docker = await fakeDocker();
+		const computer = provider(docker.socketPath);
+		closers.push(() => computer.close());
+		expect(await computer.screen("k", "get_desktop_state", { max_image_dimension: 1280 })).toEqual({ text: "Chromium", image: new Uint8Array([0x89, 0x50, 0x4e, 0x47]), structured: { screenshot_original_width: 1280 } });
+		const exec = docker.calls.find((c) => c.path.endsWith("/exec") && c.body.Cmd[0] === "/usr/local/bin/owni-screen")?.body;
+		expect(exec).toMatchObject({ User: "owni-screen", Cmd: ["/usr/local/bin/owni-screen", '{"tool":"get_desktop_state","args":{"max_image_dimension":1280}}'], Env: expect.arrayContaining(["HOME=/screen"]) });
+		await expect(computer.screen("k", "rifiuta", {})).rejects.toThrow(new ComputerError("su questo schermo c'è solo il browser"));
+		expect(() => screenAnswer(1, "", "Xvfb did not start")).toThrow("computer: screen failed (1): Xvfb did not start");
+		expect(() => screenAnswer(0, "non json", "")).toThrow("unreadable answer");
+		expect(screenFromJson(screenToJson({ text: "t", image: new Uint8Array([1, 2]), structured: { a: 1 } }))).toEqual({ text: "t", image: new Uint8Array([1, 2]), structured: { a: 1 } });
 	});
 
 	it("a missing image says what the operator has to do", async () => {
@@ -349,7 +392,7 @@ describe("Docker computer, its limits and its life", () => {
 		await expect(computer.put("k", [{ path: "a.txt", data: Buffer.from("a") }])).rejects.toThrow("disco del computer è pieno");
 		// While full, each command runs under a tiny file size limit, so Owni can still clean up.
 		const next = await computer.run("k", "rm grande.bin", { timeoutS: 10 });
-		expect(docker.calls.filter((c) => c.path.endsWith("/exec")).at(-2)?.body.Cmd[2]).toMatch(/^ulimit -f 2048; timeout/);
+		expect(docker.calls.filter((c) => c.path.endsWith("/exec")).at(-2)?.body.Cmd[2]).toMatch(/^ulimit -f 2048; \/usr\/bin\/timeout/);
 		expect(next.diskFull).toBe(false);
 		await computer.put("k", [{ path: "a.txt", data: Buffer.from("a") }]);
 	});
@@ -582,7 +625,7 @@ describe("the computer in an instance", () => {
 		const config = loadOwniConfig({ OWNI_DATA_DIR: tempDataDir(), OWNI_MODEL_PROVIDER: "faux", OWNI_WEB_PORT: "1" });
 		expect(config.computer).toBeUndefined();
 		expect(() => loadOwniConfig({ OWNI_DATA_DIR: tempDataDir(), OWNI_MODEL_PROVIDER: "faux", OWNI_COMPUTER: "fly" })).toThrow("OWNI_COMPUTER");
-		expect(loadOwniConfig({ OWNI_DATA_DIR: tempDataDir(), OWNI_MODEL_PROVIDER: "faux", OWNI_COMPUTER: "docker", OWNI_COMPUTER_RUNTIME: "runsc" }).computer).toMatchObject({ image: "owni-computer:latest", runtime: "runsc", memoryMb: 1024 });
+		expect(loadOwniConfig({ OWNI_DATA_DIR: tempDataDir(), OWNI_MODEL_PROVIDER: "faux", OWNI_COMPUTER: "docker", OWNI_COMPUTER_RUNTIME: "runsc" }).computer).toMatchObject({ image: "owni-computer:latest", runtime: "runsc", memoryMb: 2048 });
 		const owni = await startOwni({ ...config, web: { ...config.web, port: 0 } }, { schedulerIntervalMs: 60_000, log: () => {} });
 		closers.push(() => owni.stop());
 		const base = `http://127.0.0.1:${(owni.server.address() as AddressInfo).port}`;

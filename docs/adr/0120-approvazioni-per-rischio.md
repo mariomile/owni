@@ -20,7 +20,7 @@ L'approvazione dipende da cosa fa l'azione, non da quale connettore la fa.
 - **Servizi di pagamento** (categoria «pagamenti» del catalogo, oggi Stripe): ogni scrittura chiede, anche quelle che il servizio dichiara interne. La regola si decide quando Owni carica gli strumenti, confrontando l'indirizzo del connettore con quelli del catalogo: vale anche per un connettore salvato da una versione precedente, aggiunto a mano dal modulo o con la casella tolta. Aggiunto in un clic, è anche salvato con `approval: "writes"`, così il modulo mostra la casella spuntata.
 - **Google**: una bozza (`google_mail_send` con `draft: true`) e un evento senza invitati (`google_calendar_create`, mai con avvisi) si fanno subito, con l'account della persona, e il modello riceve «Fatto» con il link. Mail inviata o risposta, evento con invitati, `google_calendar_update` e `google_calendar_delete` restano card. Se Google non risponde l'esito è «esito incerto» e il modello non riprova.
 - **Audit**: `google_action.direct` con tipo e persona, mai indirizzi né testi; se l'audit non si scrive, la scrittura fatta non viene raccontata al modello come fallita. `connector.direct` con connettore e strumento, mai gli argomenti, per ogni scrittura MCP partita senza card. `connector.saved` registra `approval: "risk"` o `"writes"`, anche dal catalogo.
-- **Il computer dell'agente** (lo schermo di Cua e gli strumenti `desktop_*`) sta fuori dalle card: l'agente lavora su uno schermo suo che la persona può guardare, e non è una richiesta che si approva a pezzi.
+- **Il computer dell'agente** (lo schermo e gli strumenti `desktop_*`) sta fuori dalle card: l'agente lavora su uno schermo suo che la persona può guardare, e non è una richiesta che si approva a pezzi.
 
 ## Alternative scartate
 

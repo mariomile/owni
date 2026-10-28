@@ -119,7 +119,7 @@ export type OwniConfig = {
 	readonly phone: { readonly apiBase: string; readonly voice: string };
 	/** The instances' computers: a container each on this Docker host (ADR 0013), a Fly machine each, or, in a cell of Owni Cloud, through the control plane (ADR 0015). */
 	readonly computer: ComputerConfig | undefined;
-	/** The agenti's screens through Cua (ADR 0045): a container each on this Docker host, or one desktop run elsewhere; off if unset. */
+	/** Computer Use on the person's own Mac (OWNI_DESKTOP=local); off if unset. The agenti's own screens come with the computer (ADR 0135). */
 	readonly desktop: DesktopConfig | undefined;
 };
 
@@ -181,7 +181,7 @@ export function loadComputerConfig(env: Readonly<Record<string, string | undefin
 		return { kind, url: url.replace(/\/$/, "") };
 	}
 	if (kind !== "docker" && kind !== "fly") throw new ConfigError(`${variable}: docker or fly, or unset for no computer`);
-	const memoryMb = Number(nonEmpty(env.OWNI_COMPUTER_MEMORY_MB) ?? "1024");
+	const memoryMb = Number(nonEmpty(env.OWNI_COMPUTER_MEMORY_MB) ?? "2048");
 	if (!Number.isInteger(memoryMb) || memoryMb < 128 || memoryMb > 16384) throw new ConfigError("OWNI_COMPUTER_MEMORY_MB: whole megabytes between 128 and 16384");
 	const cpus = Number(nonEmpty(env.OWNI_COMPUTER_CPUS) ?? "1");
 	if (!(cpus >= 0.25 && cpus <= 16)) throw new ConfigError("OWNI_COMPUTER_CPUS: between 0.25 and 16");
@@ -208,39 +208,32 @@ export function loadComputerConfig(env: Readonly<Record<string, string | undefin
 	return { kind, image: nonEmpty(env.OWNI_COMPUTER_IMAGE) ?? "owni-computer:latest", socketPath: nonEmpty(env.OWNI_DOCKER_SOCKET) ?? "/var/run/docker.sock", memoryMb, cpus, diskMb, ...(runtime === undefined ? {} : { runtime }) };
 }
 
-export type DesktopConfig = { readonly kind: "docker"; readonly socketPath: string; readonly network: "none" | "internet" } | { readonly kind: "remote"; readonly url: string; readonly token: string } | { readonly kind: "local"; readonly helperPath: string };
+export type DesktopConfig = { readonly kind: "local"; readonly helperPath: string };
+
+/** What the screens through Cua (ADR 0045) were set with: the screen is now in each agente's computer (ADR 0135). */
+const CUA_SETTINGS = ["OWNI_DESKTOP_NETWORK", "OWNI_DESKTOP_URL", "OWNI_DESKTOP_TOKEN"] as const;
 
 /**
- * OWNI_DESKTOP and its settings (ADR 0045): docker, a container of Cua's image per agente, with
- * no internet unless OWNI_DESKTOP_NETWORK=internet; or remote, one Cua desktop at
- * OWNI_DESKTOP_URL with its OWNI_DESKTOP_TOKEN. Unset: no screen, and its tools are not offered.
+ * OWNI_DESKTOP=local: the person's own Mac, through the desktop app's helper (Computer Use).
+ * The agenti's own screens need no setting: they come with the computer (ADR 0135). Unset: no
+ * Computer Use.
  */
 export function loadDesktopConfig(env: Readonly<Record<string, string | undefined>>): DesktopConfig | undefined {
 	const kind = nonEmpty(env.OWNI_DESKTOP);
-	const network = nonEmpty(env.OWNI_DESKTOP_NETWORK);
-	const remote = ["OWNI_DESKTOP_URL", "OWNI_DESKTOP_TOKEN"].filter((name) => nonEmpty(env[name]) !== undefined);
-	if (kind !== undefined && kind !== "docker" && kind !== "remote" && kind !== "local") throw new ConfigError("OWNI_DESKTOP: docker, remote or local, or unset for no screen");
-	if (network !== undefined && kind !== "docker") throw new ConfigError("OWNI_DESKTOP_NETWORK set without OWNI_DESKTOP=docker");
-	if (remote.length > 0 && kind !== "remote") throw new ConfigError(`${remote.join(", ")} set without OWNI_DESKTOP=remote`);
+	const cua = CUA_SETTINGS.filter((name) => nonEmpty(env[name]) !== undefined);
+	if (kind === "docker" || kind === "remote" || cua.length > 0) {
+		throw new ConfigError(`${[...(kind === "docker" || kind === "remote" ? [`OWNI_DESKTOP=${kind}`] : []), ...cua].join(", ")}: the screens through Cua are gone (ADR 0135). Each agente's screen is now in its computer, with OWNI_COMPUTER: remove these settings`);
+	}
+	if (kind !== undefined && kind !== "local") throw new ConfigError("OWNI_DESKTOP: local (Computer Use on this Mac), or unset");
 	if (kind === undefined) return undefined;
-	if (nonEmpty(env.OWNI_CELL_SECRET) !== undefined) throw new ConfigError("OWNI_DESKTOP is not for a cell of Owni Cloud: a cell has no Docker socket, and a shared screen would mix tenants");
-	if (kind === "local") {
-		const host = nonEmpty(env.OWNI_WEB_HOST) ?? "127.0.0.1";
-		if (env.OWNI_LOCAL_PROVIDERS !== "1" || !["127.0.0.1", "::1", "localhost"].includes(host) || nonEmpty(env.OWNI_PUBLIC_URL) !== undefined) {
-			throw new ConfigError("OWNI_DESKTOP=local needs OWNI_LOCAL_PROVIDERS=1, a loopback OWNI_WEB_HOST and no OWNI_PUBLIC_URL");
-		}
-		const helperPath = nonEmpty(env.OWNI_LOCAL_DESKTOP_HELPER);
-		if (helperPath === undefined || !helperPath.startsWith("/") || /[\r\n\0]/.test(helperPath)) throw new ConfigError("OWNI_DESKTOP=local needs an absolute OWNI_LOCAL_DESKTOP_HELPER path from the desktop app");
-		return { kind, helperPath };
+	if (nonEmpty(env.OWNI_CELL_SECRET) !== undefined) throw new ConfigError("OWNI_DESKTOP is not for a cell of Owni Cloud");
+	const host = nonEmpty(env.OWNI_WEB_HOST) ?? "127.0.0.1";
+	if (env.OWNI_LOCAL_PROVIDERS !== "1" || !["127.0.0.1", "::1", "localhost"].includes(host) || nonEmpty(env.OWNI_PUBLIC_URL) !== undefined) {
+		throw new ConfigError("OWNI_DESKTOP=local needs OWNI_LOCAL_PROVIDERS=1, a loopback OWNI_WEB_HOST and no OWNI_PUBLIC_URL");
 	}
-	if (kind === "docker") {
-		if (network !== undefined && network !== "none" && network !== "internet") throw new ConfigError("OWNI_DESKTOP_NETWORK: none (default, no internet) or internet");
-		return { kind, socketPath: nonEmpty(env.OWNI_DOCKER_SOCKET) ?? "/var/run/docker.sock", network: network === "internet" ? "internet" : "none" };
-	}
-	const url = nonEmpty(env.OWNI_DESKTOP_URL);
-	const token = nonEmpty(env.OWNI_DESKTOP_TOKEN);
-	if (url === undefined || token === undefined) throw new ConfigError("OWNI_DESKTOP=remote needs OWNI_DESKTOP_URL (Cua's daemon, e.g. https://schermo.example:3211) and OWNI_DESKTOP_TOKEN (its CUA_ENV_TOKEN)");
-	return { kind, url: serviceUrl("OWNI_DESKTOP_URL", url.replace(/\/+$/, ""), "https://schermo.example:3211"), token };
+	const helperPath = nonEmpty(env.OWNI_LOCAL_DESKTOP_HELPER);
+	if (helperPath === undefined || !helperPath.startsWith("/") || /[\r\n\0]/.test(helperPath)) throw new ConfigError("OWNI_DESKTOP=local needs an absolute OWNI_LOCAL_DESKTOP_HELPER path from the desktop app");
+	return { kind, helperPath };
 }
 
 /** Reads the configuration of `pnpm start`. Only the model key is required; Telegram is optional. */

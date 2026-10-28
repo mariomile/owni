@@ -316,7 +316,7 @@ La macchina di un'istanza, separata dalla cella, collegata a internet e senza se
 _Avoid_: sandbox (è quella dei tool proposti), VM, server
 
 **Schermo**:
-Il desktop Linux di un agente, con Firefox, dove l'agente guarda lo schermo, clicca, scrive e apre programmi attraverso Cua. Un container sul server di Owni, senza internet se l'operatore non sceglie altrimenti, oppure un desktop che gira altrove e che tutti gli agenti che lo usano condividono. Lo accende l'owner agente per agente. Quello che l'agente fa sullo schermo non passa dalle approvazioni, e con internet il suo browser non segue i siti consentiti: prima di inviare o pagare chiede in chat. Nella console, accanto alla chat, il pannello Schermo mostra l'ultima schermata che l'agente ha preso in quella conversazione (ADR 0067).
+Chromium su un display virtuale dentro il computer dell'agente, la stessa macchina di `computer_run`: l'agente guarda lo schermo, clicca, scrive e apre indirizzi (solo il browser, nessun'altra app). Si accende da solo dove c'è un computer; lo permette l'owner agente per agente. I login restano nel profilo del computer (`/screen`) e i download arrivano in `/work/Downloads`, che i comandi leggono. Vale la rete del computer (internet pubblico sì, indirizzi privati no), ma il browser non segue i siti consentiti dell'agente e quello che fa sullo schermo non passa dalle approvazioni: prima di inviare o pagare chiede in chat. Nella console, accanto alla chat, il pannello Schermo mostra l'ultima schermata che l'agente ha preso in quella conversazione (ADR 0067). Il Computer Use sul Mac (`OWNI_DESKTOP=local`) è un'altra cosa.
 _Avoid_: computer (è il terminale), browser (è quello della cella), desktop remoto, VNC
 
 **Brief del mattino**:

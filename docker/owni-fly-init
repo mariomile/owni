@@ -19,8 +19,22 @@ if [ -e /.fly ]; then
 fi
 # /tmp in memory, out of the quota's way, as in the Docker computer.
 mount -t tmpfs -o mode=1777,nosuid,nodev,size=256m tmpfs /tmp
-# The volume comes up owned by root; only its top folder changes hands.
-chown 1000:1000 /work
+# X's socket folder, root's with the sticky bit: no command can stand in for the screen's X (ADR 0135).
+mkdir -p /tmp/.X11-unix && chmod 1777 /tmp/.X11-unix
+# Chromium's shared memory.
+if ! mountpoint -q /dev/shm; then
+	mkdir -p /dev/shm
+	mount -t tmpfs -o mode=1777,nosuid,nodev,size=512m tmpfs /dev/shm
+fi
+# The volume is at /data: the commands' files in /data/work on /work, the screen's profile in
+# /data/screen on /screen. Mount points cannot be renamed, so a command (owner of /work) cannot
+# swap the screen's folder for one of its own. Only the top folders change hands.
+mkdir -p /data/work /data/screen
+chmod 700 /data
+chown 1000:1000 /data/work && chmod 775 /data/work
+chown 1001:1001 /data/screen && chmod 700 /data/screen
+mount --bind /data/work /work
+mount --bind /data/screen /screen
 # Only the public internet out: not the metadata service, Fly's private network or anything
 # private (owni-run, the same rules as the Docker computer). Applied and checked, or no ready mark.
 /usr/local/bin/owni-run egress apply nft >/dev/null

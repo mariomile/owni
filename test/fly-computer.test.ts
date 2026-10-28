@@ -67,14 +67,15 @@ describe("the computer on a Fly machine", () => {
 		expect(run.stdout).toBe(`${UID}\n${realpathSync(dirs(appOf("aaaa1111")).work)}\n`);
 		const app = fly.apps.get(appOf("aaaa1111"));
 		expect(app).toMatchObject({ network: appOf("aaaa1111"), org: "owni" });
-		expect(app?.volumes).toEqual([{ id: expect.any(String), name: "work", size_gb: 1, region: "fra", encrypted: true, attached_machine_id: app?.machines[0]?.id, state: "created" }]);
+		expect(app?.volumes).toEqual([{ id: expect.any(String), name: "work", size_gb: 2, region: "fra", encrypted: true, attached_machine_id: app?.machines[0]?.id, state: "created" }]);
 		const config = app?.machines[0]?.config as Record<string, unknown>;
 		expect(config).toMatchObject({
 			image: "registry.fly.io/owni-computer:fly",
 			services: [],
 			restart: { policy: "no" },
-			mounts: [{ volume: app?.volumes[0]?.id, path: "/work" }],
-			guest: { cpu_kind: "shared", cpus: 1, memory_mb: 1024 },
+			// owni-fly-init mounts /data/work on /work and /data/screen on /screen.
+			mounts: [{ volume: app?.volumes[0]?.id, path: "/data" }],
+			guest: { cpu_kind: "shared", cpus: 1, memory_mb: 2048 },
 			env: { OWNI_IDLE_S: "600" },
 			metadata: { owni_computer: "aaaa1111" },
 		});
@@ -186,7 +187,8 @@ describe("the computer on a Fly machine", () => {
 		expect(fly.apps.get(app)?.volumes).toHaveLength(1);
 		expect(fly.apps.get(app)?.machines[0]?.config).toMatchObject({ mounts: [{ volume: "vol_left" }] });
 		await computer({ diskMb: 3000 }).run("kkkk1111", "true", { timeoutS: 10 });
-		expect(fly.apps.get(app)?.volumes[0]?.size_gb).toBe(3);
+		// 3 GB for /work, one more for the screen's profile and cache.
+		expect(fly.apps.get(app)?.volumes[0]?.size_gb).toBe(4);
 		expect(fly.calls).toContain(`PUT /v1/apps/${app}/volumes/vol_left/extend`);
 	});
 
