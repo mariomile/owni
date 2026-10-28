@@ -82,6 +82,32 @@ function checks(computer: () => FlyComputerProvider) {
 		await computer().run(key, "(sleep 600 &); echo via", { timeoutS: 30 });
 		expect((await computer().run(key, "ps -u 1000 -o stat=,comm= | grep -v '^Z' | grep -c sleep || true", { timeoutS: 30 })).stdout.trim()).toBe("0");
 	}, 600_000);
+
+	it("the screen: Chromium under the same filter; its profile closed to the commands, its downloads open to them", async () => {
+		const look = await computer().screen(key, "get_desktop_state", { max_image_dimension: 1280 });
+		expect(Buffer.from((look.image as Uint8Array).subarray(1, 4)).toString()).toBe("PNG");
+		expect(Buffer.from(look.image as Uint8Array).readUInt32BE(16)).toBe(1280);
+		await computer().screen(key, "launch_app", { urls: ["https://example.com/"] });
+		let title = "";
+		for (let i = 0; i < 30 && !title.includes("Example Domain"); i++) {
+			await new Promise((r) => setTimeout(r, 1000));
+			title = (await computer().screen(key, "get_desktop_state", { max_image_dimension: 640 })).text;
+		}
+		expect(title).toContain("Example Domain");
+		expect((await computer().run(key, "ls /screen", { timeoutS: 30 })).exitCode).not.toBe(0);
+		const serving = computer().run(key, "mkdir -p /tmp/srv && head -c 1000 /dev/urandom > /tmp/srv/dati.bin && cd /tmp/srv && timeout 30 python3 -m http.server 8765 --bind 127.0.0.1", { timeoutS: 45 });
+		await new Promise((r) => setTimeout(r, 3000));
+		await computer().screen(key, "launch_app", { urls: ["http://127.0.0.1:8765/dati.bin"] });
+		let size = "";
+		for (let i = 0; i < 20 && size !== "1000"; i++) {
+			await new Promise((r) => setTimeout(r, 1000));
+			size = (await computer().run(key, "stat -c %s /work/Downloads/dati.bin 2>/dev/null || true", { timeoutS: 30 })).stdout.trim();
+		}
+		expect(size).toBe("1000");
+		await serving;
+		await computer().screen(key, "restart", {});
+		expect(Buffer.from(((await computer().screen(key, "get_desktop_state", { max_image_dimension: 640 })).image as Uint8Array).subarray(1, 4)).toString()).toBe("PNG");
+	}, 300_000);
 }
 
 const docker = (args: string[], stdin = "") => runProcess("docker", args, stdin);
@@ -98,7 +124,9 @@ function containers(caps = true): Backend {
 			const privileges = caps ? ["--cap-add", "SYS_ADMIN", "--cap-add", "NET_ADMIN", "--security-opt", "apparmor=unconfined", "--security-opt", "seccomp=unconfined"] : [];
 			// Fly's API folder, open to all as on a machine before owni-fly-init closes it.
 			const fly = ["--mount", "type=tmpfs,destination=/.fly,tmpfs-mode=0755"];
-			const out = await docker(["run", "-d", "--name", name(app), ...privileges, ...fly, "-v", `${name(app)}:/work`, ...Object.entries(env).flatMap(([k, v]) => ["-e", `${k}=${v}`]), String(config.image)]);
+			// The volume where the machine mounts it: /data, split by owni-fly-init into /work and /screen.
+			const mount = ((config.mounts ?? []) as { path?: string }[])[0]?.path ?? "/data";
+			const out = await docker(["run", "-d", "--name", name(app), ...privileges, ...fly, "-v", `${name(app)}:${mount}`, ...Object.entries(env).flatMap(([k, v]) => ["-e", `${k}=${v}`]), String(config.image)]);
 			if (out.exit_code !== 0) throw new Error(out.stderr);
 		},
 		exec: (app, command, stdin) => docker(["exec", "-i", name(app), ...command], stdin),
@@ -148,7 +176,7 @@ describe.skipIf(image === undefined || realFly)("the computer of a micro-VM, as 
 });
 
 describe.skipIf(image === undefined || !realFly)("the computer on a real Fly machine", () => {
-	const provider = new FlyComputerProvider({ token: process.env.FLY_API_TOKEN as string, org: process.env.OWNI_TEST_FLY_ORG as string, region: process.env.OWNI_TEST_FLY_REGION ?? "fra", image: image as string, memoryMb: 1024, salt: `live-${process.pid}-0123456789abcdef` });
+	const provider = new FlyComputerProvider({ token: process.env.FLY_API_TOKEN as string, org: process.env.OWNI_TEST_FLY_ORG as string, region: process.env.OWNI_TEST_FLY_REGION ?? "fra", image: image as string, salt: `live-${process.pid}-0123456789abcdef` });
 	afterAll(() => provider.reset(key));
 	checks(() => provider);
 });

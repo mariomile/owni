@@ -1,5 +1,7 @@
 # Lo schermo: un desktop per agente, con Cua
 
+> Sostituito dall'[ADR 0135](0135-schermo-nel-computer-dell-agente.md): lo schermo non è più un desktop di Cua in un altro container. È Chromium dentro il computer dell'agente, e `OWNI_DESKTOP=docker|remote` con le sue impostazioni non ci sono più. Lo schermo continua a non seguire i siti consentiti e a non chiedere approvazione.
+
 Mario (17 ottobre 2026): «computer use e browser use con Cua». Owni aveva già un terminale senza rete ([ADR 0013](0013-terminale-in-un-computer-senza-rete.md), [ADR 0015](0015-computer-su-micro-vm.md)) e un browser che legge, clicca e scrive nei siti consentiti ([ADR 0014](0014-browser-con-clic-nella-cella.md)). Mancava un desktop vero: una finestra da guardare, un mouse e una tastiera, i programmi che non hanno una pagina web, i siti che il browser della cella non riesce a usare.
 
 Lo schermo è quel desktop. Ogni agente ne ha uno suo: un Linux con XFCE e Firefox, dove Owni guarda lo schermo e clicca, scrive, preme tasti, scorre e apre programmi o indirizzi. Lo guida attraverso [Cua](https://github.com/trycua/cua), che dà un desktop già pronto in un'immagine Docker e un demone che lo comanda via MCP.

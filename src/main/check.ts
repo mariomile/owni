@@ -1,5 +1,5 @@
 import { computerLabel, createComputerProvider } from "../computer/create.ts";
-import { createDesktopProvider, desktopLabel } from "../desktop/create.ts";
+import { createDesktopProvider } from "../desktop/create.ts";
 import { DEV_PROVIDER, modelProvider } from "../core/model-providers.ts";
 import { viesClient, type ViesConfig, ViesError } from "../core/vies.ts";
 import type { OwniConfig } from "./config.ts";
@@ -32,7 +32,7 @@ export async function runChecks(config: OwniConfig, fetchImpl: typeof fetch = fe
 	const computer = config.computer;
 	if (computer !== undefined) checks.push(check(`Computer (${computerLabel(computer)})`, () => computerCheck(config, computer)));
 	const desktop = config.desktop;
-	if (desktop !== undefined) checks.push(check(`Schermo (${desktopLabel(desktop)})`, () => desktopCheck(desktop, fetchImpl)));
+	if (desktop !== undefined) checks.push(check("Computer Use (questo Mac)", () => desktopCheck(desktop)));
 	return Promise.all(checks);
 }
 
@@ -81,17 +81,16 @@ async function modelCheck(config: OwniConfig, call: Call): Promise<string> {
 async function computerCheck(config: OwniConfig, computer: NonNullable<OwniConfig["computer"]>): Promise<string> {
 	const problem = await createComputerProvider(computer, { tenant: config.tenantId, dataDir: config.dataDir, ...(config.cell.secret === undefined ? {} : { cellSecret: config.cell.secret }) }).check();
 	if (problem !== undefined) throw new CheckFailed(problem);
-	if (computer.kind === "docker") return `Docker risponde, immagine ${computer.image} presente`;
+	if (computer.kind === "docker") return `Docker risponde, immagine ${computer.image} presente; lo schermo si prova alla prima azione`;
 	if (computer.kind === "fly") return `Fly accetta il token dell'organizzazione ${computer.org}; l'immagine ${computer.image} si prova al primo comando`;
 	return "il control plane risponde";
 }
 
-/** The Docker host answers, is amd64 and has Cua's image, or the desktop run elsewhere answers with its token (ADR 0045). */
-async function desktopCheck(desktop: NonNullable<OwniConfig["desktop"]>, fetchImpl: typeof fetch): Promise<string> {
-	const problem = await createDesktopProvider(desktop, { fetch: fetchImpl }).check();
+/** The Mac's helper answers and has its permissions. The agenti's own screens are checked with their computer (ADR 0135). */
+async function desktopCheck(desktop: NonNullable<OwniConfig["desktop"]>): Promise<string> {
+	const problem = await createDesktopProvider(desktop).check();
 	if (problem !== undefined) throw new CheckFailed(problem);
-	if (desktop.kind === "docker") return `Docker risponde, immagine di Cua presente; il primo schermo si prova alla prima azione${desktop.network === "internet" ? " (con internet)" : " (senza internet)"}`;
-	return "lo schermo risponde e accetta il token";
+	return "Computer Use ha i permessi di macOS";
 }
 
 /** The service's model list: the key works and the model is there (the services that list models). */

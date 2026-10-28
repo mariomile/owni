@@ -1,4 +1,4 @@
-import { COMPUTER_LIMITS, ComputerError, type ComputerProvider, type ComputerRun } from "../core/computer.ts";
+import { COMPUTER_LIMITS, ComputerError, type ComputerProvider, type ComputerRun, type ComputerScreen, SCREEN_TIMEOUT_S, screenFromJson } from "../core/computer.ts";
 import { computerToken } from "../web/compare.ts";
 
 export type RemoteComputerOptions = {
@@ -64,6 +64,12 @@ export class RemoteComputerProvider implements ComputerProvider {
 		const data = new Uint8Array(await response.arrayBuffer());
 		if (data.length > maxBytes) throw new ComputerError(`/work/${path} è più grande di ${Math.round(maxBytes / 1024 / 1024)} MB`);
 		return data;
+	}
+
+	async screen(key: string, tool: string, args: Readonly<Record<string, unknown>>, signal?: AbortSignal): Promise<ComputerScreen> {
+		const timeout = AbortSignal.timeout((SCREEN_TIMEOUT_S + 20) * 1000);
+		const response = await this.call("POST", "/screen", JSON.stringify({ key, tool, args }), signal === undefined ? timeout : AbortSignal.any([timeout, signal]));
+		return screenFromJson(await response.json());
 	}
 
 	async reset(key: string): Promise<void> {

@@ -21,8 +21,8 @@ import { computerLabel, createComputerProvider } from "./computer/create.ts";
 import { DockerComputerProvider } from "./computer/docker-computer.ts";
 import type { DesktopProvider } from "./core/desktop.ts";
 import { ScreenViews } from "./core/screen-views.ts";
-import { createDesktopProvider, desktopLabel } from "./desktop/create.ts";
-import { DockerDesktopProvider } from "./desktop/docker-desktop.ts";
+import { ComputerDesktopProvider } from "./desktop/computer-desktop.ts";
+import { createDesktopProvider } from "./desktop/create.ts";
 import { createGoogleTools } from "./core/tools/google-tools.ts";
 import { webGuard } from "./core/tools/web-tools.ts";
 import { viesClient } from "./core/vies.ts";
@@ -408,27 +408,13 @@ export async function startOwni(config: OwniConfig, options: OwniOptions = {}): 
 			.catch((error: unknown) => log(`computer: leftovers not checked: ${error instanceof Error ? error.message : String(error)}`));
 	}
 
-	// The agenti's screens through Cua (ADR 0045): only where the operator gave Owni a Docker host
-	// for them, or the address of one desktop run elsewhere.
-	const madeDesktop = options.desktop === undefined && config.desktop !== undefined ? createDesktopProvider(config.desktop, { log }) : undefined;
-	const desktop: DesktopProvider | undefined = options.desktop ?? madeDesktop;
+	// The agenti's screens (ADR 0135): each in its own computer, Chromium beside the commands; or,
+	// in the desktop app with Computer Use on, the person's own Mac instead.
+	const madeDesktop = options.desktop === undefined && config.desktop !== undefined ? createDesktopProvider(config.desktop) : undefined;
+	const desktop: DesktopProvider | undefined = options.desktop ?? madeDesktop ?? (computer === undefined ? undefined : new ComputerDesktopProvider(computer));
 	// What each agente last saw on its screen, per conversation, for the console (ADR 0067).
 	const screens = new ScreenViews();
-	if (madeDesktop !== undefined && config.desktop !== undefined) {
-		const label = desktopLabel(config.desktop);
-		if (config.desktop.kind === "docker") {
-			log(
-				`desktop: warning: the screens' browser can reach this server through the Docker network's gateway${config.desktop.network === "internet" ? ", the internet and the local network" : ""}: Owni's console and webhooks and every service listening on 0.0.0.0. Keep those on 127.0.0.1 or behind a firewall (runbook 6n)`,
-			);
-		}
-		void madeDesktop.check().then((problem) => log(problem === undefined ? `desktop: ${label} ready` : `desktop: not ready: ${problem}`));
-	}
-	if (madeDesktop instanceof DockerDesktopProvider) {
-		void madeDesktop
-			.stopLeftovers()
-			.then((n) => (n > 0 ? log(`desktop: stopped ${n} left running by a previous start`) : undefined))
-			.catch((error: unknown) => log(`desktop: leftovers not checked: ${error instanceof Error ? error.message : String(error)}`));
-	}
+	if (madeDesktop !== undefined) void madeDesktop.check().then((problem) => log(problem === undefined ? "desktop: this Mac ready" : `desktop: not ready: ${problem}`));
 
 	// Sign-ins to MCP servers (ADR 0024): the service sends the owner back to the console's address.
 	let oauth: McpOAuth | undefined;
@@ -778,8 +764,8 @@ export async function startOwni(config: OwniConfig, options: OwniOptions = {}): 
 		const warn = (what: string) => (error: unknown) => log(`owni: deleting ${id}: ${what} not removed: ${error instanceof Error ? error.message : String(error)}`);
 		await browseSessions.closeScope(`${record.tenantId}/${record.id}`).catch(warn("browsers"));
 		await computer?.reset(computerKey(tenant, id)).catch(warn("computer"));
+		// The screen went with the computer, its browser profile included.
 		screens.forget(id);
-		if (desktop !== undefined && !desktop.shared) await desktop.reset(computerKey(tenant, id)).catch(warn("screen"));
 	}
 
 	/**
@@ -843,7 +829,6 @@ export async function startOwni(config: OwniConfig, options: OwniOptions = {}): 
 							await desktop.reset(computerKey(tenant, id));
 						},
 						check: () => desktop.check(),
-						network: desktop.network,
 						shared: desktop.shared,
 						kind: desktop.kind ?? "remote",
 						...(desktop.permissions === undefined ? {} : { permissions: () => desktop.permissions!() }),

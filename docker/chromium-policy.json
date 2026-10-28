@@ -1,0 +1,6 @@
+{
+  "DownloadDirectory": "/work/Downloads",
+  "PromptForDownloadLocation": false,
+  "URLBlocklist": ["file://*"],
+  "DeveloperToolsAvailability": 2
+}

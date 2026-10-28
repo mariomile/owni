@@ -64,8 +64,9 @@ const ASK_FIRST =
 const UNSEEN = "Non riesco a vedere lo schermo adesso: guarda con desktop_look prima di rifare l'azione.";
 
 /**
- * The agente's screen (ADR 0045): a Linux desktop of its own, through Cua. Owni looks at it,
- * clicks, types, presses keys, scrolls, drags, opens apps; after each action she gets the screen again.
+ * The agente's screen (ADR 0135): Chromium in its own computer, or the person's Mac with
+ * Computer Use. Owni looks at it, clicks, types, presses keys, scrolls, drags, opens pages; after
+ * each action she gets the screen again.
  */
 export function createDesktopTools(options: DesktopToolsOptions): OwniTool[] {
 	const { desktop, key } = options;
@@ -152,13 +153,7 @@ export function createDesktopTools(options: DesktopToolsOptions): OwniTool[] {
 		}
 	};
 
-	const scope = { scope: "desktop" } as const;
-	const internet =
-		desktop.network === "none"
-			? "The desktop has no internet on this server: apps only, no web pages."
-			: desktop.network === "internet"
-				? "The desktop reaches the internet, and its browser is not limited to the sites the owner allowed."
-				: "Whether the desktop reaches the internet depends on where it runs; if it does, its browser is not limited to the sites the owner allowed.";
+	const internet = "The screen reaches the internet, and its browser is not limited to the sites the owner allowed.";
 	const shared = desktop.shared ? " This screen is shared with the other agenti that use it: leave it tidy." : "";
 	const coordinate = () => Type.Integer({ minimum: 0, maximum: 4000 });
 
@@ -166,8 +161,9 @@ export function createDesktopTools(options: DesktopToolsOptions): OwniTool[] {
 		defineOwniTool({
 			name: "desktop_look",
 			description:
-				`${local ? "Look at the person's Mac screen: this is their real computer, with their open apps, accounts and files. Actions affect their computer immediately; keep their work intact." : "Look at your own screen: a Linux desktop (XFCE) with Firefox and other apps."} You click (desktop_click), type (desktop_type), press keys (desktop_key), scroll (desktop_scroll), drag (desktop_drag) and open apps (desktop_open). ${internet}${shared} ` +
-				"Use the screen for desktop apps and for sites that web_browse cannot use; to read pages or fill them in, web_read and web_browse are faster and keep to the allowed sites; for files, data and commands use computer_run. " +
+				`${local ? "Look at the person's Mac screen: this is their real computer, with their open apps, accounts and files. Actions affect their computer immediately; keep their work intact." : "Look at your own screen: a browser (Chromium) in your own computer, the same machine as computer_run. Its sign-ins stay from one conversation to the next; what it downloads lands in /work/Downloads, where computer_run reads it."} You click (desktop_click), type (desktop_type), press keys (desktop_key), scroll (desktop_scroll), drag (desktop_drag) and open apps (desktop_open). ${internet}${shared} ` +
+				(local ? "Use the screen for desktop apps and for sites that web_browse cannot use; " : "Use the screen for sites that web_browse cannot use and for those you must stay signed in to; there is only the browser on it. ") +
+				"To read pages or fill them in, web_read and web_browse are faster and keep to the allowed sites; for files, data and commands use computer_run. " +
 				(local ? `${ASK_FIRST} On this Mac use super for Command shortcuts (super+a selects all), not ctrl. ` : "") +
 				"You get a picture of the screen; x and y for the other tools are read on it. Every action already shows you the screen after it: look again when the page was still loading. " +
 				"If two or three tries change nothing, or you reach a CAPTCHA or a sign-in page, stop and tell the person. The first action can take up to 2 minutes while the screen starts. " +
@@ -196,7 +192,7 @@ export function createDesktopTools(options: DesktopToolsOptions): OwniTool[] {
 					if (typeof at === "string") return at;
 					const button = args.button ?? "left";
 					const count = args.double === true ? 2 : 1;
-					await desktop.call(key, "click", { ...at, ...scope, button, count }, ctx.signal);
+					await desktop.call(key, "click", { ...at, button, count }, ctx.signal);
 					const what = `${count === 2 ? "Doppio clic" : "Clic"}${button === "left" ? "" : ` col tasto ${button === "right" ? "destro" : "centrale"}`}`;
 					return { done: `${what} in ${args.x}, ${args.y}.`, event: { action: "click" } };
 				}),
@@ -209,7 +205,7 @@ export function createDesktopTools(options: DesktopToolsOptions): OwniTool[] {
 			execute: (args, ctx) =>
 				act(ctx, "type", async () => {
 					const text = args.text;
-					await desktop.call(key, "type_text", { text, ...scope }, ctx.signal);
+					await desktop.call(key, "type_text", { text }, ctx.signal);
 					return { done: `Scritto (${text.length} caratteri).`, event: { action: "type", chars: text.length } };
 				}),
 		}),
@@ -224,8 +220,8 @@ export function createDesktopTools(options: DesktopToolsOptions): OwniTool[] {
 				act(ctx, "key", async () => {
 					const combo = keyCombo(args.key, args.modifiers);
 					if (combo === undefined) return "Errore: key è un tasto (Return, Tab, a, F5…) o una combinazione come ctrl+l; modifiers solo ctrl, alt, shift, super.";
-					if (combo.length === 1) await desktop.call(key, "press_key", { key: combo[0], ...scope }, ctx.signal);
-					else await desktop.call(key, "hotkey", { keys: combo, ...scope }, ctx.signal);
+					if (combo.length === 1) await desktop.call(key, "press_key", { key: combo[0] }, ctx.signal);
+					else await desktop.call(key, "hotkey", { keys: combo }, ctx.signal);
 					// A character, alone or with shift, is not named: typed one key at a time it would spell out a code in the console (ADR 0067).
 					const character = combo.slice(0, -1).every((m) => m === "shift") && (combo.at(-1) ?? "").length === 1;
 					return { done: character ? "Premuto un tasto." : `Premuto ${combo.join("+")}.`, event: { action: "key" } };
@@ -252,7 +248,7 @@ export function createDesktopTools(options: DesktopToolsOptions): OwniTool[] {
 						if (typeof p === "string") return p;
 						at = p;
 					}
-					await desktop.call(key, "scroll", { direction, amount, ...at, ...scope }, ctx.signal);
+					await desktop.call(key, "scroll", { direction, amount, ...at }, ctx.signal);
 					return { done: `Scorso ${{ up: "in su", down: "in giù", left: "a sinistra", right: "a destra" }[direction]} di ${amount}.`, event: { action: "scroll" } };
 				}),
 		}),
@@ -267,20 +263,19 @@ export function createDesktopTools(options: DesktopToolsOptions): OwniTool[] {
 					if (typeof from === "string") return from;
 					const to = await point(args.to_x, args.to_y, ctx.signal);
 					if (typeof to === "string") return to;
-					await desktop.call(key, "drag", { from_x: from.x, from_y: from.y, to_x: to.x, to_y: to.y, ...scope }, ctx.signal);
+					await desktop.call(key, "drag", { from_x: from.x, from_y: from.y, to_x: to.x, to_y: to.y }, ctx.signal);
 					return { done: `Trascinato da ${args.from_x}, ${args.from_y} a ${args.to_x}, ${args.to_y}.`, event: { action: "drag" } };
 				}),
 		}),
 		defineOwniTool({
 			name: "desktop_open",
-			description: `Open an app on your screen by name (${local ? "Safari, Finder, TextEdit" : "firefox, a file manager, a text editor"}…), or a web address in its browser. ${internet} You get the screen after. ${ASK_FIRST}`,
+			description: `${local ? "Open an app on your screen by name (Safari, Finder, TextEdit…), or a web address in its browser." : "Open a web address in a new tab of your screen's browser, or the browser itself (app: chromium). There are no other apps: for files, data and programs use computer_run."} ${internet} You get the screen after. ${ASK_FIRST}`,
 			parameters: Type.Object({ app: Type.Optional(Type.String({ minLength: 1, maxLength: 60 })), url: Type.Optional(Type.String({ minLength: 8, maxLength: 2000 })) }, { additionalProperties: false }),
 			replaySafe: true,
 			execute: (args, ctx) =>
 				act(ctx, "open", async () => {
 					if (args.url !== undefined) {
 						if (!/^https?:\/\/[^\s]+$/i.test(args.url)) return "Errore: url è un indirizzo http o https.";
-						if (desktop.network === "none") return "Errore: lo schermo non ha accesso a internet su questo server: per le pagine web usa web_read o web_browse.";
 						await desktop.call(key, "launch_app", { urls: [args.url] }, ctx.signal);
 						return { done: "Indirizzo aperto nel browser dello schermo.", event: { action: "open", target: "url" } };
 					}

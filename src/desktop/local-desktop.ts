@@ -27,7 +27,6 @@ type HelperReply = {
  */
 export class LocalDesktopProvider implements DesktopProvider {
 	readonly kind = "local" as const;
-	readonly network = "internet" as const;
 	readonly shared = true;
 	private readonly helperPath: string;
 	private readonly platform: NodeJS.Platform;

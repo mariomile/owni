@@ -175,7 +175,7 @@ Owni può eseguire comandi (Python, `jq`, `sqlite3`, `pandoc`, gli strumenti PDF
 **Prima di accenderlo: il socket di Docker equivale a root sul server.** Chi lo usa può creare un container che monta tutto il disco. Accendilo solo dove Owni è l'unico servizio della macchina, e mai in Owni Cloud: lì il computer gira solo su Fly (sotto, «Su Fly»).
 
 1. Costruisci l'immagine: `docker build -f docker/computer.Dockerfile -t owni-computer:latest docker`. Va rifatta quando cambia il Dockerfile; al comando dopo, ogni computer viene ricreato con la nuova immagine e i suoi file restano.
-2. In `.env`: `OWNI_COMPUTER=docker`. Le altre variabili hanno valori di default: `OWNI_COMPUTER_IMAGE` (`owni-computer:latest`), `OWNI_DOCKER_SOCKET` (`/var/run/docker.sock`), `OWNI_COMPUTER_MEMORY_MB` (1024), `OWNI_COMPUTER_CPUS` (1), `OWNI_COMPUTER_DISK_MB` (2048, la quota di `/work`), `OWNI_COMPUTER_RUNTIME` (vuoto; `runsc` per gVisor).
+2. In `.env`: `OWNI_COMPUTER=docker`. Le altre variabili hanno valori di default: `OWNI_COMPUTER_IMAGE` (`owni-computer:latest`), `OWNI_DOCKER_SOCKET` (`/var/run/docker.sock`), `OWNI_COMPUTER_MEMORY_MB` (2048), `OWNI_COMPUTER_CPUS` (1), `OWNI_COMPUTER_DISK_MB` (2048, la quota di `/work`), `OWNI_COMPUTER_RUNTIME` (vuoto; `runsc` per gVisor).
 3. Con Docker Compose, scommenta in `docker-compose.yml` il socket e `group_add`, con `DOCKER_GID` uguale al gruppo del socket (`stat -c %g /var/run/docker.sock`). Senza Compose, il processo di Owni deve poter leggere e scrivere il socket.
 4. `pnpm owni check` dice se Docker risponde e se l'immagine c'è; lo stesso controllo compare nella console (Impostazioni, Computer) e nel log all'avvio.
 5. L'owner accende il computer istanza per istanza (Impostazioni, Computer).
@@ -234,24 +234,23 @@ Owni fa i conti e risponde alle domande sulle tabelle con un programma Python, `
 
 Dal web (ADR 0027): `web_read` legge i PDF e i documenti dei siti consentiti, `web_download` li salva in `download/` nel workspace, fino a 20 MB; ogni salvataggio è una riga `web.download` nell'audit (percorso e byte). Se una persona dice che un link a un PDF «non si apre», controlla che il sito sia tra quelli consentiti (Impostazioni) e che il file non superi i 20 MB. «Riprova tra poco» su un documento vuol dire che i due lettori erano occupati o che troppi documenti grandi arrivavano insieme (oltre 100 MB in tutto il processo): se succede spesso, guarda quante ricerche approfondite girano.
 
-## 6n. Lo schermo (Cua)
+## 6n. Lo schermo
 
-Ogni agente può avere un desktop Linux con Firefox, dove Owni guarda lo schermo, clicca e scrive attraverso Cua ([ADR 0045](adr/0045-schermo-cua.md)). Serve un server amd64 con Docker 20.10 o più recente. Come per il computer (6j), **il socket di Docker equivale a root sul server**: accendilo solo dove Owni è l'unico servizio, mai in Owni Cloud.
+Ogni agente può avere uno schermo: Chromium su un display virtuale (Xvfb, 1280x800) dentro il suo computer, la stessa macchina di `computer_run` ([ADR 0135](adr/0135-schermo-nel-computer-dell-agente.md)). Solo il browser, nessun'altra app.
 
-1. Scarica l'immagine, circa 8 GB: `docker pull trycua/cua-xfce:0.3.0`.
-2. In `.env`: `OWNI_DESKTOP=docker`, e se serve il web dal browser dello schermo `OWNI_DESKTOP_NETWORK=internet`.
-3. `pnpm owni check`, poi l'owner accende lo schermo agente per agente (Impostazioni, Schermo).
+**Cosa serve.** Un computer (6j): `OWNI_COMPUTER=docker` o `fly`, oppure Owni Cloud. Nessuna impostazione né immagine a parte: lo schermo si accende da solo dove c'è un computer, e l'owner lo permette agente per agente (Impostazioni, Schermo). Se hai ricostruito l'immagine o preso quella nuova, il computer di ogni agente la riceve al comando dopo. Se `OWNI_DESKTOP=local` è impostato, sostituisce lo schermo del computer (Computer Use sul Mac, solo app desktop).
 
-Come gira: un container `owni-desktop-<hash>` per agente, 3 GB di memoria, 2 CPU, 1 GB di `/dev/shm`, un init come primo processo, solo le capability `CHOWN`, `DAC_OVERRIDE`, `FOWNER`, `SETGID`, `SETUID`, `KILL`, niente escalation di privilegi, nessuna porta pubblicata. Token del demone e password VNC casuali per ogni container. Al massimo 4 schermi accesi: per un quinto agente si chiude quello usato meno di recente, e se tutti stanno lavorando il quinto riprova dopo un minuto. Uno schermo senza azioni per 15 minuti si ferma (quello che era aperto si perde). «Riavvia lo schermo» nella console cancella il container. All'avvio Owni ferma gli schermi rimasti accesi e cancella quelli già fermi.
+**Memoria.** Chromium ne usa parecchia: il default del computer è 2048 MB (prima 1024), con `/dev/shm` di 512 MB e 512 processi per il container (i comandi restano a 128). Se avevi impostato `OWNI_COMPUTER_MEMORY_MB` a mano, controlla che non sia rimasto basso.
 
-**Rete.** Gli schermi stanno sulla rete Docker `owni-desktop` (interna, senza internet) o, con `OWNI_DESKTOP_NETWORK=internet`, su `owni-desktop-internet`. Lascia che sia Owni a crearla: la crea con il traffico fra container spento, così uno schermo non vede gli altri. Se trova una rete con quel nome che lo lascia passare, la usa e scrive un avviso nel log: gli schermi allora si vedono fra loro, protetti solo da token e password VNC diversi. Owni raggiunge ogni schermo all'indirizzo del suo container sulla rete, porta 3211:
+**Dove stanno i dati.** Il profilo del browser (login, cookie, cache fino a 100 MB) sta in `/screen`. Su Docker è un secondo volume, `owni-computer-<chiave>-screen`; su Fly è `/data/screen`, nello stesso volume dei file (che ora si monta in `/data`, con 1 GB in più). I download vanno in `/work/Downloads` e `computer_run` li legge. Il browser gira come uid 1001, i comandi come 1000: un comando non può leggere i cookie né fermare il browser.
 
-- Owni installata direttamente sul server Linux: funziona così com'è.
-- Owni in Docker Compose: usa la rete del server, così raggiunge gli schermi come un processo del server e la rete degli schermi resta chiusa. Nel servizio `owni` di `docker-compose.yml` metti `network_mode: host`, togli `ports:` e imposta `OWNI_WEB_HOST: 127.0.0.1` (non `0.0.0.0`: la console resta solo su questa macchina, dietro il proxy https). Non mettere il container di Owni sulla rete degli schermi: servirebbe il traffico fra container acceso.
+**Rete.** Valgono le regole del computer (6j, ADR 0124): internet pubblico sì, indirizzi privati e metadati del cloud no. Non c'è una rete a parte da preparare, né VNC. Il browser non segue l'elenco dei siti consentiti dell'agente e le azioni sullo schermo non chiedono approvazione.
 
-**Quello che lo schermo raggiunge sul server.** Con o senza internet, il server è il gateway della rete degli schermi: dal browser dello schermo si arriva alla console e ai webhook di Owni e a ogni servizio del server in ascolto su tutte le interfacce (`0.0.0.0`). Owni lo ricorda nel log all'avvio. Tieni quei servizi su `127.0.0.1` o chiudili con il firewall del server verso le reti `owni-desktop*`; Owni non tocca il firewall. Con internet lo schermo raggiunge anche la rete locale, e il suo browser non segue i siti consentiti dell'agente.
+**Riavviare o azzerare.** «Riavvia lo schermo» (Impostazioni, Schermo) riavvia Chromium e il display: i login restano. «Azzera i file del computer» cancella anche `/screen`, quindi i login.
 
-**Uno schermo altrove**: `OWNI_DESKTOP=remote` con `OWNI_DESKTOP_URL` e `OWNI_DESKTOP_TOKEN` ([chiavi](chiavi.md) §19), per esempio un container di Cua su un'altra macchina dietro un proxy https. Tutti gli agenti che lo usano condividono lo stesso schermo; Owni non lo avvia e non lo riavvia.
+**Come controllare.** `pnpm owni check` e il log all'avvio dicono se il computer risponde. La prova vera è la prima azione: l'agente prende una foto dello schermo (`desktop_look`) e apre un indirizzo pubblico. Il primo avvio su Fly scarica l'immagine, circa 400 MB più grande di prima, e può chiedere più di un minuto.
+
+**Le vecchie impostazioni.** `OWNI_DESKTOP=docker`, `OWNI_DESKTOP=remote`, `OWNI_DESKTOP_NETWORK`, `OWNI_DESKTOP_URL` e `OWNI_DESKTOP_TOKEN` non esistono più. Owni non parte finché ci sono: l'errore elenca quelle trovate e dice che gli schermi ora stanno nel computer, con `OWNI_COMPUTER`, e che vanno tolte da `.env`. Togli anche l'immagine di Cua dal server (`docker rmi trycua/cua-xfce:0.3.0`) e i container `owni-desktop-*` rimasti con le reti `owni-desktop` e `owni-desktop-internet`.
 
 ## 7. Connettori MCP
 

@@ -1,6 +1,8 @@
 # Fase 3, quinto passo: il computer su micro-VM, anche in Owni Cloud
 
 > Aggiornata dall'[ADR 0124](0124-il-computer-dell-agente-ha-la-rete.md): la macchina raggiunge internet pubblica. Il blocco di ogni uscita e il segno «sigillata» non ci sono più: iptables e ip6tables ora chiudono solo metadati, reti private e link-local, il segno si chiama `ready`, e `owni-run` ricontrolla quelle regole prima di ogni comando; restano l'API di Fly chiusa a root, il filtro su vsock e packet, nessun indirizzo pubblico e nessun servizio.
+>
+> Aggiornata dall'[ADR 0135](0135-schermo-nel-computer-dell-agente.md): la micro-VM porta anche lo schermo dell'agente. Il volume si monta in `/data` e ha 1 GB in più.
 
 Il computer della settimana 18 (ADR 0013) gira come container sul server dove Owni è installata, e in Owni Cloud resta spento: dare a una cella il socket di Docker equivale a darle il server. Ora il computer può essere una **Fly.io Machine**, una micro-VM con un kernel suo, e così si accende anche per le celle di Owni Cloud.
 

@@ -4,7 +4,7 @@ import { type ClientRequest, createServer, type IncomingMessage, request, type S
 import { request as httpsRequest } from "node:https";
 import { extname, join } from "node:path";
 import { googleReturnQuery } from "../connectors/google.ts";
-import { COMPUTER_LIMITS, ComputerError, type ComputerProvider, type ComputerRun, computerKey, workPath } from "../core/computer.ts";
+import { COMPUTER_LIMITS, ComputerError, type ComputerProvider, type ComputerRun, computerKey, screenToJson, workPath } from "../core/computer.ts";
 import { computerToken, proxyToken, sameSecret } from "../web/compare.ts";
 import { readJsonFile, updateJsonFile } from "../core/locked-json.ts";
 import { RollingLimit } from "../core/rolling-limit.ts";
@@ -629,6 +629,14 @@ export async function startControlPlane(options: ControlPlaneOptions): Promise<C
 						for (const wake of job.waiters.splice(0)) wake();
 					});
 				return send(res, 200, { job: id });
+			}
+			if (op === "screen" && req.method === "POST") {
+				const body = await readJson(req);
+				const tool = body.tool;
+				const args = body.args ?? {};
+				if (typeof tool !== "string" || !/^[a-z_]{1,40}$/.test(tool) || typeof args !== "object" || args === null || Array.isArray(args)) throw new HttpError(400, "azione non valida");
+				const key = (await keyOf(tenant, body.key, true)) as string;
+				return send(res, 200, screenToJson(await computer.screen(key, tool, args as Record<string, unknown>)));
 			}
 			if ((op === "result" || op === "cancel") && (req.method === "GET" || req.method === "POST")) {
 				const id = url.searchParams.get("job") ?? "";

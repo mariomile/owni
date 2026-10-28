@@ -1,5 +1,7 @@
 # Schermo dal vivo nella console
 
+> Aggiornata dall'[ADR 0135](0135-schermo-nel-computer-dell-agente.md): la vista dal vivo viene dallo schermo del computer dell'agente, non più da un desktop di Cua.
+
 Con lo Schermo ([ADR 0045](0045-schermo-cua.md)) l'agente lavora su un desktop Linux suo. Chi gli scrive dalla console però vede solo le risposte: «Clic in 640, 400.» non dice se ha aperto la finestra giusta, e per capire cosa sta facendo bisogna chiederglielo. Il VNC c'è nel container ma non è pubblicato, e pubblicarlo vorrebbe dire un'altra porta, un'altra password e una persona che può anche cliccare.
 
 ## Decisione
