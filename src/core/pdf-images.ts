@@ -1,5 +1,6 @@
 import { DELIM, type Dict, type Document, isStream, Lexer, type Matrix, multiply, Name, nameOf, type Obj, Op, openPdf, PDF_LIMITS, PdfError, type Stream, type Value, WS } from "./pdf-objects.ts";
 import { ccittDecode, PdfImageError, pngOf } from "./pdf-codecs.ts";
+import { jbig2Decode, jpxDecode, jpxSize } from "./pdf-scan-codecs.ts";
 
 /** The pictures of a PDF page: what a scan shows, found and decoded. Only erasable TypeScript here (see pdf-codecs.ts). */
 
@@ -24,10 +25,10 @@ export type PdfPageImage = {
 
 /**
  * The pictures on a page of a PDF (ADR 0028), for a scan: what the page draws, largest first in
- * weight, given from top to bottom; a JPEG as it is in the file, the rest (fax-coded, raw) as a
- * PNG. PdfError says why not.
+ * weight, given from top to bottom; a JPEG as it is in the file, the rest (fax-coded, JBIG2,
+ * JPEG 2000, raw) as a PNG. PdfError says why not.
  */
-export function pdfPageImage(data: Buffer, pageNumber: number): PdfPageImage {
+export async function pdfPageImage(data: Buffer, pageNumber: number): Promise<PdfPageImage> {
 	const { doc, pages } = openPdf(data);
 	const page = pages[pageNumber - 1];
 	if (page === undefined) throw new PdfError(`il PDF ha ${pages.length} ${pages.length === 1 ? "pagina" : "pagine"}: la pagina ${pageNumber} non c'è`);
@@ -48,7 +49,7 @@ export function pdfPageImage(data: Buffer, pageNumber: number): PdfPageImage {
 	let bytes = 0;
 	try {
 		for (const p of kept) {
-			const image = imageOf(doc, p.stream, p.resources, flipped);
+			const image = await imageOf(doc, p.stream, p.resources, flipped);
 			bytes += image.data.length;
 			if (bytes > PDF_IMAGE_LIMITS.maxBytes && images.length > 0) break;
 			images.push(image);
@@ -196,56 +197,87 @@ function cmyk(c: number, m: number, y: number, k: number): [number, number, numb
 }
 
 const CANNOT = "la scansione è in un formato che non so aprire";
+const TOO_LARGE = "l'immagine della pagina è troppo grande da aprire";
+const UNKNOWN_COLORS = "i colori della scansione sono in un formato che non so aprire";
 
-function imageOf(doc: Document, stream: Stream, resources: Dict | undefined, flipped: boolean): PdfImage {
+async function imageOf(doc: Document, stream: Stream, resources: Dict | undefined, flipped: boolean): Promise<PdfImage> {
 	const d = stream.dict;
 	const width = Math.floor(Number(doc.get(d.get("Width"))) || 0);
 	const height = Math.floor(Number(doc.get(d.get("Height"))) || 0);
 	if (width <= 0 || height <= 0) throw new PdfError("l'immagine della pagina è rovinata");
-	if (width > PDF_IMAGE_LIMITS.maxSide || height > PDF_IMAGE_LIMITS.maxSide || width * height > PDF_IMAGE_LIMITS.maxPixels) throw new PdfError("l'immagine della pagina è troppo grande da aprire");
+	if (width > PDF_IMAGE_LIMITS.maxSide || height > PDF_IMAGE_LIMITS.maxSide || width * height > PDF_IMAGE_LIMITS.maxPixels) throw new PdfError(TOO_LARGE);
 	const { data, filter, parm } = doc.imageData(stream);
 	if (filter === "DCTDecode") {
 		// The size the JPEG itself says, not the one the PDF claims.
 		const size = jpegSize(data);
 		if (size === undefined) throw new PdfError("l'immagine della pagina è rovinata");
-		if (size.width > PDF_IMAGE_LIMITS.maxSide || size.height > PDF_IMAGE_LIMITS.maxSide) throw new PdfError("l'immagine della pagina è troppo grande da aprire");
+		if (size.width > PDF_IMAGE_LIMITS.maxSide || size.height > PDF_IMAGE_LIMITS.maxSide) throw new PdfError(TOO_LARGE);
 		return { mime: "image/jpeg", data, ...size };
 	}
-	if (filter === "JBIG2Decode") throw new PdfError(`${CANNOT} (JBIG2)`);
-	if (filter === "JPXDecode") throw new PdfError(`${CANNOT} (JPEG 2000)`);
-	if (filter !== undefined && filter !== "CCITTFaxDecode") throw new PdfError(CANNOT);
+	if (filter === "JPXDecode") return jpxImage(doc, d, data, resources, flipped);
+	if (filter !== undefined && filter !== "CCITTFaxDecode" && filter !== "JBIG2Decode") throw new PdfError(CANNOT);
 	const mask = doc.get(d.get("ImageMask")) === true;
-	const fax = filter === "CCITTFaxDecode";
-	const bits = mask || fax ? 1 : Math.floor(Number(doc.get(d.get("BitsPerComponent"))) || 8);
-	const colors: Colors | undefined = mask || fax ? { kind: "gray" } : colorsOf(doc, d.get("ColorSpace"), resources);
-	if (colors === undefined) throw new PdfError("i colori della scansione sono in un formato che non so aprire");
+	// Fax and JBIG2 are black and white only.
+	const bilevel = mask || filter !== undefined;
+	const bits = bilevel ? 1 : Math.floor(Number(doc.get(d.get("BitsPerComponent"))) || 8);
+	const colors: Colors | undefined = bilevel ? { kind: "gray" } : colorsOf(doc, d.get("ColorSpace"), resources);
+	if (colors === undefined) throw new PdfError(UNKNOWN_COLORS);
 	// What a PNG can hold: grey at any depth, a palette up to 8 bits, RGB at 8 or 16, CMYK at 8 (made RGB).
 	const fits = colors.kind === "gray" ? [1, 2, 4, 8, 16].includes(bits) : colors.kind === "indexed" ? [1, 2, 4, 8].includes(bits) : colors.kind === "rgb" ? bits === 8 || bits === 16 : bits === 8;
 	if (!fits) throw new PdfError(CANNOT);
-	const channels = colors.kind === "rgb" ? 3 : colors.kind === "cmyk" ? 4 : 1;
-	const rowBytes = Math.ceil((width * channels * bits) / 8);
+	const rowBytes = Math.ceil((width * channelsOf(colors) * bits) / 8);
 	// Every buffer below is sized from these numbers: checked before any is made.
-	if (rowBytes * height > PDF_IMAGE_LIMITS.maxSamples || (colors.kind === "cmyk" && width * height * 3 > PDF_IMAGE_LIMITS.maxSamples)) throw new PdfError("l'immagine della pagina è troppo grande da aprire");
+	if (rowBytes * height > PDF_IMAGE_LIMITS.maxSamples || (colors.kind === "cmyk" && width * height * 3 > PDF_IMAGE_LIMITS.maxSamples)) throw new PdfError(TOO_LARGE);
 	const decodeArray = doc.get(d.get("Decode"));
 	const inverted = Array.isArray(decodeArray) && Number(doc.get(decodeArray[0])) === 1 && Number(doc.get(decodeArray[1])) === 0;
 	let samples = data;
-	if (fax) {
+	if (filter === "CCITTFaxDecode") {
 		const k = doc.get(parm?.get("K"));
 		samples = ccittDecode(data, { k: typeof k === "number" ? k : 0, columns: width, rows: height, blackIs1: doc.get(parm?.get("BlackIs1")) === true, byteAlign: doc.get(parm?.get("EncodedByteAlign")) === true });
+	} else if (filter === "JBIG2Decode") {
+		// Symbols shared by the pages of the document live in a stream of their own.
+		const globals = doc.get(parm?.get("JBIG2Globals"));
+		samples = await jbig2Decode(data, isStream(globals) ? doc.stream(globals) : undefined, width, height);
 	}
 	// A short tail is padded white; an image with most of its bytes missing is not a scan.
 	if (samples.length < (rowBytes * height) / 2) throw new PdfError("l'immagine della pagina è rovinata");
 	if (samples.length < rowBytes * height) samples = Buffer.concat([samples, Buffer.alloc(rowBytes * height - samples.length, 0xff)]);
-	samples = Buffer.from(samples.subarray(0, rowBytes * height));
+	return pngImage(Buffer.from(samples.subarray(0, rowBytes * height)), { width, height, bits, colors, inverted, flipped });
+}
+
+/**
+ * A JPEG 2000 picture: its own size and colours count, not the PDF's (the PDF may leave its colour
+ * space out), bounded before decoding.
+ */
+async function jpxImage(doc: Document, d: Dict, data: Buffer, resources: Dict | undefined, flipped: boolean): Promise<PdfImage> {
+	const { width, height, components } = jpxSize(data);
+	if (width <= 0 || height <= 0) throw new PdfError("l'immagine della pagina è rovinata");
+	if (width > PDF_IMAGE_LIMITS.maxSide || height > PDF_IMAGE_LIMITS.maxSide || width * height > PDF_IMAGE_LIMITS.maxPixels || width * height * Math.max(3, components) > PDF_IMAGE_LIMITS.maxSamples) throw new PdfError(TOO_LARGE);
+	const own: Colors | undefined = components === 1 ? { kind: "gray" } : components === 3 ? { kind: "rgb" } : components === 4 ? { kind: "cmyk" } : undefined;
+	const colors = d.get("ColorSpace") === undefined ? own : colorsOf(doc, d.get("ColorSpace"), resources);
+	if (colors === undefined || channelsOf(colors) !== components) throw new PdfError(UNKNOWN_COLORS);
+	const samples = await jpxDecode(data, colors.kind === "indexed");
+	if (samples.length !== width * height * components) throw new PdfError("l'immagine della pagina è rovinata");
+	return pngImage(samples, { width, height, bits: 8, colors, inverted: false, flipped });
+}
+
+function channelsOf(colors: Colors): number {
+	return colors.kind === "rgb" ? 3 : colors.kind === "cmyk" ? 4 : 1;
+}
+
+/** Decoded samples, exactly width × height of them, as a PNG the right way round. */
+function pngImage(samples: Buffer, image: { width: number; height: number; bits: number; colors: Colors; inverted: boolean; flipped: boolean }): PdfImage {
+	const { width, height, bits, colors } = image;
+	const rowBytes = Math.ceil((width * channelsOf(colors) * bits) / 8);
 	// Rows stored bottom up come out the right way round.
-	if (flipped) {
+	if (image.flipped) {
 		const rows = Buffer.alloc(samples.length);
 		for (let y = 0; y < height; y++) samples.copy(rows, (height - 1 - y) * rowBytes, y * rowBytes, (y + 1) * rowBytes);
 		samples = rows;
 	}
 	if (colors.kind === "gray") {
 		// 0 is black in a grey image and in a mask; Decode [1 0], and an ink, turn it round.
-		if (inverted !== (colors.ink === true)) for (let i = 0; i < samples.length; i++) samples[i] = (samples[i] as number) ^ 0xff;
+		if (image.inverted !== (colors.ink === true)) for (let i = 0; i < samples.length; i++) samples[i] = (samples[i] as number) ^ 0xff;
 		return { mime: "image/png", data: pngOf({ width, height, colorType: 0, bitDepth: bits, samples }), width, height };
 	}
 	if (colors.kind === "indexed") return { mime: "image/png", data: pngOf({ width, height, colorType: 3, bitDepth: bits, samples, palette: colors.palette }), width, height };

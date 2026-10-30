@@ -1,0 +1,22 @@
+# 0136: Scansioni JBIG2 e JPEG 2000
+
+Mario (30 ottobre 2026): «Va bene, procedi», dopo la spiegazione dei due formati. Una pagina scansionata in JBIG2 (il bianco e nero dei multifunzione da ufficio) o in JPEG 2000 (archivi, alcuni scanner a colori) finora non si guardava: l'ADR 0028 la mandava al computer di Owni o chiedeva una foto. È la scansione più comune che restava fuori.
+
+## Decisione
+
+- **I decodificatori di PDF.js.** `pdfjs-dist` (Apache-2.0, Mozilla) ha due decodificatori di immagini separati dal resto: JBIG2 (quello di PDFium) e JPEG 2000 (OpenJPEG), compilati in WebAssembly. Li usiamo da `src/core/pdf-scan-codecs.ts`; il resto della lettura dei PDF resta nostro (ADR 0026, 0028). Il WebAssembly si legge dalla cartella del pacchetto, perché il `fetch` di Node non legge file.
+- **JBIG2 come un fax.** Il risultato è un'immagine in bianco e nero a un bit, come dopo il decodificatore fax: passa per la stessa strada (`Decode`, maschere, righe dal basso). I simboli condivisi tra le pagine (`JBIG2Globals`) si leggono dal loro stream.
+- **JPEG 2000 con le sue dimensioni.** Come per un JPEG, dimensioni e numero di componenti si leggono dall'immagine e non dal PDF, prima di decodificare. Senza `ColorSpace` nel PDF decide l'immagine (1 grigio, 3 RGB, 4 CMYK); con un `ColorSpace` che non torna con i componenti Owni lo dice invece di indovinare. Le tavolozze (`Indexed`) si leggono. Diventa un PNG a 8 bit.
+- **Gli stessi limiti.** 25 milioni di pixel, 8.000 per lato, 64 MB di campioni, controllati prima di decodificare; dopo, il risultato deve avere esattamente i byte che le dimensioni dicono. Tutto gira nel worker dei documenti (20 secondi, 512 MB).
+
+## Alternative scartate
+
+- **`jpeg2000` o `@cornerstonejs/codec-openjpeg`.** Il primo non è aggiornato dal 2023; il secondo fa solo JPEG 2000. PDF.js fa tutti e due, è mantenuto da Mozilla e decodifica i PDF di Firefox.
+- **Scriverli a mano, come il fax.** JBIG2 (codifica aritmetica, simboli, mezzitoni) e JPEG 2000 (wavelet) sono migliaia di righe ciascuno, con una lunga storia di vulnerabilità. Meglio il codice che Firefox usa su ogni PDF.
+- **Tutto PDF.js per rasterizzare la pagina.** Servirebbe un canvas nativo e il motore completo, per un caso che resta una sola immagine per pagina.
+
+## Conseguenze
+
+- `pdfjs-dist` pesa circa 35 MB installato: entra nell'app per Mac e nell'immagine Docker. Il canvas nativo opzionale (`@napi-rs/canvas`) non si installa (`pnpm.ignoredOptionalDependencies`).
+- `pdfPageImage` è asincrona, perché i decodificatori lo sono.
+- Restano al computer o alla foto solo il fax misto (gruppo 3 a due dimensioni) e le pagine senza immagini.

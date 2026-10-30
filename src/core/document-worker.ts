@@ -17,7 +17,7 @@ try {
 	else if (make !== undefined) parentPort?.postMessage({ made: makeDocument(make) });
 	else if (page !== undefined) {
 		// A signed PDF (.pdf.p7m): the pages of what was signed.
-		const image = pdfPageImage(Buffer.from(unsignedData(data)), page);
+		const image = await pdfPageImage(Buffer.from(unsignedData(data)), page);
 		parentPort?.postMessage({ image });
 	} else parentPort?.postMessage({ document: documentText(name, data) });
 } catch (error) {
