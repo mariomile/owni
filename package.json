@@ -13,6 +13,7 @@
     "@earendil-works/pi-ai": "1.3.0",
     "@earendil-works/pi-durable": "1.3.0",
     "@modelcontextprotocol/sdk": "1.32.2",
+    "pdfjs-dist": "6.4.299",
     "playwright-core": "1.56.1",
     "pyodide": "314.0.7",
     "tsx": "4.23.15",
@@ -36,5 +37,10 @@
     "eval:agente:real": "tsx evals/agente/real.ts",
     "eval:agente:conti": "tsx evals/agente/conti.ts",
     "cloud": "tsx src/main/cloud.ts"
+  },
+  "pnpm": {
+    "ignoredOptionalDependencies": [
+      "@napi-rs/canvas"
+    ]
   }
 }
