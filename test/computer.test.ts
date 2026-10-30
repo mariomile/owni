@@ -23,7 +23,7 @@ afterEach(async () => {
  * Docker's API as the computer uses it, on a unix socket. Commands really run, with sh, in a
  * folder that stands for the container's /work: exec, archive in and out, stat, stop, remove.
  */
-async function fakeDocker(options: { stopsBehindOurBack?: boolean; garbage?: boolean; image?: string; egressFails?: boolean; capsHeld?: boolean } = {}) {
+async function fakeDocker(options: { stopsBehindOurBack?: boolean; garbage?: boolean; image?: string; egressFails?: boolean; capsHeld?: boolean; workNotOurs?: boolean } = {}) {
 	const root = mkdtempSync(join(tmpdir(), "computer-"));
 	const socketPath = join(root, "docker.sock");
 	const calls: { method: string; path: string; body?: any }[] = [];
@@ -158,6 +158,11 @@ async function fakeDocker(options: { stopsBehindOurBack?: boolean; garbage?: boo
 			}
 			// /work open to the screen's group, once per launch: on the folder that stands for it.
 			if (e.cmd[0] === "/bin/chmod" && e.cmd.at(-1) === "/work") {
+				if (options.workNotOurs === true) {
+					frame(2, Buffer.from("chmod: changing permissions of '/work': Operation not permitted\n"));
+					e.exitCode = 1;
+					return res.end();
+				}
 				chmodSync(c.work, Number.parseInt(e.cmd[1] as string, 8));
 				e.exitCode = 0;
 				return res.end();
@@ -310,6 +315,15 @@ describe("Docker computer", () => {
 		await expect(computer.run("k", "echo fuori", { timeoutS: 5 })).rejects.toThrow(/capability/);
 		const cmds = docker.calls.filter((c) => c.path.endsWith("/exec")).map((c) => (c.body.Cmd as string[])[0]);
 		expect(cmds).toEqual(["/usr/local/bin/owni-run", "/usr/bin/grep"]);
+	});
+
+	it("runs no command when /work cannot be opened to the screen's group", async () => {
+		const docker = await fakeDocker({ workNotOurs: true });
+		const computer = provider(docker.socketPath);
+		closers.push(() => computer.close());
+		await expect(computer.run("k", "echo fuori", { timeoutS: 5 })).rejects.toThrow("chmod 775 /work failed (1): chmod: changing permissions");
+		const cmds = docker.calls.filter((c) => c.path.endsWith("/exec")).map((c) => (c.body.Cmd as string[])[0]);
+		expect(cmds).toEqual(["/usr/local/bin/owni-run", "/usr/bin/grep", "/bin/chmod"]);
 	});
 
 	it("exit codes, stderr, a command killed at its time, output kept to 64 KB", async () => {

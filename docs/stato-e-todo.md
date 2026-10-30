@@ -126,7 +126,6 @@ Per l'uso di Mario basta la sua sottoscrizione di Claude Code o Codex: nessuna c
 - [x] Reazioni: l'agente mette un'emoji sotto il messaggio a cui risponde (`message_react`), sulla console, nei canali, su Telegram e su WhatsApp; se la reazione dice tutto non scrive altro ([ADR 0132](adr/0132-reazioni-degli-agenti.md))
 - [x] Risposte nei thread decise dall'agente (`thread_reply`), solo quando un thread ha senso: nei messaggi diretti e nei canali, mai dentro un thread ([ADR 0133](adr/0133-risposte-nei-thread-decise-dall-agente.md))
 - [x] Gli agenti si passano le cose: `agent_message` anche per passare a un collega quello che è suo, i canali mostrano il posto di ognuno nell'organigramma, e per la persona un agente scrive anche a un collega non collegato con cui lei può parlare ([ADR 0134](adr/0134-agenti-che-si-passano-le-cose.md))
-- [ ] Agenti che si passano informazioni quando la persona lo chiede, anche fuori dall'organigramma, e i canali che dicono a ogni agente di cosa si occupano i colleghi
 - [ ] Scansioni JBIG2 e JPEG 2000: oggi solo dal computer di Owni o con una foto
 
 ### Prima di rendere pubblico il repo

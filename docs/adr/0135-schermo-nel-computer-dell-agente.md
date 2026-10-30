@@ -6,7 +6,7 @@ OpenBot (nightly-labs/openbot, licenza PolyForm Noncommercial: ne prendiamo le i
 
 ## Decisione
 
-- **Lo schermo è il computer.** `ComputerProvider` ha `screen(key, tool, args)`. Nella stessa macchina dei comandi, Docker o Fly, gira uno schermo virtuale (Xvfb, 1280×800) con Chromium. Le azioni passano per `xdotool`, le foto dello schermo per ImageMagick. In Owni Cloud passa per il control plane (`/internal/computer/screen`), con gli stessi controlli per tenant degli altri endpoint. Così lo schermo c'è dovunque ci sia il computer: in locale, su un server e in Owni Cloud.
+- **Lo schermo è il computer.** `ComputerProvider` ha `screen(key, tool, args)`. Nella stessa macchina dei comandi, Docker o Fly, gira uno schermo virtuale (Xvfb, 1280×800) con Chromium. Le azioni passano per `xdotool`, le foto dello schermo per ImageMagick. In Owni Cloud passa per il control plane (`/internal/computer/screen`), con gli stessi controlli per tenant degli altri endpoint e al più due azioni sullo schermo insieme per tenant. Così lo schermo c'è dovunque ci sia il computer: in locale, su un server e in Owni Cloud.
 - **Gli strumenti restano quelli.** `ComputerDesktopProvider` è un `DesktopProvider` sopra il computer. I `desktop_*`, la vista dal vivo (ADR 0067) e l'interruttore «Schermo» dell'agente non cambiano. Lo schermo si accende da solo quando c'è un computer; `OWNI_DESKTOP` serve solo per `local`, il Computer Use del Mac, che resta una funzione a parte.
 - **Solo il browser.** Niente desktop XFCE e niente altre app: `desktop_open` apre Chromium o un indirizzo. Per file, dati e programmi c'è `computer_run`, nella stessa macchina.
 - **Login che restano.** Il profilo di Chromium sta in `/screen`, che resta come `/work`. Su Docker è un secondo volume, su Fly una cartella dello stesso volume, montata a parte. Chi resetta il computer resetta anche i login.
@@ -39,5 +39,5 @@ Restano dall'ADR 0045, e la descrizione degli strumenti continua a dirle al mode
 - Cua esce dal codice: `docker-desktop.ts`, `remote-desktop.ts`, `mcp-client.ts`, `spaces.ts`, `OWNI_DESKTOP=docker|remote`, `OWNI_DESKTOP_NETWORK`, `OWNI_DESKTOP_URL`, `OWNI_DESKTOP_TOKEN`. Le installazioni che li avevano devono toglierli: Owni non parte finché ci sono, e il messaggio dice perché.
 - L'immagine del computer cresce di circa 400 MB (Chromium, Xvfb, font). Il primo avvio su Fly scarica di più.
 - Su Fly il volume si monta in `/data`, e `owni-fly-init` monta `/data/work` su `/work` e `/data/screen` su `/screen`. Le macchine Fly create prima avevano i file nella radice del volume. Il test dal vivo su Fly non era ancora stato fatto, quindi non c'erano computer Fly in uso da spostare.
-- Su Docker un volume che c'era già ha `/work` a 755: al primo avvio il provider lo passa a 775.
+- Su Docker un volume che c'era già ha `/work` a 755: al primo avvio il provider lo passa a 775. Se non ci riesce il computer non parte, e il log dell'operatore dice perché.
 - Sostituisce l'ADR 0045. Aggiorna 0013 e 0015 (la macchina porta anche lo schermo), 0067 (la vista dal vivo viene dal computer) e 0124 (le regole di rete valgono anche per il browser).

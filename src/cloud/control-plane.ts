@@ -151,6 +151,8 @@ const LINKS_PER_HOUR = 5;
 const MAX_BODY = 64 * 1024;
 const MAX_WEBHOOK_BODY = 512 * 1024;
 const COMPUTER_RUNS_PER_TENANT = 2;
+/** Screen actions under way at once for a tenant: each holds a request open until the picture comes back. */
+const COMPUTER_SCREENS_PER_TENANT = 2;
 const COMPUTERS_PER_TENANT = 10;
 /** A command nobody asked about for this long is ended; its result, dropped. */
 const COMPUTER_JOB_ORPHAN_MS = 90_000;
@@ -556,6 +558,7 @@ export async function startControlPlane(options: ControlPlaneOptions): Promise<C
 	const computerJobs = new Map<string, ComputerJob>();
 	/** Copies in or out under way per tenant, and bytes being copied on this server. */
 	const computerFiles = new Map<string, number>();
+	const computerScreens = new Map<string, number>();
 	let computerBytes = 0;
 	let computerCheck: { at: number; problem: string | undefined } | undefined;
 	const running = (tenant: string) => [...computerJobs.values()].filter((j) => j.tenant === tenant && j.result === undefined).length;
@@ -636,7 +639,16 @@ export async function startControlPlane(options: ControlPlaneOptions): Promise<C
 				const args = body.args ?? {};
 				if (typeof tool !== "string" || !/^[a-z_]{1,40}$/.test(tool) || typeof args !== "object" || args === null || Array.isArray(args)) throw new HttpError(400, "azione non valida");
 				const key = (await keyOf(tenant, body.key, true)) as string;
-				return send(res, 200, screenToJson(await computer.screen(key, tool, args as Record<string, unknown>)));
+				const screens = computerScreens.get(tenant) ?? 0;
+				if (screens >= COMPUTER_SCREENS_PER_TENANT) return send(res, 429, { error: "lo schermo sta già facendo altre azioni: riprova tra poco" });
+				computerScreens.set(tenant, screens + 1);
+				try {
+					return send(res, 200, screenToJson(await computer.screen(key, tool, args as Record<string, unknown>)));
+				} finally {
+					const left = (computerScreens.get(tenant) ?? 1) - 1;
+					if (left === 0) computerScreens.delete(tenant);
+					else computerScreens.set(tenant, left);
+				}
 			}
 			if ((op === "result" || op === "cancel") && (req.method === "GET" || req.method === "POST")) {
 				const id = url.searchParams.get("job") ?? "";
