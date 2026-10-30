@@ -24,7 +24,7 @@ async function fakeDocker(options: { healthy?: boolean } = {}) {
 		let text = "";
 		req.on("data", (c) => (text += c));
 		req.on("end", () => {
-			const path = (req.url ?? "").replace(/^\/v1\.43/, "");
+			const path = (req.url ?? "").replace(/^\/v1\.44/, "");
 			const body = text === "" ? undefined : JSON.parse(text);
 			calls.push({ method: req.method ?? "", path, body });
 			const send = (status: number, value?: unknown) => {
@@ -165,7 +165,7 @@ describe.skipIf(image === undefined)("Docker cell provider, real daemon", () => 
 		// What a cell costs: memory while it runs, disk while it sleeps.
 		const docker = (path: string) =>
 			new Promise<any>((resolve, reject) => {
-				const req = request({ socketPath: "/var/run/docker.sock", path: `/v1.43${path}` }, (res) => {
+				const req = request({ socketPath: "/var/run/docker.sock", path: `/v1.44${path}` }, (res) => {
 					let text = "";
 					res.on("data", (c) => (text += c));
 					res.on("end", () => resolve(JSON.parse(text)));

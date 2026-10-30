@@ -226,7 +226,7 @@ describe("the computer on a Fly machine", () => {
 		const resolv = join(state, "resolv.conf");
 		// A cloud's private resolver, Fly's, a link-local one with its zone, a public one, and junk.
 		writeFileSync(resolv, "# Generated\nnameserver 10.0.0.2\nnameserver fdaa::3\nnameserver fe80::1%eth0\nnameserver 8.8.8.8\nnameserver nonsense\nsearch internal\n");
-		const out = await runProcess("python3", [runner, "egress", "rules"], "", { OWNI_RUN_STATE: state, OWNI_RUN_RESOLV: resolv });
+		const out = await runProcess("python3", [runner, "egress", "rules", "nft"], "", { OWNI_RUN_STATE: state, OWNI_RUN_RESOLV: resolv });
 		expect(out.exit_code).toBe(0);
 		const rules = JSON.parse(out.stdout) as Record<string, Record<string, string[]>>;
 		const deny = (net: string) => `-A OUTPUT -d ${net} -j OWNI-DENY`;
@@ -252,10 +252,15 @@ describe("the computer on a Fly machine", () => {
 			...ndp,
 			...["64:ff9b::/96", "64:ff9b:1::/48", "2001::/32", "2002::/16", "fc00::/7", "fe80::/10", "fec0::/10", "ff00::/8"].map(deny),
 		]);
+		// gVisor (legacy) has no icmp6 match: all of ICMPv6 to the same two, the rest the same.
+		const legacy = await runProcess("python3", [runner, "egress", "rules", "legacy"], "", { OWNI_RUN_STATE: state, OWNI_RUN_RESOLV: resolv });
+		const ip6 = JSON.parse(legacy.stdout).ip6tables.OUTPUT as string[];
+		expect(ip6.filter((r) => r.includes("ipv6-icmp"))).toEqual(["-A OUTPUT -d fe80::/10 -p ipv6-icmp -j ACCEPT", "-A OUTPUT -d ff02::/16 -p ipv6-icmp -j ACCEPT"]);
+		expect(ip6.filter((r) => !r.includes("ipv6-icmp"))).toEqual(rules.ip6tables?.OUTPUT?.filter((r) => !r.includes("ipv6-icmp")));
 		// TCP refused at once with a reset (gVisor hangs on an ICMP reject), the rest dropped.
 		for (const table of ["iptables", "ip6tables"]) expect(rules[table]?.["OWNI-DENY"]).toEqual(["-N OWNI-DENY", "-A OWNI-DENY -p tcp -j REJECT --reject-with tcp-reset", "-A OWNI-DENY -j DROP"]);
 		// No resolver at all: no hole for one.
-		const none = await runProcess("python3", [runner, "egress", "rules"], "", { OWNI_RUN_STATE: state, OWNI_RUN_RESOLV: join(state, "missing") });
+		const none = await runProcess("python3", [runner, "egress", "rules", "nft"], "", { OWNI_RUN_STATE: state, OWNI_RUN_RESOLV: join(state, "missing") });
 		expect(JSON.parse(none.stdout).iptables.OUTPUT.filter((r: string) => r.includes("--dport 53"))).toEqual([]);
 		// Rules never applied are never taken as in place; an unknown backend is refused.
 		expect((await runProcess("python3", [runner, "egress", "check"], "", { OWNI_RUN_STATE: state })).exit_code).not.toBe(0);

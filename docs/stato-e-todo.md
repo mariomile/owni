@@ -33,7 +33,6 @@ Lo stesso ramo aggiunge progressi live, Stop persistente per conversazione, stor
 Per l'uso di Mario basta la sua sottoscrizione di Claude Code o Codex: nessuna chiave Anthropic, nessun account di terzi. Ogni cliente collega i suoi connettori e i suoi canali dalla console.
 
 - [ ] Prova dal vivo del computer dell'agente su Fly: servono `FLY_API_TOKEN`, `OWNI_TEST_FLY_ORG` e `OWNI_TEST_FLY_IMAGE`
-- [ ] Prova del computer dell'agente con gVisor
 - [ ] `OWNI_JUDGE_MODEL_KEY` tra i secret del repo, per il giudice notturno dell'agente
 
 ### Decisioni che spettano a Mario
@@ -121,6 +120,7 @@ Per l'uso di Mario basta la sua sottoscrizione di Claude Code o Codex: nessuna c
 - [x] Gli strumenti dei connettori arrivano al modello solo quando li carica con `tool_search`; quelli di Owni sono sempre lì ([ADR 0122](adr/0122-strumenti-dei-connettori-caricati-su-richiesta.md))
 - [x] Incarichi, Automazioni (e Pratiche, poi tolte con la segreteria) sono pagine della barra laterale, senza linguette interne ([ADR 0123](adr/0123-lavori-come-pagine-della-barra-laterale.md))
 - [x] Il computer dell'agente ha la rete: installa pacchetti, clona repository, scarica dati e chiama API, su Docker e su Fly, verso internet pubblica e non verso metadati, rete locale e reti private (le stesse regole sui due provider); restano niente segreti dentro, niente in entrata, l'API di Fly chiusa, niente vsock né socket packet ([ADR 0124](adr/0124-il-computer-dell-agente-ha-la-rete.md)). Il job `computer` della CI è verde; mancano la prova dal vivo su Fly e quella con gVisor
+- [x] Il computer dell'agente con gVisor: la prova dal vivo passa 4 su 4 (Docker 29, runsc con `--net-raw` e `--oci-seccomp`). Servivano regole IPv6 che gVisor sa leggere e l'API di Docker 1.44
 - [x] Console divisa per pagina: `src/web/ui/app.js` (circa 5.900 righe) è ora un modulo ES per pagina (le pagine non si importano a vicenda), una tabella delle pagine in `shell.js` e un `common.js` che non importa nulla; il server serve i file elencando la cartella. Una pagina nuova: file, riga in `PAGES`, riga in `SHELL` ([ADR 0102](adr/0102-console-un-modulo-per-pagina.md))
 - [x] Chi sta facendo cosa: `agent_list` e la pagina Agenti dicono se un agente è occupato, da quanto e su quale scheda «In corso» o chat, solo dentro quello che chi guarda già vede; `agent_message` avvisa che un collega occupato può metterci di più ([ADR 0109](adr/0109-chi-sta-facendo-cosa.md))
 - [x] Reazioni: l'agente mette un'emoji sotto il messaggio a cui risponde (`message_react`), sulla console, nei canali, su Telegram e su WhatsApp; se la reazione dice tutto non scrive altro ([ADR 0132](adr/0132-reazioni-degli-agenti.md))

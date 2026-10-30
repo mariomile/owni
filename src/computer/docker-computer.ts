@@ -23,8 +23,8 @@ export type DockerComputerOptions = {
 	readonly log?: (message: string) => void;
 };
 
-/** Docker Engine API 1.41: Docker 20.10 and later. */
-const API = "/v1.41";
+/** Docker Engine API 1.44: Docker 25 and later (Docker 29 refuses anything older). */
+const API = "/v1.44";
 const LABEL = "owni.computer";
 /** A hash of how the container was created: a change of image, runtime or limits recreates it (the files stay). */
 const SPEC_LABEL = "owni.computer.spec";
