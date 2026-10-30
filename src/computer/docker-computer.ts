@@ -263,7 +263,8 @@ export class DockerComputerProvider implements ComputerProvider {
 			if (out?.exitCode === 0) {
 				await this.noCapabilities(key);
 				// A volume from before the screen has /work at 755: the screen's downloads need the group's write.
-				await this.exec(key, ["/bin/chmod", "775", "/work"], API_TIMEOUT_MS);
+				const opened = await this.exec(key, ["/bin/chmod", "775", "/work"], API_TIMEOUT_MS);
+				if (opened.exitCode !== 0) throw new Error(`computer: chmod 775 /work failed (${opened.exitCode}): ${opened.stderr.slice(0, 200)}`);
 				return;
 			}
 			if (out === undefined) break;

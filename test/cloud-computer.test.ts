@@ -56,6 +56,7 @@ class Recorder implements ComputerProvider {
 	async screen(key: string, tool: string, args: Readonly<Record<string, unknown>>): Promise<ComputerScreen> {
 		this.calls.push(`screen ${key} ${tool} ${JSON.stringify(args)}`);
 		if (tool === "rifiuta") throw new ComputerError("lo schermo non ha risposto in tempo");
+		if (tool === "aspetta") await this.hold;
 		return { text: `ok ${tool}`, image: new Uint8Array([0x89, 0x50, 0x4e, 0x47]), structured: { capture_id: "c" } };
 	}
 	async check(): Promise<string | undefined> {
@@ -124,6 +125,21 @@ describe("computers through the control plane", () => {
 		await expect(a.screen(KEY, "Rm -rf", {})).rejects.toThrow("HTTP 400");
 		await expect(a.screen("non-una-chiave", "click", {})).rejects.toThrow("HTTP 400");
 		await expect(new RemoteComputerProvider({ url, tenant: "aaaa", cellSecret: SECRET_B }).screen(KEY, "click", {})).rejects.toThrow("HTTP 404");
+	});
+
+	it("holds at most two screen actions at once for a tenant; another tenant is not held up, and a place frees when an action ends", async () => {
+		const recorder = new Recorder();
+		let release = () => {};
+		recorder.hold = new Promise((resolve) => (release = resolve));
+		const url = await controlPlane(recorder);
+		const a = new RemoteComputerProvider({ url, tenant: "aaaa", cellSecret: SECRET_A });
+		const held = [a.screen(KEY, "aspetta", {}), a.screen(KEY, "aspetta", {})];
+		await expect.poll(() => recorder.calls.length).toBe(2);
+		await expect(a.screen(KEY, "click", {})).rejects.toThrow("altre azioni");
+		expect(await new RemoteComputerProvider({ url, tenant: "bbbb", cellSecret: SECRET_B }).screen(KEY, "click", {})).toMatchObject({ text: "ok click" });
+		release();
+		await Promise.all(held);
+		expect(await a.screen(KEY, "click", {})).toMatchObject({ text: "ok click" });
 	});
 
 	it("answers no one without the cell's token, and never with the cell's secret itself", async () => {
