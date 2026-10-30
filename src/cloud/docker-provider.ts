@@ -172,7 +172,7 @@ export class DockerCellProvider implements CellProvider {
 	/** One Docker Engine API call. Returns undefined for a 404 that was accepted. */
 	private api(method: string, path: string, body: unknown, ok: readonly number[]): Promise<unknown> {
 		return new Promise((resolve, reject) => {
-			const req = request({ socketPath: this.options.socketPath ?? "/var/run/docker.sock", path: `/v1.43${path}`, method, headers: body === undefined ? {} : { "content-type": "application/json" } }, (res) => {
+			const req = request({ socketPath: this.options.socketPath ?? "/var/run/docker.sock", path: `/v1.44${path}`, method, headers: body === undefined ? {} : { "content-type": "application/json" } }, (res) => {
 				const chunks: Buffer[] = [];
 				res.on("data", (c: Buffer) => chunks.push(c));
 				res.on("end", () => {

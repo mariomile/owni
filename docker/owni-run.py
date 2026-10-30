@@ -14,7 +14,7 @@ starts here in the background and is waited for in slices, and files go in and o
                             SECONDS with no call and no command running
   egress apply nft|legacy   as root: only the public internet out (below), then checked
   egress check              exit 0 only if those rules are the ones in place
-  egress rules              the rules for this /etc/resolv.conf, as JSON (for tests)
+  egress rules nft|legacy   the rules for this /etc/resolv.conf, as JSON (for tests)
   guard nft|legacy          the Docker computer's first process: egress apply, `ready`, then idles
   screen JSON               on a machine, as root: the screen's action (owni-screen) as uid 1001
 
@@ -84,6 +84,7 @@ DENIED = {
 # loses its neighbors, and Fly's resolver with them, when the cache expires.
 NDP_TYPES = (1, 2, 3, 4, 133, 134, 135, 136)
 NDP_TO = ("fe80::/10", "ff02::/16")
+# gVisor has no icmp6 match: there all of ICMPv6 goes to those two, by protocol only.
 BACKENDS = ("nft", "legacy")
 
 
@@ -256,7 +257,7 @@ def nameservers():
     return found
 
 
-def egress_rules(servers):
+def egress_rules(servers, backend):
     """Per table, the OUTPUT chain and the deny chain exactly as `iptables -S CHAIN` prints them."""
     rules = {}
     for table, denied in DENIED.items():
@@ -268,7 +269,10 @@ def egress_rules(servers):
                 for proto in ("udp", "tcp"):
                     output.append(f"-A OUTPUT -d {server}/{server.max_prefixlen} -p {proto} -m {proto} --dport 53 -j ACCEPT")
         if version == 6:
-            output += [f"-A OUTPUT -d {net} -p ipv6-icmp -m icmp6 --icmpv6-type {kind} -j ACCEPT" for net in NDP_TO for kind in NDP_TYPES]
+            if backend == "legacy":
+                output += [f"-A OUTPUT -d {net} -p ipv6-icmp -j ACCEPT" for net in NDP_TO]
+            else:
+                output += [f"-A OUTPUT -d {net} -p ipv6-icmp -m icmp6 --icmpv6-type {kind} -j ACCEPT" for net in NDP_TO for kind in NDP_TYPES]
         output +=[f"-A OUTPUT -d {net} -j {DENY}" for net in denied]
         deny = [f"-N {DENY}", f"-A {DENY} -p tcp -j REJECT --reject-with tcp-reset", f"-A {DENY} -j DROP"]
         rules[table] = {"OUTPUT": output, DENY: deny}
@@ -285,7 +289,7 @@ def restore_input(chains):
 def egress_apply(backend):
     if backend not in BACKENDS:
         fail("usage: owni-run egress apply nft|legacy")
-    for table, chains in egress_rules(nameservers()).items():
+    for table, chains in egress_rules(nameservers(), backend).items():
         done = subprocess.run([f"/usr/sbin/{table}-{backend}-restore"], input=restore_input(chains), capture_output=True, text=True, timeout=30)
         if done.returncode != 0:
             fail(f"egress: {table}-{backend}-restore failed: {done.stderr.strip()[-500:]}")
@@ -304,7 +308,7 @@ def egress_holds():
         return False
     if backend not in BACKENDS:
         return False
-    for table, chains in egress_rules(nameservers()).items():
+    for table, chains in egress_rules(nameservers(), backend).items():
         for chain, expected in chains.items():
             try:
                 shown = subprocess.run([f"/usr/sbin/{table}-{backend}", "-S", chain], capture_output=True, text=True, timeout=10)
@@ -631,8 +635,8 @@ def main(argv):
             return out({"ok": True})
         if what == "egress" and args == ["check"]:
             return out({"ok": True}) if egress_holds() else fail("egress: the rules are not in place")
-        if what == "egress" and args == ["rules"]:
-            return out(egress_rules(nameservers()))
+        if what == "egress" and args[:1] == ["rules"] and len(args) == 2 and args[1] in BACKENDS:
+            return out(egress_rules(nameservers(), args[1]))
         if what == "guard" and len(args) == 1:
             return guard(args[0])
         if what == "screen" and len(args) == 1:

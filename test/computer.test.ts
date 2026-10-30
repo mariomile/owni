@@ -43,7 +43,7 @@ async function fakeDocker(options: { stopsBehindOurBack?: boolean; garbage?: boo
 	const server: Server = createServer(async (req, res) => {
 		const raw = await read(req);
 		const url = new URL(req.url ?? "", "http://docker");
-		const path = url.pathname.replace(/^\/v1\.41/, "");
+		const path = url.pathname.replace(/^\/v1\.44/, "");
 		const body = (req.headers["content-type"] ?? "").includes("json") && raw.length > 0 ? JSON.parse(raw.toString("utf8")) : undefined;
 		calls.push({ method: req.method ?? "", path: `${path}${url.search}`, ...(body === undefined ? {} : { body }) });
 		let m: RegExpExecArray | null;

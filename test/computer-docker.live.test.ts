@@ -116,6 +116,8 @@ describe.skipIf(image === undefined)("the computer on a real Docker host", () =>
 		await expect(computer.put(key, [{ path: "s/profile/Default/Preferences", data: Buffer.from("{}") }])).rejects.toThrow("collegamento");
 		// No file:// pages, typed in the address bar either: the managed policy blocks them.
 		await computer.screen(key, "hotkey", { keys: ["ctrl", "l"] });
+		// The address bar takes a moment to take the focus (under gVisor a first key went to the page).
+		await new Promise((r) => setTimeout(r, 500));
 		await computer.screen(key, "type_text", { text: "file:///etc/passwd\n" });
 		await new Promise((r) => setTimeout(r, 2000));
 		expect((await computer.screen(key, "get_desktop_state", { max_image_dimension: 640 })).text).toBe("file:///etc/passwd - Chromium");
