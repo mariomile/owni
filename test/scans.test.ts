@@ -219,6 +219,23 @@ describe("scanned pages", () => {
 		huge.writeUInt32BE(9000, 12);
 		await expect(pdfPageImage(pdfOf([{ images: { A: image(jpx, huge) } }]), 1)).rejects.toThrow(/troppo grande da aprire/);
 		await expect(pdfPageImage(pdfOf([{ images: { A: image(jpx, Buffer.alloc(40)) } }]), 1)).rejects.toThrow(/rovinata/);
+		// A box before the codestream holding a small SIZ header does not stand in for the real one.
+		const jp2 = fixture("scansione-jpx-grigio.jp2");
+		const codestream = jp2.indexOf("jp2c") + 4;
+		const decoy = Buffer.concat([Buffer.from("0000002e786d6c20ff4fff51002f0000", "hex"), Buffer.from("00000018000000100000000000000000", "hex"), Buffer.alloc(14)]);
+		const real = Buffer.from(jp2);
+		real.writeUInt32BE(9000, codestream + 8);
+		real.writeUInt32BE(9000, codestream + 12);
+		const hidden = Buffer.concat([real.subarray(0, 12), decoy, real.subarray(12)]);
+		await expect(pdfPageImage(pdfOf([{ images: { A: image({ ...jpx, ColorSpace: "/DeviceGray" }, hidden) } }]), 1)).rejects.toThrow(/troppo grande da aprire/);
+	});
+
+	it("a JPEG 2000 scan with an alpha channel keeps its colours, with or without a colour space", async () => {
+		const expected = Buffer.from(Array.from({ length: 24 * 16 }, (_, i) => [(i % 24) * 10, Math.floor(i / 24) * 15, ((i % 24) + Math.floor(i / 24)) * 5]).flat());
+		for (const dict of [{ SMaskInData: 1 }, { ColorSpace: "/DeviceRGB" }] as TestImage["dict"][]) {
+			const png = pngSamples((await only(pdfOf([{ images: { A: image({ Width: 24, Height: 16, Filter: "/JPXDecode", ...dict }, fixture("scansione-jpx-alfa.jp2")) } }]))).data);
+			expect([png.colorType, png.samples.equals(expected)], JSON.stringify(dict)).toEqual([2, true]);
+		}
 	});
 
 	it("files made to cost memory or time are refused before they do", async () => {

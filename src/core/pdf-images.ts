@@ -247,17 +247,21 @@ async function imageOf(doc: Document, stream: Stream, resources: Dict | undefine
 
 /**
  * A JPEG 2000 picture: its own size and colours count, not the PDF's (the PDF may leave its colour
- * space out), bounded before decoding.
+ * space out), bounded before decoding. One component past the colours is an alpha channel, left out.
  */
 async function jpxImage(doc: Document, d: Dict, data: Buffer, resources: Dict | undefined, flipped: boolean): Promise<PdfImage> {
 	const { width, height, components } = jpxSize(data);
 	if (width <= 0 || height <= 0) throw new PdfError("l'immagine della pagina è rovinata");
 	if (width > PDF_IMAGE_LIMITS.maxSide || height > PDF_IMAGE_LIMITS.maxSide || width * height > PDF_IMAGE_LIMITS.maxPixels || width * height * Math.max(3, components) > PDF_IMAGE_LIMITS.maxSamples) throw new PdfError(TOO_LARGE);
-	const own: Colors | undefined = components === 1 ? { kind: "gray" } : components === 3 ? { kind: "rgb" } : components === 4 ? { kind: "cmyk" } : undefined;
+	// SMaskInData: the picture's own alpha is the image's transparency.
+	const alpha = (Number(doc.get(d.get("SMaskInData"))) || 0) > 0;
+	const shown = alpha ? components - 1 : components;
+	const own: Colors | undefined = shown === 1 ? { kind: "gray" } : shown === 3 ? { kind: "rgb" } : shown === 4 ? { kind: "cmyk" } : undefined;
 	const colors = d.get("ColorSpace") === undefined ? own : colorsOf(doc, d.get("ColorSpace"), resources);
-	if (colors === undefined || channelsOf(colors) !== components) throw new PdfError(UNKNOWN_COLORS);
-	const samples = await jpxDecode(data, colors.kind === "indexed");
-	if (samples.length !== width * height * components) throw new PdfError("l'immagine della pagina è rovinata");
+	const channels = colors === undefined ? 0 : channelsOf(colors);
+	if (colors === undefined || (components !== channels && components !== channels + 1)) throw new PdfError(UNKNOWN_COLORS);
+	const samples = await jpxDecode(data, channels, colors.kind === "indexed", alpha);
+	if (samples.length !== width * height * channels) throw new PdfError("l'immagine della pagina è rovinata");
 	return pngImage(samples, { width, height, bits: 8, colors, inverted: false, flipped });
 }
 
