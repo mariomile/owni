@@ -88,6 +88,7 @@ describe("agent context in product navigation", () => {
 		expect(moved("#/toString")).toBeUndefined();
 		expect(moved("#/connettori?agent=sales")).toBe("#/impostazioni/servizi?agent=sales");
 		expect(moved("#/connettori")).toBe("#/impostazioni/servizi");
+		expect(moved("#/gestione")).toBe("#/account");
 		expect(moved("#/dm/sales/info/memoria")).toBeUndefined();
 		expect(moved("#/impostazioni/servizi?agent=sales")).toBeUndefined();
 	});

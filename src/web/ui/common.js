@@ -492,7 +492,8 @@ const MATERIALS = { file: "documenti", memoria: "memoria", skill: "procedure" };
 
 /**
  * Where an address from before goes now: a chat opens in its agente's direct messages (ADR 0113);
- * documents, memory and procedures in the agente's panel, its services in its configuration (ADR 0114).
+ * documents, memory and procedures in the agente's panel, its services in its configuration (ADR 0114);
+ * the old management page in the Account page (ADR 0137).
  */
 export function movedHref({ view, rest, instanceId }) {
 	if (view === "chat") return instanceId ? dmHref(instanceId, rest[0]) : "#/";
@@ -502,6 +503,7 @@ export function movedHref({ view, rest, instanceId }) {
 		return id ? agentInfoHref(id, MATERIALS[view]) : "#/agenti";
 	}
 	if (view === "connettori") return instanceHref("impostazioni", ["servizi"], instanceId ?? null);
+	if (view === "gestione") return "#/account";
 	return undefined;
 }
 
