@@ -1,71 +1,57 @@
-// The agente's computer, live next to the chat.
+// The agente's computer, the «Computer» tab of its panel next to the chat.
 import { api, face, fmt, h, icon, store } from "./common.js";
 
 /**
- * The agente's computer, live next to the chat (ADR 0067, 0135): the last picture it took of its
- * screen in this conversation, with what it just did, or the computer asleep before it has used it
- * here. Only to watch: the agente works, the person follows. The button is there while the agente
- * has the screen; the panel opens by itself the first time it uses it here, on a wide window.
+ * The agente's computer in a conversation (ADR 0067, 0135), shown in the «Computer» tab of its
+ * panel, as in Grok Bot: the last picture it took of its screen here, with what it just did, or the
+ * computer asleep (before it has used it here, or with the screen off). Only to watch.
+ * `open()`: show the tab; called by the «Computer» button and, on a wide window, the first time the
+ * agente uses its screen here. `visible(on)`: the tab is on screen or not, for the pictures.
  */
-export function screenPanel(inst, threadId, onShow) {
+export function computerView(inst, threadId, open) {
 	const base = `/api/instances/${inst.id}/threads/${encodeURIComponent(threadId)}/screen`;
 	const seenKey = `owni.screen.${threadId}`;
 	let version = -1;
+	let shown = false;
 	// A picture gone between the question and the download (the screen reset): asked again next time.
 	const picture = h("img.screen", { alt: "", hidden: true, onerror: () => { version = -1; } });
 	const asleep = h("div.computer-asleep", h("span.computer-face", face(inst, 52, "asleep"), h("span.zz", { "aria-hidden": "true" }, h("span", "z"), h("span", "z"))), h("p", "Il computer dorme"));
+	const when = h("span");
 	const what = h("p.browser-note", { hidden: true });
-	const when = h("span.busy-note");
+	const offNote = h("p.browser-note", { hidden: true }, `Lo schermo di ${inst.name} è spento: l'owner lo accende nella sua configurazione.`);
 	const el = h(
-		"aside.browser-panel.computer-panel",
-		{ hidden: true, "aria-label": "Computer" },
-		h("div.browser-head", icon("screen"), h("span.page-title", "Computer"), when, h("button.icon-btn", { type: "button", title: "Chiudi", "aria-label": "Chiudi il computer", onclick: () => show(false) }, icon("close"))),
-		h("figure.computer-view", h("div.computer-screen", picture, asleep), h("figcaption", `Lo schermo di ${inst.name}`)),
+		"div.computer",
+		h("figure.computer-view", h("div.computer-screen", picture, asleep), h("figcaption", `Lo schermo di ${inst.name}`, when)),
 		what,
+		offNote,
 		h("p.browser-note", "Qui guardi soltanto. Prima di inviare, pagare o accedere a un account si ferma e te lo chiede in chat."),
 	);
-	const toggle = h("button.browser-toggle", { type: "button", hidden: true, title: `Il computer di ${inst.name}`, "aria-pressed": "false", onclick: () => show(el.hidden) }, icon("screen"), h("span", "Computer"));
-	const show = (on) => {
-		if (on === !el.hidden) return;
-		el.hidden = !on;
-		toggle.setAttribute("aria-pressed", String(on));
-		if (on) {
-			toggle.classList.remove("news");
-			store(seenKey, "1");
-			onShow();
-			void refresh();
-		}
+	const toggle = h("button.browser-toggle", { type: "button", title: `Il computer di ${inst.name}`, "aria-pressed": "false", onclick: () => open() }, icon("screen"), h("span", "Computer"));
+	const sleep = () => {
+		picture.hidden = true;
+		what.hidden = true;
+		asleep.hidden = false;
+		toggle.classList.remove("news");
+		when.textContent = "";
+		version = -1;
 	};
 	const refresh = async () => {
 		const answer = await api(base).catch(() => undefined);
-		if (answer === undefined) return;
+		// The conversation gone while asking: nothing to open or draw.
+		if (answer === undefined || !toggle.isConnected) return;
 		const { screen, on } = answer;
 		off = !on && screen === null;
-		// No screen for this agente, and nothing seen here: no button, no panel.
-		if (off) {
-			show(false);
-			toggle.hidden = true;
-			return;
-		}
-		toggle.hidden = false;
-		// The screen on, not used here yet (or any more: the screen reset, Owni restarted): asleep.
-		if (screen === null) {
-			picture.hidden = true;
-			what.hidden = true;
-			asleep.hidden = false;
-			toggle.classList.remove("news");
-			when.textContent = "";
-			version = -1;
-			return;
-		}
-		if (store(seenKey) !== "1" && el.hidden) {
+		offNote.hidden = !off;
+		// Not used here yet, or any more (the screen reset, Owni restarted), or no screen: asleep.
+		if (screen === null) return sleep();
+		if (store(seenKey) !== "1" && !shown) {
 			if (matchMedia("(max-width: 860px)").matches) toggle.classList.add("news");
-			else show(true);
+			else open();
 		}
-		when.textContent = fmt.time(screen.at);
+		when.textContent = ` · ${fmt.time(screen.at)}`;
 		what.textContent = screen.action ?? "Ha guardato lo schermo.";
 		what.hidden = false;
-		if (screen.version !== version && !el.hidden) {
+		if (screen.version !== version && shown) {
 			version = screen.version;
 			picture.src = `${base}.png?v=${screen.version}`;
 			picture.alt = `Lo schermo di ${inst.name}: ${what.textContent}`;
@@ -73,21 +59,31 @@ export function screenPanel(inst, threadId, onShow) {
 			asleep.hidden = true;
 		}
 	};
-	// Often while the panel is open or the conversation is moving, rarely otherwise; never for an
-	// agente without the screen. A picture only after a change.
+	const visible = (on) => {
+		if (on === shown) return;
+		shown = on;
+		toggle.setAttribute("aria-pressed", String(on));
+		if (on) {
+			toggle.classList.remove("news");
+			store(seenKey, "1");
+			void refresh();
+		}
+	};
+	// Often while the tab is on screen or the conversation is moving, rarely otherwise; for an
+	// agente without the screen only while the tab is on screen. A picture only after a change.
 	let ticks = 0;
 	let livelyUntil = 0;
 	let off = false;
 	const timer = setInterval(() => {
-		if (!el.isConnected) return clearInterval(timer);
+		if (!toggle.isConnected && !el.isConnected) return clearInterval(timer);
 		ticks += 1;
-		if (document.visibilityState === "visible" && !off && (!el.hidden || Date.now() < livelyUntil || ticks % 5 === 0)) void refresh();
+		if (document.visibilityState === "visible" && (shown || (!off && (Date.now() < livelyUntil || ticks % 5 === 0)))) void refresh();
 	}, 2000);
 	void refresh();
 	return {
 		el,
 		toggle,
-		show,
+		visible,
 		lively: () => {
 			livelyUntil = Date.now() + 120_000;
 		},

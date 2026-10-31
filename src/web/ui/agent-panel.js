@@ -73,27 +73,28 @@ export function routineRows(inst, { schedules = [], watches = [], automations = 
  * The panel of `inst`, next to a conversation (full width on a phone, with a way back).
  * `onShow`/`onHide`: it opened or closed, for the page to close the other panels and keep its address.
  * `openArtifact(threadId, artifact)` and `openFile(path)`: a page opens in the page's artifact panel.
+ * `computer`: in a conversation, the agente's computer there (screen-panel.js), its last tab.
  */
-export function agentPanel(inst, { onShow = () => {}, onHide = () => {}, openArtifact, openFile } = {}) {
+export function agentPanel(inst, { onShow = () => {}, onHide = () => {}, openArtifact, openFile, computer } = {}) {
 	let current = "attivita";
 	/** The section on screen: a load that ends after another tab opened shows nothing. */
 	let shown;
 	const status = h("p.agent-panel-status.muted.small");
 	const body = h("div.agent-panel-body");
-	const tabs = AGENT_SECTIONS.map(([id, label]) => h("button.agent-tab", { type: "button", role: "tab", "data-section": id, "aria-selected": "false", onclick: () => select(id) }, label));
+	const named = computer ? [...AGENT_SECTIONS, ["computer", "Computer"]] : AGENT_SECTIONS;
+	const tabs = named.map(([id, label]) => h("button.agent-tab", { type: "button", role: "tab", "data-section": id, "aria-selected": "false", onclick: () => select(id) }, label));
 	const el = h(
 		"aside.browser-panel.agent-panel",
 		{ hidden: true, "aria-label": inst.name },
 		h(
 			"div.browser-head",
 			h("button.icon-btn.agent-back", { type: "button", title: "Torna alla conversazione", "aria-label": "Torna alla conversazione", onclick: () => show(false) }, icon("back")),
-			face(inst, 24),
-			h("span.page-title", inst.name),
+			h("span.agent-head-gap"),
 			state.me?.role === "owner" ? h("a.icon-btn", { href: instanceHref("impostazioni", [], inst.id), title: `Configura ${inst.name}`, "aria-label": `Configura ${inst.name}` }, icon("impostazioni")) : null,
 			h("button.icon-btn.agent-close", { type: "button", title: "Chiudi", "aria-label": `Chiudi ${inst.name}`, onclick: () => show(false) }, icon("close")),
 		),
-		inst.tagline ? h("p.agent-panel-tagline", inst.tagline) : null,
-		status,
+		// Who it is, large and centred, as in Grok Bot.
+		h("div.agent-hero", face(inst, 72), h("h2.page-title", inst.name), inst.tagline ? h("p.agent-panel-tagline", inst.tagline) : null, status),
 		h("div.agent-tabs", { role: "tablist", "aria-label": `Sezioni di ${inst.name}` }, tabs),
 		body,
 	);
@@ -130,6 +131,7 @@ export function agentPanel(inst, { onShow = () => {}, onHide = () => {}, openArt
 		memoria: (box) => memorySection(inst, box),
 		documenti: (box) => filesSection(inst, box, (path) => openFile?.(path)),
 		procedure: (box) => skillsSection(inst, box),
+		...(computer ? { computer: (box) => mount(box, computer.el) } : {}),
 	};
 	const load = async (box, id) => {
 		try {
@@ -144,7 +146,8 @@ export function agentPanel(inst, { onShow = () => {}, onHide = () => {}, openArt
 			tab.setAttribute("aria-selected", String(tab.dataset.section === current));
 			if (tab.dataset.section === current) tab.scrollIntoView?.({ block: "nearest", inline: "nearest" });
 		}
-		const box = h("div.agent-section", { role: "tabpanel", "aria-label": AGENT_SECTIONS.find(([s]) => s === current)?.[1] }, h("p.muted.small", "Caricamento…"));
+		computer?.visible(current === "computer");
+		const box = h("div.agent-section", { role: "tabpanel", "aria-label": named.find(([s]) => s === current)?.[1] }, h("p.muted.small", "Caricamento…"));
 		mount(body, box);
 		shown = box;
 		void load(box, current);
@@ -161,6 +164,7 @@ export function agentPanel(inst, { onShow = () => {}, onHide = () => {}, openArt
 			if (el.hidden) return;
 			el.hidden = true;
 			shown = undefined;
+			computer?.visible(false);
 			mount(body);
 			return onHide();
 		}

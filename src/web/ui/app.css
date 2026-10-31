@@ -689,8 +689,8 @@ main.is-chat { position: relative; }
 .browser-note { margin: 0; font-size: 12px; line-height: 1.5; color: var(--fg-3); }
 .busy-note { font-size: 12px; color: var(--fg-3); white-space: nowrap; }
 /* The agente's computer (ADR 0135): its screen in a frame, or the computer asleep, and whose it is under it. */
-.computer-panel { gap: 14px; }
-.computer-view { flex: none; margin: 8px 0 0; display: flex; flex-direction: column; gap: 12px; }
+.computer { display: flex; flex-direction: column; gap: 12px; }
+.computer-view { flex: none; margin: 0; display: flex; flex-direction: column; gap: 12px; }
 .computer-screen { display: grid; place-items: center; aspect-ratio: 16 / 10; overflow: hidden; border-radius: var(--r-card); background: var(--surface); }
 .computer-screen .screen { display: block; width: 100%; height: 100%; object-fit: contain; }
 .computer-asleep { display: flex; flex-direction: column; align-items: center; gap: 10px; color: var(--fg-2); font-size: 14px; }
@@ -746,17 +746,23 @@ main.is-chat { position: relative; }
 .artifact-panel.floating { position: fixed; top: 0; right: 0; bottom: 0; z-index: 30; width: min(46vw, 640px); box-shadow: var(--shadow-lg); }
 /* The agente's panel (ADR 0114): who it is and what it has, next to the conversation. */
 .agent-panel { flex-basis: min(40%, 440px); gap: 12px; }
-.agent-panel .browser-head { flex: none; gap: 10px; min-height: 32px; }
-.agent-panel .browser-head .page-title { font-size: 15px; font-weight: 600; }
+.agent-panel .browser-head { flex: none; gap: 6px; min-height: 32px; }
+.agent-head-gap { flex: 1; }
 .agent-back { display: none; }
-.agent-panel-tagline { flex: none; margin: -4px 0 0; color: var(--fg-2); font-size: 13px; line-height: 1.45; text-wrap: pretty; }
-.agent-panel-status { flex: none; margin: 0; min-height: 20px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+/* who it is, large and centred over the tabs, as in Grok Bot */
+.agent-hero { flex: none; display: flex; flex-direction: column; align-items: center; gap: 6px; margin-top: -8px; text-align: center; }
+.agent-hero .face { margin-bottom: 6px; }
+.agent-hero .page-title { margin: 0; font-size: 19px; font-weight: 600; letter-spacing: -0.01em; }
+.agent-panel-tagline { flex: none; max-width: 34ch; margin: 0; color: var(--fg-2); font-size: 13px; line-height: 1.45; text-wrap: pretty; }
+.agent-panel-status { flex: none; margin: 0; min-height: 20px; display: flex; align-items: center; justify-content: center; gap: 6px; flex-wrap: wrap; }
 .agent-panel-status:empty { display: none; }
-.agent-tabs { flex: none; display: flex; gap: 0; margin: 0 -14px; padding: 0 14px; border-bottom: 1px solid var(--border); overflow-x: auto; scrollbar-width: none; }
+/* the tabs: words in a row, the open one in a soft pill */
+.agent-tabs { flex: none; display: flex; justify-content: safe center; gap: 2px; margin: 4px -14px 4px; padding: 0 14px; overflow-x: auto; scrollbar-width: none; }
 .agent-tabs::-webkit-scrollbar { display: none; }
-.agent-tab { flex: 1 0 auto; height: 34px; padding: 0 6px; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; background: transparent; color: var(--fg-3); font: inherit; font-size: 13px; font-weight: 500; cursor: pointer; transition: color 0.15s var(--ease), border-color 0.15s var(--ease); }
+.agent-tab { flex: none; height: 32px; padding: 0 12px; border: 0; border-radius: 999px; background: transparent; color: var(--fg-3); font: inherit; font-size: 13.5px; font-weight: 500; white-space: nowrap; cursor: pointer; transition: color 0.15s var(--ease), background-color 0.15s var(--ease); }
 .agent-tab:hover { color: var(--fg); }
-.agent-tab[aria-selected="true"] { color: var(--fg); border-bottom-color: var(--fg); }
+.agent-tab[aria-selected="true"] { color: var(--fg); background: var(--hover); }
+.agent-tab:focus-visible { outline: none; box-shadow: var(--ring); }
 .agent-panel-body { flex: 1; min-height: 0; }
 .agent-section { display: flex; flex-direction: column; gap: 12px; }
 .agent-section ul.task-list { padding: 0; }
