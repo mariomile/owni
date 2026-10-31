@@ -1,7 +1,7 @@
 // Shell: sidebar, account menu, theme.
-import { accountDialog } from "./account.js";
-import { $app, agentHome, api, ApiError, batched, channelHref, channelName, dmHref, emptyNote, face, go, h, icon, initials, instanceHref, mount, movedHref, route, selectInstance, state, store, toast } from "./common.js";
+import { $app, agentHome, api, ApiError, batched, channelHref, channelName, dmHref, emptyNote, face, go, h, icon, initials, mount, movedHref, route, selectInstance, state, store, toast } from "./common.js";
 import { renderLogin } from "./login.js";
+import { viewAccount } from "./pages/account.js";
 import { viewActivity } from "./pages/activity.js";
 import { agentForm, viewAgents } from "./pages/agents.js";
 import { viewApprovals } from "./pages/approvals.js";
@@ -39,7 +39,7 @@ export const PAGES = [
 	{ id: "organigramma", label: "Organigramma", group: "Gestione", owner: true, view: viewOrg },
 	{ id: "impostazioni", label: "Configurazione dell'agente", group: "Gestione", owner: true, view: viewSettings },
 	{ id: "inizia", label: "Primi passi", group: "Gestione", owner: true, view: viewStart },
-	{ id: "gestione", label: "Account e gestione", group: "Gestione", view: viewManagement },
+	{ id: "account", label: "Account", group: "Gestione", view: viewAccount },
 	{ id: "persone", label: "Persone e accessi", group: "Gestione", owner: true, view: viewPeople },
 	{ id: "attivita", label: "Attività e spesa", group: "Gestione", view: viewActivity },
 ];
@@ -65,14 +65,6 @@ function workspaceNav(item) {
 /** Where `#/` opens: the direct conversation with the general agente, or the first one the person can write to. */
 function homeAgent() {
 	return state.instances.find((i) => i.main && i.canChat) ?? state.instances.find((i) => i.canChat);
-}
-
-async function viewManagement(main) {
-	const owner = state.me.role === "owner";
-	mount(main, h("div.head", h("div.head-title", h("h1", "Account e gestione"), h("p", "Le tue impostazioni personali e la gestione dell'installazione sono separate."))),
-		h("div.card.pad.stack", h("h2", "Il tuo account"), h("p.muted", "Collegamenti personali e verifica in due passaggi."), h("button.btn", { onclick: accountDialog }, "Apri il tuo account")),
-		owner ? h("section.management-links", h("h2", "Installazione"), h("a.card.pad", { href: "#/persone" }, "Persone e accessi"), h("a.card.pad", { href: instanceHref("impostazioni", ["providers"]) }, "Provider disponibili"), h("a.card.pad", { href: "#/attivita" }, "Consumi e registro delle attività")) : h("a.btn.ghost", { href: "#/attivita" }, "Le tue esecuzioni e i consumi"),
-	);
 }
 
 // ---------- dialogs ----------
@@ -288,7 +280,7 @@ export function renderRail() {
 			"div.rail-foot",
 			h(
 				"button.who-id",
-				{ onclick: openMenu, "aria-haspopup": "menu", "aria-expanded": document.querySelector(".menu") ? "true" : "false", "aria-label": `Account e gestione, ${state.me.name}`, title: "Account e gestione" },
+				{ onclick: openMenu, "aria-haspopup": "menu", "aria-expanded": document.querySelector(".menu") ? "true" : "false", "aria-label": `Account, ${state.me.name}`, title: "Account" },
 				h("span.avatar", { "aria-hidden": "true" }, initials(state.me.name)),
 				h("span.who-text", h("span.name", state.me.name), roleLine() ? h("span.role", roleLine()) : null),
 				icon("more"),
@@ -357,14 +349,13 @@ function openMenu() {
 			: null,
 		h(
 			"div",
-			{ role: "menu", "aria-label": "Account e gestione" },
+			{ role: "menu", "aria-label": "Account" },
 			h("hr", { role: "separator" }),
-			section("gestione"),
+			section("account"),
 			section("agenti"),
 			owner ? entry("plus", "Nuovo agente", () => agentForm()) : null,
 			installOffer && !installed() ? entry("install", "Installa l'app", install) : null,
 			h("hr", { role: "separator" }),
-			entry("account", "Il tuo account", accountDialog),
 			entry("theme", `Tema: ${THEMES[store("owni.theme") ?? "auto"] ?? THEMES.auto}`, cycleTheme),
 			entry("keyboard", "Scorciatoie da tastiera", shortcutsDialog),
 			entry("logout", "Esci", async () => {

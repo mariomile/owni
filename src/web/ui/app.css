@@ -274,9 +274,14 @@ main.is-page { width: 100%; max-width: 1080px; margin: 0 auto; padding: 0 clamp(
 .setup-optional > p { margin: 12px 0; }
 .load-warning, .work-source-errors { padding: 14px 16px; border: 1px solid var(--border-2); border-radius: 10px; color: var(--fg-2); margin-bottom: 16px; }
 .load-warning .btn { margin-left: 10px; }
-.management-links { display: grid; gap: 10px; margin-top: 28px; }
-.management-links a { color: var(--fg); text-decoration: none; }
-.management-links a:hover { background: var(--hover); }
+.account-links { margin-top: 28px; }
+.account-link { display: grid; gap: 2px; color: var(--fg); text-decoration: none; }
+.account-link:hover { background: var(--hover); }
+.person-access { display: block; color: var(--fg-2); }
+.access-pick { border: 0; padding: 0; margin: 0; display: grid; gap: 6px; }
+.access-pick legend { padding: 0; margin-bottom: 4px; }
+dialog.access-dialog { max-width: 560px; }
+dialog.access-dialog td:not(:first-child), dialog.access-dialog th:not(:first-child) { width: 1%; text-align: center; }
 .work-toolbar { align-items: center; justify-content: space-between; }
 .work-description { font-size: 13px; margin: 4px 0 0; color: var(--fg-2); }
 .inbox-section { margin: 0 0 28px; }

@@ -13,7 +13,7 @@ vi.mock("../src/web/ui/login.js", () => ({ renderLogin: mocks.renderLogin, rende
 vi.mock("../src/web/ui/google.js", () => ({}));
 vi.mock("../src/web/ui/setup.js", () => ({ setupLeft: () => 0 }));
 vi.mock("../src/web/ui/signin.js", () => ({}));
-vi.mock("../src/web/ui/account.js", () => ({ accountDialog: vi.fn() }));
+vi.mock("../src/web/ui/pages/account.js", () => ({ viewAccount: vi.fn() }));
 vi.mock("../src/web/ui/models.js", () => ({ closeModelMenu: vi.fn() }));
 vi.mock("../src/web/ui/pwa.js", () => ({ install: vi.fn(), installed: () => true, installOffer: false }));
 vi.mock("../src/web/ui/pages/activity.js", () => ({ viewActivity: vi.fn() }));

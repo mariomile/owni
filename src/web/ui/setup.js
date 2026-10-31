@@ -19,7 +19,7 @@ export function setupSteps(setup) {
 		{ id: "web", own: true, done: setup.web, title: "Lasciala cercare sul web", text: can.search ? "Accendi la ricerca e scegli i siti che può aprire: notizie, prezzi, orari aggiornati, report di ricerca con le fonti." : "Scegli i siti che può aprire: notizie, prezzi, orari aggiornati.", go: ["impostazioni", can.search ? "ricerca" : "siti"] },
 		...(can.images ? [{ id: "images", own: true, done: setup.images, title: "Fatti creare un'immagine", text: "Accendi le immagini: un logo, un volantino, una foto ritoccata, chiesti a parole in chat.", go: ["impostazioni", "immagini"] }] : []),
 		{ id: "connectors", own: true, done: setup.connectors, title: "Collega i tuoi strumenti", text: "Notion, Linear, Jira, Stripe, GitHub e altri in un clic: entri con il tuo account e Owni può cercare, leggere e aggiornare lì dentro.", go: ["impostazioni", "servizi"] },
-		{ id: "people", own: true, done: setup.people, title: "Invita il tuo team", text: "Aggiungi le persone in Persone, poi in Impostazioni scegli chi può scrivere a questo agente. Ognuno ha le sue chat e la sua memoria; tu decidi chi approva le azioni delicate.", go: ["persone"] },
+		{ id: "people", own: true, done: setup.people, title: "Invita il tuo team", text: "Aggiungi le persone in Persone e accessi e scegli a quali agenti scrivono. Ognuno ha le sue chat e la sua memoria; tu decidi chi approva le azioni delicate.", go: ["persone"] },
 		{ id: "app", own: canInstall(), done: installed(), title: "Installa la console come app", text: "Owni sulla schermata Home o sul desktop, a schermo intero, come un'app." },
 	];
 }
