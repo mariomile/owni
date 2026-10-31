@@ -104,6 +104,22 @@ describe("the agente's panel", () => {
 		expect(changed).toHaveBeenCalledTimes(2);
 	});
 
+	it("in a conversation has the agente's computer as its last tab, told when it is on screen", () => {
+		mocks.api.mockResolvedValue({ runs: [], agents: [] });
+		const computer = { el: fakeH("div.computer", "Lo schermo di Vendite"), visible: vi.fn() };
+		const panel = agentPanel(inst, { computer });
+		panel.show(true, "computer");
+		const tabs = find(panel.el, "button.agent-tab");
+		expect(tabs.map((t) => t.textContent).at(-1)).toBe("Computer");
+		expect(panel.el.textContent).toContain("Lo schermo di Vendite");
+		expect(computer.visible).toHaveBeenLastCalledWith(true);
+		tabs[0]!.fire("click");
+		expect(computer.visible).toHaveBeenLastCalledWith(false);
+		panel.show(true, "computer");
+		panel.show(false);
+		expect(computer.visible).toHaveBeenLastCalledWith(false);
+	});
+
 	it("opens at the section asked, says it to the page and closes with nothing left running", async () => {
 		mocks.api.mockImplementation(async (path: string) => (path === "/api/agents" ? { agents: [{ id: "sales", status: "al_lavoro", statusText: "Al lavoro", doing: "Offerta Rossi" }] } : { runs: [] }));
 		const onShow = vi.fn();

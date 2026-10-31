@@ -17,6 +17,8 @@ Con lo Schermo ([ADR 0045](0045-schermo-cua.md)) l'agente lavora su un desktop L
 
 Mario: «la pagina browser è strana, dovrebbe essere la pagina computer, tipo Grok bot». Il pannello si chiama «Computer», come in Grok Bot: lo schermo in una cornice e sotto «Lo schermo di …». Il pulsante c'è finché l'agente ha lo schermo acceso, anche prima che lo usi; fino ad allora il computer dorme. Il browser interno ([ADR 0044](0044-browser-interno.md)) resta com'era, con il suo pulsante: da lì si apre la prima pagina e si esce dai siti.
 
+Poi, lo stesso giorno: «non vedo la modalità computer come Grok bot» e le schede «dello stile di Grok bot». Il Computer non è più un pannello a parte ma l'ultima scheda del pannello dell'agente ([ADR 0114](0114-pannello-dell-agente-e-configurazione-a-parte.md)), che prende la forma di Grok Bot: volto grande e nome al centro, schede in fila con quella aperta in una pillola. Il pulsante «Computer» c'è sempre in una conversazione; con lo schermo spento il computer dorme e il pannello dice che l'owner lo accende nella configurazione.
+
 ## Alternative scartate
 
 - **Pubblicare il VNC (noVNC nella console)**: sarebbe davvero dal vivo, ma apre un canale verso il container con credenziali da gestire, permette di cliccare insieme all'agente e tiene acceso il desktop finché qualcuno guarda.

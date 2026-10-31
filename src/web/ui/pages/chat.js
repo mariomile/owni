@@ -5,7 +5,7 @@ import { connectorActionCard, googleActionCard } from "../cards.js";
 import { agentCommands, commandMenu } from "../commands.js";
 import { chatModelCache, modelPill } from "../models.js";
 import { browserPanel } from "../browser-panel.js";
-import { screenPanel } from "../screen-panel.js";
+import { computerView } from "../screen-panel.js";
 import { markRead, meAvatar, reactionRow, showReaction, threadPanel, threadSummary } from "../threads.js";
 import { stepsLeftText } from "../setup.js";
 import { install, installed, installOffer } from "../pwa.js";
@@ -110,7 +110,7 @@ const read = (inst, threadId) => markRead(`${inst.id}/${threadId}`, `/api/instan
  * address kept: `#/dm/<agente>/info/<sezione>` while it is open. A page opened from the panel goes
  * back to it when closed. `others()`: the page's other panels, closed when one of these opens.
  */
-function agentSide(inst, others = () => []) {
+function agentSide(inst, others = () => [], computer) {
 	const context = document.querySelector(".agent-context");
 	let fromPanel = false;
 	let switching = false;
@@ -134,6 +134,7 @@ function agentSide(inst, others = () => []) {
 		},
 		openArtifact: (threadId, page) => { void artifact.openArtifact(inst.id, threadId, page); fromPanel = true; },
 		openFile: (path) => { artifact.openFile(inst.id, path); fromPanel = true; },
+		computer,
 	});
 	const artifact = artifactPanel(() => { fromPanel = false; only(artifact); }, () => {
 		if (fromPanel && !switching) agent.show(true);
@@ -157,11 +158,12 @@ function conversationView(inst, main, thread, entries, model) {
 	const threadId = thread.id;
 	const conversation = h("section.conversation");
 	// One panel at a time next to the chat, also when one opens by itself.
-	const { agent, artifact, only } = agentSide(inst, () => [browser, screen, replies]);
+	// The agente's computer is the last tab of its panel, as in Grok Bot.
+	const screen = computerView(inst, threadId, () => (agent.isOpen() && agent.section() === "computer" ? agent.show(false) : agent.show(true, "computer")));
+	const { agent, artifact, only } = agentSide(inst, () => [browser, replies], screen);
 	const browser = browserPanel(inst, threadId, () => only(browser));
-	const screen = screenPanel(inst, threadId, () => only(screen));
 	const replies = chatThreads(inst, (entry, into, where) => show(entry, into, false, where), () => only(replies), () => void refreshSummaries());
-	mount(main, h("div.chat-split", conversation, browser.el, screen.el, replies.el, agent.el, artifact.el));
+	mount(main, h("div.chat-split", conversation, browser.el, replies.el, agent.el, artifact.el));
 	read(inst, threadId);
 	// Tools belong to the fixed context bar, after the conversation has loaded successfully.
 	mount(main.parentElement.querySelector(".conversation-tools"), screen.toggle, browser.toggle);
@@ -313,7 +315,7 @@ function conversationView(inst, main, thread, entries, model) {
 		show(event.entry);
 		// A new page or version opens by itself while the conversation is on screen, unless a thread,
 		// the browser or the screen is open there; on a phone it would cover the chat. The card opens it.
-		const busy = [browser.el, screen.el, replies.el, agent.el].some((panel) => !panel.hidden);
+		const busy = [browser.el, replies.el, agent.el].some((panel) => !panel.hidden);
 		if (event.entry.artifact && !busy && !matchMedia("(max-width: 860px)").matches) void artifact.openArtifact(inst.id, threadId, event.entry.artifact);
 		if (event.entry.from === "owni") void drawAsks();
 		browser.lively();

@@ -8,7 +8,7 @@ vi.mock("../src/web/ui/common.js", async () => {
 });
 
 // @ts-expect-error Console modules intentionally use plain JavaScript.
-import { screenPanel } from "../src/web/ui/screen-panel.js";
+import { computerView } from "../src/web/ui/screen-panel.js";
 // @ts-expect-error Console modules intentionally use plain JavaScript.
 import { browserPanel } from "../src/web/ui/browser-panel.js";
 
@@ -24,42 +24,46 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllGlobals());
 
-describe("the agente's computer next to the chat", () => {
-	it("has no button for an agente without the screen", async () => {
+describe("the agente's computer, a tab of its panel", () => {
+	it("is asleep with the screen off, says so, and the button is there anyway", async () => {
 		mocks.api.mockResolvedValue({ on: false, screen: null });
-		const panel = screenPanel(inst, "t1", () => {});
+		const view = computerView(inst, "t1", () => {});
 		await tick();
-		expect(panel.toggle.hidden).toBe(true);
-		expect(panel.el.hidden).toBe(true);
+		expect(view.toggle.hidden).toBeFalsy();
+		expect(view.toggle.textContent).toContain("Computer");
+		expect(find(view.el, "div.computer-asleep").hidden).toBe(false);
+		expect(allNodes(view.el).find((n) => n.textContent.includes("è spento") && n.spec.startsWith("p"))!.hidden).toBe(false);
 	});
 
-	it("is asleep until the agente uses its screen here, and the button is already there", async () => {
+	it("is asleep until the agente uses its screen here, with whose screen it is", async () => {
 		mocks.api.mockResolvedValue({ on: true, screen: null });
-		const panel = screenPanel(inst, "t1", () => {});
+		const open = vi.fn();
+		const view = computerView(inst, "t1", open);
 		await tick();
-		expect(panel.toggle.hidden).toBe(false);
-		expect(panel.toggle.textContent).toContain("Computer");
-		expect(panel.el.hidden).toBe(true);
-		expect(find(panel.el, "div.computer-asleep").hidden).toBe(false);
-		expect(find(panel.el, "div.computer-asleep").textContent).toContain("Il computer dorme");
-		expect(find(panel.el, "span.face.asleep")).toBeDefined();
-		expect(find(panel.el, "img.screen").hidden).toBe(true);
-		expect(find(panel.el, "figure.computer-view").textContent).toContain("Lo schermo di Owni");
+		expect(open).not.toHaveBeenCalled();
+		expect(find(view.el, "div.computer-asleep").textContent).toContain("Il computer dorme");
+		expect(find(view.el, "span.face.asleep")).toBeDefined();
+		expect(find(view.el, "img.screen").hidden).toBe(true);
+		expect(find(view.el, "figure.computer-view").textContent).toContain("Lo schermo di Owni");
+		expect(allNodes(view.el).find((n) => n.textContent.includes("è spento") && n.spec.startsWith("p"))!.hidden).toBe(true);
+		view.toggle.fire("click");
+		expect(open).toHaveBeenCalledTimes(1);
 	});
 
-	it("opens by itself on the screen the first time the agente uses it, on a wide window", async () => {
+	it("asks to open its tab the first time the agente uses it, and shows the picture once visible", async () => {
 		mocks.api.mockResolvedValue({ on: true, screen: { version: 3, at: "2026-10-31T16:44:00.000Z", action: "Ha aperto la pagina." } });
-		const onShow = vi.fn();
-		const panel = screenPanel(inst, "t1", onShow);
+		const open = vi.fn();
+		const view = computerView(inst, "t1", open);
 		await tick();
+		expect(open).toHaveBeenCalledTimes(1);
+		view.visible(true);
 		await tick();
-		expect(onShow).toHaveBeenCalled();
-		expect(panel.el.hidden).toBe(false);
-		const picture = find(panel.el, "img.screen");
+		const picture = find(view.el, "img.screen");
 		expect(picture.hidden).toBe(false);
 		expect(picture.attrs.src ?? (picture as unknown as { src: string }).src).toBe("/api/instances/owni/threads/t1/screen.png?v=3");
-		expect(find(panel.el, "div.computer-asleep").hidden).toBe(true);
-		expect(panel.el.textContent).toContain("Ha aperto la pagina.");
+		expect(find(view.el, "div.computer-asleep").hidden).toBe(true);
+		expect(view.el.textContent).toContain("Ha aperto la pagina.");
+		expect(view.toggle.attrs["aria-pressed"]).toBe("true");
 	});
 });
 
