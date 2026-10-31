@@ -1,10 +1,10 @@
-// The person's own Google account: the section of the account dialog, and the return from Google's consent.
+// The person's own Google account: its section of the Account page, and the return from Google's consent.
 import { api, h, mount, toast } from "./common.js";
 
-/** Back from Google's consent: the code is in the fragment, the session in our cookie. */
+/** Back from Google's consent: the code is in the fragment, the session in our cookie. Lands on the Account page, where it was started. */
 export async function finishGoogle() {
 	const params = new URLSearchParams(location.hash.slice("#/google?".length));
-	history.replaceState(null, "", "/#/");
+	history.replaceState(null, "", "/#/account");
 	if (params.get("error")) return toast(params.get("error") === "access_denied" ? "Collegamento a Google annullato" : "Google non ha completato il collegamento: riprova", true);
 	try {
 		const { account } = await api("/api/google/finish", { method: "POST", body: { state: params.get("state") ?? "", code: params.get("code") ?? "" } });
@@ -22,7 +22,7 @@ async function connectGoogle() {
 	}
 }
 
-/** The person's own Google account, in the account dialog. */
+/** The person's own Google account, on the Account page. */
 export function googleSection() {
 	const box = h("div.card.pad.stack");
 	const draw = async () => {

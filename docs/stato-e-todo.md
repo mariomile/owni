@@ -127,6 +127,7 @@ Per l'uso di Mario basta la sua sottoscrizione di Claude Code o Codex: nessuna c
 - [x] Risposte nei thread decise dall'agente (`thread_reply`), solo quando un thread ha senso: nei messaggi diretti e nei canali, mai dentro un thread ([ADR 0133](adr/0133-risposte-nei-thread-decise-dall-agente.md))
 - [x] Gli agenti si passano le cose: `agent_message` anche per passare a un collega quello che è suo, i canali mostrano il posto di ognuno nell'organigramma, e per la persona un agente scrive anche a un collega non collegato con cui lei può parlare ([ADR 0134](adr/0134-agenti-che-si-passano-le-cose.md))
 - [x] Scansioni JBIG2 e JPEG 2000: Owni le guarda come le altre, con i decodificatori di PDF.js ([ADR 0136](adr/0136-scansioni-jbig2-e-jpeg-2000.md))
+- [x] Account in una pagina sola, accessi per persona in «Persone e accessi» ([ADR 0137](adr/0137-account-e-accessi-per-persona.md))
 
 ### Prima di rendere pubblico il repo
 

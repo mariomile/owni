@@ -550,9 +550,8 @@ export async function viewSettings(main) {
 		mount(main, head(null, `Configurazione di ${inst.name}`, "La configurazione dell'agente è riservata all'owner.", h("a.btn", { href: agentHome(inst.id) }, `Apri ${inst.name}`)));
 		return;
 	}
-	const [{ settings }, { people }, tg, wa, tel, { capabilities }, models, providers] = await Promise.all([
+	const [{ settings }, tg, wa, tel, { capabilities }, models, providers] = await Promise.all([
 		api(`/api/instances/${inst.id}/settings`),
-		api("/api/people"),
 		api(`/api/instances/${inst.id}/telegram`).catch(() => undefined),
 		api(`/api/instances/${inst.id}/whatsapp`).catch(() => undefined),
 		api(`/api/instances/${inst.id}/phone`).catch(() => undefined),
@@ -565,13 +564,6 @@ export async function viewSettings(main) {
 	const tagline = h("input", { type: "text", value: settings.persona.tagline ?? "", maxlength: "120", placeholder: "Cosa fa, in una riga" });
 	const tone = h("select", TONES.map(([value, label]) => h("option", { value, selected: value === (settings.persona.tone ?? "naturale") ? "selected" : undefined }, label)));
 	const instructions = h("textarea", { rows: 9, value: settings.instructions });
-	const chat = new Set(settings.allowedUsers.web ?? []);
-	const approve = new Set(settings.approvers.web ?? []);
-	const rows = people.map((p) => {
-		const c = h("input", { type: "checkbox", checked: chat.has(p.id), "aria-label": `${p.name} può scrivere` });
-		const a = h("input", { type: "checkbox", checked: approve.has(p.id), "aria-label": `${p.name} approva` });
-		return { p, c, a, row: h("tr", h("td", p.name, h("small.muted.person-role", p.role === "owner" ? "Owner" : "Membro", p.id === state.me.id ? " · tu" : "")), h("td", c), h("td", a)) };
-	});
 	// Each field saves on its own when it changes (ADR 0125); the server takes partial bodies.
 	const put = (body) => api(`/api/instances/${inst.id}/settings`, { method: "PUT", body });
 	const persona = () => put({ persona: { tagline: tagline.value, tone: tone.value } });
@@ -580,7 +572,6 @@ export async function viewSettings(main) {
 	const taglineNote = autosave("tagline", tagline, persona);
 	const toneNote = autosave("tone", tone, persona);
 	const instructionsNote = autosave("instructions", instructions, () => put({ instructions: instructions.value }));
-	const webNote = autosave("web", rows.flatMap((r) => [r.c, r.a]), () => put({ webPeople: rows.filter((r) => r.c.checked).map((r) => r.p.id), webApprovers: rows.filter((r) => r.a.checked).map((r) => r.p.id) }));
 	const e = settings.egress;
 	const caps = Object.fromEntries(capabilities.map((c) => [c.name, c]));
 	const capability = (name) => capabilityCard(inst, caps, e.web ?? [], CAPABILITY_CARDS.find((spec) => spec.name === name));
@@ -621,13 +612,10 @@ export async function viewSettings(main) {
 		] },
 		{ id: "servizi", label: "Servizi", glyph: "connettori", anchors: [], content: [services] },
 		{ id: "canali", label: "Canali", glyph: "chat", anchors: ["telegram", "whatsapp", "telefono"], content: [
-			h("div.card.pad", h("h2", "Dove risponde"), h("p", e.channels.map((c) => CHANNEL_NAMES[c] ?? c).join(", ") || "Nessun canale attivo"), h("p.muted", "Telegram, WhatsApp e telefono sono facoltativi.")),
+			h("div.card.pad", h("h2", "Dove risponde"), h("p", e.channels.map((c) => CHANNEL_NAMES[c] ?? c).join(", ") || "Nessun canale attivo"), h("p.muted", "Telegram, WhatsApp e telefono sono facoltativi. Chi può scrivergli e approvare dalla console lo scegli in ", h("a", { href: "#/persone" }, "Persone e accessi"), ".")),
 			tg === undefined ? null : anchor("telegram", telegramCard(inst, tg.telegram)),
 			wa === undefined ? null : anchor("whatsapp", whatsappCard(inst, wa.whatsapp)),
 			tel === undefined ? null : anchor("telefono", phoneCard(inst, tel.phone)),
-		] },
-		{ id: "accessi", label: "Accessi", glyph: "persone", anchors: [], content: [
-			h("div.card", h("div.pad", h("h2", "Chi può scrivere e approvare"), h("p.muted", "Scrivere all'agente e approvare le sue azioni sono permessi distinti. Essere owner non aggiunge automaticamente il permesso di scrivere. Questi accessi riguardano la console web; gli altri canali hanno i propri elenchi."), webNote), h("table.ledger", h("thead", h("tr", h("th", "Persona"), h("th", "Scrive"), h("th", "Approva"))), h("tbody", rows.map((r) => r.row)))),
 		] },
 	];
 	const requested = route().rest[0];

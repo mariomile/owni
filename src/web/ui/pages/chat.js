@@ -1,5 +1,5 @@
 // Chat page.
-import { agentInfoHref, api, batched, channelHref, dmHref, face, faceColor, fmt, h, icon, instanceHref, mount, needInstance, route, state, store, thinking, toast } from "../common.js";
+import { agentInfoHref, api, batched, channelHref, dmHref, face, faceColor, fmt, h, icon, mount, needInstance, route, state, store, thinking, toast } from "../common.js";
 import { boardNote, copyButton, listenButton } from "../listen.js";
 import { connectorActionCard, googleActionCard } from "../cards.js";
 import { agentCommands, commandMenu } from "../commands.js";
@@ -51,7 +51,7 @@ export async function viewDm(main) {
 	if (!inst.canChat) {
 		const owner = state.me.role === "owner";
 		const note = h("section.conversation.empty-chat", h("div.welcome", h("h2", "Chat non disponibile"), owner
-			? h("p", "Aggiungi te stesso alle persone che possono scrivere a questo agente, in ", h("a", { href: instanceHref("impostazioni", ["accessi"], inst.id) }, "Configurazione"), ". Documenti, memoria e procedure sono nel ", h("a", { href: agentInfoHref(inst.id) }, "suo pannello"), ".")
+			? h("p", "Dai a te stesso il permesso di scrivere a questo agente, in ", h("a", { href: "#/persone" }, "Persone e accessi"), ". Documenti, memoria e procedure sono nel ", h("a", { href: agentInfoHref(inst.id) }, "suo pannello"), ".")
 			: h("p", "Non sei tra le persone che possono scrivere a questo agente.")));
 		if (!owner) return void mount(main, note);
 		// The owner keeps the agente's panel (ADR 0114), next to the note.
