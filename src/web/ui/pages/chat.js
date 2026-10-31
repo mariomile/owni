@@ -233,10 +233,11 @@ function conversationView(inst, main, thread, entries, model) {
 		const actions = entry.from === "owni" && entry.text ? h("div.msg-actions", copyButton(entry.text), listen, answer) : answer ? h("div.msg-actions", answer) : null;
 		// Which model wrote the reply: the chat's own, or the instance's when that could not answer.
 		const by = entry.model ? h("span.by", { title: `${entry.model.provider} · ${entry.model.modelId}` }, entry.model.name ?? entry.model.modelId) : null;
+		// The replies right under the message they answer, before its actions: one block with it.
 		const slot = threaded ? h("div.thread-slot", summary(inst, entry, () => void replies.open(entry, entry.thread?.id))) : null;
 		if (slot) summaries.set(entry.id, slot);
 		const reactions = reactionRow(entry.reaction ? [{ instanceId: inst.id, emoji: entry.reaction }] : []);
-		const el = h(`div.msg.${entry.from}`, { "data-entry": entry.id }, h("div.meta", entry.from === "owni" ? [face(inst, 20), h("b.who", inst.name)] : null, fmt.time(entry.at), by), pictures, entry.text || entry.file || !pictures ? body : null, reactions, actions, slot);
+		const el = h(`div.msg.${entry.from}`, { "data-entry": entry.id }, h("div.meta", entry.from === "owni" ? [face(inst, 20), h("b.who", inst.name)] : null, fmt.time(entry.at), by), pictures, entry.text || entry.file || !pictures ? body : null, reactions, slot, actions);
 		into(el);
 		return el;
 	};

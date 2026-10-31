@@ -13,6 +13,10 @@ Con lo Schermo ([ADR 0045](0045-schermo-cua.md)) l'agente lavora su un desktop L
 - **In memoria, le ultime 300 conversazioni**. Dopo un riavvio di Owni, o se l'owner azzera lo schermo o elimina l'agente, il pannello sparisce fino alla prossima azione. La console chiede ogni 2 secondi se c'è una schermata nuova, col pannello aperto o mentre la conversazione si muove, ogni 10 altrimenti, e mai per un agente senza schermo; scarica l'immagine solo quando è cambiata. Restano solo le conversazioni della console (le altre nessuno le guarda), e al massimo 200 MB di schermate.
 - **Il testo scritto non si vede mai**: dopo desktop_type il pannello dice quanti caratteri, e un tasto che è un carattere (anche con maiuscolo) è «Premuto un tasto.», così un codice battuto tasto per tasto non compare.
 
+## Aggiornamento (31 ottobre 2026)
+
+Mario: «la pagina browser è strana, dovrebbe essere la pagina computer, tipo Grok bot». Il pannello si chiama «Computer», come in Grok Bot: lo schermo in una cornice e sotto «Lo schermo di …». Il pulsante c'è finché l'agente ha lo schermo acceso, anche prima che lo usi; fino ad allora il computer dorme. Il browser interno ([ADR 0044](0044-browser-interno.md)) resta com'era, con il suo pulsante: da lì si apre la prima pagina e si esce dai siti.
+
 ## Alternative scartate
 
 - **Pubblicare il VNC (noVNC nella console)**: sarebbe davvero dal vivo, ma apre un canale verso il container con credenziali da gestire, permette di cliccare insieme all'agente e tiene acceso il desktop finché qualcuno guarda.

@@ -1,11 +1,11 @@
-// The agente's screen, live next to the chat.
-import { api, fmt, h, icon, store } from "./common.js";
+// The agente's computer, live next to the chat.
+import { api, face, fmt, h, icon, store } from "./common.js";
 
 /**
- * The agente's screen, live next to the chat (ADR 0067): the last picture it took of its screen in
- * this conversation, with what it just did. Only to watch: the agente works, the person follows.
- * The button appears once the agente has used its screen here; the panel opens by itself the first
- * time, on a wide window.
+ * The agente's computer, live next to the chat (ADR 0067, 0135): the last picture it took of its
+ * screen in this conversation, with what it just did, or the computer asleep before it has used it
+ * here. Only to watch: the agente works, the person follows. The button is there while the agente
+ * has the screen; the panel opens by itself the first time it uses it here, on a wide window.
  */
 export function screenPanel(inst, threadId, onShow) {
 	const base = `/api/instances/${inst.id}/threads/${encodeURIComponent(threadId)}/screen`;
@@ -13,17 +13,18 @@ export function screenPanel(inst, threadId, onShow) {
 	let version = -1;
 	// A picture gone between the question and the download (the screen reset): asked again next time.
 	const picture = h("img.screen", { alt: "", hidden: true, onerror: () => { version = -1; } });
-	const what = h("p.browser-note");
+	const asleep = h("div.computer-asleep", h("span.computer-face", face(inst, 52, "asleep"), h("span.zz", { "aria-hidden": "true" }, h("span", "z"), h("span", "z"))), h("p", "Il computer dorme"));
+	const what = h("p.browser-note", { hidden: true });
 	const when = h("span.busy-note");
 	const el = h(
-		"aside.browser-panel",
-		{ hidden: true, "aria-label": "Schermo" },
-		h("div.browser-head", icon("screen"), h("span.page-title", `Lo schermo di ${inst.name}`), when, h("button.icon-btn", { type: "button", title: "Chiudi", "aria-label": "Chiudi lo schermo", onclick: () => show(false) }, icon("close"))),
-		h("div.browser-view", picture),
+		"aside.browser-panel.computer-panel",
+		{ hidden: true, "aria-label": "Computer" },
+		h("div.browser-head", icon("screen"), h("span.page-title", "Computer"), when, h("button.icon-btn", { type: "button", title: "Chiudi", "aria-label": "Chiudi il computer", onclick: () => show(false) }, icon("close"))),
+		h("figure.computer-view", h("div.computer-screen", picture, asleep), h("figcaption", `Lo schermo di ${inst.name}`)),
 		what,
 		h("p.browser-note", "Qui guardi soltanto. Prima di inviare, pagare o accedere a un account si ferma e te lo chiede in chat."),
 	);
-	const toggle = h("button.browser-toggle", { type: "button", hidden: true, title: "Lo schermo dell'agente", "aria-pressed": "false", onclick: () => show(el.hidden) }, icon("screen"), h("span", "Schermo"));
+	const toggle = h("button.browser-toggle", { type: "button", hidden: true, title: `Il computer di ${inst.name}`, "aria-pressed": "false", onclick: () => show(el.hidden) }, icon("screen"), h("span", "Computer"));
 	const show = (on) => {
 		if (on === !el.hidden) return;
 		el.hidden = !on;
@@ -40,28 +41,36 @@ export function screenPanel(inst, threadId, onShow) {
 		if (answer === undefined) return;
 		const { screen, on } = answer;
 		off = !on && screen === null;
-		// Nothing seen (yet, or any more: the screen reset, Owni restarted): no button, no panel.
-		if (screen === null) {
+		// No screen for this agente, and nothing seen here: no button, no panel.
+		if (off) {
 			show(false);
 			toggle.hidden = true;
+			return;
+		}
+		toggle.hidden = false;
+		// The screen on, not used here yet (or any more: the screen reset, Owni restarted): asleep.
+		if (screen === null) {
 			picture.hidden = true;
+			what.hidden = true;
+			asleep.hidden = false;
+			toggle.classList.remove("news");
+			when.textContent = "";
 			version = -1;
 			return;
 		}
-		if (toggle.hidden) {
-			toggle.hidden = false;
-			if (store(seenKey) !== "1") {
-				if (matchMedia("(max-width: 860px)").matches) toggle.classList.add("news");
-				else show(true);
-			}
+		if (store(seenKey) !== "1" && el.hidden) {
+			if (matchMedia("(max-width: 860px)").matches) toggle.classList.add("news");
+			else show(true);
 		}
 		when.textContent = fmt.time(screen.at);
 		what.textContent = screen.action ?? "Ha guardato lo schermo.";
+		what.hidden = false;
 		if (screen.version !== version && !el.hidden) {
 			version = screen.version;
 			picture.src = `${base}.png?v=${screen.version}`;
 			picture.alt = `Lo schermo di ${inst.name}: ${what.textContent}`;
 			picture.hidden = false;
+			asleep.hidden = true;
 		}
 	};
 	// Often while the panel is open or the conversation is moving, rarely otherwise; never for an
