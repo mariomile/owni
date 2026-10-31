@@ -11,6 +11,7 @@ export type FakeNode = {
 	hidden: boolean;
 	disabled: boolean;
 	selectedOptions: { textContent: string }[];
+	readonly classList: { add(name: string): void; remove(name: string): void; contains(name: string): boolean };
 	style: Record<string, unknown> & { setProperty(name: string, value: string): void };
 	open: boolean;
 	readonly isConnected: boolean;
@@ -80,6 +81,14 @@ export function fakeNode(spec: string, attrs: Record<string, any> = {}, children
 		set open(value) { if (value) this.attrs.open = ""; else delete this.attrs.open; },
 		get isConnected() { return !this.removed && (this.parent?.isConnected ?? true); },
 		get textContent() { return text(this); },
+		get classList() {
+			const names = () => String(this.attrs.class ?? "").split(" ").filter(Boolean);
+			return {
+				add: (name: string) => { if (!names().includes(name)) this.attrs.class = [...names(), name].join(" "); },
+				remove: (name: string) => { this.attrs.class = names().filter((n) => n !== name).join(" "); },
+				contains: (name: string) => names().includes(name),
+			};
+		},
 		set textContent(value) { this.children = [String(value)]; },
 		dataset: new Proxy({} as Record<string, string | undefined>, {
 			get: (_, key) => typeof key === "string" ? node.attrs[dataName(key)] : undefined,
