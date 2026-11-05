@@ -1,5 +1,7 @@
 # 0113: Canali, messaggi diretti e thread
 
+> Proposta di aggiornamento in [ADR 0138](0138-canali-con-piu-persone.md): canali con più persone. Finché non è approvata vale questa decisione.
+
 Mario vuole che la console sembri una chat di team con i suoi agenti: ogni agente ha la sua conversazione privata, ci sono canali dove lavorano più agenti insieme, e ogni messaggio può avere il suo thread. Fino a oggi la console aveva molte chat per agente («Nuova chat» e l'elenco delle recenti nella barra laterale) e le stanze ([ADR 0063](0063-stanze.md)) come conversazione con più agenti. Una persona doveva scegliere ogni volta se aprire una chat nuova o continuare una vecchia, e il lavoro con un agente si spezzava in tante conversazioni corte. In una chat di team la scelta non c'è: si scrive nella conversazione con quell'agente, e se un argomento merita spazio si apre un thread sotto il messaggio.
 
 ## Decisione
